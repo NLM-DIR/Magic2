@@ -75,7 +75,7 @@ void saGPUSort(T* cp, long int number_of_records)
         h_vec.push_back(cp[i]);
     }
     auto end = std::chrono::high_resolution_clock::now();
-    // std::cerr << "Copy data to a vector: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    std::cerr << "Copy data to a vector: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     // copy data to a GPU
