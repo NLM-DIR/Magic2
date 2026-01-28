@@ -68,20 +68,10 @@ template<typename T, typename CMP>
 void saGPUSort(T* cp, long int number_of_records)
 {
     auto start = std::chrono::high_resolution_clock::now();
-    // copy data to a thrust data structure
-    std::vector<T> h_vec;
-    h_vec.reserve(number_of_records);
-    for (unsigned int i=0;i < number_of_records;i++) {
-        h_vec.push_back(cp[i]);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy data to a vector: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
-
-    start = std::chrono::high_resolution_clock::now();
     // copy data to a GPU
-    thrust::device_vector<T> d_vec = h_vec;
-    end = std::chrono::high_resolution_clock::now();
-    // std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    thrust::device_vector<T> d_vec(cp, cp + number_of_records);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     // sort
@@ -91,17 +81,9 @@ void saGPUSort(T* cp, long int number_of_records)
 
     start = std::chrono::high_resolution_clock::now();
     // copy sorted data back to the host
-    thrust::copy(d_vec.begin(), d_vec.end(), h_vec.begin());
+    thrust::copy(d_vec.begin(), d_vec.end(), cp);
     end = std::chrono::high_resolution_clock::now();
-    // std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
-
-    start = std::chrono::high_resolution_clock::now();
-    // copy sorted data back to data structure used by sortalign
-    for (unsigned int i=0;i < h_vec.size();i++) {
-        cp[i] = h_vec[i];
-    }
-    end = std::chrono::high_resolution_clock::now();
-    // std::cerr << "Copy sorted data to back to a sortalign struct: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 }
 
 // the sort function callable from C
