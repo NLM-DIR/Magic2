@@ -301,7 +301,7 @@ void dnaAlignGetData (DEFCPT look)
   KEY dummy ; 
   KEYSET ksp, ksq ; 
   KEYSET ks, *kstmp, dna, mar ;
-  char *cdep, buf[60] ;
+  char *cdep, buf[128] ;
   unsigned int test ;
   BOOL depart ;
   Array histdna = 0, mondna, marin, defin ;
@@ -799,7 +799,7 @@ static void dnaAddPiece(Array mydna, Array dnasup, Array erreur, int sens,
   else /* dnasup dans le sens reverse */
     { cq = arrp(dnasup, taille - 1, char) + 1 ;
       while(i--)
-	base[i] = complementBase[(int)bu[i]] ;
+	base[i] = complementBase(bu[i]) ;
     }
   fin = debut + taille + 2 * nerrmax ;
   if (fin >= arrayMax(mydna))

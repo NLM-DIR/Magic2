@@ -140,7 +140,9 @@ static FREEOPT mkaction[] =
     {1071, "cDNA_71 [-locally] realign all transcribed_genes"},
     {1073, "cDNA_73 [-locally]  [-fuse_locally] [-clean_killed_mRNA] [-split_cloud] [-repeats] [-rubber]  realign active set of transcribed_genes"},
   {1074, "Percolate active set of tg: create pseudo-EST percolating through the most favorable set of exons"}, 
-    {1075, "Tag_shedded_genes Tag the principal and shedded active transcribed_genes"},
+  {1075, "Tag_shedded_genes Tag the principal and shedded active transcribed_genes"},
+  {1076, "cDNA_76 Split in active set of transcribed genes  the XG_ exons on Xends_ signals"},
+  {1077, "cDNA_77 Kill premRNA echoes on other starnd\n"},
   {1031, "cDNA_31 allocate all cDNAs to best gene"},
   {1032, "cDNA_32 allocate active cDNA to best gene"},
   {1038, "cDNA_bury bury cdna_clones in mrna>200 clones in active list of Tg"},
@@ -3725,7 +3727,7 @@ static void defCptDoReadAction(DEFCPT look, int level)
 	    case 1062: case 1063: case 1064:
 	    case 1031: case 1032: case 1038: case 1039:
 	    case 1061:
-	    case 1071: case 1073: case 1074: case 1075: case 1080: case 1081:
+	    case 1071: case 1073: case 1074: case 1075: case 1076: case 1077: case 1080: case 1081:
 	    case 1090: case 1091: case 1092: case 1095: case 1096: case 1097: case 1098:
 	    case 1101: case 1102: case 1111: case 1121: case 1131:
             case 1301: case 1302: case 1311: case 1313: 

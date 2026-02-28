@@ -519,7 +519,7 @@ static unsigned int shortComplement(unsigned int rac, int taille)
 static BOOL invariantOligo (char *cp0, int taille)
 { char *cp, *cq ;
   int i, j ;
-  char buf[33] ;
+  char buf[64] ;
 
   if (taille > 16) messcrash("taille > 16 in invariantoligo") ;
   
@@ -810,7 +810,7 @@ void localCptErreur(Array longDna, int xl1, int xl2, int pol,
       base[i] = i ;
   else
     while(i--)
-      base[i] = complementBase[i] ;
+      base[i] = complementBase(i) ;
   cp0 = arrp(longDna, 0, char) ;
   cq0 = arrp(shortDna, 0, char) ;
   cp = cp0 + pol ;
@@ -1659,7 +1659,7 @@ static void fixDnaConsensus (FIXTOOL tool, BOOL first)
 	    { if (eq->sens == 1)
 		errBase[(int)eq->baseShort]++ ;
 	      else
-		errBase[(int)complementBase[(int)eq->baseShort]]++ ;
+		errBase[(int)complementBase(eq->baseShort)]++ ;
 	    }
 	  eq++ ;
 	}
@@ -1739,14 +1739,14 @@ static void fixDnaConsensus (FIXTOOL tool, BOOL first)
 	      if (sens == 1)
 		*cp++ = ep->baseShort ;
 	      else
-		*cp++ = complementBase[(int)ep->baseShort] ;
+		*cp++ = complementBase(ep->baseShort) ;
 	      *cp++ = *cq++ ;
 	      break ;
 	    case INSERTION_DOUBLE:
 	      if (sens == 1)
 		*cp++ = ep->baseShort ;
 	      else
-		*cp++ = complementBase[(int)ep->baseShort] ;
+		*cp++ = complementBase(ep->baseShort) ;
 	      *cp++ = (char)A_ ; /* juste pour retablir le bon nombre de base */
 	      *cp++ = *cq++ ;
 	      break ;
@@ -2163,7 +2163,7 @@ BOOL alignToolsAdjustContigSize (KEY link, KEY key)
 	  else
 	    { cq = arrp (subdna, 0, char) ;
 	      if (j>0) while (j--)
-		*cp-- = complementBase[(int)*cq++] ;
+			 *cp-- = complementBase(*cq++) ;
 	    }
 	}
     }
@@ -2187,7 +2187,7 @@ BOOL alignToolsAdjustContigSize (KEY link, KEY key)
 	    { x3 = arrayMax (subdna) - 1 ;
 	      cq = arrp (subdna, x3, char) ;
 	      if (j>0) while (j--)
-		*cp++ = complementBase[(int)*cq--] ;
+			 *cp++ = complementBase(*cq--) ;
 	    }
 	}
     }
