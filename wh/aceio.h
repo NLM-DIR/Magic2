@@ -155,7 +155,7 @@ BOOL aceInStep (ACEIN fi, char x) ;
 void aceInNext (ACEIN fi) ;
 char* aceInPos (ACEIN fi) ;
 
-BOOL aceInBinary (ACEIN fi, void *buffer, int size) ;
+BOOL aceInBinary (ACEIN fi, void *buffer, long int size) ;
 
 BOOL aceInEOF (ACEIN fi);	/* TRUE if fi->streamlevel == 0 */
 
@@ -185,8 +185,8 @@ void aceOutSetNewStack(ACEOUT fo, Stack s) ;
 /* simple outputs to stdout if outFileNme == NULL */
 ACEOUT aceOutCreate (const char *outFileName, const char *suffix, BOOL gzo, AC_HANDLE h) ; 
 void aceOutDate (ACEOUT ao, const char *commentPrefix, const char *title)  ; /* export "prefix title\tdate\tfile=filename",  commentPefix would usually be  "#" or "//" */
-void aceOutPercent (ACEOUT ao, float z) ; /* export a precent, increasing the number of decimal near 0%, 50% 100% */
 
+				      
 /* destructor */
 void uAceOutDestroy (ACEOUT fo) ;   /* will close file or send mail */
 #define aceOutDestroy(fo) (uAceOutDestroy(fo),fo=0)
@@ -207,14 +207,18 @@ BOOL aceOutStreamPos (ACEOUT fo, long int *posp);
 
 /* these functions return errno, which is ESUCCESS if all is OK
  * calling code should check for ENOSPC and others */
+int aceOutBinary(ACEOUT fo, const void *data, long int size) ;
 int aceOut(ACEOUT fo, const char *simple_string) ;	    /* Use for simple text string. */
 int aceOutf(ACEOUT fo, char *format,...) ;		    /* Use for formatted printing. */
 int aceOutxy(ACEOUT fo, const char *text, int x, int y) ; 
-int aceOutBinary(ACEOUT fo, const void *data, int size) ;
+void aceOutPercent (ACEOUT ao, float z) ; /* export a precent, increasing the number of decimal near 0%, 50% 100% */
+int aceOutInt (ACEOUT ao, int n) ; /* fast equivalent of aceOutf(ao,"%d", n) */
+int aceOutLongInt (ACEOUT ao, int n) ; /* fast equivalent of aceOutf(ao,"%ld", n) */
+int aceOutLongFloat (ACEOUT ao, float z) ; /* fast equivalent of aceOutf(ao,"%f", z) */
 
 
-int aceOutLine (ACEOUT fo) ;	/* how many lines written */
-long int aceOutByte (ACEOUT fo) ; /* how bytes have been written */
+int aceOutLine (ACEOUT fo) ;	  /* how many lines written */
+long int aceOutByte (ACEOUT fo) ; /* how many bytes have been written */
 int aceOutPos (ACEOUT fo) ;
 
 /****** ACETMP - writing to temporary files using ACEOUT ************/

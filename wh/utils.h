@@ -32,6 +32,8 @@
 #ifndef UTILS_DEF
 #define UTILS_DEF
 
+BOOL isExecutableInPath (const char *name) ;
+
 /* case-insensitive version of strstr */
 char *strcasestr (const char *str1, const char *str2);
 /* Wrapper to allow lexstrcmp to be used with arraySort.y */
@@ -114,9 +116,9 @@ int fetch_and_add (int *variable, int value) ; /* x86 specific multithread-safe 
 
 typedef struct regExpStruct *RegExp ;
 
-RegExp regExpCreate (const char *pattern, BOOL getPos, AC_HANDLE h) ;
+RegExp regExpCreate (const char *pattern, AC_HANDLE h) ;
 int regExpFind (RegExp br, const char *data) ;
-int regExpMatch (const char *data, const char *pattern, BOOL getPos) ; 
+int regExpMatch (const char *data, const char *pattern) ; 
 
 /* Usage
  * br = regExpCreate (pattern, 0, h) ;

@@ -37,7 +37,7 @@ void viewWindowDraw(VIEWWINDOW view) ;
 
 
 struct ConversionRecord {   /* record of a conversion routine to be called */
-  void *(*convertRoutine)();
+  void *(*convertRoutine)(MAPCONTROL map, void *params);
   void *params;
   void *results;
 };

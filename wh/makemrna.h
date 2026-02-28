@@ -53,7 +53,9 @@ KEY mrnaIntronBoundary (Array dnaD, Array dnaR,  int a1, int a2) ;
 
 BOOL mrnaDesignUsingCompositeStrategy (S2M *s2m, SC* sc, SMRNA *gmrna, Array smrnas) ;
 void mrnaDesignSetCompletenessFlags (S2M *s2m, SC* sc, SMRNA *gmrna, Array smrnas) ;
-
+BOOL mrnaDesignCutOnePreMrna (KEY gene, KEY green, KEYSET ks) ;
+void mrnaDesignCutAllPreMrna (KEYSET tgs) ;
 int cdnaTagSheddedTranscribedGenes (KEYSET tgs0) ;
+int mrnaDesignCleanEcho (void) ;
 
 #endif

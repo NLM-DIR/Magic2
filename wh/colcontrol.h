@@ -161,7 +161,7 @@ struct InstanceStruct
   void (*doColour)(COLINSTANCE instance, int box);
   void (*followBox)(COLINSTANCE instance, int box, double x, double y);
   void (*pick)(COLINSTANCE instance, int box, double x, double y);
-  void (*conversionRegister)();
+  void (*conversionRegister)(COLCONTROL control, COLINSTANCE instance);
   void (*configFinal)(COLINSTANCE instance, void *locals,BOOL okay);
   Graph configGraph;
   void *private;

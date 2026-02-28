@@ -101,6 +101,10 @@ void bsMinilibDumpB(OBJ obj, FILE *fil, Stack s) ;
 /* simple routines, avoid opening the object in the calling routine */
 KEY keyGetKey (KEY key, KEY tag) ;      /* get first key 1 to the right of tag */
 KEY keyGetTag2Key (KEY key, KEY tag) ;  /* tag2 system, get first key 2 to the right of tag */
+int   keyGetInt (KEY key, KEY tag) ;      /* get first key 1 to the right of tag */
+float keyGetFloat (KEY key, KEY tag) ;      /* get first key 1 to the right of tag */
+const char *keyGetText (KEY key, KEY tag) ;    /* idem for text, not parallelisable */
+  
 KEY keyFindTag (KEY key, KEY tag) ;
 int keySetAddTag (KEYSET ks, KEY tag) ;  /* return number of keys where tag was actually added */
 int keySetRemoveTag (KEYSET ks, KEY tag) ;   /* return number of keys where tag was  actually removed */

@@ -32,6 +32,8 @@
 #define channelTryGet(_chan,_vp,_type) uChannelMultiGet((_chan),(_vp),sizeof(_type),1,FALSE)
 #define channelTryPut(_chan,_vp,_type) uChannelMultiPut((_chan),(_vp),sizeof(_type),1,FALSE)
 
+#define channelGetmaxWait(_chan,_vp,_type,_maxSeconds) (uChannelGetMaxWait((_chan),(_vp),sizeof(_type),_maxSeconds)) 
+
  /*   please do not call these functions directly, they are private but in C they
  *   need to be exposed to allow the compiler to understand the public macros.
  */
@@ -42,6 +44,8 @@ void *uChannelGet (CHAN *c, void *vp, int size) ;
 
 int uChannelMultiGet (CHAN *c, void *vp, int size, int max, BOOL wait) ;
 int uChannelMultiPut (CHAN *c, void *vp, int size, int max, BOOL wait) ;
+
+int uChannelGetMaxWait (CHAN *c, void *vp, int size, double maxSeconds) ;
 
 CHAN *uChannelCreate (int cMax, int size, AC_HANDLE h) ;
 
@@ -67,6 +71,7 @@ struct channelStruct1 {
   int in ;                  /* cell number, modulo cMax, where channelPut will write the next incoming record */
   int out ;                 /* cell number, modulo cMax, where channelGet will read the next exportedg record */
   int nPut1, nPut2, nGet ;  /* global counters */
+  int nSources ;            /* used by channelAddSources and by channelCloseSource */
   char title[24] ;
   BOOL isClosed ;
   BOOL debug ;

@@ -26,7 +26,7 @@
 #include "aceio.h"
 
 typedef int MESSAGERETURN ;
-typedef void (*CallFunc)() ;
+typedef void (*CallFunc)(va_list args) ;
 
 BOOL call (char *name, ...) ;
 int callScript (const char *script, const char *args) ;

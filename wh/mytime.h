@@ -70,12 +70,12 @@ BOOL     timeComparison (int op, /* -1 for lessthan, 0 for equal, +1 for greater
 char*    timeDiffShow (mytime_t t1, mytime_t t2, char *buf1, int bufsize) ;
 char*	 timeShowFormat (mytime_t t, char *format, char *buf, int len) ;
 char*    timeShowJava (mytime_t t, char *buf, int bufsize) ;
-char* timeShowNow () ; /* Deprecated
+char* timeShowNow (void) ; /* Deprecated
 			* ATTENTION, uses a static, NOT REENTRANT 
 			* prefer timeHandleShowNow (AC_HANDLE h) ; in regular.h
-			* ir timeBufShowNow
+			* or timeBufShowNow
 			*/
-char *timeBufShowNow (char *timeBuf) ; /* expecta buffer of legt 25, or the buffer retruned by a previous  timeHandleShowNow */
+char *timeBufShowNow (char *timeBuf) ; /* expecta buffer of legnth 25, or the buffer retruned by a previous  timeHandleShowNow */
 
 mytime_t timeNow (void) ;
 void     timeDiff (mytime_t t1, mytime_t t2, int *ydiff, int *mdiff,

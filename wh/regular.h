@@ -47,10 +47,11 @@
 #define DEF_REGULAR_H
 
 
-/*
-#define MEM_DEBUG 
-#define MALLOC_CHECK 
-*/
+
+/* #define MEM_DEBUG  */
+/* #define MALLOC_CHECK  */
+/* #define ARRAY_CHECK */
+
 				/* library EXPORT/IMPORT symbols */
 #if defined (WIN32)
 #include "win32libspec.h"  /* must come before mystdlib.h...*/
@@ -62,7 +63,7 @@
 #include <limits.h>
 #include <strings.h>
 #include <stdio.h>
-#include <float.h>
+#include <float.h> 
 #include <stdlib.h>
 #include "mystdlib.h"    /* contains full prototypes of system calls */
 #include "ctype.h"
@@ -192,8 +193,11 @@ void utUnlimitResources(BOOL allow_user_abort) ;
 int utPrintfSizeOfArgList (const char * formatDescription, va_list marker) ;
 BOOL getCmdLineOption (int *argcp, const char **argv,
 		       const char *arg_name, const char **arg_val) ; /* in utils.c */
+BOOL getCmdLineText (AC_HANDLE h, int *argcp, const char **argv,
+		       const char *arg_name, const char **arg_val) ; /* in utils.c */
 BOOL getCmdLineBool (int *argcp, const char **argv, const char *arg_name) ;
-BOOL getCmdLineInt (int *argcp, const char **argv, const char *arg_name, int *val) ; 
+BOOL getCmdLineInt (int *argcp, const char **argv, const char *arg_name, int *val) ;
+BOOL getCmdLineLong (int *argcp, const char **argv, const char *arg_name, long int *val) ; 
 BOOL getCmdLineFloat (int *argcp, const char **argv, const char *arg_name, float *val) ;
 
 /**********************************************************************/
@@ -308,6 +312,7 @@ void *halloc_dbg(mysize_t size, AC_HANDLE handle, const char *hfname, int hlinen
 void *handleAlloc_dbg(void (*final)(void *), AC_HANDLE handle, mysize_t size,
 					  const char *hfname, int hlineno) ;
 char *strnew_dbg (const char *old, AC_HANDLE handle, const char *hfname, int hlineno) ;
+
 #define halloc(_s, _h) halloc_dbg(_s, _h, __FILE__, __LINE__)
 #define handleAlloc(_f, _h, _s) handleAlloc_dbg(_f, _h, _s, __FILE__, __LINE__)
 #define strnew(_o, _h) strnew_dbg(_o, _h, __FILE__, __LINE__)

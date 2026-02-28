@@ -73,7 +73,8 @@ void bitExtend (BitSet bb, unsigned long int n) ;
                   /* Returns the number of set bits */
 unsigned long int bitSetCount (BitSet a) ;
       /* return the maximal allocated bit, useful to scan the table */
-#define bitSetMax(_x) ((bigArrayMax(_x)) << 5)
+#define bitSetExists(_x) ((_x) && (_x)->magic == BIG_ARRAY_MAGIC ? (_x)->id : 0 )
+
 
            /* performs b1 = b1 OPERATOR b2, returns count (b1) */
 unsigned long int bitSetAND (BitSet b1, BitSet b2) ;

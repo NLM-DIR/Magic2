@@ -47,6 +47,8 @@ typedef struct block /* sizeof(block) must be < BLOC_SIZE */
 
 #endif /* !ACEDB5 */
 
+void swapSuperBlock(BLOCK *bp) ;
+
 /******* session tree **********/
 typedef struct STstructure *STP ;
 typedef struct STstructure {

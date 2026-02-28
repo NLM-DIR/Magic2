@@ -244,6 +244,7 @@ extern  KEY _Alternative_exon
 , _VAnnotation
 , _VClone_Group
 , _VFiche
+, _VIntron
 , _VKantor
 , _VNewName
 , _VRNAi

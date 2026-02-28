@@ -143,10 +143,11 @@ char *DosToPosix(char *path) ; /* defined in filsubs.c */
 #  define MALLOC_ALIGNMENT 4
 #endif
 
-/* Alpha pointers are 8 bytes, so align the stack to that */
+/* Alpha pointers are 8 bytes, so align the stack to that  */
 #if defined(ALPHA) || defined(OPTERON) || defined(ALIGNMENT_64_BIT) 
 #  define STACK_ALIGNMENT 8
 #endif
+
 
 #if !defined(STACK_ALIGNMENT)
 #  define STACK_ALIGNMENT 4
@@ -159,6 +160,13 @@ char *DosToPosix(char *path) ; /* defined in filsubs.c */
 #if !defined(MALLOC_ALIGNMENT) 
 #  define MALLOC_ALIGNMENT DOUBLE_ALIGNMENT
 #endif
+
+
+/* this global 64 doubles memory requireements and slows the code 
+#define STACK_ALIGNMENT 64
+#define STACK_DOUBLE_ALIGNMENT 64
+#define MALLOC_ALIGNMENT 64
+*/
 
 #include <sys/utsname.h>
 

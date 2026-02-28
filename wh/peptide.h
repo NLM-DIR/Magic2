@@ -107,12 +107,13 @@ void pepGifDestroy (void*) ;
 /* OF HEADER CLASHES...                                                      */
 /* Pep display create data, controls how pep display will be created, passed */
 /* in as a void * to pepDisplay() via displayApp()                           */
+#ifdef JUNK
 typedef struct _PepDisplayData
 {
   BOOL CDS_only ;					    /* TRUE: translate only CDS portion of */
 							    /* objects DNA.*/
 } PepDisplayData ;
-
+#endif
 
 
 #endif   /* !ACEDB_PEPTIDE_H */

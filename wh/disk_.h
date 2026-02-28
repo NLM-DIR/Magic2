@@ -15,7 +15,8 @@
 #ifndef DEF_DISK
 #include "disk.h"
 #endif
-
+/* lscpu   on Linux gives the cache size of the hardware */
+/* sysctl  on Mac */
 #define BLOC_SIZE 1024      /*number of char in a block*/
 extern int _DISQUE_BLOC_SIZE ;
 typedef struct  blockheader

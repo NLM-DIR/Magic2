@@ -32,7 +32,7 @@
 #include "dict.h"
 #include "aceio.h"
 
-typedef enum { BF, BV, BG, AF, AM, AG, AW, BHIT, TABIX, COUNT } WFORMAT ;
+typedef enum { BF, BV, BG, AF, AM, AG, AW, BHIT, COUNT } WFORMAT ;
 typedef struct wiggleStruct { 
   AC_HANDLE h ; const char *title ; 
   ACEIN ai ; ACEOUT ao, aoPeaks ;
@@ -69,7 +69,7 @@ typedef struct wiggleStruct {
   const char *strandShift_f, *strandShift_r ;
   const char *strategy ;
   BOOL RNA_seq ;
-  BOOL ventilate, cumul, peaks, multiVentilate, hierarchic, lengthCoverage, flagEnds ;
+  BOOL ventilate, cumul, peaks, hierarchic, lengthCoverage, flagEnds ;
   int wiggleRatio, wiggleRatioDamper ;
   int multiPeaks ;  
   int BF_predictor ; /* degree of the polynome used to compress the BF format */
@@ -88,13 +88,13 @@ int sxWiggleGauss (WIGGLE *sx) ;
 void sxWiggleScale (WIGGLE *sx, float scale) ;
 void sxWiggleShift (WIGGLE *sx, float delta) ;
 void sxWiggleFloor (WIGGLE *sx, float mini) ;
-void sxWiggleRatio (WIGGLE *sx) ;
+void sxWiggleEndRatio (WIGGLE *sx) ;
 Array sxWiggleStrandedRatio (WIGGLE *sx, Array aaa, Array bbb, int damper, AC_HANDLE h) ;
 Array sxWiggleMultiply (WIGGLE *sx, Array aaa, AC_HANDLE h) ;
-void sxWiggleMultiplyLocally (WIGGLE *sx, Array bbb) ;
+void sxWiggleMultiplyLocally (WIGGLE *sx, Array bbb, Array aaa1) ;
 void sxWiggleCopy (WIGGLE *sx) ;
 void sxWiggleExport (WIGGLE *sx) ;
 
-Array sxGetWiggleZone (Array aa, const char *fNam, char *type, int step, const char *chrom, int a1, int a2, AC_HANDLE h) ; /* returns an array of WIGGLEPOINT */
+Array sxGetWiggleZone (Array aa, const char *fNam, char *type, int *stepp, const char *chrom, int a1, int a2, AC_HANDLE h) ; /* returns an array of WIGGLEPOINT */
 
 #endif
