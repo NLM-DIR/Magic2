@@ -66,7 +66,6 @@ static char usage[] = "Usage: aceserver database_dir [-nowrite] [-noswap] [port_
    implementations 
 */
 
-extern char *stackorigin ;            /* in arraysub */
 extern int isInteractive ;           /* in freesubs */
 extern BOOL parseKeepGoing ;
 
@@ -147,7 +146,6 @@ UT_MAKE_GETCOMPILEDATEROUTINE()
 
 int main (int argc, const char **argv)
 { 
-  char x ;
   u_long p ;
   int n, t, ix ;
   char *cp ;
@@ -175,8 +173,6 @@ int main (int argc, const char **argv)
 
 
   out = stderr ; /* this static cannot be initialized at file scope in WIN32? */
-
-  stackorigin = &x ;
 
   if (getCmdLineOption (&argc, argv, "-nowrite", 0))
     {
