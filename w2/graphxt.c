@@ -44,6 +44,7 @@
 /* $Id: graphxt.c,v 1.13 2017/01/17 21:15:06 mieg Exp $ */
 
 #include "regular.h"
+#include <stdnoreturn.h>
 
 #include "graphxt_.h"
 #include "key.h"		/* for keyboard stuff */
@@ -489,7 +490,7 @@ static void xtWarningHandler (char *msg)
 /* Handle drastic errors in Xt (recursion in Form widgets for instance).     */
 /* This routine must exit, Xt behaviour will be undefined if we try to carry */
 /* on.                                                                       */
-static void xtErrorHandler(String msg)
+static noreturn void xtErrorHandler(String msg)
 {
   fprintf(stderr, "Xt Error: %s\n", msg) ;
   

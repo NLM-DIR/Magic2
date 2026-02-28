@@ -42,8 +42,6 @@
  */
 
 /* $Id: graphcon.c,v 1.7 2015/08/11 22:14:46 mieg Exp $ */
-#define ARRAY_CHECK 
-
 #include "regular.h"
 
 #include "graph_.h"					    /* defines Graph, gXxxx externals, 

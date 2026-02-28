@@ -326,7 +326,7 @@ void graphBubbleInfo (int box, KEY key, char *ficheName, char *bubbleName)
     return ;
   if (!gActive->bubbleDict || !gActive->bubbleInfo)
     return ;
-  if (strstr (bubbleName, "primed in"))
+  if (0 && strstr (bubbleName, "primed in"))
     invokeDebugger() ;
   bubble = arrayp(gActive->bubbleInfo, box, BUBBLEINFO) ;
   bubble->box = box ;
