@@ -2190,7 +2190,7 @@ int main(int argc, char **argv)
 	{
 	  txt = vtxtHandleCreate (h) ;
 	  loopOnAllGenome (mode) ;
-	  fprintf (stderr, "// gene2gene created a buffer of %d char\n", vtxtMark (txt)) ;
+	  fprintf (stderr, "// gene2gene created a buffer of %ld char\n", vtxtMark (txt)) ;
 	  if (0) fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 	  if (vtxtPtr (txt) && !ac_parse (DB, vtxtPtr (txt), &error, 0, h))
 	    fprintf(stderr, "// Parse error: %s\n", error) ;

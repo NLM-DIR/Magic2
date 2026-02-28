@@ -74,10 +74,8 @@
 
 #define VERSION "1.1"
 
-/* 
-   #define MALLOC_CHECK   
-   #define ARRAY_CHECK   
-*/
+/* #define MALLOC_CHECK    */
+/* #define ARRAY_CHECK  */
 #include "ac.h"
 #include "channel.h"
 #include "query.h"
@@ -106,6 +104,7 @@ typedef struct tsnpCallerTable {
   const char *select ;
   const char *remap2genome ;
   const char *remap2genes ;
+  BOOL countTypes ;
   BOOL force ;
  
   int minSnpCover, minSnpCount ;
@@ -121,6 +120,7 @@ typedef struct tsnpCallerTable {
   DICT *snpTypeDict ;
   DICT *geneDict ;
   DICT *runDict ;
+  DICT *runStatDict ;
   DICT *targetDict ;
   DICT *chromDict ;
   DICT *target_classDict ;
@@ -135,7 +135,9 @@ typedef struct tsnpCallerTable {
 
   BOOL mergeCounts ;
   BOOL dbReport ;
+  BOOL dbSnpProfile ;
   BOOL dbTranslate ;
+  BOOL dbGroupCount ;
   BOOL dbGGG ;
   BOOL dropMonomodal ;
   const char *dbName ;
@@ -191,6 +193,8 @@ typedef struct runStruct {
   int *types ;
   int *typesR ;
   int *typesC ;
+  KEYSET r2g ; /* list of groups g of which r is a member */
+  KEYSET g2r ; /* list of runs in this group */
 } RC ;
 
 static BOOL tsnpGetMonomodal (TSNP *tsnp, AC_OBJ Snp);
@@ -1188,10 +1192,19 @@ static void tsnpRemap0 (TSNP *tsnp)
   if (tsnp->db)
     {
       if (tsnp->force)
-	iter = ac_query_iter (tsnp->db, TRUE, "find variant ", 0, h) ;
+	{
+	  if (tsnp->remap2genome)
+	    iter = ac_query_iter (tsnp->db, TRUE, "find variant Found_in_mRNA", 0, h) ;
+	  if (tsnp->remap2genes)
+	    iter = ac_query_iter (tsnp->db, TRUE, "find variant Found_in_genome", 0, h) ;
+	}
       else
-	iter = ac_query_iter (tsnp->db, TRUE, "find variant Found_in_mRNA && ! mRNA ", 0, h) ;
-
+	{
+	  if (tsnp->remap2genome)
+	    iter = ac_query_iter (tsnp->db, TRUE, "find variant Found_in_mRNA && ! IntMap ", 0, h) ;
+	  if (tsnp->remap2genes)
+	    iter = ac_query_iter (tsnp->db, TRUE, "find variant Found_in_genome && ! mRNA ", 0, h) ;
+	}
       while (ac_free (variant), ac_free (h1), variant = ac_iter_obj (iter))
 	{
 	  h1 = ac_new_handle () ;
@@ -1221,9 +1234,20 @@ static void tsnpRemap0 (TSNP *tsnp)
 	  if (Bbuf[0] == '~')   continue ;
 	  if (Abuf[0] == '~')   continue ;
 
-	  vtxtPrintf (txt, "\nVariant \"%s\"\nmRNA\nSite\nFound_in_mRNA\n", ac_name (variant)) ;
-	  vtxtPrintf (txt, "Parent_sequence \"%s\"\n", seqNam) ;
+	  vtxtPrintf (txt, "\nVariant \"%s\"\n", ac_name (variant)) ;
 	  vtxtPrintf (txt, "-D Type\n-D Seq\n-D VCF_hg38\n-D Site\n") ;
+	  if (tsnp->remap2genes)
+	    {
+	      vtxtPrintf (txt, "Found_in_genome\n") ;
+	      vtxtPrintf (txt, "Parent_sequence \"%s\"\n", seqNam) ;
+	    }
+	  if (tsnp->remap2genome)
+	    {
+	      vtxtPrintf (txt, "Found_in_mRNA\n") ;
+	      vtxtPrintf (txt, "-D mRNA\nmRNA \"%s\"\n", seqNam) ;
+	    }
+
+
 
 	  if (!strcasecmp (typeBuf, "Sub")) 
 	    {
@@ -1256,7 +1280,19 @@ static void tsnpRemap0 (TSNP *tsnp)
 	  else
 	    continue ;
 	  nn2++ ;
-	  vtxtPrintf (txt, "mRNA \"%s\" %d %d\n\n", seqNam, a1, a2) ;
+	  if (tsnp->remap2genes)
+	    {
+	      vtxtPrintf (txt, "Site\nFound_in_genome\n") ;
+	      vtxtPrintf (txt, "Parent_sequence \"%s\"\n", seqNam) ;
+	      vtxtPrintf (txt, "IntMap \"%s\" %d %d\n", seqNam, a1, a2) ;
+	    }
+	  if (tsnp->remap2genome)
+	    {
+	      vtxtPrintf (txt, "Site\nFound_in_mRNA\n") ;
+	      vtxtPrintf (txt, "mRNA \"%s\" %d %d\n", seqNam, a1, a2) ;
+	    }
+
+	  vtxtPrintf (txt, "\n") ;
 	}
       ac_parse (tsnp->db, vtxtPtr (txt), &errors, 0, h) ; 
     }
@@ -1419,9 +1455,9 @@ static int tsnpRemap2 (TSNP *tsnp)
   const char *errors = 0 ;
   
   if (tsnp->force)
-    iter = ac_query_iter (tsnp->db, TRUE, "find variant IntMap ", 0, h) ;
+    iter = ac_query_iter (tsnp->db, TRUE, "find variant found_in_genome ", 0, h) ;
   else
-    iter = ac_query_iter (tsnp->db, TRUE, "find variant IntMap && ! geneBox", 0, h) ;
+    iter = ac_query_iter (tsnp->db, TRUE, "find variant found_in_genome && ! geneBox", 0, h) ;
   while (ac_free (variant), ac_free (h1), variant = ac_iter_obj (iter))
     {
       h1 = ac_new_handle () ;
@@ -2386,6 +2422,304 @@ static void tsnpMergeCounts (TSNP *tsnp)
   
 /*************************************************************************************/
 /*************************************************************************************/
+typedef struct snpRunCounts { KEY run ; int m, c ;} RMC ;
+
+static int rmcOrder (const void *va, const void *vb)
+{
+  const RMC *up = va ;
+  const RMC *vp = vb ;
+  int n = up->run - vp->run ;
+  return n ;
+} /* rmcOrder */
+
+/*************************************************************************************/
+
+static int tsnpDbRun2groups (TSNP *tsnp)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  DICT *runDict = dictHandleCreate (200, tsnp->h) ;
+  AC_DB db = tsnp->db ;
+  Array runs = tsnp->runs ;
+  const char *errors = 0 ;
+  char *qq = hprintf (h, "Find Project \"%s\" ; >run", tsnp->project) ;
+  AC_TABLE tbl = ac_bql_table (db, qq, 0, 0, &errors, h) ;
+  int ir, irMax = tbl ? tbl->rows : 0 ;
+
+  tsnp->runStatDict = runDict ;
+  for (ir = 0 ; ir < irMax ; ir++) 
+    dictAdd (runDict, ac_table_printable (tbl, ir, 0, "NULL"), 0) ;
+
+  if (! tsnp->runs)
+    runs = tsnp->runs = arrayHandleCreate (256, RC, tsnp->h) ;
+  for (ir = 0 ; ir < irMax ; ir++) 
+    {
+      AC_HANDLE h1 = ac_new_handle () ;
+      AC_OBJ Run = ac_table_obj (tbl, ir, 0, h1) ;
+      int run ;
+      if (dictFind (runDict, ac_name(Run), &run))
+	{
+	  AC_TABLE tbl2 = ac_obj_bql_table (Run, ">>Group", 0, &errors, h1) ;
+	  int jrMax = tbl2 ? tbl2->rows : 0 ;
+      
+	  if (jrMax)
+	    {
+	      RC *rc = arrayp (runs, run, RC) ;
+	      KEYSET r2g = rc->r2g ;
+	  
+	      if (! r2g)
+		r2g = rc->r2g = keySetHandleCreate (tsnp->h) ;
+	      for (int g = 0, k =0, jr = 0 ; jr < jrMax ; jr++)
+		if (dictFind (runDict, ac_table_printable (tbl2, jr, 0, 0), &g))
+		  keySet (r2g, k++) = g ;
+	    }
+	}
+      ac_free (h1) ;
+    }
+  
+  ac_free (h) ;
+  return dictMax (runDict) ;
+} /* tsnpDbRun2groups */
+
+/*************************************************************************************/
+/* export a tsf file per run and group counting supported snps */
+static void tsnpDbSnpProfile (TSNP *tsnp)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h1 = 0 ;
+  AC_DB db = tsnp->db ;
+  AC_ITER iter ;
+  AC_OBJ Snp = 0 ;
+  Array rmcs = arrayHandleCreate (300, RMC, h) ;
+  Array stats = arrayHandleCreate (1000000, int, h) ;
+  DICT *runDict = tsnp->runStatDict ;
+  DICT *dict = dictHandleCreate (10000, h) ;
+  DICT *gNameDict = dictHandleCreate (10000, h) ;
+  int minSnpCover = tsnp->minSnpCover ;
+  int minSnpCount = tsnp->minSnpCount ;
+  int minSnpFrequency = tsnp->minSnpFrequency ;
+  char *allSubs = "A>G_T>C_G>A_C>T_A>T_T>A_G>C_C>G_A>C_T>G_G>T_C>A" ;
+  int nSites = 0, nIter = 0 ;
+  tsnp->varTypeDict = tsnpMakeVarTypeDict (h) ;
+  int nnn = 0 ;
+  char typ2[256] ;
+
+  memset (typ2, 0, sizeof (typ2)) ;
+  if (tsnp->select)
+    iter = ac_query_iter (db, TRUE, hprintf (h, "find variant IS  \"%s\" ", tsnp->select), 0, h) ;
+  else
+    iter = ac_query_iter (db, TRUE, "Find Variant typ && BRS_counts", 0, h) ;
+  
+  while (ac_free (Snp), ac_free (h1), Snp = ac_iter_obj (iter))
+    {
+      AC_TABLE tbl = 0 ;
+      int irmc = 0, ir, irMax = dictMax (runDict) ;
+      RMC *rmc ;  
+      const char *typ = ac_tag_printable (Snp, "Typ", 0) ;
+      int i, k, p = 0 ;
+      const char *gName = ac_tag_printable (Snp, "gName", 0) ;
+
+      nIter++ ;
+      if (! gName || ! dictAdd (gNameDict, gName, 0))
+	continue ;
+      if (! typ)
+	continue ;
+      
+      nSites++ ;
+      h1 = ac_new_handle () ;
+      tbl = ac_tag_table (Snp, "BRS_counts", h1) ;
+
+      if (typ[1]== '>')
+	{ 
+	  char *cp = strstr (allSubs, typ) ;
+	  p = 29 ; memcpy (typ2+3, typ, 3) ; typ2[6] = 0 ; 
+	  if (cp) { p = (cp - allSubs) ; p = 10 + p/4 ; }
+	}
+      else
+	{
+	  k = strlen (typ) ; 
+	  if (k > 6) k = 6 ; 
+	  k -= 3 ;
+	  if (k <= 0)
+	    continue ;
+	  
+	  if (! strncmp (typ, "Del", 3))
+	    { 
+	      p = 20 + 10*k + 3 ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+i] = '-' ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+k+i] = typ[i+3] ;
+	      typ2[3+2*k] = 0 ;
+	    }
+	  else if (! strncmp (typ, "Ins", 3))
+	    { 
+	      p = 20 + 10*k + 1 ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+i] = '+' ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+k+i] = typ[i+3] ;
+	      typ2[3+2*k] = 0 ;
+	    }
+	  else if (! strncmp (typ, "Dim", 3))
+	    { 
+	      p = 20 + 10*k + 4 ;
+	      typ2[3] = '*' ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+1+i] = '-' ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+1+k+i] = typ[i+3] ;
+	      typ2[3+2*k+1] = 0 ;
+	    }
+	  else if (! strncmp (typ, "Dup", 3))
+	    { 
+	      p = 20 + 10*k + 2 ;
+	      typ2[3] = '*' ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+1+i] = '+' ;
+	      for (i = 0 ; i < k ; i++)
+		typ2[3+1+k+i] = typ[i+3] ;
+	      typ2[3+2*k+1] = 0 ;
+	    }
+	}
+      typ2[0] = '0' + p/10 ; 
+      typ2[1] = '0' + p%10 ; 
+      typ2[2] = '_' ;
+      for (char *cp = typ2 + 3 ; *cp ; cp++)
+	*cp = ace_lower (*cp) ;
+      
+      for (ir = 0 ; ir < irMax ; ir++)
+	{
+	  const char *runNam = ac_table_printable (tbl, ir, 0, 0) ;
+	  int run = 0 ;
+	  if (dictFind (runDict, runNam, &run))
+	    {
+	      int c = ac_table_int (tbl, ir, 1, 0) ;
+	      int m = ac_table_int (tbl, ir, 2, 0) ;
+	      RC *rc = arrayp (tsnp->runs, run, RC) ;
+	      KEYSET r2g = rc->r2g ;
+	      int igMax = r2g ? keySetMax (r2g) : 0 ;
+	      rmc = arrayp (rmcs, irmc++, RMC) ;
+	      rmc->run = run ;
+	      rmc->c = c ;
+	      rmc->m = m ;
+	      for (int ig = 0 ; ig < igMax ; ig++)
+		{
+		  rmc = arrayp (rmcs, irmc++, RMC) ;
+		  rmc->run = keySet (r2g, ig) ;
+		  rmc->c = c ;
+		  rmc->m = m ;
+		}
+	    }
+	}	    
+      arraySort (rmcs, rmcOrder) ;
+      for (int i = 0 ; i < irmc ; i++)
+	{
+	  int c = 0, m = 0 ;
+	  RMC *rmc = arrp (rmcs, i, RMC) ;
+	  KEY run = rmc->run ;
+
+	  for (int j = i ; j < irmc && rmc->run == run ; j++, rmc++)
+	    { c += rmc->c ; m += rmc->m ; i = j ; }
+	  if (c >= minSnpCover && m >= minSnpCount && 100*m >= minSnpFrequency * c)
+	    {
+	      int *kp, k = 0, t = -1 ;
+	      char buf[276] ;
+
+	      snprintf (buf, 275, "%05d_%s", run, "Measurable") ;
+	      dictAdd (dict, buf, &k) ;
+	      kp = arrayp (stats, k, int) ;
+	      (*kp)++ ;
+
+	      if (ac_has_tag (Snp, "monomodal"))
+		{
+		  snprintf (buf, 275, "%05d_%s", run, "Rejected_sites") ;
+		  dictAdd (dict, buf, &k) ;
+		  kp = arrayp (stats, k, int) ;
+		  (*kp)++ ;
+		  continue ;
+		}
+
+	      snprintf (buf, 275, "%05d_TYPE__%s", run, typ2) ;
+	      dictAdd (dict, buf, &k) ;
+	      kp = arrayp (stats, k, int) ;
+	      (*kp)++ ;
+	      t = -1 ;
+	      if (1)
+		{
+		  /* char *pTypes = {"Pure","High","Mid","Low","Ref"} ; */
+		  if (100 * m > 95*c) t = 4 ;
+		  else if (100 * m > 80*c) t = 3 ;
+		  else if (100 * m > 20*c) t = 2 ;
+		  else if (100 * m > 5*c) t = 1 ;
+		  else if (100 * m > 95*c) t = 0 ;
+		}
+	      if (t >= 0)
+		{
+		  snprintf (buf, 275, "%05d_Genomic__%d", run, t) ;
+		  dictAdd (dict, buf, &k) ;
+		  kp = arrayp (stats, k, int) ;
+		  (*kp)++ ;	     
+		} 
+	      t = -1 ;
+	      if (ac_has_tag (Snp, "Coding") && !ac_has_tag (Snp, "Synonymous"))
+		{
+		  /* char *pTypes = {"Pure","High","Mid","Low","Ref"} ; */
+		  if (100 * m > 95*c) t = 4 ;
+		  else if (100 * m > 80*c) t = 3 ;
+		  else if (100 * m > 20*c) t = 2 ;
+		  else if (100 * m > 5*c) t = 1 ;
+		  else if (100 * m > 95*c) t = 0 ;
+		}
+	      if (t >= 0)
+		{
+		  snprintf (buf, 275, "%05d_Protein_changing__%d", run, t) ;
+		  dictAdd (dict, buf, &k) ;
+		  kp = arrayp (stats, k, int) ;
+		  (*kp)++ ;	     
+		} 
+	    }
+	}
+    }
+
+  /* export in tsf format */
+  if (1)
+    {
+      ACEOUT ao = aceOutCreate (tsnp->outFileName, ".snp_profile.tsf", tsnp->gzo, h) ;
+      int run = 0, kMax = arrayMax (stats) ;
+
+      for (run = 1 ; run <= dictMax (runDict) ; run++)
+	aceOutf (ao, "%s\t%s\ti\t%d\n", dictName (runDict, run), "Tested_sites", nSites) ; 
+      
+      for (int k = 1 ; k < kMax ; k++)
+	{
+	  int nn = array (stats, k, int) ;
+	  if (nn)
+	    {
+	      const char *ccp = dictName (dict, k) ;
+	      sscanf (ccp, "%d_", &run) ;
+	      while (*ccp != '_') ccp++ ; 
+	      ccp++ ;
+	      if (!strcmp (ccp, "Measurable"))
+		{ 
+		  aceOutf (ao, "%s\t%s\ti\t%d\n", dictName (runDict, run), ccp, nn) ; 
+		  nn = nSites - nn ; ccp = "Not_measurable_sites" ; 
+		}
+	      aceOutf (ao, "%s\t%s\ti\t%d\n", dictName (runDict, run), ccp, nn) ;
+	      nnn++ ; 
+	    }
+	}
+ 
+      fprintf (stderr, "tsnpDbSnpProfile exported %d/%d snps in file %s\n"
+	       , nnn, nIter, aceOutFileName (ao)
+	       ) ;
+    }
+  
+  ac_free (h) ;
+  return ;
+} /* tsnpDbSnpProfile */
+
+/*************************************************************************************/
+/*************************************************************************************/
 /* slide deletions and insertions, speclial treat for position 76 */
 
 static BOOL tsnpSlide (const char *dna, int dnaLn, int a10, int da, int *dxp, int *slidep)
@@ -3102,7 +3436,7 @@ static int tsnpSetGName (vTXT txt, TSNP *tsnp, AC_OBJ Snp, AC_HANDLE h0)
 		    am2 = am1 + 2 ;
 		    fs = -1 ; 
 
-		    vtxtPrintf (txt, "mRNA %s %d %d \"Base %c %d is deleted\"\n", name (mrna), m1, m2, (*del)[3], m1+1) ;
+		    if (mrna) vtxtPrintf (txt, "mRNA %s %d %d \"Base %c %d is deleted\"\n", name (mrna), m1, m2, (*del)[3], m1+1) ;
 		    if (a1 < a2)
 		      vtxtPrintf (txt, "-D IntMap\nIntMap %s %d %d \"Base %c %d is deleted\"\n", name (seq), a1, a2, (*del)[3], a1+1) ;
 		    else
@@ -3205,10 +3539,10 @@ static int tsnpSetGName (vTXT txt, TSNP *tsnp, AC_OBJ Snp, AC_HANDLE h0)
 		  if (a1 > a2)
 		    {
 		      for (i = 0 ; i <  da ; i++)
-			bufVG[i] = ace_upper(dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)bufV[da - 1 - i]]]]) ;
+			bufVG[i] = ace_upper(dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)bufV[da - 1 - i]])]) ;
 		      bufVG[i] = 0 ;
 		      for (i = 0 ; i <  da ; i++)
-			bufVGS[i] = ace_upper(dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)bufVS[da - 1 - i]]]]) ;
+			bufVGS[i] = ace_upper(dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)bufVS[da - 1 - i]])]) ;
 		      bufVGS[i] = 0 ;
 		    }
 		  vtxtPrintf (txt,"Multi_deletion %d %s\n", da, bufV) ; /* reinstate */ 
@@ -3809,6 +4143,111 @@ static void tsnpDbTranslate (TSNP *tsnp)
   
 /*************************************************************************************/
 /*************************************************************************************/
+/* count per group */
+static void tsnpDbGroupCount (TSNP *tsnp)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h1 = 0 ;
+  AC_DB db = tsnp->db ;
+  AC_ITER iter ;
+  ACEOUT ao = tsnp->outFileName ? aceOutCreate (tsnp->outFileName, ".group_count.ace", tsnp->gzo, h) : 0 ;
+  int nn = 0, nnn = 0 ;
+  AC_OBJ Snp = 0 ;
+  vTXT txt = vtxtHandleCreate (h) ;
+  KEYSET gCounts = 0 ;
+  const char *errors = 0 ;
+  int runClass = 0 ;
+  Array r2gs = arrayHandleCreate (200, KEYSET, h) ;
+  int minSnpCover = tsnp->minSnpCover ;
+
+  
+  char *qq = "select r,g from r in ?runs, g in r >> group where g#SNP_add_counts" ;
+  AC_TABLE tbl = ac_bql_table (db, qq, 0, 0, &errors, h) ;
+  if (tbl)
+    for (int ir = 0 ; ir < tbl->rows ; ir++)
+      {
+	KEY r = ac_table_key (tbl, ir, 0, 0) ;
+	if (r)
+	  runClass = class (r) ;
+	r = KEYKEY (r) ;
+	KEYSET r2g = array (r2gs, r, KEYSET) ;
+	if (! r2g)
+	  r2g = array (r2gs, r, KEYSET) = keySetHandleCreate (h) ;
+	keySet (r2g, keySetMax (r2g)) = KEYKEY (ac_table_key (tbl, ir, 1, 0)) ;
+      }
+  if (! tbl)
+    { ac_free (h) ; return ; }
+
+  if (tsnp->select)
+    iter = ac_query_iter (db, TRUE, hprintf (h, "find variant BRS_counts && IS  \"%s\" ", tsnp->select), 0, h) ;
+  else
+    iter = ac_query_iter (db, TRUE, "Find Variant BRS_counts", 0, h) ;
+
+  /* NOT DONE: split the 729 multi sub and force create the individual pieces */
+  while (ac_free (Snp), ac_free (h1),  Snp = ac_iter_obj (iter))
+    {
+      AC_TABLE tbl = 0 ;
+      h1 = ac_new_handle () ;
+      nn++ ;
+      vtxtPrintf (txt, "\nVariant \"%s\"\n", ac_name (Snp)) ;
+
+      gCounts = keySetHandleCreate (h1) ;
+      tbl = ac_tag_table (Snp, "BRS_counts", h1) ;
+      if (tbl)
+	{
+	  for (int ir = 0 ; ir < tbl->rows ; ir++)
+	    {
+	      KEY run = ac_table_key (tbl, ir, 0, 0) ;
+	      KEYSET r2g = array (r2gs, KEYKEY (run), KEYSET) ;
+	      if (r2g)
+		for (int ig = 0 ; ig < keySetMax (r2g) ; ig++)
+		  {
+		    KEY g = keySet (r2g, ig) ;
+		    for (int ic = 1 ; ic <= 7 ; ic++)
+		      {
+			int x = ac_table_int (tbl, ir, ic, 0) ;
+			keySet (gCounts, 8*g + ic) += x ;
+		      }
+		  }
+	    }
+	}
+      for (int ig = 0 ; ig < keySetMax (gCounts) ; ig += 8)
+	{
+	  int m ; /* cover , mutant */
+	  float f = 0 ;
+	  int c = keySet (gCounts, ig + 1) ;
+	  KEY gr = KEYMAKE (runClass, ig/8) ;
+	  
+	  if (c < minSnpCover)
+	    continue ;
+
+	  vtxtPrintf (txt, "BRS_counts %s", name (gr)) ;
+	  for (int ic = 1 ; ic <= 7 ; ic++)
+	    vtxtPrintf (txt, " %d ", keySet (gCounts, ig + ic)) ;
+	  m = keySet (gCounts, ig + 2) ;
+	  f = c ? 100.0 * m/c : 0 ;
+	  vtxtPrintf (txt, " Frequency %.2f\n", f) ;
+	  nnn++ ;
+	}
+      ac_free (h1) ;
+    }
+  vtxtPrint (txt,"\n") ;
+  if (ao)
+    aceOutf (ao, "%s\n", vtxtPtr (txt)) ;
+  else
+    {
+      ac_parse (db, vtxtPtr (txt), &errors, 0, h) ; 
+      if (errors && *errors)
+	fprintf(stderr, "tsnpDbTranslate parsing error %s\n", errors) ;
+    }
+
+  fprintf (stderr, "Found %d SNPs, exported %d counts\n", nn, nnn) ;
+
+  ac_free (h) ;
+} /* tsnpDbGroupCount */
+  
+/*************************************************************************************/
+/*************************************************************************************/
 /* look for snp in geneBox but not in transcript */
 static int tsnpPotential_splice_disruption (TSNP *tsnp, ACEOUT ao)
 {
@@ -4395,7 +4834,7 @@ static int tsnpCodingModif  (TSNP *tsnp)
 		{
 		  cc =  typ[2] ;
 		  if (strand == -1)
-		    cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ;
+		    cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc])] ;
 		  *(cd3 - 1) = ace_upper (cc) ; /* we already copied the original letter */
 		}
 	      else if (! strncasecmp (typ, "Ins", 3)) /* insert the insertion */
@@ -4423,7 +4862,7 @@ static int tsnpCodingModif  (TSNP *tsnp)
 			{ 
 			  cc = *cd22 ;
 			  if (strand == -1)
-			    cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ;
+			    cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc])] ;
 			  *cd3 = ace_upper(cc) ; isFrameshift++ ; 
 
 			  /* specialize Ins? to Dup? if *cp3 is a repeated letter */
@@ -4462,7 +4901,7 @@ static int tsnpCodingModif  (TSNP *tsnp)
 		      char *cq = cp + strlen (cp) - 1 ;
 		      cd3-- ;
 		      while (cq >= cp)
-			*cd3++ = ace_upper (dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)(*cq--)]]])   ;
+			*cd3++ = ace_upper (dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)(*cq--)])])   ;
 		    }
 		}
 	      
@@ -5961,6 +6400,164 @@ static void tsnpMakeWords (TSNP *tsnp)
 } /* tsnpMakeWords */
 
 /*************************************************************************************/
+/*************************************************************************************/
+/* compute for jafar sum of Nth pwers of the integers in formal variables */
+static void getSumNthPowers (int N)
+{
+  int ii, P = 8 , s[P+1], a[N +1], b[N+1], d = 1 ;
+  int M = 5 ;
+  /* compute the actual partial sums up to order P */
+  for (ii = 0 ; ii <= 8 ; ii++)
+    {
+      s[ii] = 0 ;
+      if (ii > 0)
+	{
+	  int k = ii ;
+	  for (int j=2 ; j <= N ; j++)
+	    k *= ii ;
+	  s[ii] = s[ii-1] + k ;
+	}
+    }
+  switch (N)
+    {
+    default: return ;
+    case 1:  /* n (n+1)/2 */
+      for (a[0] = 1 ; a[0] <= M ; a[0]++)
+	for (a[1] = 1 ; a[1] <= M ; a[1]++)
+	  for (b[0] = -M ; b[0] <= M ; b[0]++)
+	    for (b[1] = -M ; b[1] <= M ; b[1]++)
+	      {
+		int jj ;
+
+		d = 2 * a[0] * a[1] ;
+		if (d == 0)
+		  continue ;
+		for (jj = 0 ; jj < 8 ; jj++)
+		  {
+		    int x = (a[0] * jj + b[0]) * (a[1] * jj + b[1]) ;
+		    if (x % d)
+		      break ;
+		    if (x != d*s[jj])
+		      break ;
+		  }
+		if (jj == 8) /* success */
+		  {
+		    printf("+++++  formula is sum(i^N) = (%d n + %d) (%d n + %d)/%d\n", a[0], b[0], a[1], b[1], d) ;
+		    exit (0) ;
+		  }
+	      }
+      break ;
+    case 2: /* n (n+1) (2n+1)/6 */
+      for (a[0] = 1 ; a[0] <= M ; a[0]++)
+	for (a[1] = 1 ; a[1] <= M ; a[1]++)
+	  for (a[2] = 1 ; a[2] <= M ; a[2]++)
+	    for (b[0] = -M ; b[0] <= M ; b[0]++)
+	      for (b[1] = -M ; b[1] <= M ; b[1]++)
+		for (b[2] = -M ; b[2] <= M ; b[2]++)
+	      {
+		int jj ;
+
+		d = 3 * a[0] * a[1] * a[2] ;
+		if (d == 0)
+		  continue ;
+		for (jj = 0 ; jj < 8 ; jj++)
+		  {
+		    int x = (a[0] * jj + b[0]) * (a[1] * jj + b[1]) * (a[2] * jj + b[2]) ;
+		    if (x % d)
+		      break ;
+		    if (x != d*s[jj])
+		      break ;
+		  }
+		if (jj == 8) /* success */
+		  {
+		    printf("+++++  formula is sum(i^N) = (%d n + %d) (%d n + %d) (%d n + %d)/%d\n", a[0], b[0], a[1], b[1], a[2], b[2], d) ;
+		    exit (0) ;
+		  }
+	      }
+      break ;
+    case 3: /* n^2 (n+1)^2/4 */
+      for (a[0] = 1 ; a[0] <= M ; a[0]++)
+	for (a[1] = 1 ; a[1] <= M ; a[1]++)
+	  for (a[2] = 1 ; a[2] <= M ; a[2]++)
+	    for (a[3] = 1 ; a[3] <= M ; a[3]++)
+	    for (b[0] = -M ; b[0] <= M ; b[0]++)
+	      for (b[1] = -M ; b[1] <= M ; b[1]++)
+		for (b[2] = -M ; b[2] <= M ; b[2]++)
+		  for (b[3] = -M ; b[3] <= M ; b[3]++)
+	      {
+		int jj ;
+
+		d = N + 1 ;
+		for (int i = 0 ; i <= N ; i++)
+		  d = d * a[i] ;
+		if (d == 0)
+		  continue ;
+		for (jj = 0 ; jj < 8 ; jj++)
+		  {
+		    int x = 1 ;
+		    for (int i = 0 ; i <= N ; i++)
+		      x *= a[i] * jj + b[i] ;
+		    if (x % d)
+		      break ;
+		    if (x != d * s[jj])
+		      break ;
+		  }
+		if (jj == 8) /* success */
+		  {
+		    printf("+++++  formula is sum(i^N) = ") ;
+		    for (int i = 0 ; i <= N ; i++)
+		      printf (" (%d n + %d) ", a[i], b[i]) ;
+		    printf (" / %d\n", d) ;
+		    exit (0) ;
+		  }
+	      }
+      break ;
+    case 4:
+      /* faux la vrai formule est n (n+1)(2n+1)(3n^2 + 3n -1)/30 */
+      for (a[0] = 1 ; a[0] <= M ; a[0]++)
+	for (a[1] = 1 ; a[1] <= M ; a[1]++)
+	  for (a[2] = 1 ; a[2] <= M ; a[2]++)
+	    for (a[3] = 1 ; a[3] <= M ; a[3]++)
+	      for (a[4] = 1 ; a[4] <= M ; a[4]++)
+		for (b[0] = -M ; b[0] <= M ; b[0]++)
+		  for (b[1] = -M ; b[1] <= M ; b[1]++)
+		    for (b[2] = -M ; b[2] <= M ; b[2]++)
+		      for (b[3] = -M ; b[3] <= M ; b[3]++)
+			for (b[4] = -M ; b[4] <= M ; b[4]++)
+		      {
+		int jj ;
+
+		d = N + 1 ;
+		for (int i = 0 ; i <= N ; i++)
+		  d = d * a[i] ;
+		if (d == 0)
+		  continue ;
+		for (jj = 0 ; jj < 8 ; jj++)
+		  {
+		    int x = 1 ;
+		    for (int i = 0 ; i <= N ; i++)
+		      x *= a[i] * jj + b[i] ;
+		    if (x % d)
+		      break ;
+		    if (x != d * s[jj])
+		      break ;
+		  }
+		if (jj == 8) /* success */
+		  {
+		    printf("+++++  formula is sum(i^N) = ") ;
+		    for (int i = 0 ; i <= N ; i++)
+		      printf (" (%d n + %d) ", a[i], b[i]) ;
+		    printf (" / %d\n", d) ;
+		    exit (0) ;
+		  }
+	      }
+      break ;
+    }
+  printf ("Solution NOT found N = %d\n", N) ;
+		
+}
+
+/*************************************************************************************/
 /***************************** Public interface **************************************/
 /*************************************************************************************/
 /* run -run NA12878MOD -laneList tmp/TSNP/NA12878MOD/LaneList -t 20 -target_fasta TARGET/CHROMS/hs.chrom_20.fasta.gz -t1 25000001 -t2 30010000 -minSnpFrequency 18 -minSnpCover 10 -minSnpCount 4 -target_class Z_genome -o tata -maxLanes 4
@@ -6012,8 +6609,10 @@ static void usage (const char commandBuf [], int argc, const char **argv)
 	   "//   --db_remap2genes tmp/METADATA/mrnaRemap.gz --db ACEDB [--force]\n"
 	   "//      Remap the genome variants into transcript coordinates\n"
 	   "//      --force : remap all variants, default: remmap on those lacking the GeneBox tag\n"
-	   "//   --db_translate --db ACEDB : translate the mRNA variants (or genome variants remapped to mRNAs) if they map to a protein coding exon\n"
-	   "//   --db_count -i count_file --db ACEDB  : scan the input file and adjust in the ACEDB database the variant->population and ->strand counts\n"
+	   "//   --db_translate --db ACEDB [--select snp_name]\n"
+	   "//      Translate all [matching] mRNA variants (or genome variants remapped to mRNAs) if they map to a protein coding exon\n"
+	   "//   --db_count_types  --db ACEDB  : count per run the number of SNP passing the cover/count/frequency thresholds of each type sub/indels/transition ...\n"
+	   "//   --db_group_count  --db ACEDB  : add up the counts per group\n"
 	   "// GENE FUSION\n"
 	   "//   --target_class : target class (KT_RefSeq ET_av...) [default ET_av]\n"
 	   "//   --min_GF integer : [default 5]  filter geneFusionFile on min support \n" 
@@ -6081,6 +6680,13 @@ int main (int argc, const char **argv)
       sprintf(cp, "%s ", argv[ix]) ;
   }
 
+  if (0)
+    {
+      int N = 0 ;
+      if (getCmdLineInt (&argc, argv, "--jaf", &N))
+	getSumNthPowers (N) ;
+      exit(0) ;
+    }
   /* consume optional args */
   tsnp.gzi = getCmdLineBool (&argc, argv, "--gzi") ;
   tsnp.gzo = getCmdLineBool (&argc, argv, "--gzo") ;
@@ -6134,6 +6740,7 @@ int main (int argc, const char **argv)
   getCmdLineOption (&argc, argv, "--filter", &(tsnp.filter)) ;
   getCmdLineOption (&argc, argv, "--db_remap2genome", &tsnp.remap2genome) ;
   getCmdLineOption (&argc, argv, "--db_remap2genes", &tsnp.remap2genes) ;
+  tsnp.countTypes = getCmdLineBool (&argc, argv, "--db_count_types") ;
   tsnp.force = getCmdLineBool (&argc, argv, "--force") ;
 
   tsnp.makeWords = getCmdLineBool (&argc, argv, "--makeWords") ;
@@ -6154,10 +6761,14 @@ int main (int argc, const char **argv)
     tsnp.minSnpCount =  tsnp.minSnpCover ;
 
   tsnp.mergeCounts = getCmdLineBool (&argc, argv, "--merge") ;
-  tsnp.dbReport = getCmdLineBool (&argc, argv, "--db_report") ;
   tsnp.dbTranslate = getCmdLineBool (&argc, argv, "--db_translate") ;
+  tsnp.dbGroupCount = getCmdLineBool (&argc, argv, "--db_group_count") ;
   tsnp.dbGGG = getCmdLineBool (&argc, argv, "--db_GGG") ;
   tsnp.dropMonomodal = getCmdLineBool (&argc, argv, "--dropMonomodal") ;
+
+  tsnp.dbReport = getCmdLineBool (&argc, argv, "--db_report") ;
+  tsnp.dbSnpProfile = getCmdLineBool (&argc, argv, "--db_snp_profile") ;
+
   if (tsnp.dbName)
     {
       const char *errors ;
@@ -6197,6 +6808,19 @@ int main (int argc, const char **argv)
       if (! tsnp.db)
 	{
 	  fprintf (stderr, "-db_translate requires -db SnpMetaDataDB, sorry, try -help\n") ;
+	  exit (1) ;
+	}
+    }
+  if (tsnp.dbGroupCount)
+    {
+      if (! tsnp.project)
+	{
+	  fprintf (stderr, "-db_group_count requires -project $MAGIC, sorry, try -help\n") ;
+	  exit (1) ;
+	}
+      if (! tsnp.db)
+	{
+	  fprintf (stderr, "-db_group_count requires -db SnpMetaDataDB, sorry, try -help\n") ;
 	  exit (1) ;
 	}
     }
@@ -6242,18 +6866,37 @@ int main (int argc, const char **argv)
       if (1) tsnpRemap0 (&tsnp) ; 
       if (1) tsnpCreateAtlas (&tsnp) ;
       if (1) tsnpRemap1 (&tsnp) ; 
-      if (1) tsnpRemap2 (&tsnp) ;    
     }
   if (tsnp.remap2genes)
     {
-      tsnpCreateAtlas (&tsnp) ;
-      messcrash ("tsnpRemap2genes  not programmed") ;
+      if (1) tsnpRemap0 (&tsnp) ;
+      if (1) tsnpCreateAtlas (&tsnp) ;
+      if (1) tsnpRemap2 (&tsnp) ;    
     }
   if (tsnp.dbTranslate)
     {
       if (1) tsnpDbTranslate (&tsnp) ;
       if (0) tsnpCodingModif (&tsnp) ; /* probably obsolete */
       if (0) tsnpExportProfile (&tsnp) ; /* export tsf file for this section */
+    }
+  if (tsnp.dbGroupCount)
+    {
+      if (1) tsnpDbGroupCount (&tsnp) ;
+    }
+  if (tsnp.dbSnpProfile)
+    {
+      if (! tsnp.db)
+	{
+	  fprintf (stderr, "-db_snp_profile requires -db SnpMetaDataDB, sorry, try -help\n") ;
+	  exit (1) ;
+	}
+      if (! tsnp.project)
+	{
+	  fprintf (stderr, "-db_snp_profile requires -project $MAGIC, sorry, try -help\n") ;
+	  exit (1) ;
+	}
+      if (tsnpDbRun2groups (&tsnp))
+	tsnpDbSnpProfile (&tsnp) ;
     }
   wego_flush () ;
 

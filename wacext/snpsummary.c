@@ -10,6 +10,9 @@
  *        s  sponge
  */
 
+/* #define MALLOC_CHECK    */
+/* #define ARRAY_CHECK  */
+
 #include "../wac/ac.h"
 #include "../wh/bitset.h"
 
@@ -19,7 +22,7 @@ typedef struct tsnpStruct {
   const char *export ;
   const char *select ;
   int snpType ; /* 0: any, 1=sublib; 2=runs ; 3=group */
-  int minSnpFrequency, minSnpCover ;
+  int minSnpFrequency, minSnpCover, minSnpCount ;
   int allC, allM ;
   int chapter ;
   BOOL tsfOut ;
@@ -55,6 +58,7 @@ typedef enum { F_ZERO = 0, F_Hide, F_p10, F_perCentRead, T_FMAX } T_FORMAT ;
 typedef struct snpStruct {
   AC_HANDLE h ;
   AC_OBJ Snp ;
+  BOOL is20_4 ;
 } SNP ;
 
 typedef struct runStruct {
@@ -767,8 +771,8 @@ static void snpBrsTitrationDo (TSNP *tsnp, SNP *snp)
   
   if (ir > irOld + 1)
     snpBrsTitrationDoOne (tsnp, snp, tt, irOld, ir) ;
-
-    ac_free (h) ;
+  
+  ac_free (h) ;
 } /* snpBrsTitrationDo */
 
 /*************************************************************************************/
@@ -901,10 +905,13 @@ static BOOL snpBrsParseCounts (TSNP *tsnp, SNP *snp)
 {
   AC_HANDLE h = ac_new_handle () ;
   int nn = 0 ;
-  KEYSET ddd = tsnp->doub ? keySetHandleCreate (h) : 0 ;
-  BOOL is20_4 = FALSE ;
   BOOL detected = FALSE ;
+  int minF = tsnp->minSnpFrequency ;
+  int minM = tsnp->minSnpCount ;
+  int minC = tsnp->minSnpCover > 0 ? tsnp->minSnpCover : 1 ;
+  snp->is20_4 = FALSE ;
 
+  if (minM <= 0) minM = 4 ;
   for (int ir = 0 ; ir < keySetMax (tsnp->runs) ; ir++)
     {
       int r = keySet (tsnp->runs, ir) ;
@@ -916,17 +923,8 @@ static BOOL snpBrsParseCounts (TSNP *tsnp, SNP *snp)
 	continue ;
       c = keySet (tsnp->covers, r) ;
       m = keySet (tsnp->mutant, r) ;
-      if (! rr->isLowQ)
-	{
-	  tsnp->allC += c ;
-	  tsnp->allM += m ;
-	}
-      if (tsnp->doub && 100 * m >= 2 * c)
-	{
-	  if (c >= 20 && m >= 4) is20_4 = TRUE ;
-	  if (c >= 20 && m >= 4)
-	    { keySet (ddd, r) = 1 ; nn++ ; }
-	}
+      if (100 * m >= minF * c && c >= minC && m >= minM)
+	snp->is20_4 = TRUE ;
       if (r2g && keySetMax (r2g))
 	{
 	  for (int i = 0 ; i < keySetMax (r2g) ; i++)
@@ -942,16 +940,42 @@ static BOOL snpBrsParseCounts (TSNP *tsnp, SNP *snp)
 	}	      
       }
 
-  if (tsnp->allC >= 20 && tsnp->count_libs)
-    detected = snpBrsCountLibsDo (tsnp, snp) ;
-  if (tsnp->justDetected && ! detected)
-    return FALSE ;
-    
-
-  if (is20_4)
+  for (int ir = 0 ; ir < keySetMax (tsnp->runs) ; ir++)
     {
-      const char *cp, *cq ; ;
+      int r = keySet (tsnp->runs, ir) ;
+      RR *rr = arrayp (tsnp->rrs, r, RR) ;
+      if (rr->isGroup)
+	{
+	  int c = keySet (tsnp->covers, r) ;
+	  int m = keySet (tsnp->mutant, r) ;
+	  
+	  if (100 * m >= minF * c && c >= minC && m >= 4)
+	    snp->is20_4 = TRUE ;
+	}
+    }
+  if (snp->is20_4)
+    {  
+      const char *cp, *cq ;
 
+      for (int ir = 0 ; ir < keySetMax (tsnp->runs) ; ir++)
+	{
+	  int r = keySet (tsnp->runs, ir) ;
+	  RR *rr = arrayp (tsnp->rrs, r, RR) ;
+	  if (! rr->isGroup)  /* avoid double counting */
+	    {
+	      int c = keySet (tsnp->covers, r) ;
+	      int m = keySet (tsnp->mutant, r) ;
+	      if (! rr->isLowQ)
+		{
+		  tsnp->allC += c ;
+		  tsnp->allM += m ;
+		}
+	    }
+	}
+      if (tsnp->allC >= 20 && tsnp->count_libs)
+	detected = snpBrsCountLibsDo (tsnp, snp) ;
+      if (tsnp->justDetected && ! detected)
+	return FALSE ;
       cp = "X" ;
       if (ac_has_tag (snp->Snp, "Wtrue")) cp = "Wtrue" ;
       else if (ac_has_tag (snp->Snp, "Wtrue2")) cp = "Wtrue2" ;
@@ -960,19 +984,19 @@ static BOOL snpBrsParseCounts (TSNP *tsnp, SNP *snp)
 
       cq = ac_tag_printable (snp->Snp, "Monomodal", "toto") ;
       if (! cq)  cq = "X" ;
-      aceOutf (tsnp->ao204, "%s\t%s\tift\t%d\t%.2f\t%s\t%s\n", ac_name (snp->Snp), tsnp->project, nn, 100.0 * tsnp->allM/tsnp->allC, cp, cq) ;
+      if (tsnp->ao204)
+	aceOutf (tsnp->ao204, "%s\t%s\tift\t%d\t%.2f\t%s\t%s\n", ac_name (snp->Snp), tsnp->project, nn, 100.0 * tsnp->allM/tsnp->allC, cp, cq) ;
+      if (tsnp->histo)
+	snpBrsHistos (tsnp, snp) ;
+      if (tsnp->titration)
+	snpBrsTitrationDo (tsnp, snp) ;
     }
-  
-  if (tsnp->histo)
-    snpBrsHistos (tsnp, snp) ;
-  if (tsnp->titration)
-    snpBrsTitrationDo (tsnp, snp) ;  
   ac_free (h) ;
   return TRUE ;
 } /*  snpBrsParseCounts */
 
 /*************************************************************************************/
-/* parse the actual count of a snp, and cumulate in tsnp->coers/count for equivalent snp */
+/* parse the actual count of a snp, and cumulate in tsnp->cover/count for equivalent snp */
 
 static int snpBrsParseTrueCounts (TSNP *tsnp, SNP *snp)
 {
@@ -1033,7 +1057,7 @@ static BOOL snpBrsNextSnp (TSNP *tsnp, SNP *snp, int iSnp)
 	  tsnp->Wfalse = ac_has_tag (snp->Snp, "Wfalse") ||  ac_has_tag (snp->Snp, "Wfalse2") ;
 	  tsnp->DanLi = ac_has_tag (snp->Snp, "Dan_Li") ;
 	  if (! snpBrsParseCounts (tsnp, snp))
-	    return FALSE ;
+	    { ac_free (snp->h) ; return FALSE ; }
 	}
     }
   else
@@ -1082,7 +1106,7 @@ static BOOL snpBrsNextSnp (TSNP *tsnp, SNP *snp, int iSnp)
 		      tsnp->Wfalse = ac_has_tag (snp->Snp, "Wfalse") ||  ac_has_tag (snp->Snp, "Wfalse2") ;
 		      tsnp->monomodal |= ac_has_tag (snp->Snp, "Monomodal") ;
 		      if (! snpBrsParseCounts (tsnp, snp))
-			return FALSE ;
+			{ ac_free (h) ; ac_free (snp->h) ; return FALSE ; }
 		    }
 
 		}
@@ -1840,11 +1864,13 @@ static void snpBrsTitration (TSNP *tsnp, SNP *snp)
 
 static BOOL snpFilter (TSNP *tsnp, SNP *snp)
 {
-  BOOL ok = TRUE ;
+  BOOL ok = snp->is20_4 ;
   int minF = tsnp->minSnpFrequency ;
-  int minC = tsnp->minSnpCover ;
+  int minM = tsnp->minSnpCount ;
+  int minC = tsnp->minSnpCover > 0 ? tsnp->minSnpCover : 1 ;
 
-
+  return ok || tsnp->snpType >= 3 ;
+  
   if (tsnp->snpType < 3 && minF + minC > 0)
     {
       AC_HANDLE h = ac_new_handle () ;
@@ -1855,11 +1881,14 @@ static BOOL snpFilter (TSNP *tsnp, SNP *snp)
       if (tt && tt->rows)
 	for (ir = 0 ; ir < tt->rows && !ok ; ir++)
 	  {
+	    const char *runNam = ac_table_printable (tt, ir, 0, 0) ;
 	    int c = ac_table_int (tt, ir, 1, 0) ;
 	    int m = ac_table_int (tt, ir, 2, 0) ;
 
-	    if (c >= minC && 100 * m >= minF * c)
-	      ok = TRUE ;
+	    if (runNam && dictFind (tsnp->runDict, runNam, 0) 
+		&& c >= minC && 100 * m >= minF * c && m >= minM
+		)
+		  ok = TRUE ;
 	  }
 
       ac_free (h) ;
@@ -1869,7 +1898,7 @@ static BOOL snpFilter (TSNP *tsnp, SNP *snp)
 
 /*************************************************************************************/
 
-static const char *allMethods = "VIQSgd" ;
+static const char *allMethods = "VIQSgGrR" ;
 /* VIQSgd   */
 /* VIQSDGR     */
 /* VIQSG2   */
@@ -2161,7 +2190,7 @@ static int snpGetSnpsRunsGroups (TSNP *tsnp)
 	      }
 	  }
 
-      qq = hprintf (h, "select g, r from p in ?project where p == \"%s\", g in p->run where g#union_of, r in g>>union_of where ! r#union_of, p2 in r->project where p2 == p", tsnp->project) ;
+      qq = hprintf (h, "select g, r from p in ?project where p == \"%s\", g in p->run where g#union_of && g#snp_add_counts, r in g>>union_of where ! r#union_of, p2 in r->project where p2 == p", tsnp->project) ;
       tt = ac_bql_table (tsnp->db
 			 , qq
 			 , 0
@@ -2201,7 +2230,7 @@ static int snpGetSnpsRunsGroups (TSNP *tsnp)
   if (! keySetMax (tsnp->runs))
     messcrash ("No run in project %s\n", tsnp->project) ;
   if (! keySetMax (tsnp->groups))
-    messcrash ("No group in project %s\n", tsnp->project) ;
+    messout ("No group in project %s\n", tsnp->project) ;
 
   switch (tsnp->snpType)
     {
@@ -2319,10 +2348,13 @@ static void usage (char *message)
 	    "//            d: Dan Li allele frequencies\n"
 	    "//   --orderBy <tag> : sort the runs by this tag\n"
 	    "//      default: sorting_title\n"
-	    "//      Only export in that order the runs belonging to the project, present in this list\n"
 	    "//      Insert a blank line if the sorting value looks like A__B and A changes\n"
-	    "//   --snpType [0,1,2,3] : which runs\n"
-	    "//       0 [default]: any_snp\n"
+	    "//   --minSnpCover <int> : coverage default 20\n"
+	    "//   --minSnpCount <int> : coverage default 4\n"
+	    "//   --minSnpFrequency <int> : per cent mutant / coverage default 10\n"	    
+	    "//   --snpType [0,1,2,3] \n"
+	    "//       Only export  SNPs seen at least 4 times, cover >=20 m/c>2/100 in a run of this project \n"
+	    "//       0 : any_snp\n"	    
 	    "//       1 : skip the monomodal snps\n"
 	    "//       2 : only the rejected snps\n"
 	    "//       3 : only the DanLi snps\n"
@@ -2333,7 +2365,7 @@ static void usage (char *message)
 	    "//       10 : gene captured by A1 A2 R1 R2 R3 I1 I2 I3  and snp is Wtrue || Dan_Li\n"
 	    "//       9 : no SNP, only the title lines\n"
 	    "//    --doubleDetect\n"
-	    "//       Count  snp detetced at in 2 libraries at 10:4 and at least once at 20:8\n"
+	    "//       Count  snp detected at in at least 2 libraries at 10:4 and at least once at 20:8\n"
 	    "// Caveat:\n"
 	    "//   Caption lines at the top start with a #\n"
 	    ) ;
@@ -2386,10 +2418,12 @@ int main (int argc, const char **argv)
   tsnp.tsfOut =   getCmdLineBool (&argc, argv, "--tsf") ;
   tsnp.gzo =   getCmdLineBool (&argc, argv, "--gzo") ;
 
-  tsnp.minSnpFrequency = 0 ;
-  tsnp.minSnpCover = 0 ;
+  tsnp.minSnpCount = 4 ;
+  tsnp.minSnpFrequency = 10 ;
+  tsnp.minSnpCover = 20 ;
   getCmdLineInt (&argc, argv, "--minSnpFrequency", &tsnp.minSnpFrequency) ;
   getCmdLineInt (&argc, argv, "--minSnpCover", &tsnp.minSnpCover) ;
+  getCmdLineInt (&argc, argv, "--minSnpCount", &tsnp.minSnpCount) ;
   if (! tsnp.dbName)
     {
       fprintf (stderr, "Sorry, missing parameter -db, please try snpsummary -help\n") ;
@@ -2469,7 +2503,7 @@ int main (int argc, const char **argv)
   if (tsnp.tsfOut)
     snpExportSnp (&tsnp, 0, 3) ; /* stats */
 
-  if (0 && tsnp.doub)
+  if (tsnp.doub)
     snpExportDoubleDetect (&tsnp) ;
   if (tsnp.count_libs)
     {

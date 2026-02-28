@@ -14,7 +14,7 @@
 #include "aceio.h"
 #include <wiggle.h>
 
-static int SNPDEBUG=0 ;
+/* static int SNPDEBUG=0 ; */
 static void usage (char *message) ;
 
 typedef struct hitStruct { 
@@ -254,6 +254,7 @@ static int snpParseFastaFile (SNP *snp)
 		  return FALSE ;
 		}
 	      cq = strstr (cp, "|Gene|") ; if (cq) *cq = 0 ;
+	      cq = strstr (cp, "|GENE|") ; if (cq) *cq = 0 ;
 	      if (! strncmp (cp, ">MRNA:",6)) cp += 6 ;
 	      if (! strncmp (cp, ">",1)) cp += 1 ;
 	      /* in case -select, only collect the relevant sequences in the fasta file */
@@ -715,7 +716,7 @@ static void showSsm (Array aa)
 } /* showSsm */
   
 /*************************************************************************************/
-
+#ifdef JUNK
 static int ssmOrderBySnp (const void *va, const void *vb)
 {
   const SSM *a = (const SSM *)va, *b = (const SSM *)vb ;
@@ -728,7 +729,7 @@ static int ssmOrderBySnp (const void *va, const void *vb)
 
   return 0 ;
 } /* ssmOrderBySnp */
-
+#endif
 /*************************************************************************************/
 
 static int ssmDeepTableReportOrder (const void *va, const void *vb)
@@ -1845,6 +1846,8 @@ static char *cleanSnpName (const char * ccp, int strand, int *type)
 } /* cleanSnpName */
 
 /*************************************************************************************/
+#ifdef JUNK
+
 /* construct a signature for the quadruplet */
 static int zz (SNP *snp, int run)
 {
@@ -2173,7 +2176,7 @@ static long int snpBRSparseFile (SNP *snp, BOOL forgetRepeats, AC_HANDLE h)
   fprintf (stderr, "// Parsed %ld lines in input file : %s\n", bigArrayMax (snps), timeShowNow ()) ;
   return bigArrayMax (snps) ;
 } /* snpBRSparseFile */
-
+#endif
 /*************************************************************************************/
 
 static int snpParseSnpList (SNP *snp)
@@ -2234,6 +2237,7 @@ static int snpParseSnpList (SNP *snp)
 } /* snpParseSnpList */
 
 /*************************************************************************************/
+#ifdef JUNK
 
 static BOOL  snpBRS2snpName (SNP *snp, SSM *ssm, char* namBuf, char *typeBuf, char *Abuf, char *Bbuf, char *tagBuf, int *deltap, const char *requestedName) 
 {
@@ -2515,6 +2519,7 @@ static BOOL  snpBRS2snpName (SNP *snp, SSM *ssm, char* namBuf, char *typeBuf, ch
 
   return isRepeat ;  
 } /* snpBRS2snpName */
+#endif
 
 /*************************************************************************************/
 /* from wolfram: p = proba (mean - alpha*sigma < x < mean + alpha*sigma)
@@ -2852,7 +2857,7 @@ static void snpNotLowShow (ACEOUT ao, int count, int called, double *zp, double 
 } /* snpNotLowShow */
 
 /*************************************************************************************/
-
+#ifdef JUNK
 static int ssmOrderByC2a (const void *va, const void *vb)
 {
   const SSM *a = (const SSM *)va, *b = (const SSM *)vb ;
@@ -3867,6 +3872,7 @@ static int snpBRS2snp (SNP *snp)
   ac_free (h) ;
   return nn ;
 } /* snpBRS2snp */
+#endif
 
 /*************************************************************************************/
 /*************************************************************************************/
@@ -4070,8 +4076,8 @@ static BOOL snpIsSliding (char *typ, char *buf1, char *buf2, BOOL isRNA, BOOL is
 	      cc1 = cp[j] ; cc2 = cp[ln - 1 - j] ;
 	      if (isRNA)
 		{
-		  cp[j] = ace_lower(rnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc2]]]) ;
-		  cp[ln - 1 - j] = ace_lower(rnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc1]]]) ;
+		  cp[j] = ace_lower(rnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc2])]) ;
+		  cp[ln - 1 - j] = ace_lower(rnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc1])]) ;
 		}
 	      else
 		{
@@ -4102,13 +4108,13 @@ static BOOL snpIsSliding (char *typ, char *buf1, char *buf2, BOOL isRNA, BOOL is
 	{
 	  if (isRNA)
 	    {
-	      typ[0] = ace_lower(rnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)typ[0]]]]) ;
-	      typ[2] = ace_lower(rnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)typ[2]]]]) ;
+	      typ[0] = ace_lower(rnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)typ[0]])]) ;
+	      typ[2] = ace_lower(rnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)typ[2]])]) ;
 	    }
 	  else
 	    {
-	      typ[0] = ace_upper(dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)typ[0]]]]) ;
-	      typ[2] = ace_upper(dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)typ[2]]]]) ;
+	      typ[0] = ace_upper(dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)typ[0]])]) ;
+	      typ[2] = ace_upper(dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)typ[2]])]) ;
 	    }
 	}
 
@@ -4207,7 +4213,7 @@ static BOOL snpIsSliding (char *typ, char *buf1, char *buf2, BOOL isRNA, BOOL is
 } /* snpIsSliding */
 
 /*************************************************************************************/
-
+#ifdef JUNK
 static int snpExtendGenomicSnpNet  (SNP *snp)
 {
   AC_HANDLE  h1 = 0, h = ac_new_handle () ;
@@ -4503,7 +4509,7 @@ static int snpExtendGenomicSnpNet  (SNP *snp)
   ac_free (h) ;
   return nn ;
 } /* snpExtendGenomicSnpNet */
-
+#endif
 
 static int snpCompatibleStrands (int cover, int a1, int a2, int b1, int b2, double *zp, double *z1p, double *z2p, int *chiFlagp, int limit)
 {
@@ -4993,7 +4999,7 @@ static int snpExportEditedSequence (SNP *snp)
 	  int i ;
 	  const char *ccq = dna2 + up->a2 - 1 ;
 	  for (i = 0 ; i < delta - dx ; i++)
-	    *cq++ = dnaDecodeChar [(int)complementBase[(int)dnaEncodeChar[(int)*ccq--]]];
+	    *cq++ = dnaDecodeChar [(int)complementBase(dnaEncodeChar[(int)*ccq--])];
 	  *cq = 0 ;
 	}
 
@@ -5638,7 +5644,7 @@ static int snpAliExtendAnalyse (SNP *snp, Array hits, int runQualityPrefix)
 	  i = 0 ; ccp-- ;
 	  while (ln > 0 && b1 - i >= 1 && *++ccp)
 	    {
-	      char cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccp]]] ;
+	      char cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccp])] ;
 	      arr (tagZone, b1 - i - 2, char) = cc ; ln1++ ; i++ ;
 	    }
 	  b1 -= ln1 ; a1 -= ln1 ; x1 -= ln1 ; y1 -= ln1 ;
@@ -7256,21 +7262,21 @@ static int snpDeepTableReport (SNP *snp)
 		    for (cp = cp1, cq = (strand == 1 ? buf : buf + 2*w)  ; cp < cp2 ; cp++, cq += strand)
 		      {
 			if (strand == -1)
-			  *cq = ace_upper (dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int) *cp]]]) ;
+			  *cq = ace_upper (dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int) *cp])]) ;
 			else
 			  *cq = ace_upper (*cp) ;
 		      }
 		    for ( ; cp <= cp2 ; cp++, cq += strand)
 		      {
 			if (strand == -1)
-			  *cq =  ace_lower (dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int) *cp]]]) ;
+			  *cq =  ace_lower (dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int) *cp])]) ;
 			else
 			  *cq = ace_lower (*cp) ;
 		      } 
 		    for ( ; cp < cp3 ; cp++, cq += strand)
 		      {
 			if (strand == -1)
-			  *cq = ace_upper (dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int) *cp]]]) ;
+			  *cq = ace_upper (dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int) *cp])]) ;
 			else
 			  *cq = ace_upper (*cp) ;
 		      }
@@ -7318,7 +7324,7 @@ static int snpDeepTableReport (SNP *snp)
 			  {
 			    dx = (gt->a2 - pos) % 3 ; /* zero if b is the first base of the codon */
 			    for (cp1 += dx, i = 0 ; i<3 ; cp1--, i++)
-			      buf[i] = complementBase [(int)dnaEncodeChar[(int) *cp1]] ;
+			      buf[i] = complementBase((int)dnaEncodeChar[(int) *cp1]) ;
 			  }
 			else
 			  {
@@ -7332,7 +7338,7 @@ static int snpDeepTableReport (SNP *snp)
 			  {
 			    if (gt->isUp)
 			      {
-				buf[dx] = complementBase [(int)dnaEncodeChar[(int)mysnp[2]]] ;
+				buf[dx] = complementBase(dnaEncodeChar[(int)mysnp[2]]) ;
 			      }
 			    else
 			      {
@@ -8752,7 +8758,7 @@ static void snpBRS2tsf (SNP *snp)
 /*************************************************************************************/
 /******************************* snpBRS2snps end *************************************/
 /*************************************************************************************/
-
+#ifdef JUNK
 static void snpMerge (SNP *snp)
 {
   AC_HANDLE h = ac_new_handle () ;
@@ -8881,7 +8887,7 @@ static void snpMerge (SNP *snp)
 
   ac_free (h) ;
 } /* snpMerge */
-
+#endif
 /*************************************************************************************/
 typedef struct runInfoStruct { int machine, sample, system1, system2, tissue1, tissue2 ; } RI ;
 
@@ -9578,7 +9584,7 @@ static int snpPrettyNames (SNP *snp, AC_OBJ snpObj
 	  i = 0 ;
 	  while (--ccr >= ccp)
 	    {
-	      char c = rnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccr]]] ;
+	      char c = rnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccr])] ;
 	      buf1[i++] = c ;
 	    }
 	  buf1[i++] = 0 ;
@@ -9587,7 +9593,7 @@ static int snpPrettyNames (SNP *snp, AC_OBJ snpObj
 	  i = 0 ;
 	  while (--ccr >= ccq)
 	    {
-	      char c = rnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccr]]] ;
+	      char c = rnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccr])] ;
 	      buf2[i++] = c ;
 	    }
 	  buf2[i++] = 0 ;

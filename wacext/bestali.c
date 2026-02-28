@@ -27,11 +27,6 @@
  *  mieg@ncbi.nlm.nih.gov
  */
 
-/*
-#define MALLOC_CHECK   
-#define ARRAY_CHECK   
-*/
-
 #include "ac.h"
 #include "acedb.h"
 #include "bitset.h"
@@ -144,6 +139,7 @@ typedef struct hitStruct3 {
     , nN, nErr
     , c1, c2 /* chain start/stop in x coordinates */
     , gt_ag, ct_ac /* justified introns */
+    , hardClip1, hardClip2 
     ;
 } HIT3 ;
 
@@ -601,7 +597,11 @@ static BOOL baParseOneHit (ACEIN ai, BA *ba, HIT *up, int nn)
       return FALSE ;
     }
   if (strcmp (ccp, "-"))
-    dictAdd (ba->dnaDict,ccp, &(up3->prefix)) ;
+    {
+      dictAdd (ba->dnaDict,ccp, &(up3->prefix)) ;
+      if (*ccp == ace_upper(*ccp))
+	up3->hardClip1 = up->x1 ;
+    }
   
   ccp = aceInWordCut (ai, "\t", &cutter) ; /* col 19: suffix */
   if (! ccp || ! *ccp)
@@ -612,6 +612,8 @@ static BOOL baParseOneHit (ACEIN ai, BA *ba, HIT *up, int nn)
   if (strcmp (ccp, "-"))
     {
       dictAdd (ba->dnaDict,ccp, &(up3->suffix)) ;
+      if (*ccp == ace_upper(*ccp))
+	up3->hardClip2 = up->x2 ;
     }
   
   ccp = aceInWordCut (ai, "\t", &cutter) ; /* col 20: targetPrefix */
@@ -725,7 +727,7 @@ static BOOL baParseOneSamTranscriptHit (ACEIN ai, BA *ba, HIT *up, int nn)
  
   aceInStep (ai, '\t') ; aceInInt (ai, &(up2->a1)) ; /* quality, discard */
   aceInStep (ai, '\t') ;  cigar = aceInWord (ai) ;
-  samParseCigar (cigar, cigarettes, up2->a1, &(up2->a2), &(up->x1), &(up->x2), 0) ;
+  samParseCigar (cigar, cigarettes, up2->a1, &(up2->a2), &(up->x1), &(up->x2), 0, 0, 0, 0) ;
 
   up2->target_class = ba->target_class ;
   up2->dPair = 0 ;
@@ -1121,6 +1123,14 @@ static BOOL baKeepOneHit (BA *ba, HIT *up, const int nn, const int Z_genome)
 		  }
 		else if (score > vp->score)
 		  vp->score = 0 ;
+	      }
+	    if (
+		(vp3->hardClip1 && up->x2 < vp3->hardClip1 + 30) ||
+		(vp3->hardClip2 && up->x1 < vp3->hardClip2 - 30)
+		)
+	      {
+		score = up->score = 0 ;
+		break ;
 	      }
 	  }
 	}
@@ -4914,7 +4924,7 @@ static int baHit2Intron (BA *ba, HIT *vp, int *intronp, int *z1p, int *z2p, int 
 	  *gDownp = 1 ;
 
 	  if (a1 > a2) {  ii = a1 ; a1 = a2 ; a2 = ii ; *gDownp = -1 ; }
-	  for (ii = 0, mp = arrp (map, 0, MHIT) ; ii < arrayMax (map) - 1 ; ii++, mp++)
+	  for (ii = 0, mp = arrp (map, 0, MHIT) ; ii < arrayMax (map)  ; ii++, mp++)
 	    {
 	      if (intron)
 		{
@@ -4922,9 +4932,9 @@ static int baHit2Intron (BA *ba, HIT *vp, int *intronp, int *z1p, int *z2p, int 
 		    continue ;
 		  else if (x2 != mp->x2)
 		    return 0 ;
-		  mp++ ;
+		  ii++ ;  mp++ ;
 		}
-	      if (a1 < mp->x1 - dx && a2 > mp->x2 + dx)
+	      if (ii < arrayMax (map) && a1 < mp->x1 - dx && a2 > mp->x2 + dx)
 		{
 		  *intronp = mp->exon ; 
 		  *z1p = mp->a1 ; *z2p = mp->a2 ; *zx1p = mp->x1 ; *zx2p = mp->x2 ; 
@@ -6148,6 +6158,7 @@ static int baGroupLetterProfileByLevel (BA *ba, int groupLevel)
   Array nhali_kb2 = arrayHandleCreate (100, float,h) ;
 
   Array cpu = arrayHandleCreate (100, float,h) ;
+  Array elapsed = arrayHandleCreate (100, float,h) ;
   Array maxmem = arrayHandleCreate (100, float,h) ;
 
   Array lnDistrib = arrayHandleCreate (12, long int, h) ;
@@ -6303,6 +6314,7 @@ static int baGroupLetterProfileByLevel (BA *ba, int groupLevel)
       nhali_kb2 = arrayReCreate (nhali_kb2,100,float) ;
 
       cpu = arrayReCreate (cpu,100,float) ;
+      elapsed = arrayReCreate (elapsed,100,float) ;
       maxmem = arrayReCreate (maxmem,100,float) ;
 
       errPos = arrayReCreate (errPos,100,float) ;
@@ -6647,7 +6659,7 @@ static int baGroupLetterProfileByLevel (BA *ba, int groupLevel)
 	    }
 	  if ((let = ac_tag_table (Ali, "Partial_3p", h1)))
 	    {
-	      partial3_25 += ac_table_float (let, 0, 0, 0) ;
+	      partial3_15 += ac_table_float (let, 0, 0, 0) ;
 	      partial3_25 += ac_table_float (let, 0, 1, 0) ;
 	    }
 	  if ((let = ac_tag_table (Ali, "Diffuse_mapping", h1)))
@@ -6671,16 +6683,6 @@ static int baGroupLetterProfileByLevel (BA *ba, int groupLevel)
 	    {
 	      rej_lqm_seq += ac_table_float (let, 0, 0, 0) ;
 	      rej_lqm_tags += ac_table_float (let, 0, 2, 0) ;
-	    }
-	  if ((let = ac_tag_table (Ali, "Entry_adaptor_clipping", h1)))
-	    {
-	      adap1_tags += ac_table_float (let, 0, 0, 0) ;
-	      adap1_kb += ac_table_float (let, 0, 2, 0) ;
-	    }
-	  if ((let = ac_tag_table (Ali, "Exit_adaptor_clipping", h1)))
-	    {
-	      adap2_tags += ac_table_float (let, 0, 0, 0) ;
-	      adap2_kb += ac_table_float (let, 0, 2, 0) ;
 	    }
 	  if ((let = ac_tag_table (Ali, "stranding", h1)))
 	    {
@@ -6917,6 +6919,14 @@ static int baGroupLetterProfileByLevel (BA *ba, int groupLevel)
 		  array (cpu, n,float) += ac_table_int (let, kr, 1, 0) ;
 		}
 	    }
+	  if ((let = ac_tag_table (Ali, "Elapsed", h1)))
+	    {
+	      for (kr = 0 ; let && kr < let->rows ; kr++)
+		{
+		  dictAdd (targetDict, ac_table_printable (let, kr, 0, "toto"), &n) ;
+		  array (elapsed, n,float) += ac_table_int (let, kr, 1, 0) ;
+		}
+	    }
 	  if ((let = ac_tag_table (Ali, "Max_memory", h1)))
 	    {
 	      for (kr = 0 ; let && kr < let->rows ; kr++)
@@ -6981,10 +6991,6 @@ static int baGroupLetterProfileByLevel (BA *ba, int groupLevel)
 		      , rej_unali_seq, rej_unali_tags, rej_unali_kb) ;
 	  vtxtPrintf (txt, "\nLow_quality_mapping %f Seq %f Tags"
 		      , rej_lqm_seq, rej_lqm_tags) ;
-	  vtxtPrintf (txt, "\nEntry_adaptor_clipping %f Tags %f kb %d bp_per_tag"
-		      , adap1_tags, adap1_kb,  adap1_kb > 1 ? (int)(.5 + (1000.0 * adap1_kb)/adap1_tags) : 0) ;
-	  vtxtPrintf (txt, "\nExit_adaptor_clipping %f Tags %f kb %d bp_per_tag"
-		      , adap2_tags, adap2_kb, adap2_kb > 1 ? (int)(.5 + (1000.0 * adap2_kb)/adap2_tags) : 0) ;
 	  vtxtPrintf (txt, "\nPartial_5p %f %f", partial5_15, partial5_25) ;
 	  vtxtPrintf (txt, "\nPartial_3p %f %f", partial3_15, partial3_25) ;
 
@@ -7285,6 +7291,12 @@ static int baGroupLetterProfileByLevel (BA *ba, int groupLevel)
 	      int x  =  array (cpu, n,float) ;
 	      if (x >= 1)
 		vtxtPrintf (txt, "\nCPU %s %d seconds", dictName (targetDict, n), (int)array (cpu, n,float)) ; 
+	    } 
+	  for (n = 0 ; n < arrayMax (elapsed) ; n++)
+	    {
+	      int x  =  array (elapsed, n,float) ;
+	      if (x >= 1)
+		vtxtPrintf (txt, "\nElapsed %s %d seconds", dictName (targetDict, n), (int)array (elapsed, n,float)) ; 
 	    } 
 	  for (n = 0 ; n < arrayMax (maxmem) ; n++)
 	    {
@@ -9230,13 +9242,13 @@ static int greg2aceCigarette (int x1, int x2, int a1, int a2, const char *greg, 
 	  
 	  cc = ace_lower (*++cp) ;
 	  xBuf[j] = cc ; zBuf[j] = '-' ; nerr ++ ;
-	  if (strand < 0) cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ; 
+	  if (strand < 0) cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc])] ; 
 	  aBuf[j++] = cc ; 
 	  
 	  while (j < 3 && *(cp+1) == '-')
 	    {
 	      cp += 2 ;  cc = ace_lower (*cp) ; xBuf[j] = cc ; zBuf[j] = '-' ;  
-	      if (strand < 0) cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ;
+	      if (strand < 0) cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc])] ;
 	      aBuf[j++] = cc ;
 	    }
 	  xBuf[j] = 0 ; aBuf[j] = 0 ; zBuf[j] = 0 ; aa += j * strand ;
@@ -9262,12 +9274,12 @@ static int greg2aceCigarette (int x1, int x2, int a1, int a2, const char *greg, 
 	      int j = 0 ;
 	  
 	       xBuf[j] = cc ; zBuf[j] = '+' ; nerr++ ;
-	      if (strand < 0) cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ;
+	       if (strand < 0) cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc])] ;
 	       aBuf[j++] = cc ;
 	      while (*(cp+2) == '-')
 		{
 		  cp++ ;  cc = ace_lower (*cp++) ; xBuf[j] = cc ; zBuf[j] = '+' ; 
-		  if (strand < 0) cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ;
+		  if (strand < 0) cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc])] ;
 		  aBuf[j++] = cc ;
 		}
 	      xBuf[j] = 0 ; aBuf[j] = 0 ; zBuf[j] = 0 ; xx += j ;
@@ -9289,8 +9301,8 @@ static int greg2aceCigarette (int x1, int x2, int a1, int a2, const char *greg, 
 	      vtxtPrintf (aSnps, "%s%d:", k ? "," : "", aa) ;
 	      k++ ;
 	      vtxtPrintf (xSnps, "%c>%c", cc, cc1) ; 
-	      if (strand < 0) cc = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ;
-	      if (strand < 0) cc1 = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc1]]] ;
+	      if (strand < 0) cc = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc])] ;
+	      if (strand < 0) cc1 = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)cc1])] ;
 	      vtxtPrintf (aSnps, "%c>%c", cc, cc1) ; xx++ ; aa += strand ; nerr++ ;
 	    }
 	}
@@ -9412,7 +9424,7 @@ int main (int argc, const char **argv)
   AC_HANDLE h = ac_new_handle () ;
   const char *ccp, *dbName = 0 ;
 
-  freeinit () ; 
+  if (1)   freeinit () ; 
   messErrorInit (argv[0]) ;
 
   memset (&ba, 0, sizeof (BA)) ;
@@ -9548,7 +9560,7 @@ int main (int argc, const char **argv)
         /* synchronize with bin/target2target_class.txt with c5.h_Ali.awk and with baExportAliProfile() */
       const char **cl ;
       const char *classes[] = { "0_SpikeIn", "1_DNASpikeIn", "A_mito", "B_rrna", "C_chloro", "D_transposon"
-				, "DT_magic", "ET_av", "FT_av2008", "FT_extra", "FT_simul", "FT_cloud", "KT_RefSeq", "LT_RefSeqCurrent",  "LT_seqc", "LT_magic", "LT_UCSC", "MT_EBI", "MT_Gaj", "NT_miRNA", "NT_MiT",  "NT_HINV", "NT_FBK", "NT_FlyBase", "OT_rnaGene", "PT_tRNA", "QT_smallRNA"
+				, "DT_magic", "ET_av", "FT_av2008", "FT_extra", "FT_simul", "FT_cloud", "FT_Eco", "FT_Tjaden", "KT_RefSeq", "LT_RefSeqCurrent",  "LT_seqc", "LT_magic", "LT_UCSC", "MT_EBI", "MT_Gaj", "NT_miRNA", "NT_MiT",  "NT_HINV", "NT_FBK", "NT_FlyBase", "OT_rnaGene", "PT_tRNA", "QT_smallRNA"
 				, "S_est", "U_introns", "W_Line", "X_Bami", "Y_Pfluo", "Z_genome", "b_bacteria", "v_virus", "z_gdecoy"
 			       , 0 } ;
       for (cl = classes ; *cl ; cl++)

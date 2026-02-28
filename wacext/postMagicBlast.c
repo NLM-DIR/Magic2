@@ -1001,7 +1001,7 @@ static int pmbTabularSmoke (PMB *pmb, ALI *up, vTXT txt)
 	    
 
 	      if (! isDown && suffix[0])
-		suffix[0] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)suffix[0]]]] ; 
+		suffix[0] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)suffix[0]])] ; 
 	      if (isDown)
 		{ s.a1 = a1 - 1 ; s.a2 = a1 + nd ;}
 	      else
@@ -1176,7 +1176,7 @@ static int pmbTabularSmoke (PMB *pmb, ALI *up, vTXT txt)
 		}
 
 	      if (! isDown && suffix[0])
-		suffix[0] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)suffix[0]]]] ; 
+		suffix[0] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)suffix[0]])] ; 
 	      if (isDown)
 		{ s.a1 = a1 - 1 ; s.a2 = a1 + 1 ; if (s.da == 1) s.a2-- ; }
 	      else

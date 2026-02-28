@@ -174,6 +174,8 @@ static const char *sraRemoveBaddy (const char *ccp0, Array baddies, AC_HANDLE h)
 	return 0 ;
       if (!strcasecmp (ccp, "not collected"))
 	return 0 ;
+      if (!strcasecmp (ccp, "public"))
+	return 0 ;
       ccp = strnew (ccp, h) ;
       {
 	char *cp = ccp ;
@@ -213,6 +215,12 @@ static const char *sraRemoveBaddy (const char *ccp0, Array baddies, AC_HANDLE h)
 	    }
 	}
     }
+  if (ccp && ! strncasecmp (ccp, "E-MTAB-",7))
+    {
+      char *cq = strchr (ccp,':') ;
+      if (cq && cq - ccp < 15)
+	ccp = cq+1 ;
+    }
   return ccp && *ccp ? ccp : 0 ;
 } /* sraRemoveBaddy */
 
@@ -228,7 +236,10 @@ static int sraSetBaddies (SRA *sra, char cc)
     {
       array (baddies, nBaddy++, char*) =  "Keywords:" ;
       array (baddies, nBaddy++, char*) =  "Missing" ;
-      if (0) array (baddies, nBaddy++, char*) =  "N/A" ;
+      array (baddies, nBaddy++, char*) =  "Not applicable" ;
+      array (baddies, nBaddy++, char*) =  "Not connected" ;
+      array (baddies, nBaddy++, char*) =  "Null" ;
+      if (1) array (baddies, nBaddy++, char*) =  "N/A" ;
     }
 
   switch (cc)  /* class specific baddies */
@@ -244,6 +255,16 @@ static int sraSetBaddies (SRA *sra, char cc)
 
       if (1)
 	{
+	  array (baddies, nBaddy++, char*) =  "C_elegans" ;
+	  array (baddies, nBaddy++, char*) =  "C elegans" ;
+	  array (baddies, nBaddy++, char*) =  "C.elegans" ;
+	  array (baddies, nBaddy++, char*) =  "C. elegans" ;
+	  array (baddies, nBaddy++, char*) =  "Caenorhabditis elegans" ;
+	  array (baddies, nBaddy++, char*) =  "Model organism or animal sample from" ;
+	  array (baddies, nBaddy++, char*) =  "Model organism or animal sample" ;
+	  array (baddies, nBaddy++, char*) =  "Model organism or animal" ;
+	  array (baddies, nBaddy++, char*) =  "Model organism" ;
+
 	  array (baddies, nBaddy++, char*) =  "of Drosophila melanogaster" ;
 	  array (baddies, nBaddy++, char*) =  "Drosophila melanogaster" ;
 	  array (baddies, nBaddy++, char*) =  "Droshophila melanogaster" ;
@@ -437,7 +458,20 @@ static void sraTextTokenize (SRA *sra, const char *text)
 static int sraGetData (SRA *sra, AC_OBJ obj, const char *tag, int column, int maxLength, AC_HANDLE h)
 {
   int isMigs = 0 ;
+  const char *tag2 = 0, **tag3 ;
+  const char *inAuthor[] = {"collected by", "biomaterial provider", "BioSourceProvider", "identified by","INSDC center alias","INSDC center name", "collection date", "worm collection date", 0} ;
 
+  if (column == -1)
+    { 
+      inAuthor[0] = 0 ;
+      column = 2 ;
+      tag2 = tag ;
+      tag = "Biosample_attribute" ;
+    } 
+  if (strcmp ("Biosample_attribute", tag))
+    {
+      inAuthor[0] = 0 ;
+    }
   if (obj && ac_has_tag (obj, tag))
     {
       AC_HANDLE h = ac_new_handle () ;
@@ -449,9 +483,42 @@ static int sraGetData (SRA *sra, AC_OBJ obj, const char *tag, int column, int ma
 
 	  for (ir = 0 ; ir < table->rows ; ir++)
 	    {
+	      BOOL ok = TRUE ;
 	      BOOL isPerfect = FALSE ;
 	      const char *ccp = 0 ;
 
+	      ccp = ac_table_printable (table, ir, 0, "___") ;
+	      if (! strcmp (tag, "Description") &&
+		  ! strncmp (ccp, "Protocols:", 10)
+		  )
+		continue ;
+	      if (strcasestr (ccp, "External Id"))
+		continue ;
+	      if (strcasestr (ccp, "Broker name"))
+		continue ;
+	      if (strcasestr (ccp, "GEO Accession"))
+		continue ;
+	      if (strcasestr (ccp, "first-public"))
+		continue ;
+	      if (strcasestr (ccp, "first public"))
+		continue ;
+	      if (strcasestr (ccp, "last update"))
+		continue ;
+	      if (strcasestr (ccp, "last-update"))
+		continue ;
+	      if (tag2)
+		{
+		  if (strcmp (ccp, tag2))
+		    continue ;
+		}
+	      for (tag3 = inAuthor ; ok && *tag3 ; tag3++) 
+		{
+		  if (! strcmp (ccp, *tag3))
+		    ok = FALSE ;
+		}
+	      if (!ok)
+		continue ;
+		
 	      if (column == 2)
 		{
 		  ccp = ac_table_printable (table, ir, column - 2, 0) ;
@@ -459,7 +526,23 @@ static int sraGetData (SRA *sra, AC_OBJ obj, const char *tag, int column, int ma
 		    isPerfect = TRUE ;
 		}
 	      ccp = ac_table_printable (table, ir, column - 1, 0) ;
-	      if ( !ccp) continue ;
+	      if (! strcmp (tag, "Library_name"))
+		{
+		  if (! strncmp (ccp, "GSM", 3))
+		    {
+		      const char *cr ;
+		      for (cr = ccp + 3 ; *cr ; cr++)
+			{
+			  if (*cr >= '0' && *cr <= 9)
+			    continue ;
+			  if (*cr == ' ' || *cr == ':' || *cr == ',')
+			    continue ;
+			}
+		      ccp = *cr ? cr : 0 ;
+		    }
+		}
+	      if ( !ccp)
+		continue ;
 
 	      if (isPerfect)
 		{
@@ -657,7 +740,7 @@ static void sraExportTokens (SRA *sra, AC_OBJ obj, const char *tag)
 	}
       else
 	{
-	  printf ("%s\t%s\n", ac_name(obj), vtxtPtr (txt) ? vtxtPtr (txt)  : "-") ;
+	  printf ("%s\t%s\t%s\n", tag, ac_name(obj), vtxtPtr (txt) ? vtxtPtr (txt)  : "-") ;
 	}
     }
 
@@ -720,15 +803,22 @@ static void sraAuthor2 (SRA *sra)
    */
   sraGetData (sra, sra->geo , "Author", 1, 0, h) ;
   sraGetPaper5Authors (sra) ;
-  sraGetData (sra, sra->srr , "Center_name", 1, 0, h) ;
   sraGetData (sra, sra->srp , "Identifier", 1, 0, h) ;
-  sraGetData (sra, sra->srx , "Submitted_by", 1, 0, h) ;
+  sraGetData (sra, sra->sample , "collected by", -1, 0, h) ;
+  sraGetData (sra, sra->sample , "biomaterial provider", -1, 0, h) ;
+  sraGetData (sra, sra->sample , "BioSourceProvider", -1, 0, h) ;
+  sraGetData (sra, sra->sample , "identified by", -1, 0, h) ;
+  sraGetData (sra, sra->sample , "INSDC center alias", -1, 0, h) ;
+  sraGetData (sra, sra->sample , "INSDC center name", -1, 0, h) ;
+  sraGetData (sra, sra->srr , "Center_name", 1, 0, h) ;
+
   sraGetData (sra, sra->sample , "Submission", 1, 0, h) ;
+  sraGetData (sra, sra->srx , "Submitted_by", 1, 0, h) ;
 
   sraExportTokens (sra, sra->srr, "Magic_author2") ;
 
   ac_free (h) ;
-} /* sraSample2  */
+} /* sraAuthor2  */
 
 /*************************************************************************************/
 
@@ -767,7 +857,7 @@ static void sraAnalayze (SRA *sra)
     query = hprintf (h, "Find SRR SPR || SRX || Biosample || GEO ; %s", sra->template ? sra->template : "") ;
   iter = ac_query_iter (sra->db, TRUE, query, 0, h) ;
 
-  if (sra->showAuthor && ! sra->dbEdit)
+  if (0 && sra->showAuthor && ! sra->dbEdit)
     printf ("# SRR\tCenter_name\tSRP Identifier\tSRX submitted_by\tSample submission\tGeo author\t\tProposed title\n") ;
 
   while (ac_free (srr), (srr = ac_iter_obj (iter)))

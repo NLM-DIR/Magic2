@@ -390,7 +390,7 @@ static void svSwitchComplement (DICT *dict, YY *dd)
       strncpy (uu, dictName(dict, type), 6) ;
       tt[5]  = 0 ;
       for (i = 0 ; i < 5 ; i++)
-	tt[i] = (uu[4-i] == '_' ? '_' : dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)uu[4-i]]]]) ;
+	tt[i] = (uu[4-i] == '_' ? '_' : dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)uu[4-i]])]) ;
        dictAdd (dict, tt, &(dd->type)) ;
     }
   dd->downA *= -1 ;
@@ -1206,8 +1206,8 @@ static int  svDeDuoParseOverhangs (const SV *sv, SDU *sdu, SW *sw)
 			k1 = k2 = -1 ; 
 			ccp = exon1 + i  ; ccq = ccp+1 ;
 			f2[3] = *ccp ; f2[4] = *ccq ;
-			f1[1] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccp]]] ;
-			f1[0] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccq]]] ;
+			f1[1] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccp])] ;
+			f1[0] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccq])] ;
 			if (
 			    (*ccp == 'a' && *ccq == 'c')   /*    d1 == "gt"  */
 			    )
@@ -1224,8 +1224,8 @@ static int  svDeDuoParseOverhangs (const SV *sv, SDU *sdu, SW *sw)
 			
 			ccp = exon2 + dx1 - i - 2 ; ccq = ccp+1 ;
 			f1[3] = *ccp ; f1[4] = *ccq ;
-			f2[1] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccp]]] ;
-			f2[0] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccq]]] ;
+			f2[1] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccp])] ;
+			f2[0] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccq])] ;
 			if (i == 0) /* always initialize */
 			  { bestk = k1 ; bestdx = i ; reverse = FALSE ; strcpy (foot, f1) ; foot[5]='1'; foot[6]=0 ;}
 			if (*ccp == 'a' && *ccq == 'g')   /*    d1 == "ag"  */

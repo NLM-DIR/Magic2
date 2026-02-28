@@ -307,9 +307,9 @@ static void go (Array dna, BOOL ismotif , int pos , char *aatarget , char *motif
 		    for (i8 = enzoverlape - imin - 1, i9 = 0 ; 
 			 i9 < j + enz->length + enz->overhang - difposl ; i9++)  
 		      if (buffer[i8-i9] == arr(dna, imin + i8 - i9, char))
-			enztoaddr[i9] =  ace_upper(dnaDecodeChar[(int)complementBase[(int)buffer[i8 - i9]]]) ;
+			enztoaddr[i9] =  ace_upper(dnaDecodeChar[(int)complementBase(buffer[i8 - i9])]) ;
 		      else
-			enztoaddr[i9] =  ace_lower(dnaDecodeChar[(int)complementBase[(int)buffer[i8 - i9]]]) ;
+			enztoaddr[i9] =  ace_lower(dnaDecodeChar[(int)complementBase(buffer[i8 - i9])]) ;
 		    enztoaddr [i9] = 0 ;
 		    
 		    

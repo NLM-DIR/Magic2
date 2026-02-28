@@ -31,10 +31,6 @@
  */
 
 /* %W% %G% */  
-/* debugging flags -> slower code 
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
 #define MAXWORD 50
 #define DEBUG 1
 
@@ -1963,8 +1959,8 @@ static int parseFastaFile (JP *jp, long unsigned int *nbp, BOOL isRead)
 	      
 
 	      bigArray (dna, NN + seq->ln + 2, char) = 0 ; /* make room */
-	      for (cr = arrp (dna, seq->start + seq->ln - 1, char), j = seq->ln ; j-- ; cr--)
-		bigArray (dna, NN++, char) = complementBase[(int)*cr] ;
+	      for (cr = bigArrp (dna, seq->start + seq->ln - 1, char), j = seq->ln ; j-- ; cr--)
+		bigArray (dna, NN++, char) = complementBase(*cr) ;
 	      bigArray (dna, NN++, char) = 0 ;
 	      bigArray (dna, NN++, char) = 0 ;
 	      if (NN % 1024) /* start on a new page and associate this page to the current newName */

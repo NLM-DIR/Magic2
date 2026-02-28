@@ -61,6 +61,7 @@ typedef struct clipAlignStruct {
   const char* wordFrequencyConstructTable ;
   const char* wordFrequencyTable ;
   const char *target_class ;
+  const char *runName ;
   FILE *probeFile, *targetFile, *selectedProbeFile , *rejectedProbeFile ;
   Stack probeStack, qualityStack ;
   unsigned long int mask, mask1, mask2 ;
@@ -91,6 +92,7 @@ typedef struct clipAlignStruct {
   BOOL roche ; /* favor deletions */
   BOOL pacbio ; /* favor deletions */
   BOOL nanopore ; /* favor deletions */
+  BOOL ultima; /* favor deletions */
   BOOL fastQ ; /* probe file is in fastQ format */
   BOOL A2G, G2A, T2C, C2T, A2C, C2A, T2G, G2T, G2C, C2G, A2T, T2A, X2X ;  /* search for intense RNA-editing by aligning in 3 letter code */
   int probeQquality ; /* ignore, if fastq format, right clip until a letter of given quality is reached */
@@ -116,8 +118,8 @@ typedef struct clipAlignStruct {
   BOOL avoidPseudoGenes ;   /* kill hits to unspliced gene on the same strand as hits to spliced genes */
   enum { STRATEGY_ZERO=0, STRATEGY_RNA_SEQ, STRATEGY_GENOME} strategy ;
   float minTM ;
-  unsigned char **sl, **slR, **entryAdaptor, **entryAdaptorDecoded , **exitAdaptor, **exitAdaptor2, **exitAdaptorDecoded, **exitAdaptor2Decoded ;
-  unsigned int *entryAdaptorFound,  *exitAdaptorFound,  *exitAdaptor2Found, *entryAdaptorHasN,  *exitAdaptorHasN ,  *exitAdaptor2HasN ;
+  unsigned char **sl, **slR, **entryAdaptor, **entryAdaptorDecoded, **entryAdaptor2, **entryAdaptor2Decoded , **exitAdaptor, **exitAdaptor2, **exitAdaptorDecoded, **exitAdaptor2Decoded ;
+  unsigned int *entryAdaptorFound, *entryAdaptor2Found,  *exitAdaptorFound,  *exitAdaptor2Found, *entryAdaptorHasN, *entryAdaptor2HasN,  *exitAdaptorHasN ,  *exitAdaptor2HasN ;
   int targetMutantMalus, mutantMalus, geneStrandMalus ;
   int aliBonusForThisAli, leftAdaptorClipForThisAli, rightAdaptorClipForThisAli ; /* belong to mm, but it saves memory to have them as globals */   
   int errMin, errMax, errRateMax, errCost, endBonus, bonus, slBonus, clipN,
@@ -153,6 +155,10 @@ typedef struct clipAlignStruct {
   BitSet seedOver25 ;
   BitSet doubleGenes ;
   ACEIN ai ; ACEOUT ao, outNoInsert, aoRead2Intron ;
+
+  const char *method ;
+  long int nRawReads, nRawBases, nReads, nErrors ;
+  long int nAlignedPairs, nAlignedReads, nUnaligned, nMultiAligned[11], nAlignedBases ;
 } CLIPALIGN ;
 
 #define NBESTSCORES 25
@@ -1261,7 +1267,7 @@ static void slInit (CLIPALIGN *pp)
 	  while (*++cp)
 	    {
 	      *cq = dnaEncodeChar [(int)*cp] ;
-	      *cr-- = complementBase [(int)*cq++] ;
+	      *cr-- = complementBase(*cq++) ;
 	    }
 	}      
       pp->sl = sl ; pp->slR = slR ;
@@ -1369,7 +1375,9 @@ static void entryAdaptorInit (CLIPALIGN *pp, const char *eV0)
 	    }
 	}
       if (j && cq) { *++cq = 0 ; *++cqD = 0 ;}
-
+      for (i = 0 ; i < j ; i++)
+	if (strlen ((char*)eV[i])> 15)  /* limit the entry adaptor to 15 bases */
+	  { eV[i][15] = 0 ; eVD[i][15] = 0 ; }
       pp->entryAdaptor = &eV[0] ;
       pp->entryAdaptorDecoded = &eVD[0] ;
       pp->entryAdaptorFound = halloc((j+1) * sizeof(int), pp->h) ; 
@@ -1387,6 +1395,61 @@ static void entryAdaptorInit (CLIPALIGN *pp, const char *eV0)
 
   return ;
 } /* entryAdaptorInit */
+
+/**************************/
+
+static void entryAdaptor2Init (CLIPALIGN *pp, const char *eV0)
+{
+  static unsigned char *eV[256], *eVD[256] ;
+  static int firstPass = 1 ;
+  unsigned char *cq = 0, *cqD = 0 ;
+  unsigned char cc ;
+  const unsigned char *cp ;
+  int i, j, ns ;
+
+  if (firstPass)
+    {
+      memset (eV, 0, sizeof (eV)) ;
+      firstPass = 0 ;
+      for (i = j = 0, cp = (const unsigned char *)eV0 ; j < 255 && *cp ; cp++)
+	{
+	  if (i+j == 0 || *cp == ',')
+	    {
+	      if (j) *cq++ = 0 ;
+	      cq = eV[j] = halloc(256, pp->h) ;
+	      cqD = eVD[j] = halloc(256, pp->h) ;
+	      j++ ;
+	      if (*cp == ',') continue ;
+	    }
+	  cc = dnaEncodeChar [(int)*cp] ;
+	  if (!cc) 
+	    messcrash ("Unrecognized char in -entryAdaptor2 %s", pp->entryAdaptor2[0]) ;
+	  if (i < 255)
+	    {
+	      i++ ;
+	      *cq++ = cc ;
+	      *cqD++ = *cp ;
+	    }
+	}
+      if (j && cq) { *++cq = 0 ; *++cqD = 0 ;}
+
+      pp->entryAdaptor2 = &eV[0] ;
+      pp->entryAdaptor2Decoded = &eVD[0] ;
+      pp->entryAdaptor2Found = halloc((j+1) * sizeof(int), pp->h) ; 
+      pp->entryAdaptor2HasN = halloc((j+1) * sizeof(int), pp->h) ;
+    } 
+  
+  if (pp->entryAdaptor2)
+    for (ns = 0 ; pp->entryAdaptor2[ns] ; ns++)
+      {
+	unsigned char *ccp = pp->entryAdaptor2[ns] - 1 ;
+	int nN = 0 ;
+	while (*++ccp) if (*ccp == N_) nN++ ;
+	pp->entryAdaptor2HasN[ns] = nN ;
+      }
+
+  return ;
+} /* entryAdaptor2Init */
 
 /**************************/
 
@@ -1907,8 +1970,8 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 
 		    sprintf(cp,"%d:%c%c>oo"
 			    , isUp ? xLong - 1 : xLong - 1
-			    , isUp ? dnaDecodeChar[(int)complementBase[(int)cc1a]] : dnaDecodeChar[(int)cc1a]
-			    , isUp ? dnaDecodeChar[(int)complementBase[(int)cc2a]] : dnaDecodeChar[(int)cc2a]
+			    , isUp ? dnaDecodeChar[(int)complementBase(cc1a)] : dnaDecodeChar[(int)cc1a]
+			    , isUp ? dnaDecodeChar[(int)complementBase(cc2a)] : dnaDecodeChar[(int)cc2a]
 			    ) ;
 		    
 		    sprintf(cr,"%d:%c%c>oo"
@@ -2002,8 +2065,8 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 			  }
 		      }
 
-		    cc2o = isUp ? complementBase[(int)cc1o] : cc1o ; 
-		    cc2a = isUp ? complementBase[(int)cc1a] : cc1a ; 
+		    cc2o = isUp ? complementBase(cc1o) : cc1o ; 
+		    cc2a = isUp ? complementBase(cc1a) : cc1a ; 
 		    cc1oc = dnaDecodeChar[(int)cc1o] ;
 		    cc2oc = dnaDecodeChar[(int)cc2o] ;
 		    cc1ac = dnaDecodeChar[(int)cc1a] ;
@@ -2046,7 +2109,7 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 			if (cc1a == R_ || cc1a == M_) cc1a = A_ ;
 			if (cc1a == Y_ || cc1a == K_) cc1a = T_ ;
 		      }
-		    cc2a = isUp ? complementBase[(int)cc1a] : cc1a ; 
+		    cc2a = isUp ? complementBase(cc1a) : cc1a ; 
 		    
 		    cc1ac = dnaDecodeChar[(int)cc1a] ;
 		    cc2ac = dnaDecodeChar[(int)cc2a] ;
@@ -2103,8 +2166,8 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 			if (cc1b == Y_ || cc1b == K_) cc1b = T_ ;
 		      }
 
-		    cc2a = isUp ? complementBase[(int)cc1b] : cc1a ; 
-		    cc2b = isUp ? complementBase[(int)cc1a] : cc1b ; 
+		    cc2a = isUp ? complementBase(cc1b) : cc1a ; 
+		    cc2b = isUp ? complementBase(cc1a) : cc1b ; 
 
 		    cc1ac = dnaDecodeChar[(int)cc1a] ;
 		    cc1bc = dnaDecodeChar[(int)cc1b] ;
@@ -2160,9 +2223,9 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 			if (cc1c == Y_ || cc1c == K_) cc1c = T_ ;
 		      }
 
-		    cc2a = isUp ? complementBase[(int)cc1c] : cc1a ; 
-		    cc2b = isUp ? complementBase[(int)cc1b] : cc1b ; 
-		    cc2c = isUp ? complementBase[(int)cc1a] : cc1c ; 
+		    cc2a = isUp ? complementBase(cc1c) : cc1a ; 
+		    cc2b = isUp ? complementBase(cc1b) : cc1b ; 
+		    cc2c = isUp ? complementBase(cc1a) : cc1c ; 
 
 		    cc1ac = dnaDecodeChar[(int)cc1a] ;
 		    cc1bc = dnaDecodeChar[(int)cc1b] ;
@@ -2210,7 +2273,7 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 		      }
 
 
-		    cc2a = isUp ? complementBase[(int)cc1a] : cc1a ; 
+		    cc2a = isUp ? complementBase(cc1a) : cc1a ; 
 		    cc1ac = dnaDecodeChar[(int)cc1a] ;
 		    cc2ac = dnaDecodeChar[(int)cc2a] ;
 
@@ -2221,7 +2284,7 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 			    ) ;
 		    
 		    sprintf(cr,"%d:%s%c"
-			    , xShort + (isUp ? mm->probeLeftClip - 1 : mm->probeLeftClip )
+			    , xShort + (isUp ? mm->probeLeftClip - 0 : mm->probeLeftClip )
 			    , ss
 			    , cc1ac
 			    ) ;
@@ -2260,8 +2323,8 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 		      }
 
 
-		    cc2a = isUp ? complementBase[(int)cc1b] : cc1a ; 
-		    cc2b = isUp ? complementBase[(int)cc1a] : cc1b ; 
+		    cc2a = isUp ? complementBase(cc1b) : cc1a ; 
+		    cc2b = isUp ? complementBase(cc1a) : cc1b ; 
 		    cc1ac = dnaDecodeChar[(int)cc1a] ;
 		    cc1bc = dnaDecodeChar[(int)cc1b] ;
 		    cc2ac = dnaDecodeChar[(int)cc2a] ;
@@ -2317,9 +2380,9 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 		      }
 
 
-		    cc2a = isUp ? complementBase[(int)cc1c] : cc1a ; 
-		    cc2b = isUp ? complementBase[(int)cc1b] : cc1b ; 
-		    cc2c = isUp ? complementBase[(int)cc1a] : cc1c ; 
+		    cc2a = isUp ? complementBase(cc1c) : cc1a ; 
+		    cc2b = isUp ? complementBase(cc1b) : cc1b ; 
+		    cc2c = isUp ? complementBase(cc1a) : cc1c ; 
 		    cc1ac = dnaDecodeChar[(int)cc1a] ;
 		    cc1bc = dnaDecodeChar[(int)cc1b] ;
 		    cc1cc = dnaDecodeChar[(int)cc1c] ;
@@ -2334,7 +2397,7 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 			    ) ;
 		    
 		    sprintf(cr,"%d:%s%c%c%c"
-			    , xShort + (isUp ? mm->probeLeftClip - 1 : mm->probeLeftClip )
+			    , xShort + (isUp ? mm->probeLeftClip - 2 : mm->probeLeftClip )
 			    , ss
 			    , cc1ac, cc1bc, cc1cc
 			    ) ;
@@ -2374,13 +2437,14 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
       unsigned char buf[x1+OVLN+1] ;
       int n = 0, pN = 0 ;
 
-      /* construct the prefix, in the orientation of the probe */
+      memset (buf, 0, sizeof(buf)) ;
+      /* construct the prefix, in the orientation opposite to  the probe */
       if (!pp->solid)
 	{
-	  for (cp = buf, i = x1 - 1, ccp = probeDna ;
-	       i > 0 ; i--, cp++, ccp++)
+	  for (cp = buf, i = x1 - 2, ccp = probeDna + i ;
+	       i > 0 ; i--, cp++, ccp--)
 	    {
-	      *cp = *ccp ;
+	      *cp = complementBase(*ccp) ;
 	    }
 	  *cp = 0 ;
 	}
@@ -2413,8 +2477,8 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 
       if (0 && !pN && pp->clipPolyT) /* look for 9 pure T */
 	{
-	  for (n = 0, i = strlen ((char *)prefix+1), ccp = prefix + 1 + i - 1 ; 
-	       i > 0 && *ccp == T_ ; i--, ccp--)
+	  for (n = 0, i = strlen ((char*)prefix), ccp = prefix ; 
+	       i > 0 && *ccp == T_ ; i++, ccp++)
 	    n++ ;
 	  if (n >= 9)
 	    goodPrefix = 2 ;
@@ -2484,61 +2548,76 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 	    }
 	}
       /* search for entryAdaptor (possibly a short bar-code) */
-      if (! pN && pp->entryAdaptor && !goodPrefix && 
-	  strlen((char*)buf) < 30 && 
-	  strlen((char*)buf) >= 5) /* search for the bar-code or entry adaptor */
+      int bufLn = strlen((char*)prefix+1) ;
+      unsigned char **entryAdaptor  = (mm->pair < 0 ? pp->entryAdaptor2 : pp->entryAdaptor) ;
+      unsigned  int *entryAdaptorHasN = (mm->pair <0 ? pp->entryAdaptor2HasN : pp->entryAdaptorHasN ) ;
+      if (! pN && entryAdaptor && !goodPrefix && 
+	  bufLn < 200 && 
+	  bufLn >= 5) /* search for the bar-code or entry adaptor */
 	{
 	  int ns, n1, petitMalus = 0 ;
 	  unsigned char buf2[OVLN+3] ;
 	  
-	  for (ns = 0 ; pp->entryAdaptor[ns] && !goodPrefix ; ns++)
+	  for (ns = 0 ; entryAdaptor[ns] && !goodPrefix ; ns++)
 	    {
+	      int aAT = 0, sAT = 0 ;
+	      int adapLn = 0 ;
 	      petitMalus = 0 ;
-	      ccp = pp->entryAdaptor[ns] ;
-	      i =  strlen((char *)ccp)  ;
-	      n1 = dnaPickMatch (ccp, i, buf, i > 5 ? 1 : 0 , 0) ;
+	      ccp = entryAdaptor[ns] ;
+	      adapLn = strlen((char *)ccp)  ;
+	      if (pp->clipPolyT)
+		{
+		  for (aAT = 0 ; ccp[aAT] == A_  ; aAT++)
+		    ;
+		  for (sAT = 0 ; prefix[1+sAT] == A_ ; sAT++)
+		    ;
+		}
+	      if (aAT > sAT)
+		continue ;
+	      i =  adapLn - aAT ;
+	      n1 = dnaPickMatch (ccp + aAT, i, prefix + 1 + sAT, i > 5 ? 1 : 0 , 0) ;
 	      if (n1 && ! pp->solid &&  mm->probeLeftClip)
 		{  /* left TTTT should also be present in the SL motif */
-		  for (i = 0 ; i < mm->probeLeftClip ; i++)
+		  for (i = 0 ; i < mm->probeLeftClip  - sAT ;  i++)
 		    if (n1 < 2+i || ccp[n1-2-i] != T_) 
 		      n1 = 0 ;
 		}
-              if (n1 - mm->probeLeftClip > 1)
-		continue ; /* the prefix should not be longer than the adaptor sequence */
-	      if (n1 > 0) /* the prefix matches in the adaptor */
+	      if (n1 <= 0)
+		continue ;
+	      if (adapLn - n1 < 6 && bufLn > 30)
+		continue ;
+	      if (adapLn - n1 < 10 && bufLn > 100)
+		continue ;
+	      if (adapLn - n1 < 20 && bufLn > 1000)
+		continue ;
+	      if (n1 >= 0) /* the prefix matches in the adaptor */
 		{
 		  /* locate the tail of the adaptor present in the tag */
-		  ccp = pp->entryAdaptor[ns] + n1 - 1 ; 
+		  ccp = entryAdaptor[ns] + n1 - 1 + aAT ; 
 		  i = strlen((char *)ccp) ;
 		  petitMalus = i + 1 - x1 ;
-		  if (i + 1 < x1 + (pp->solid ? 0 : 0)) continue ;
 		  /* verify that the whole tail of the adaptor matches the ttag */
-		  if (! pp->solid)
+		  if (! pp->solid && n1 > 1)
 		    {
-		      if (! dnaPickMatch (probeDna, mm->probeLength, ccp, (i > 5 ? 1 : 0),  pp->entryAdaptorHasN[ns]))
-			continue ;
-		      else if (i > 0 && i < x1 + OVLN)
-			{ 
-			  unsigned char *ccr1 = buf ;
-			  const unsigned char *ccr2 = probeDna ;
-			  while (i--) *ccr1++ = *ccr2++ ;
-			  *ccr1 = 0 ;
-			}
+		      for (i = 0 ; i < n1 - 1 ; i++)
+			if (probeDna[ x1 - 2 - i] != complementBase( ccp[ - i-1]))
+			  n1 = 0 ;
 		    }
 		  /* check that the prefix 
 		   * is not present in the genome
 		   */
                   int kkk = ccp ? strlen ((const char *)ccp) : 0 ;
                   BOOL inGenome = FALSE ;
-		  if (kkk < OVLN)
+		  if (kkk && kkk < OVLN)
 		    {
-		      fprintf (stderr , "zzzzz   kkk=%d ccp=%s\n", kkk, ccp) ;
+		      if (0) fprintf (stderr , "zzzzz   kkk=%d ccp=%s\n", kkk, ccp) ;
 		      sprintf ((char *)buf2, "%s%c%c", ccp, G_, T_ | C_) ;
-		      inGenome = dnaPickMatch (genome, genomeLn, buf2, 0, pp->entryAdaptorHasN[ns]) ;
+		      inGenome = dnaPickMatch (genome, genomeLn, buf2, 0, entryAdaptorHasN[ns]) ;
 		    }
 		  if (! inGenome)
 		    {
 		      goodPrefix = 3 ;  /* report Adaptor */
+		      if (goodPrefix > 250) goodPrefix = 250 ;
 		      score -= petitMalus ; /* do not count the aligned letters which belong to the adaptor */
 		      i = 1 + strlen ((char *)ccp) - x1 ;
 		      if (i > 0)
@@ -2551,6 +2630,19 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 		}
 	    }
 	}
+      /* search for a polyT */
+      if (! pN && !goodPrefix && 
+	  pp->clipPolyT &&
+	  bufLn < 200 && 
+	  bufLn >= 8) /* search for the bar-code or entry adaptor */
+	{
+	  int sAT = 0 ;
+	  for (sAT = 0 ; prefix[1+sAT] == A_ ; sAT++)
+		    ;
+	  if (sAT >= 8)
+	    goodPrefix = 3 ;
+	}
+
       /* search for an upstream donor exon */
       if (! pN && (pp->splice || pp->showOverhang || pp->clipPolyT2) && !goodPrefix && pp->overhangLength > 3 && strlen ((char *)buf) >= pp->overhangLength)
 	{
@@ -2568,29 +2660,15 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
       
       prefix[0] = goodPrefix ; /* flag it is an SL a poly-A or an intron candidate */
       
-      /* reverse complement the prefix */
-      ccp = buf + strlen((char *)buf) - OVLN ;
-      if (ccp < buf) ccp = buf ;
-      j = strlen((char *)ccp) ; ccp += j - 1 ;
-      for (cp = prefix+1 ; j > 0 ; j--, cp++, ccp--)
+      /* fix the prefix */
+      for (cp = prefix+1 ; *cp ; cp++)
 	{
-	  *cp = dnaDecodeChar[(int)complementBase[(int)*ccp]] ;
+	  *cp = dnaDecodeChar[(int)*cp] ;
 	  if (goodPrefix > 1 && goodPrefix != 63)
 	    *cp = ace_upper (*cp) ;
 	}
-      *cp = 0 ;
-      /*      if (! strcasecmp(prefix + 1, "TGAGCTGC")) invokeDebugger() ; */
-      
-      /* re append the polyT prefix */
-      if (mm->probeLeftClip)
-	{	  
-	  j = OVLN - strlen ((char *)prefix + 1) ;
-	  for (i = 0 ; i < mm->probeLeftClip && i < j ; i++, cp++)
-	    *cp = 'a' ; /* since we export the reverse complemented prefix */
-	  *cp = 0 ;
-	}
     }
-  
+	
   /**************************/
   /* Export the suffix      */
   /**************************/
@@ -2693,28 +2771,47 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 	    }
 	}
       /* search for the exit adaptor */
-      if (pp->exitAdaptor && pp->exitAdaptor[0] && !adaptorSuffix &&
+      unsigned char **exitAdaptor  = (mm->pair < 0 ? pp->exitAdaptor2 : pp->exitAdaptor) ;
+      unsigned int *exitAdaptorFound  = (mm->pair < 0 ? pp->exitAdaptor2Found : pp->exitAdaptorFound) ;
+      unsigned  int *exitAdaptorHasN = (mm->pair < 0 ? pp->exitAdaptor2HasN : pp->exitAdaptorHasN ) ;
+
+      if (exitAdaptor && exitAdaptor[0] && !adaptorSuffix &&
 	  strlen((char *)suffix + 1) >= 6) /* search for adaptor */
 	{
 	  int ns, n1 = 0, i1, j1, nE, nN ;
 
-	  for (ns = 0 ; pp->exitAdaptor[ns] && !adaptorSuffix ; ns++)
+
+	  for (ns = 0 ; exitAdaptor[ns] && !adaptorSuffix ; ns++)
 	    {
-	      ccp = pp->exitAdaptor[ns] ;
-	      i =  strlen((char *)ccp)  ; if (i>6) i = 6 ;
+	      int aAT = 0, sAT = 0 ;
+	      ccp = exitAdaptor[ns] ;
+	      int adapLn = strlen ((char *)ccp) ;	
+	      if (pp->clipPolyA)
+		{
+		  for (aAT = 0 ; ccp[aAT] == A_  ; aAT++)
+		    ;
+		  for (sAT = 0 ; suffix[1+sAT] == A_ ; sAT++)
+		    ;
+		}
+	      if (aAT > sAT)
+		continue ;
+
+	      if (adapLn <= aAT)
+		continue ;
+	      i =  adapLn - aAT  ; if (i>6) i = 6 ;
 	      for (j1 = -1, n1 = 0 ; !n1 && (++j1) < 16 ; )
-		n1 = dnaPickMatch (ccp + j1, i, suffix+1, 1, 2) ;
+		n1 = dnaPickMatch (ccp + j1+aAT, i, suffix+1+sAT, 1, 2) ;
 	      if (n1 > 0)
 		{
-		  i =  strlen((char *)ccp)  ;
-		  i1 = strlen ((const char*)probeDna + x2 - n1 + 1) ;
+		  i =  strlen((char *)ccp)  - aAT ;
+		  i1 = strlen ((char *)suffix+1+sAT-n1+1) ;
 		  n1 = nE = nN = 0 ;
 		  if (i >= i1)
 		    {
 		      if (i1< 6) nE = -1 ;
-		      else if (i1 < 8 && pp->exitAdaptorFound[ns] < 1000) { nE = -1 ;nN = 2 ; }
-		      else if (i1 < 12 && pp->exitAdaptorFound[ns] < 200) { nE = 0 ; nN = 1 ; }
-		      else if (i1 > 20 && pp->exitAdaptorFound[ns] > 1000) { nE = 2 ; nN = 2 ; }
+		      else if (i1 < 8 && exitAdaptorFound[ns] < 1000) { nE = -1 ;nN = 2 ; }
+		      else if (i1 < 12 && exitAdaptorFound[ns] < 200) { nE = 0 ; nN = 1 ; }
+		      else if (i1 > 20 && exitAdaptorFound[ns] > 1000) { nE = 2 ; nN = 2 ; }
 		      else { nE = 1 ; nN = 1 ; }
 		    }
 		  else
@@ -2730,21 +2827,21 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 		    }
 		  if (i > i1) i = i1 ;
 		  if (i > 20) { i = i1 = 20 ; }
-		  nN += pp->exitAdaptorHasN[ns] ;
+		  nN += exitAdaptorHasN[ns] ;
 		  if (nE >= 0)
-		    n1 = dnaPickMatch (ccp, i, probeDna + x2 - n1 - j1, nE, nN) ;
+		    n1 = dnaPickMatch (ccp + aAT, i, probeDna + x2 - n1 - j1 + sAT, nE, nN) ;
 		  if (i > 999) i = 999 ; /* to allow 100*ns + i multiplex construction */
 		}
 	      if (n1 > 0 && n1 < 3)
 		{
-		  (pp->exitAdaptorFound[ns]) += mm->mult ;
+		  (exitAdaptorFound[ns]) += mm->mult ;
 		  adaptorSuffix = 1000 * (1+ns) + i ;
 		  /* flush the matching letters of the vector back into the probe suffix */
 		  a2 = (*a2p) -= j1 ;
 		  x2 = (*x2p) -= j1 ;
 		  score -= j1 ;
-		  for (cp = suffix+1 ; *cp ; cp++) ;
-		  for (--cp ; cp > suffix + j1 ; cp--)
+		  for (cp = suffix+1 +sAT; *cp ; cp++) ;
+		  for (--cp ; cp > suffix + j1+sAT ; cp--)
 		    *cp = *(cp - j1 ) ;
 		  for (i = 0 ; i < j1 ; i++)
 		    *(suffix + 1 + i) = *(ccp + i) ;
@@ -2753,70 +2850,20 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 		}
 	    }
 	}
-
-       /* search for the exit adaptor 2 */
-      if (pp->exitAdaptor2 && pp->exitAdaptor2[0] && !adaptorSuffix &&
-	  strlen((char *)suffix + 1) >= 6) /* search for adaptor */
-	{
-	  int ns, n1 = 0, i1, j1, nE, nN ;
-
-	  for (ns = 0 ; pp->exitAdaptor2[ns] && !adaptorSuffix ; ns++)
-	    {
-	      ccp = pp->exitAdaptor2[ns] ;
-	      i =  strlen((char *)ccp)  ; if (i>6) i = 6 ;
-	      for (j1 = -1, n1 = 0 ; !n1 && (++j1) < 16 ; )
-		n1 = dnaPickMatch (ccp + j1, i, suffix+1, 1, 2) ;
-	      if (n1 > 0)
-		{
-		  i =  strlen((char *)ccp)  ;
-		  i1 = strlen ((const char*)probeDna + x2 - n1 + 1) ;
-		  n1 = nE = nN = 0 ;
-		  if (i >= i1)
-		    {
-		      if (i1< 6) nE = -1 ;
-		      else if (i1 < 8 && pp->exitAdaptor2Found[ns] < 1000) { nE = -1 ;nN = 2 ; }
-		      else if (i1 < 12 && pp->exitAdaptor2Found[ns] < 200) { nE = 0 ; nN = 1 ; }
-		      else if (i1 > 20 && pp->exitAdaptor2Found[ns] > 1000) { nE = 2 ; nN = 2 ; }
-		      else { nE = 1 ; nN = 1 ; }
-		    }
-		  else
-		    {
-		      if (
-			  i < 16 ||
-			  (i < 20 && i < i1 + 5)
-			  )
-			nE = -1 ;
-		      else if (i >= 20)
-			{ nE = 1 ; nN = 1 ; }
-		      /* else keep nE == 0 */
-		    }
-		  if (i > i1) i = i1 ;
-		  if (i > 20) { i = i1 = 20 ; }
-		  nN += pp->exitAdaptor2HasN[ns] ;
-		  if (nE >= 0)
-		    n1 = dnaPickMatch (ccp, i, probeDna + x2 - n1 - j1, nE, nN) ;
-		  if (i > 999) i = 999 ; /* to allow 100*ns + i multiplex construction */
-		}
-	      if (n1 > 0 && n1 < 3)
-		{
-		  (pp->exitAdaptor2Found[ns]) += mm->mult ;
-		  adaptorSuffix = 1000 * (1+ns) + i ;
-		  /* flush the matching letters of the vector back into the probe suffix */
-		  a2 = (*a2p) -= j1 ;
-		  x2 = (*x2p) -= j1 ;
-		  score -= j1 ;
-		  for (cp = suffix+1 ; *cp ; cp++) ;
-		  for (--cp ; cp > suffix + j1 ; cp--)
-		    *cp = *(cp - j1 ) ;
-		  for (i = 0 ; i < j1 ; i++)
-		    *(suffix + 1 + i) = *(ccp + i) ;
-		  rightAdaptorClip = x2 ;
-		  goodSuffix = 3 ;   /* report Adaptor */
-		}
-	    }
-	}
-
    
+      int bufLn = strlen ((char *)suffix+1) ;
+      if (! pN && !goodSuffix && 
+	  pp->clipPolyA &&
+	  bufLn < 200 && 
+	  bufLn >= 8) /* search for the bar-code or entry adaptor */
+	{
+	  int sAT = 0 ;
+	  for (sAT = 0 ; suffix[1+sAT] == A_ ; sAT++)
+		    ;
+	  if (sAT >= 8)
+	    goodSuffix = 3 ;
+	}
+
       /* search for a downstream acceptor exon */
       if (!pN && ! goodSuffix && (pp->splice || pp->showOverhang) && !goodSuffix && pp->overhangLength > 3 && strlen ((char *)suffix + 1) >= pp->overhangLength)
 	{
@@ -3051,7 +3098,7 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 	      i = x2 + 1 ;
 	      ccp = probeDna + i - 1 ;
 	      while (j < OVLN && *ccp)
-		{ *cp++ = dnaDecodeChar[(int)complementBase[(int)*ccp++]] ; j++ ; }
+		{ *cp++ = dnaDecodeChar[(int)complementBase(*ccp++)] ; j++ ; }
 	    }
 	}
 
@@ -3066,13 +3113,13 @@ BOOL clipAlignVerifyProbeHit (CLIPALIGN *pp, MM *mm, Array dna, Array dnaR, int 
 	    { *cp++ = '-' ; i-- ; j++ ; }
 	  ccp = arrp (pp->dna0, i - 1, unsigned char) ;
 	  while (j < OVLN && i >= 1)
-	    { *cp++ = dnaDecodeChar[(int)complementBase[(int)*ccp--]] ; i-- ; j++ ; }
+	    { *cp++ = dnaDecodeChar[(int)complementBase(*ccp--)] ; i-- ; j++ ; }
 	  if (j < OVLN && ! pp->solid) /* continue on the tag itself */
 	    {
 	      i = x1 - 1 ;
 	      ccp = probeDna + i - 1 ;
 	      while (j < OVLN && i >= 1)
-		{ *cp++ = dnaDecodeChar[(int)complementBase[(int)*ccp--]] ; i-- ; j++ ; }
+		{ *cp++ = dnaDecodeChar[(int)complementBase(*ccp--)] ; i-- ; j++ ; }
 	    }
 	}
 
@@ -3598,7 +3645,7 @@ static void clipAlignDoExportPx (CLIPALIGN *pp, PEXPORT *px, int type)
       if (n > 1) mm1 = arrp (pp->probes, n - 2, MM) ;
     }
   */
-
+  int   jump = (mm->fragment ? pp->jump5_1 : pp->jump5_2) ;
   switch (type)
     {
     case 0: /* hit */
@@ -3608,7 +3655,7 @@ static void clipAlignDoExportPx (CLIPALIGN *pp, PEXPORT *px, int type)
 	       , mm->mult
 	       , px->ln  /* tag length_to_align */
 	       , px->chainAli ?  px->chainAli : px->ali    /* length aligned */
-	       , px->x1, px->x2
+	       , px->x1 + jump, px->x2 + jump
 	       ) ;
       
       aceOutf (pp->ao, "\t%s\t%s\t%d\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%s"
@@ -3709,7 +3756,7 @@ static void clipAlignDoExportPx (CLIPALIGN *pp, PEXPORT *px, int type)
 	aceOutf (pp->ao,  "%s\t%05d\t%d\t%d\t%d\t%s\t%s\t%s\t%d\t%s\t%s\t%d\n"
 		 , stackText (pp->probeStack, px->mm->probeName)
 		 , px->score, mm->mult
-		 , px->x2, px->x1
+		 , px->x2+jump, px->x1+jump
 		 , type
 		 , dictName (pp->targetDict, px->target)
 		 , strand
@@ -3773,7 +3820,7 @@ static void clipAlignDoExportPx (CLIPALIGN *pp, PEXPORT *px, int type)
 	  aceOutf (pp->ao,  "%s\t%05d\t%d\t%d\t%d\t%s\t%s\t%s\t%d\t%s\t%s\t%d\n"
 		   , stackText (pp->probeStack, mm->probeName)
 		   , px->score, mm->mult
-		   , px->x1, px->x2
+		   , px->x1+jump, px->x2+jump
 		   , type
 		   , dictName (pp->targetDict, px->target)
 		   , strand
@@ -3793,9 +3840,9 @@ static void clipAlignDoExportPx (CLIPALIGN *pp, PEXPORT *px, int type)
 		   , px->nN < 0x4 ? "INTRON" : (px->nN < 0x8 ? "BIGINTRON" : (px->nN < 0x10 ? "HUGEINTRON" : (px->nN < 0x20 ? "DELETION" : (px->nN < 0x40 ? "DUPLICATION" : "TRANSLOCATION"))))
 		   , px->nN >= 0x40 ? "-" : (px->nN & 0x1 ? "Reverse" : "Forward")
 		   , dictName (pp->targetDict, px->s1)
-		   , px->x1, px->a1
+		   , px->x1+jump, px->a1
 		   , dictName (pp->targetDict, px->s2)
-		   , px->a2, px->x2
+		   , px->a2, px->x2+jump
 		   , px->foot
 		   , px->ali
 		   , px->score 
@@ -3830,8 +3877,8 @@ static void clipAlignDoExportPx (CLIPALIGN *pp, PEXPORT *px, int type)
 		   , "DOUBLEINTRON"
 		   , dictName (pp->targetDict, px->target)
 		   , px->a1, px->a2
-		   , px->x1, px->x2
-		   , px->s1, px->s2
+		   , px->x1+jump, px->x2+jump
+		   , px->s1+jump, px->s2+jump
 		   , px->score
 		   , px->foot 
 		   , (px->mm &&  px->mm->probeName ? stackText (pp->probeStack, px->mm->probeName) : "")
@@ -3857,7 +3904,8 @@ static int clipAlignExportPx (CLIPALIGN *pp, int type)
   PEXPORT *px ;
   int i, nn = 0 ;
   BigArray hits = 0 ;
-
+  MM *oldMm = 0 ;
+  
   switch (type)
     {
     case 0:
@@ -3892,7 +3940,12 @@ static int clipAlignExportPx (CLIPALIGN *pp, int type)
 	/* vectorize ? */
 	if (px->score > 0)
 	  { 
-	    nn++ ; 
+	    nn++ ;
+	    if (px->mm != oldMm)
+	      pp->nAlignedReads++ ;
+	    pp->nErrors += px->nErr ;
+	    pp->nAlignedBases += px->x2 - px->x1 + 1 ;
+	    oldMm = px->mm ;
 	    if (type == 0 && pp->vectorize )
 	      clipAlignDoExportVectorizedPx (pp, px, type) ; 
 	    else
@@ -3904,7 +3957,7 @@ static int clipAlignExportPx (CLIPALIGN *pp, int type)
 
 /*********************************************************************/
 /* hits is  in pExportSamOrder
- * so organized by  read/taget/chain in the orientation of the target 
+ * so organized by  read/target/chain in the orientation of the target 
  * as befits a good Cuban CIGAR
  */
 static char *clipAlignExportOneSamCigar (CLIPALIGN *pp,PEXPORT *px, int di, vTXT cigar, Array cigarettes, Array dnaShort, Array err, int *nErrp, AC_HANDLE h)
@@ -4484,14 +4537,18 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
   if (!singleTarget)
     return 1 ;
 
-  if (1)
+  if (1) globallyStranded = 0 ; /* at this stage we ignore the strand of the read, because we have not counted yet */
+  if (0)
     {	
-      if (pp->nIntronPlus  > 100 && pp->nIntronPlus  > 20 * pp->nIntronMinus)
+      if (pp->nIntronPlus  > 1000 && pp->nIntronPlus  > 20 * pp->nIntronMinus)
 	globallyStranded = 1 ;
-      else if (pp->nIntronMinus > 100 && pp->nIntronMinus > 20 * pp->nIntronPlus)
+      else if (pp->nIntronMinus > 1000 && pp->nIntronMinus > 20 * pp->nIntronPlus)
 	globallyStranded = -1 ;
     }
-  if (0) globallyStranded = 0 ;
+  /* 20250418: set k2=0 below so that minority antisens introns are reported  */
+  if (pp->stranded > 0)   globallyStranded = 1 ;
+  if (pp->stranded < 0)   globallyStranded = -1 ; 
+  
   aa = exportIntrons ;
   ii = jj = 0 ; nIntrons = arrayMax (aa) ;
   up = bigArrp (exportDonors, 0, PEXPORT) ;
@@ -4507,10 +4564,11 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
       a2 = up->a2 ;
       if ((isDown==1 &&  up->a1 > up->a2) || (isDown == -1 &&  up->a1 < up->a2))
 	continue ;
-      stranded = globallyStranded ;
+      if (globallyStranded)
+	stranded = globallyStranded ;
+      else
+	stranded = pp->stranded ;
       if (mm->pair < 0) stranded = -stranded ;
-      if (0 && up->a1 > 25170000 && up->a1 < 25171000)
-	  invokeDebugger () ;
       if (debug)
 	fprintf (stderr, "ii=%d f=%d s=%d a1=%d a2=%d x1=%d x2=%d\n", ii, mm->fragment, up->score, up->a1, up->a2, up->x1, up->x2) ;
 
@@ -4708,7 +4766,7 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
 		reverse = FALSE ;
 		foot[0] = '-' ; foot[1] = 0 ;
 		f1[2] = '_' ; f1[5] = 0 ;
-		f2[2] = '_' ; f2[5] = 0 ;
+		f2[2] = '_' ; f2[5] = 0 ; 
 		if (pp->strategy == STRATEGY_RNA_SEQ &&
 		    (
 		     (isDown == 1 && a2 - dx1 < b1 - pp->intronMinLength) || 
@@ -4742,9 +4800,9 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
 		    char c1, c2 ;
 		    k1 = k2 = 0 ; 
 		    ccp = exon1 + i  ; ccq = ccp+1 ;
-		    f2[3] = *ccp ; f2[4] = *ccq ;
-		    c2 = f1[1] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccp]]] ;
-		    c1 = f1[0] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccq]]] ;
+		    f2[3] = *ccp ; f2[4] = *ccq ; 
+		    c2 = f1[1] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccp])] ;
+		    c1 = f1[0] = dnaDecodeChar[(int)complementBase(dnaEncodeChar[(int)*ccq])] ;
 
 		    if (c1 == 'g' && c2 == 't')        /*    d1 == "gt"  */
 		      { k1 += 5 ; k2 += 3 ; } 
@@ -4757,9 +4815,10 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
 
 		    ccp = exon2 + dx1 - i - 2 ; ccq = ccp+1 ;
 		    c1 = f1[3] = *ccp ; c2 = f1[4] = *ccq ;
-		    f2[1] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccp]]] ;
-		    f2[0] = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*ccq]]] ;
-		    
+
+		    f2[1] = complementLetter(*ccp) ;
+		    f2[0] = complementLetter(*ccq) ;
+
 		    if (c1 == 'a' && c2 == 'g')        /*    d1 == "ag"  */
 		      { k1 += 4 ; k2 += 3 ; } 
 		    else if (c1 == 'a' && c2 == 'c')   /*    d1 == "ac"  */
@@ -4769,21 +4828,21 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
 		    else if (c1 == 'a' && c2 == 't')   /*    d1 == "ac"  */
 		      { k1 += 0 ; k2 += 3 ; } 
 
-		    if (stranded > 0) k2 = 0 ;
-		    if (stranded < 0) k1 = 0 ;
+		    if (stranded < 0) { int kx = k1 ; k1 = k2 ; k2 = kx ; } /* test 2025 */
+		    if (globallyStranded) k2 = 0 ;
+
 		    if (k1 > bestk)
-		      { bestk = k1 ; bestdx = i ; reverse = FALSE ; strcpy (foot, f1) ; }
+		      { bestk = k1 ; bestdx = i ; strcpy (foot, f1) ; reverse = FALSE ; }
 		    if ( k2 > bestk)
-		      { bestk = k2 ; bestdx = i ; reverse = TRUE ; strcpy (foot, f2) ; }
-		    if (0) fprintf (stderr, "a2=%d b1=%d i=%d dxMin=%d dxMax=%d %s\n"
-				    ,a2,b1,i,dxMin, dxMax, reverse ? "reverse": "forward") ;
-		  }
-		if (bestk >= 8)
-		  {
-		    BOOL r = reverse ;
-		    if (mm->pair < 0) r = (r ? FALSE : TRUE) ;
-		    if (r == FALSE) { pp->nIntronPlus += mm->mult ;  }
-		    else { pp->nIntronMinus += mm->mult ;  }
+		      { bestk = k2 ; bestdx = i ; strcpy (foot, f2) ; reverse = TRUE ; }
+		    
+		    if (0)
+		      fprintf (stderr, "XXXXXXXXXX\ta2=%d b1=%d i=%d dxMin=%d dxMax=%d %s stranded=%d %s plus=%d, minus=%d k1=%d  k2=%d\n"
+			       ,a2,b1,i,dxMin, dxMax, reverse ? "reverse": "forward", stranded			      
+			       , stackText (pp->probeStack, mm->probeName)
+			       , pp->nIntronPlus, pp->nIntronMinus
+			       , k1, k2
+			    ) ;
 		  }
 		if (bestk < 8 && overlap < 2)
 		  continue ;
@@ -4821,7 +4880,6 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
 		px->intron = nIntrons ;
 		px->target = up->target ;
 		if (0) {up->donor = 0 ; vp->acceptor = 0 ; }
-		px->fragment = up->fragment ;
 		px->s1 = up->target ;
 		px->s2 = vp->target ;
 		px->x1 = up->a1 ;   
@@ -4854,12 +4912,12 @@ static int clipAlignConstructIntrons (CLIPALIGN *pp, int isDown, BOOL singleTarg
 		px->ali = px->a1 < px->a2 ? px->a2 - px->a1 - 1 : px->a1 - px->a2 - 1 ;
 		strcpy (px->foot, foot) ;
 		px->nN = (px->a1 < px->a2 ? 0x0 : 0x1) ;   /* forward reverse */
-		if (!stranded && bestk < 8) px->nN |= 0x2 ;             /* non gt-ag */
+		if (!stranded && bestk < 8) px->nN |= 0x2 ;             /* non gt-ag ct-ac */
 		if (pp->strategy == STRATEGY_RNA_SEQ &&
 		    bestda >=  pp->intronMinLength
 		    )
 		  {
-                    if (bestk >= 8)
+                    if (bestk >= 9)
 		      {
 			if (px->a1 < px->a2)
 			  mm->gt_ag++ ;
@@ -4939,8 +4997,9 @@ static int clipAlignMergeIntrons (CLIPALIGN *pp)
   BigArray aa = pp->exportIntrons ;
   int iMax = arrayMax (aa) ;
   int orientation = 0 ;
+  int pass = 0 ;
 
-  if (iMax) 
+  for (pass = 0 ; iMax && pass < 2 ; pass += 2)
     {
       bigArraySort (aa, pExportIntronOrder) ;
       bigArrayCompress (aa) ;
@@ -4967,38 +5026,50 @@ static int clipAlignMergeIntrons (CLIPALIGN *pp)
 		}
 	    }
 	}
-      
       /* keep happy few */
-      if (pp->nIntronPlus + pp->nIntronMinus > 1000)
-	{
-	  if (pp->nIntronPlus > 80 * pp->nIntronMinus) orientation = 1 ;
-	  if (pp->nIntronMinus > 80 * pp->nIntronPlus) orientation = - 1 ;
-	}
-      else if (pp->nIntronPlus + pp->nIntronMinus > 100)
-	{
-	  if (pp->nIntronPlus > 10 * pp->nIntronMinus) orientation = 1 ;
-	  if (pp->nIntronMinus > 10 * pp->nIntronPlus) orientation = - 1 ;
-	}
       for (ii = jj = 0, up = vp = bigArrp (aa, 0, PEXPORT)  ; ii < bigArrayMax (aa) ; ii++, up++)
-	{
-	  if ( orientation &&
-	       (up->nN & 0x2) && /* non gt-ag, orientation unknown */
-	       orientation * (up->errLeftVal - up->errRightVal) < 0
-	       )
-	    {  /* reverse a NS intron according to dominant stranding of the experiment */
-	      int i = up->x1 ; up->x1 = up->x2 ; up->x2 = i ;
-	      i = up->a1 ; up->a1 = up->a2 ; up->a2 = i ;
-	      i = up->prefix ; up->prefix = up->suffix ; up->suffix = i ;
-	      i = up->errLeftVal ; up->errLeftVal = up->errRightVal ; up->errRightVal = i ;
-	      up->nN ^= 0x1 ; /* flip the orientation flag */
-	    }
 	  if (up->score)
 	    {
 	      if (ii > jj) *vp = *up ;
 	      jj++ ; vp++ ;
 	    }
-	}
       arrayMax (aa) = jj ;
+  
+      if (pass) 
+	break ;
+
+      /* flip introns */
+      if (pp->nIntronPlus + pp->nIntronMinus > 1000)
+	{
+	  if (pp->nIntronPlus > 90 * pp->nIntronMinus) orientation = 1 ;
+	  if (pp->nIntronMinus > 90 * pp->nIntronPlus) orientation = - 1 ;
+	}
+      for (ii = jj = 0, up = vp = bigArrp (aa, 0, PEXPORT)  ; ii < bigArrayMax (aa) ; ii++, up++)
+	{
+	  if (
+	      ( orientation && /* reverse a NS intron according to dominant stranding of the experiment */
+		(up->nN & 0x2) &&  /* non gt-ag, orientation unknown */
+		orientation * (up->errLeftVal - up->errRightVal) < 0
+		)
+	      ||
+	      ( ! orientation &&
+		!strcmp (up->foot, "ct_ac")
+	       ))
+	    {
+	      char foot[6] ;
+	      int i = up->x1 ; up->x1 = up->x2 ; up->x2 = i ;
+	      i = up->a1 ; up->a1 = up->a2 ; up->a2 = i ;
+	      i = up->prefix ; up->prefix = up->suffix ; up->suffix = i ;
+	      i = up->errLeftVal ; up->errLeftVal = up->errRightVal ; up->errRightVal = i ;
+	      up->nN ^= 0x1 ; /* flip the orientation flag */
+	      strncpy (foot, up->foot, 6) ;
+	      up->foot[0] = complementLetter (foot[4]) ;
+	      up->foot[1] = complementLetter (foot[3]) ;
+	      up->foot[3] = complementLetter (foot[1]) ;
+	      up->foot[4] = complementLetter (foot[0]) ;
+	      pass = -1 ; /* iterate */
+	    }
+	}
     }
 
    return arrayMax (aa) ;
@@ -5122,7 +5193,7 @@ static void clipAlignExportAll (CLIPALIGN *pp, const char *commandBuf)
       ac_free (pp->ao) ;
     }
 
-  if (pp->splice)   /* merge introns and blank out the donor acceptors */
+  if (pp->splice)   /* flip introns if non stranded run, merge introns, and blank out the donor acceptors */
     {
       clipAlignMergeIntrons (pp) ;
       clipAlignMergeDoubleIntrons (pp) ;
@@ -5169,6 +5240,41 @@ static void clipAlignExportAll (CLIPALIGN *pp, const char *commandBuf)
 	  ac_free (pp->ao) ;
 	}
     }
+  if (! pp->sam)
+    { /* samStats, useful to compare to the output of sam2gold */
+      AC_HANDLE h = ac_new_handle () ;
+      const char *METHOD = pp->method ? pp->method : "02_ClipAlign" ;
+      ACEOUT ao = aceOutCreate (pp->outFileName, ".s2g.samStats", 0, h) ;
+      const char *run = pp->runName ? pp->runName : "-" ;
+      
+      aceOutf (ao, "%s\t%s\tnRawReads\t%ld\n", run, METHOD, pp->nRawReads) ;
+      aceOutf (ao, "%s\t%s\tnRawBases\t%ld\n", run, METHOD, pp->nRawBases) ;
+      aceOutf (ao, "%s\t%s\tnReads\t%ld\n", run, METHOD, pp->nReads) ;  
+      
+      if (0)   aceOutf (ao, "%s\t%s\tnAlignedPairs\t%ld\n", run, METHOD, pp->nAlignedPairs) ;
+      aceOutf (ao, "%s\t%s\tnAlignedReads\t%ld\t%.2f%%\n", run, METHOD, pp->nAlignedReads, (100.0 * pp->nAlignedReads)/(pp->nRawReads + .000001)) ;
+      
+      aceOutf (ao, "%s\t%s\tnAlignedBases\t%ld\t%.2f%%\n", run, METHOD, pp->nAlignedBases, (100.0 * pp->nAlignedBases) / (pp->nRawBases + .000001)) ;
+      aceOutf (ao, "%s\t%s\tnMultiAligned %d times\t%ld\t%.2f%%\n", run, METHOD, 0
+	       , pp->nUnaligned
+	       , 100.0 * pp->nUnaligned / (pp->nRawReads + .000001)
+	       ) ;
+      for (int j = 1 ; j < 11 ; j++)
+	if (pp->nMultiAligned[j])
+	  {
+	    aceOutf (ao, "%s\t%s\tnMultiAligned %d times\t%ld\t%.2f%%\n", run, METHOD
+		     , j, pp->nMultiAligned[j]
+		     , 100.0 * pp->nMultiAligned[j] / (pp->nRawReads + .000001)
+		     ) ;
+	  }
+      long int verif = 0 ;
+      for (int j = 1 ; j < 11 ; j++)
+	verif += pp->nMultiAligned[j] ;
+      aceOutf (ao, "nReads = %ld , sum of multiAli = %ld, verif = %ld\n", pp->nRawReads, verif, pp->nRawReads - verif - pp->nUnaligned) ; 
+       
+      aceOutf (ao, "%s\t%s\tnErrors\t%ld\t%.4f%%\n", run, METHOD, pp->nErrors, (100.0 * pp->nErrors)/(pp->nAlignedBases + 0.00001)) ;
+      ac_free(h) ;
+    }
   ac_free (pp->ao) ;
 } /* clipAlignExportAll */
 
@@ -5186,11 +5292,11 @@ static void clipAlignTableCaption (CLIPALIGN *pp)
       if(0)
 	{
 	  aceOutf (pp->ao, "# 5\'All DNA sequences are read on the strand going away from the edges of the alignment\n") ;
-		  aceOutf (pp->ao, "# So for donors and acceptors the match part (identical on read and target) and the overhang part are read on the opposite strands,\n"
-			   "# The advantage of this unusual convention is that the beginning of all these words is independent of the length of the read, \n"
-			   "# independent of the strand of the read or of the target, and the overhang at the donor site is identical to the \n"
-			   "# match at the acceptor site and vice versa, so the donor acceptor pairs are easy to recognize.\n"
-			   ) ;
+	  aceOutf (pp->ao, "# So for donors and acceptors the match part (identical on read and target) and the overhang part are read on the opposite strands,\n"
+		   "# The advantage of this unusual convention is that the beginning of all these words is independent of the length of the read, \n"
+		   "# independent of the strand of the read or of the target, and the overhang at the donor site is identical to the \n"
+		   "# match at the acceptor site and vice versa, so the donor acceptor pairs are easy to recognize.\n"
+		   ) ;
 	}
       aceOutf (pp->ao, "#Read\tAlignment score\tRead multiplicity") ;
       aceOutf (pp->ao, "\tRead length to be aligned, i.e. removing eventual adaptors, leading Ts or trailing As not matching the target") ;
@@ -5253,7 +5359,7 @@ void clipAlignExportHit (CLIPALIGN *pp, MM *mm, int xpos
   if (*suffix == 63) intronBonus += INTRONBONUS ;
   
   if (debug) fprintf (stderr, "---------- proposing %s  %d %d    %s %d %d\tscore %d\n"
-			      , stackText (pp->probeStack, mm->probeName)
+		      , stackText (pp->probeStack, mm->probeName)
 		      , x1, x2
 		      , dictName (pp->targetDict, pp->target)
 		      , a1, a2
@@ -5286,7 +5392,7 @@ void clipAlignExportHit (CLIPALIGN *pp, MM *mm, int xpos
       if (!nErr)
 	aceOutf (pp->ao, "Genome_exact_hit %s %d %d %d\n"
 		 , freeprotect (cosmidName)
-		, a1, a2, nErr
+		 , a1, a2, nErr
 		 ) ;
       aceOutf (pp->ao, "Genome_approximate_hit %s %d %d %d\n\n"
 	       , freeprotect (cosmidName)
@@ -5295,7 +5401,7 @@ void clipAlignExportHit (CLIPALIGN *pp, MM *mm, int xpos
       if (mm->probeSetName)
 	aceOutf (pp->ao, "Probe %s\nProbe_set %s\n\n"
 		 , freeprotect (stackText (pp->probeStack, mm->probeName))
-		  , freeprotect (stackText (pp->probeStack, mm->probeSetName))
+		 , freeprotect (stackText (pp->probeStack, mm->probeSetName))
 		 ) ;
     }
   else if (pp->aceOutMrna)
@@ -5313,7 +5419,7 @@ void clipAlignExportHit (CLIPALIGN *pp, MM *mm, int xpos
 	aceOutf (pp->ao, "mRNA_exact_hit %s %d %d %d\n"
 		 , freeprotect (cosmidName)
 		 , a1, a2, nErr
-		) ;
+		 ) ;
       if (a1 < a2)
 	aceOutf (pp->ao, "mRNA_hit %s %d %d %d\n\n"
 		 , freeprotect (cosmidName)
@@ -5340,7 +5446,7 @@ void clipAlignExportHit (CLIPALIGN *pp, MM *mm, int xpos
 	aceOutf (pp->ao, "Probe %s\nProbe_set %s\n\n"
 		 , freeprotect (stackText (pp->probeStack, mm->probeName))
 		 , freeprotect (stackText (pp->probeStack, mm->probeSetName))
-		  ) ;
+		 ) ;
     }
   else if (pp->aceOutNM)
     {
@@ -5654,221 +5760,223 @@ static int clipAlignGetProbeHits (CLIPALIGN *pp, Array dna, Array dnaR, BOOL isU
   if (pp->minAli && j > pp->minAli) j = pp->minAli ;
   pos = -1 ; ii = arrayMax(dna) - dx2 ;
   if (ii > 0) while (pos++, cp++, cpB++, ii--)
-    { 
-      if (0 && pp->hashPhase && pos == 4910877  && pp->target == 17 && isUp == FALSE)
-	invokeDebugger() ;
-      if (cp > arrp (dna, arrayMax(dna)-1, char))
-	{
-	  char *cq0 = arrp (dna, 0, char) ;
-	  char *cq1 = arrp (dna, arrayMax(dna) -1, char) ;
-	  char *zero = 0 ;
-
-	  messcrash ("bad pointer too far by %ld bytes cp=%ld, cq0=%ld cq1=%ld, ii=%d maxDna=%d dx2=%d pos=%d hashPhase=%d", cp - cq1, cp - zero, cq0 - zero, cq1 - zero, ii, arrayMax(dna), dx2, pos, hashPhase) ;
-	}
-      oligo = ((oligo << 2) | B2[(int)*cp]) & mask ;
-      if (*cp == N_) nok = seedLength ;
-      else nok-- ;  
-      if (cpB >= arrp (dna, arrayMax(dna)-1, char))
-	cpB-- ;
-      oligoB = ((oligoB << 2) | B2[(int)*cpB]) & maskB ;
-      if (! oligo || nok > 0)
-	continue ; 
-      
-      if (hashPhase == 0) 
-	{
-	  if (pp->isShortTarget) /* fill ass1 on the fly */
-	    { 
-	      if (1) 
 		{ 
-		  if (! assFind (ass1, assVoid(oligo), &vp))
+		  if (0 && pp->hashPhase && pos == 4910877  && pp->target == 17 && isUp == FALSE)
+		    invokeDebugger() ;
+		  if (cp > arrp (dna, arrayMax(dna)-1, char))
 		    {
-		      pp->nOligo++ ;
-		      assInsert (ass1, assVoid(oligo), assVoid(pp->nOligo)) ;
-		      nOligo = pp->nOligo ;
+		      char *cq0 = arrp (dna, 0, char) ;
+		      char *cq1 = arrp (dna, arrayMax(dna) -1, char) ;
+		      char *zero = 0 ;
+
+		      messcrash ("bad pointer too far by %ld bytes cp=%ld, cq0=%ld cq1=%ld, ii=%d maxDna=%d dx2=%d pos=%d hashPhase=%d", cp - cq1, cp - zero, cq0 - zero, cq1 - zero, ii, arrayMax(dna), dx2, pos, hashPhase) ;
 		    }
-		  else
-		    nOligo = assInt(vp) ;
-		  nf = array (oligoFrequency, nOligo, unsigned char) ;
-		  if (oligoGene)
+		  oligo = ((oligo << 2) | B2[(int)*cp]) & mask ;
+		  if (*cp == N_) nok = seedLength ;
+		  else nok-- ;  
+		  if (cpB >= arrp (dna, arrayMax(dna)-1, char))
+		    cpB-- ;
+		  oligoB = ((oligoB << 2) | B2[(int)*cpB]) & maskB ;
+		  if (! oligo || nok > 0)
+		    continue ; 
+      
+		  if (hashPhase == 0) 
 		    {
-		      if (nf < 255 && ! bitt(oligoGene, oligo))
-			{
-			  bitSet (oligoGene, oligo) ; oligoGeneTouched = TRUE ;
-			  array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
-			}
-		    }
-		  else
-		    {
-		      if (nf < 5 || (nTargets < 5 && nf < 255)) 
-			array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
-		    }
-		}
-	      if (doubleSeed) /* big oligos */
-		{
-		  if (! assFind (assB1, assVoid(oligoB), &vp))
-		    {
-		      pp->nOligo++ ;
-		      assInsert (assB1, assVoid(oligoB), assVoid(pp->nOligo)) ;
-		      nOligo = pp->nOligo ;
-		    }
-		  else
-		    nOligo = assInt(vp) ;
-		  nf = array (oligoFrequencyB, nOligo, unsigned char) ;
-		  if (nf < 5 || (nTargets < 5 && nf < 255)) 
-		    array (oligoFrequencyB, nOligo, unsigned char) = nf + 1 ;
-		}
-	    }
-	  else
-	    { 
-	      if (1)
-		{
-		  /*
-		    if (pos < 20)
-		    fprintf (stderr, ".... testing pos %d\n", pos) ;
-		  */ 
-		  if (assFind(ass1, assVoid(oligo), &vp)) 
-		    {
-		      /*
-		      if (pos < 20)
-			fprintf (stderr, ".... testing pos %d  success\n", pos) ;
-		      */
-		      nOligo = assInt(vp) ;
-		      nf = array (oligoFrequency, nOligo, unsigned char) ;
-		      if (oligoGene)
-			{
-			  if (nf < 255 && ! bitt(oligoGene, oligo))
-			    {
-			      bitSet (oligoGene, oligo) ; oligoGeneTouched = TRUE ;
-			      array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
+		      if (pp->isShortTarget) /* fill ass1 on the fly */
+			{ 
+			  if (1) 
+			    { 
+			      if (! assFind (ass1, assVoid(oligo), &vp))
+				{
+				  pp->nOligo++ ;
+				  assInsert (ass1, assVoid(oligo), assVoid(pp->nOligo)) ;
+				  nOligo = pp->nOligo ;
+				}
+			      else
+				nOligo = assInt(vp) ;
+			      nf = array (oligoFrequency, nOligo, unsigned char) ;
+			      if (oligoGene)
+				{
+				  if (nf < 255 && ! bitt(oligoGene, oligo))
+				    {
+				      bitSet (oligoGene, oligo) ; oligoGeneTouched = TRUE ;
+				      array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
+				    }
+				}
+			      else
+				{
+				  if (nf < 5 || (nTargets < 5 && nf < 255)) 
+				    array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
+				}
 			    }
-			}
-		      else
-			{
-			  if (nf < 5 || (nTargets < 5 && nf < 255)) 
-			    array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
-			}
-		      if (doubleSeed) /* The short oligo is included in the long one */
-			{
-			  if (assFind(assB1, assVoid(oligoB), &vp)) 
+			  if (doubleSeed) /* big oligos */
 			    {
-			      nOligo = assInt(vp) ;
+			      if (! assFind (assB1, assVoid(oligoB), &vp))
+				{
+				  pp->nOligo++ ;
+				  assInsert (assB1, assVoid(oligoB), assVoid(pp->nOligo)) ;
+				  nOligo = pp->nOligo ;
+				}
+			      else
+				nOligo = assInt(vp) ;
 			      nf = array (oligoFrequencyB, nOligo, unsigned char) ;
 			      if (nf < 5 || (nTargets < 5 && nf < 255)) 
 				array (oligoFrequencyB, nOligo, unsigned char) = nf + 1 ;
 			    }
 			}
-		    }
-		}
-	    }
-	  continue ;
-	}
-      myass = 0 ;
-      /*
-      if (assFind (ass2, assVoid(oligo), 0) && assFind(ass, assVoid(oligo), &vp))
-	{ myass = ass ; myOligo = oligo ; }
-      else if (doubleSeed && assFind (assB2, assVoid(oligoB), 0) && assFind(assB, assVoid(oligoB), &vp))
-	{ myass = assB ; myOligo = oligoB ; }
-      */
-      if (doubleSeed)
-	{ myass = assB ; myOligo = oligoB ; }
-      else
-	{ myass = ass ; myOligo = oligo ; }
-      iBucket = 0 ; bucket = 0 ;
-      if (assFind (ass2, assVoid(oligo), 0))   /* (myass) */
-	while (assFindNext(myass, assVoid(myOligo), &vp, &bucket, &iBucket))
-	  {
-	    int anchorMax = arrayMax (pp->probes) ;
-	    NNN++ ;
-	    anchor = assULong(vp)-1 ;
-	    if (is64)
-	      {
-		xpos = (anchor >> 32) & 0xefffffff ; /* avoid the sign bit ! */
-		anchor = anchor & 0xffffffff ; 
-	      }
-	    else
-	      {
-		xpos = (anchor >> 22) & 0xefffffff ; /* avoid the sign bit ! */
-		anchor = anchor & 0x3fffff ; 
-	      }
-	    mm0 = arrp (pp->probes, anchor, MM) ;
-	    for (mm = mm0, same = mm->probeLength ;  mm && anchor < anchorMax ; anchor++, mm = (same  >= xpos  + seedLength - 1 ? mm+1 : 0) )
-	      {
-		if (mm->same < same) same = mm->same ; /* part in future mm common with mm0 */
-		if (pp->maxHit && mm->nGeneHits * 30 > pp->maxHit * mm->probeLength) /* assume 30bp per exon */
-		  continue ; 
-		if (mm->probeLength < xpos  + seedLength - 1)
-		  continue ;
-		if (mm->lastTarget == pp->target)  
-		  {   /* same hit as before  ? */
-		    if (xpos >= mm->lastX1  && xpos <= mm->lastX2 && 
-			pos >= mm->lastA1 && pos <= mm->lastA2  &&
-			pos - xpos >= mm->lastDelta - 20 &&
-			pos - xpos <= mm->lastDelta + 20 &&
-			mm->lastIsUp == isUp
-			)
-		      {
-			mm->lastDelta = pos - xpos ;
-			continue ; 
-		      }
-		  }
-		if (pp->MRNAH && 
-		    !pp->hasPairs &&  /* 2015_02_02  is hasPairs we cannot do that because if r1 goes just in b and run2 goes in a,b we need to keep b */
-		    mm->lastTarget &&
-		    mm->lastTargetGene == pp->targetGene &&
-		    mm->lastIsUp == isUp &&
-		    mm->lastTarget < pp->target &&     /* assuming the targets fasta files are sorted in alphabetic order */
-		    mm->nPerfectHit > 0
-		    )  
-		  continue ;
-		
-		/* do not retry the very same word too often thrhoughout the whole run
-		 * since we cannot count every position, we count modulo a hash
-		 * we do not zero this number when we get a better hit
-		 */
-		if (mm->probeLength < 128) /* catastrophic on long reads becasue we fold back on 8 counters
-			* we have 8 * seedStep = 40 so it only work for seq length up to 128
-			*/
-		  {
-		    int limit = 64 ; /* must be smaller than 255 = max char value */
-		    unsigned int xk = xpos ;
-		    int w ;
-		    xk /= pp->seedShift ;
-		    xk = (xk) ^ (xk * 13) ^ (xk * 37) ; xk = xk ^ (xk > 3) ^ (xk >> 5) ;
-		    xk = xk % 8 ;
-		    xk <<= 1 ; if (isUp) xk |= 0x1 ;
-		    w = mm->wordCount[xk] ;
-		    if (w >= limit)
+		      else
+			{ 
+			  if (1)
+			    {
+			      /*
+				if (pos < 20)
+				fprintf (stderr, ".... testing pos %d\n", pos) ;
+			      */ 
+			      if (assFind(ass1, assVoid(oligo), &vp)) 
+				{
+				  /*
+				    if (pos < 20)
+				    fprintf (stderr, ".... testing pos %d  success\n", pos) ;
+				  */
+				  nOligo = assInt(vp) ;
+				  nf = array (oligoFrequency, nOligo, unsigned char) ;
+				  if (oligoGene)
+				    {
+				      if (nf < 255 && ! bitt(oligoGene, oligo))
+					{
+					  bitSet (oligoGene, oligo) ; oligoGeneTouched = TRUE ;
+					  array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
+					}
+				    }
+				  else
+				    {
+				      if (nf < 5 || (nTargets < 5 && nf < 255)) 
+					array (oligoFrequency, nOligo, unsigned char) = nf + 1 ;
+				    }
+				  if (doubleSeed) /* The short oligo is included in the long one */
+				    {
+				      if (assFind(assB1, assVoid(oligoB), &vp)) 
+					{
+					  nOligo = assInt(vp) ;
+					  nf = array (oligoFrequencyB, nOligo, unsigned char) ;
+					  if (nf < 5 || (nTargets < 5 && nf < 255)) 
+					    array (oligoFrequencyB, nOligo, unsigned char) = nf + 1 ;
+					}
+				    }
+				}
+			    }
+			}
 		      continue ;
-		    mm->wordCount[xk]++ ;
-		  }
-		nErr = nN = 0 ;
-		NNN++ ;
-		if (0 && xpos < 230 && xpos > 130 && pp->target == 17 && isUp == FALSE)
-		  invokeDebugger() ;
-		if (clipAlignVerifyProbeHit (pp, mm, dna, dnaR, pos, xpos
-					     , (unsigned char*) stackText (pp->probeStack, mm->probeSequence)
-					     , mm->probeLength, isUp
-					     , &nErr, &nN
-					     , &a1, &a2, &x1, &x2
-					     , errLeftVal, errRightVal
-					     , prefix, suffix, targetPrefix
-					     )
-		    )
-		  {
-		    nHits++ ;
-		    if (isUp)
+		    }
+		  myass = 0 ;
+		  /*
+		    if (assFind (ass2, assVoid(oligo), 0) && assFind(ass, assVoid(oligo), &vp))
+		    { myass = ass ; myOligo = oligo ; }
+		    else if (doubleSeed && assFind (assB2, assVoid(oligoB), 0) && assFind(assB, assVoid(oligoB), &vp))
+		    { myass = assB ; myOligo = oligoB ; }
+		  */
+		  if (doubleSeed)
+		    { myass = assB ; myOligo = oligoB ; }
+		  else
+		    { myass = ass ; myOligo = oligo ; }
+		  iBucket = 0 ; bucket = 0 ;
+		  if (assFind (ass2, assVoid(oligo), 0))   /* (myass) */
+		    while (assFindNext(myass, assVoid(myOligo), &vp, &bucket, &iBucket))
 		      {
-			a1 = max - a1 + 1 ; a2 = max - a2 + 1 ; 
-		      }
-		    clipAlignExportHit (pp, mm, xpos, a1, a2, x1, x2, nErr, nN
-					, errLeftVal, errRightVal
-					, prefix, suffix, targetPrefix
-					) ;
+			int anchorMax = arrayMax (pp->probes) ;
+			NNN++ ;
+			anchor = assULong(vp)-1 ;
+			if (is64)
+			  {
+			    xpos = (anchor >> 32) & 0xefffffff ; /* avoid the sign bit ! */
+			    anchor = anchor & 0xffffffff ; 
+			  }
+			else
+			  {
+			    xpos = (anchor >> 22) & 0xefffffff ; /* avoid the sign bit ! */
+			    anchor = anchor & 0x3fffff ; 
+			  }
+			mm0 = arrp (pp->probes, anchor, MM) ;
+			for (mm = mm0, same = mm->probeLength ;  mm && anchor < anchorMax ; anchor++, mm = (same  >= xpos  + seedLength - 1 ? mm+1 : 0) )
+			  {
+			    if (mm->same < same) same = mm->same ; /* part in future mm common with mm0 */
+			    if (pp->maxHit && mm->nGeneHits * 30 > pp->maxHit * mm->probeLength) /* assume 30bp per exon */
+			      continue ; 
+			    if (mm->probeLength < xpos  + seedLength - 1)
+			      continue ;
+			    if (mm->lastTarget == pp->target)  
+			      {   /* same hit as before  ? */
+				if (xpos >= mm->lastX1  && xpos <= mm->lastX2 && 
+				    pos >= mm->lastA1 && pos <= mm->lastA2  &&
+				    pos - xpos >= mm->lastDelta - 20 &&
+				    pos - xpos <= mm->lastDelta + 20 &&
+				    mm->lastIsUp == isUp
+				    )
+				  {
+				    mm->lastDelta = pos - xpos ;
+				    continue ; 
+				  }
+			      }
+			    if (pp->MRNAH && 
+				!pp->hasPairs &&  /* 2015_02_02  is hasPairs we cannot do that because if r1 goes just in b and run2 goes in a,b we need to keep b */
+				mm->lastTarget &&
+				mm->lastTargetGene == pp->targetGene &&
+				mm->lastIsUp == isUp &&
+				mm->lastTarget < pp->target &&     /* assuming the targets fasta files are sorted in alphabetic order */
+				mm->nPerfectHit > 0
+				)  
+			      continue ;
+		
+			    /* do not retry the very same word too often throughout the whole run
+			     * since we cannot count every position, we count modulo a hash
+			     * we do not zero this number when we get a better hit
+			     */
+			    if (mm->probeLength < 128) /* catastrophic on long reads because we fold back on 8 counters
+							* we have 8 * seedStep = 40 so it only work for seq length up to 128
+							*/
+			      {
+				int limit = 64 ; /* must be smaller than 255 = max char value */
+				unsigned int xk = xpos ;
+				int w ;
+				xk /= pp->seedShift ;
+				xk = (xk) ^ (xk * 13) ^ (xk * 37) ; xk = xk ^ (xk > 3) ^ (xk >> 5) ;
+				xk = xk % 8 ;
+				xk <<= 1 ; if (isUp) xk |= 0x1 ;
+				w = mm->wordCount[xk] ;
+				if (w >= limit)
+				  continue ;
+				mm->wordCount[xk]++ ;
+			      }
+			    nErr = nN = 0 ;
+			    NNN++ ;
+			    if (0 && xpos < 230 && xpos > 130 && pp->target == 17 && isUp == FALSE)
+			      invokeDebugger() ;
+			    if (1 && !strcmp(stackText (pp->probeStack, mm->probeName), "cYOK-024J17<"))
+			      invokeDebugger() ;
+			    if (clipAlignVerifyProbeHit (pp, mm, dna, dnaR, pos, xpos
+							 , (unsigned char*) stackText (pp->probeStack, mm->probeSequence)
+							 , mm->probeLength, isUp
+							 , &nErr, &nN
+							 , &a1, &a2, &x1, &x2
+							 , errLeftVal, errRightVal
+							 , prefix, suffix, targetPrefix
+							 )
+				)
+			      {
+				nHits++ ;
+				if (isUp)
+				  {
+				    a1 = max - a1 + 1 ; a2 = max - a2 + 1 ; 
+				  }
+				clipAlignExportHit (pp, mm, xpos, a1, a2, x1, x2, nErr, nN
+						    , errLeftVal, errRightVal
+						    , prefix, suffix, targetPrefix
+						    ) ;
 		    
-		  }
-	      }
-	  }
-    }
+			      }
+			  }
+		      }
+		}
   pp->oligoGeneTouched = oligoGeneTouched ;
   return nHits ;
 } /* clipAlignGetProbeHits */
@@ -6046,39 +6154,50 @@ static void  clipAlignOptimizeIntronCleanUp (CLIPALIGN *pp, BigArray aa, int ii1
 	    if (pt->s1 == target || pt->s2 == target)
 	      {
 		b1 = pt->a1 ; b2 = pt->a2 ; targ = pt->s1 ; }
-		if (b1 > a2 - du && b1 < a2 + dv && targ == target)
-		  { /* found an intron look for next exon */
-		    int e1 ;
+	    if (b1 > a2 - du && b1 < a2 + dv && targ == target)
+	      { /* found an intron look for next exon */
+		int e1 ;
 		    
-		    for (jj = ii + 1, py = px + 1 ; jj < ii2 ; py++, jj++)
+		for (jj = ii + 1, py = px + 1 ; jj < ii2 ; py++, jj++)
+		  {
+		    e1 = py->a1 ; targ = py->target ; 
+		    if (e1 > b2 - du && e1 < b2 + dv &&
+			targ == target &&
+			py->score && py->mm
+			)
 		      {
-			e1 = py->a1 ; targ = py->target ; 
-			if (e1 > b2 - du && e1 < b2 + dv &&
-			    targ == target &&
-			    py->score && py->mm
-			    )
+			int mult =  py->mm ?  py->mm->mult : 0 ;
+			pt->score += px->mm->mult ; /* success */
+			nValidatedIntrons++ ;
+			/* count the orientation of the reads supporting gt_ag to influence at export time
+			 * the orientation of the NS introns
+			 */
+			if (! strcmp (pt->foot, "gt_ag"))
 			  {
-			    int mult =  py->mm ?  py->mm->mult : 0 ;
-			    pt->score += px->mm->mult ; /* success */
-			    nValidatedIntrons++ ;
-			    /* count the orientation of the reads supporting gt_ag to influence at export time
-			     * the orientation of the NS introns
-			     */
-			    if (! strcmp (pt->foot, "gt_ag"))
+			    if (pt->errLeftVal > pt->errRightVal)
+			      pp->nIntronPlus += mult ;
+			    else
 			      {
-				if (pt->errLeftVal > pt->errRightVal)
-				  pp->nIntronPlus += mult ;
-				else
-				  pp->nIntronMinus  += mult ;
+				pp->nIntronMinus  += mult ;
 			      }
-			    py->acceptor = 0 ;
-			    intronFound = TRUE ;
-			    break ;  /* break the py loop */
 			  }
+			else if (! strcmp (pt->foot, "ct_ac"))
+			  {
+			    if (pt->errLeftVal > pt->errRightVal)
+			      {
+				pp->nIntronMinus += mult ;
+			      }
+			    else
+			      pp->nIntronPlus  += mult ;
+			  }
+			py->acceptor = 0 ;
+			intronFound = TRUE ;
+			break ;  /* break the py loop */
 		      }
-		    break ; /* break the pt loop */
 		  }
+		break ; /* break the pt loop */
 	      }
+	  }
       if (! intronFound && px->donor)
 	{	
 	  py = bigArrp (donors, px->donor - 1, PEXPORT) ;
@@ -6276,7 +6395,7 @@ static int clipAlignOptimizeHalfChain (CLIPALIGN *pp, BigArray aa, int ii1, int 
 		    if (isDown * (py->a2 - py->a1) > 0 &&  isDown * (db - da) + dx == 1 &&
 			py->pairScore <= px->score + px->pairScore)
 		      {	
-			 if (! py->score || isDown * (py->a2 - py->a1) < 0)
+			if (! py->score || isDown * (py->a2 - py->a1) < 0)
 			  continue ;
 			
 			if (
@@ -6511,17 +6630,17 @@ static int clipAlignOptimizeHalfRaphia (CLIPALIGN *pp, BigArray aa, int ii1, int
 	}
     }
   /*
-mapped_read= 
- 6S    20=                 2X17=             1I25=15S
- GTTCACAACGCTTTCATTGCAGGAAATAATGCTATATGGCCATTTGCTGACTTGTCGTAACAAAGTTTCCAATACCATTAGTGATAG   ln= 87
- SSSSSSAACGCTTTCATTGCAGGAAAATATGCTATATGGCCATTGICTGACTTGTCGTAACAAAGTTTCCASSSSSSSSSSSSSSS    ln= 86
+    mapped_read= 
+    6S    20=                 2X17=             1I25=15S
+    GTTCACAACGCTTTCATTGCAGGAAATAATGCTATATGGCCATTTGCTGACTTGTCGTAACAAAGTTTCCAATACCATTAGTGATAG   ln= 87
+    SSSSSSAACGCTTTCATTGCAGGAAAATATGCTATATGGCCATTGICTGACTTGTCGTAACAAAGTTTCCASSSSSSSSSSSSSSS    ln= 86
 
-mapped_read= 
- GTCGGCCAACCATTCTCTGAATGTCTGAATGACAGCGACTATTGTTTAAGGTTTT    GTAAATAAGAGACCTTAAGCAATGCATTGACTGCATGGTCTCAACCTCATCTGTGCTGTGAGAA   ln= 119
- SSSGGCCAACCATTCTCTGAATGTCTGAATGACAGCGACTATIGTTTAAGGTTTTTTTTGTAAATAAGAGACCTTAAGCAATGCATTGACTGCATGGTCTCAACCTCATCTGTGCTGTGAGAA    ln= 123
+    mapped_read= 
+    GTCGGCCAACCATTCTCTGAATGTCTGAATGACAGCGACTATTGTTTAAGGTTTT    GTAAATAAGAGACCTTAAGCAATGCATTGACTGCATGGTCTCAACCTCATCTGTGCTGTGAGAA   ln= 119
+    SSSGGCCAACCATTCTCTGAATGTCTGAATGACAGCGACTATIGTTTAAGGTTTTTTTTGTAAATAAGAGACCTTAAGCAATGCATTGACTGCATGGTCTCAACCTCATCTGTGCTGTGAGAA    ln= 123
 
- ttctcacagcacagatgaggttgagaccatgcagtcaatgcattgcttaaggtctcttatttacaaaaA    ccttaaacatagtcgctgtcattcagacattcagagaatggttggcc
- ttctcacagcacagatgaggttgagaccatgcagtcaatgcattgcttaaggtctcttatttacaaaaaaaaaccttaaacatagtcgctgtcattcagacattcagagaatggttggcc
+    ttctcacagcacagatgaggttgagaccatgcagtcaatgcattgcttaaggtctcttatttacaaaaA    ccttaaacatagtcgctgtcattcagacattcagagaatggttggcc
+    ttctcacagcacagatgaggttgagaccatgcagtcaatgcattgcttaaggtctcttatttacaaaaaaaaaccttaaacatagtcgctgtcattcagacattcagagaatggttggcc
 
   */
   if (nRF < 2)
@@ -6690,16 +6809,16 @@ mapped_read=
       if (! rf->nn || ! rf->nr)
 	continue ;
       if (keySet (scores, rf->nr))
-	 {
-	   int dx = rf->x1 - rf[-1].x2 - 1 ;
-	   if (dx < 0)
-	     {
-	       dx = -dx ;
-	     }
-	   else 
-	     dx = 0 ;
-	   keySet (scores, rf->nr) += rf->score - dx - malus ;
-	 }
+	{
+	  int dx = rf->x1 - rf[-1].x2 - 1 ;
+	  if (dx < 0)
+	    {
+	      dx = -dx ;
+	    }
+	  else 
+	    dx = 0 ;
+	  keySet (scores, rf->nr) += rf->score - dx - malus ;
+	}
       else
 	{
 	  keySet (scores, rf->nr) = rf->score ;
@@ -6905,7 +7024,7 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
 	  int score = 0, ali = 0, target, targetGene, chain, x1, x2 ;
 	  int  bestii = -1 ;
 	  
-      /* find the best score of the read */
+	  /* find the best score of the read */
 	  for (ii = ii1,  py = px ; ii < ii2 ; py++, ii++)
 	    {
 	      if (! py->score || bit(bb, ii)) /* already done */
@@ -6961,10 +7080,10 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
       fprintf (stderr, "-------1-------clipAlignOptimizeOnePair after selection of the best scores for each read: %s\n"
 	       ,  pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : ""
 	       ) ;
-     showPexport (pp, singleTarget ? 1 : 0) ;
+      showPexport (pp, singleTarget ? 1 : 0) ;
     } 
 
- /* construct the true pair score 
+  /* construct the true pair score 
    * up to now px->pairSCore is the chain score
    */
   if (pp->hasPairs && singleTarget)
@@ -7092,7 +7211,7 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
 	      if (pairScore > bestPairScore)
 		bestPairScore = pairScore ;  /* this works for pairs and for orphan cases  */
 	    } /* forever */
-      /* scan again and reject suboptimal pair scores */
+	  /* scan again and reject suboptimal pair scores */
 	  if (foundPair)
 	    {
 	      px = bigArrp (aa, ii1, PEXPORT) ;
@@ -7119,7 +7238,7 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
   if (! singleTarget)
     {
       /* scan again and reject suboptimal pair scores */
-       MM *mm1 = 0 ;
+      MM *mm1 = 0 ;
       bb = bitSetReCreate (bb, ii2) ;
       px = bigArrp (aa, ii1, PEXPORT) ;
 
@@ -7128,7 +7247,7 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
 	  int score = 0, ali = 0, target, targetGene, chain, x1, x2 ;
 	  int  bestii = -1 ;
 	  
-      /* find the best score of the read */
+	  /* find the best score of the read */
 	  for (ii = ii1,  py = px ; ii < ii2 ; py++, ii++)
 	    {
 	      if (! py->score || bit(bb, ii)) /* already done */
@@ -7186,11 +7305,11 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
       fprintf (stderr, "-------4-------clipAlignOptimizeOnePair: %s\n"
 	       ,  pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : ""
 	       ) ;
-     showPexport (pp, singleTarget ? 1 : 0) ;
+      showPexport (pp, singleTarget ? 1 : 0) ;
     } 
 
 
- /* MRNAH : prefer multi hits to same transcript, else keep first transcrip for each read */
+  /* MRNAH : prefer multi hits to same transcript, else keep first transcrip for each read */
   if (singleTarget && isTranscript && pp->hasPairs && pp->MRNAH)  
     {
       int ok = 0 ;
@@ -7254,7 +7373,7 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
 	}
     }
  
- /* strand counts */
+  /* strand counts */
   if (singleTarget && isTranscript)  
     {
       for (ii = ii1, px = bigArrp (aa, ii1, PEXPORT) ; ii < ii2 ; px++, ii++)
@@ -7269,7 +7388,7 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
 	}
     }
  
- /* compare different genes and discard lower scores */
+  /* compare different genes and discard lower scores */
 
   /* Disfavor genes A-and-B also denoted A--B */
   if (! singleTarget || isTranscript)
@@ -7298,7 +7417,7 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
 	  }
     }
 
-   /*  target multiplicity */
+  /*  target multiplicity */
   if (singleTarget || ! isTranscript)
     {
       bb = bitSetReCreate (bb, ii2) ;
@@ -7425,149 +7544,149 @@ static void clipAlignOptimizeOnePair (CLIPALIGN *pp, BOOL MRNAH, BOOL singleTarg
       showPexport (pp, singleTarget ? 1 : 0) ;
     } 
   
-     /* genome  case count the target multiplicity, by counting  the non overlapping best segments*/
-   if (! singleTarget &&  ! (isTranscript && pp->strategy == STRATEGY_RNA_SEQ))
-     {
-       PEXPORT *px3 ;
-       int j2, j3 ;
-       int nGenePlus = 0,  nGeneMinus = 0 ;
+  /* genome  case count the target multiplicity, by counting  the non overlapping best segments*/
+  if (! singleTarget &&  ! (isTranscript && pp->strategy == STRATEGY_RNA_SEQ))
+    {
+      PEXPORT *px3 ;
+      int j2, j3 ;
+      int nGenePlus = 0,  nGeneMinus = 0 ;
 
-       bb = bitSetReCreate (bb, ii2) ;
-       for (ii = ii1, px = bigArrp (aa, ii1, PEXPORT) ; ii < ii2 ; px++, ii++)
-	 if (px->score && px->mm && ! bit (bb, ii))
-	   {
-	     MM *mm = px->mm ;
-	     int uu , bestScore = 0 ;
-	     int bestx1 = 999999, bestx2 = 0, besty1 = 999999, besty2 = 0 ;
+      bb = bitSetReCreate (bb, ii2) ;
+      for (ii = ii1, px = bigArrp (aa, ii1, PEXPORT) ; ii < ii2 ; px++, ii++)
+	if (px->score && px->mm && ! bit (bb, ii))
+	  {
+	    MM *mm = px->mm ;
+	    int uu , bestScore = 0 ;
+	    int bestx1 = 999999, bestx2 = 0, besty1 = 999999, besty2 = 0 ;
 
-	     /* notice that pairScore in genomic case is the chain score */
-	     uu = 0 ; 
-	     if (1)
-	       {
-		 for (px1 = px, jj = ii ; jj < ii2 ; px1++, jj++)
-		   if (px1->score && px1->mm == mm)
-		     {
-		       if (pp->hasPairs)
-			 {
-			   if (bestScore <= px1->pairScore)
-			     { 
-			       bestScore = px1->pairScore ; 
-			       if (px->mm->pair < -1)
-				 {
-				   if (bestx1 > px1->s1)  bestx1 = px1->s1 ; 
-				   if (bestx2 < px1->s2)  bestx2 = px1->s2 ; 
-				 }
-			       else
-				 {
-				   if (besty1 > px1->s1)  besty1 = px1->s1 ; 
-				   if (besty2 < px1->s2)  besty2 = px1->s2 ; 
-				 }
-			     }
-			 }
-		       else
-			 {
-			   if (bestScore < px1->score)
-			     {
-			       bestScore = px1->score ; 
-			       if (bestx1 > px1->s1)  bestx1 = px1->s1 ; 
-			       if (bestx2 < px1->s2)  bestx2 = px1->s2 ; 
-			     }
-			 }
-		     }
-	       }
+	    /* notice that pairScore in genomic case is the chain score */
+	    uu = 0 ; 
+	    if (1)
+	      {
+		for (px1 = px, jj = ii ; jj < ii2 ; px1++, jj++)
+		  if (px1->score && px1->mm == mm)
+		    {
+		      if (pp->hasPairs)
+			{
+			  if (bestScore <= px1->pairScore)
+			    { 
+			      bestScore = px1->pairScore ; 
+			      if (px->mm->pair < -1)
+				{
+				  if (bestx1 > px1->s1)  bestx1 = px1->s1 ; 
+				  if (bestx2 < px1->s2)  bestx2 = px1->s2 ; 
+				}
+			      else
+				{
+				  if (besty1 > px1->s1)  besty1 = px1->s1 ; 
+				  if (besty2 < px1->s2)  besty2 = px1->s2 ; 
+				}
+			    }
+			}
+		      else
+			{
+			  if (bestScore < px1->score)
+			    {
+			      bestScore = px1->score ; 
+			      if (bestx1 > px1->s1)  bestx1 = px1->s1 ; 
+			      if (bestx2 < px1->s2)  bestx2 = px1->s2 ; 
+			    }
+			}
+		    }
+	      }
 
-	     if ((1 || ! pp->bestHit) && bestScore > maxDiscardableAli)   /* mieg 2022-12-10   allow muti hits also in transcript to allow fusions */
-	       bestScore = maxDiscardableAli ;
-	     if (bestScore)
-	       for (px1 = px , jj = ii  ; jj < ii2 ; px1++, jj++) 
-		 {
-		   int score ;
-		   if (! px1->score || px1->mm != mm)
-		     continue ;
-		   score = pp->hasPairs ? px1->pairScore : px1->score ;
-		   if (score < bestScore)
-		     score = px1->score = px1->pairScore = 0 ;
-		   if (score && score < bestScore)
-		     {
-		       int u1, u2 ;
-		       if (! pp->hasPairs || px->mm->pair < -1)
-			 { u1 = bestx1 ; u2 = bestx2 ; }
-		       else
-			 { u1 = besty1 ; u2 = besty2 ; }
-		       if (u1 < px1->s1) u1 = px1->s1 ;
-		       if (u2 >  px1->s2) u2 = px1->s2 ;
-		       if (2*(u2 - u1) >  px1->s2 - px1->s1) 
-			 px1->score = px1->pairScore = 0 ;
-		     }
-		   if (! px1->score)
-		     continue ;
-		   if (! bit (bb, jj))
-		     {	
-		       for (px2 = px1 , j2 = jj ; j2 < ii2 ; px2++, j2++)
-			 if (px2->score == px1->score && px2->mm == mm && ! bit (bb, j2))  /* last term was ! bit (bb, jj which seems dubious 2018+03_21 */
-			   {
-			     for (px3 = px2 , j3 = j2 ; j3 < ii2 ; px3++, j3++)
-			       if (px3->mm == mm && px3->score == px1->score)
-				 {
-				   bitSet (bb, j3) ;
-				   if (
-				       (px3->target == px2->target   && px3->x1 < px->x2 - 10 && px3->x2 > px->x1 + 10) /* overlap on same target */
-				       || (px3->targetGene != px2->targetGene)                        /* 2 genes */
-				       || (px3->targetGene == 0 && px3->target != px2->target )       /* 2 targets (say 2 chromosomes), excluding 2 mrna of the same gene */
-				       )
-				     {
-				       uu++ ;
-				       if (px1->a1 < px1->a2)
-					 { 
-					   if (mm->pair < 0) 
-					     nGeneMinus++ ;
-					   else 
-					     nGenePlus++ ;
-					 }
-				       else
-					 {
-					   if (mm->pair >= 0) 
-					     nGeneMinus++ ;
-					   else 
-					     nGenePlus++ ;			
-					 }
-				     }
-				 }
-			   }
-		     }
-		 }
-	     bitSet (bb, ii) ;
-	     if (nGenePlus && nGeneMinus) uu = -uu ;
-	     for (px1 = px , jj = ii ; jj < ii2 ; px1++, jj++)
-	       if (px1->mm == mm && px1->score)
-		 { px1->uu = uu ; bitSet (bb, jj) ; }
-	   }
-     }
+	    if ((1 || ! pp->bestHit) && bestScore > maxDiscardableAli)   /* mieg 2022-12-10   allow muti hits also in transcript to allow fusions */
+	      bestScore = maxDiscardableAli ;
+	    if (bestScore)
+	      for (px1 = px , jj = ii  ; jj < ii2 ; px1++, jj++) 
+		{
+		  int score ;
+		  if (! px1->score || px1->mm != mm)
+		    continue ;
+		  score = pp->hasPairs ? px1->pairScore : px1->score ;
+		  if (score < bestScore)
+		    score = px1->score = px1->pairScore = 0 ;
+		  if (score && score < bestScore)
+		    {
+		      int u1, u2 ;
+		      if (! pp->hasPairs || px->mm->pair < -1)
+			{ u1 = bestx1 ; u2 = bestx2 ; }
+		      else
+			{ u1 = besty1 ; u2 = besty2 ; }
+		      if (u1 < px1->s1) u1 = px1->s1 ;
+		      if (u2 >  px1->s2) u2 = px1->s2 ;
+		      if (2*(u2 - u1) >  px1->s2 - px1->s1) 
+			px1->score = px1->pairScore = 0 ;
+		    }
+		  if (! px1->score)
+		    continue ;
+		  if (! bit (bb, jj))
+		    {	
+		      for (px2 = px1 , j2 = jj ; j2 < ii2 ; px2++, j2++)
+			if (px2->score == px1->score && px2->mm == mm && ! bit (bb, j2))  /* last term was ! bit (bb, jj which seems dubious 2018+03_21 */
+			  {
+			    for (px3 = px2 , j3 = j2 ; j3 < ii2 ; px3++, j3++)
+			      if (px3->mm == mm && px3->score == px1->score)
+				{
+				  bitSet (bb, j3) ;
+				  if (
+				      (px3->target == px2->target   && px3->x1 < px->x2 - 10 && px3->x2 > px->x1 + 10) /* overlap on same target */
+				      || (px3->targetGene != px2->targetGene)                        /* 2 genes */
+				      || (px3->targetGene == 0 && px3->target != px2->target )       /* 2 targets (say 2 chromosomes), excluding 2 mrna of the same gene */
+				      )
+				    {
+				      uu++ ;
+				      if (px1->a1 < px1->a2)
+					{ 
+					  if (mm->pair < 0) 
+					    nGeneMinus++ ;
+					  else 
+					    nGenePlus++ ;
+					}
+				      else
+					{
+					  if (mm->pair >= 0) 
+					    nGeneMinus++ ;
+					  else 
+					    nGenePlus++ ;			
+					}
+				    }
+				}
+			  }
+		    }
+		}
+	    bitSet (bb, ii) ;
+	    if (nGenePlus && nGeneMinus) uu = -uu ;
+	    for (px1 = px , jj = ii ; jj < ii2 ; px1++, jj++)
+	      if (px1->mm == mm && px1->score)
+		{ px1->uu = uu ; bitSet (bb, jj) ; }
+	  }
+    }
 
-   if (debug)
+  if (debug)
     {
       fprintf (stderr, "-------6-------clipAlignOptimizeOnePair after global gene selection: %s\n"
 	       ,  pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : ""
 	       ) ;
-     showPexport (pp, singleTarget ? 1 : 0) ;
+      showPexport (pp, singleTarget ? 1 : 0) ;
     } 
  
 
-   /* clean up the donor/acceptor/introns lists */
-   if (singleTarget)
-     clipAlignOptimizeIntronCleanUp (pp, aa, ii1, ii2, singleTarget, t0p, w0p, d0p, c0p) ;
+  /* clean up the donor/acceptor/introns lists */
+  if (singleTarget)
+    clipAlignOptimizeIntronCleanUp (pp, aa, ii1, ii2, singleTarget, t0p, w0p, d0p, c0p) ;
 
 
-   /* reset the chainAli value */
-   if (singleTarget)
-     clipAlignOptimizeSetChainAli (pp,  aa, ii1, ii2) ;
-   if ( debug)
-     {
-       fprintf (stderr, "-------7-------after global gene strand selection: %s\n"
-		,  pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : ""
-		) ;
-     showPexport (pp, singleTarget ? 1 : 0) ;
-     } 
+  /* reset the chainAli value */
+  if (singleTarget)
+    clipAlignOptimizeSetChainAli (pp,  aa, ii1, ii2) ;
+  if ( debug)
+    {
+      fprintf (stderr, "-------7-------after global gene strand selection: %s\n"
+	       ,  pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : ""
+	       ) ;
+      showPexport (pp, singleTarget ? 1 : 0) ;
+    } 
 }  /* clipAlignOptimizeOnePair */
 
 /*************************************************************************************/
@@ -7611,7 +7730,7 @@ static int clipAlignOptimizePairs (CLIPALIGN *pp, BOOL singleTarget)
     }
   
 
- if (! singleTarget)
+  if (! singleTarget)
     {
       BigArray dd = pp->exportDoubleIntrons ;
       BigArray bb = pp->exportIntrons ;
@@ -7685,7 +7804,7 @@ static int clipAlignOptimizePairs (CLIPALIGN *pp, BOOL singleTarget)
       fprintf (stderr, ".....clipAlignOptimizePairs: %s\n"
 	       ,  pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : ""
 	       ) ;
-     showPexport (pp, singleTarget) ;
+      showPexport (pp, singleTarget) ;
     } 
   ac_free (h) ;
   return bigArrayMax (pp->exportGeneHits) ;
@@ -7725,9 +7844,9 @@ static void clipAlignGetDonors (CLIPALIGN *pp)
 		  cp = strstr (dictName(pp->exportDict, pxg->targetPresuffix), "*") ;
 		  if (cp && cp[1]) 
 		    {
-		       strncpy (buf,  cp+1, 63 + OVLN) ; 
-		       cp = strstr (buf, "#") ; if (cp) *cp = 0 ;
-		       dictAdd (pp->exportDict, buf, &(px->targetPresuffix)) ;
+		      strncpy (buf,  cp+1, 63 + OVLN) ; 
+		      cp = strstr (buf, "#") ; if (cp) *cp = 0 ;
+		      dictAdd (pp->exportDict, buf, &(px->targetPresuffix)) ;
 		    }
 		}
 	      else
@@ -7822,7 +7941,7 @@ static void clipAlignGetAcceptors (CLIPALIGN *pp)
 
 static int clipAlignOptimizeMergeDonors (CLIPALIGN *pp)
 {
-   PEXPORT *px, *py, *pz ;
+  PEXPORT *px, *py, *pz ;
   int ii, iiMax = bigArrayMax (pp->exportGeneHits) ;
   int jj = bigArrayMax (pp->exportDonors) ;
 
@@ -7887,12 +8006,30 @@ static int clipAlignOptimizeMergeIntrons (CLIPALIGN *pp)
 		lastPz = ii && jj > 1 ? bigArrayp (pp->exportIntrons, jj - 2, PEXPORT) : 0 ;
 		px->intron = py->intron = jj ;
 		*pz = *py ; pz->chain = px->chain ;
-		if (! strcmp (px->foot, "gt_ag"))
+		if (1) /* alreadydone  above */
 		  {
-		    if (py->errLeftVal > py->errRightVal)
-		      pp->nIntronPlus += px->mm->mult ;
-		    else
-		      pp->nIntronMinus  += px->mm->mult ;
+		    if (! strcmp (py->foot, "gt_ag"))
+		      {
+			if (py->errLeftVal > py->errRightVal)
+			  pp->nIntronPlus += px->mm->mult ;
+			else
+			  {
+			    pp->nIntronMinus  += px->mm->mult ;
+			    if (pp->nIntronMinus == 1 || pp->nIntronMinus == 11)
+			      invokeDebugger () ;
+			  }
+		      }
+		    if (! strcmp (py->foot, "ct_ac"))
+		      {
+			if (py->errLeftVal > py->errRightVal)
+			  {
+			    pp->nIntronMinus += px->mm->mult ;
+			    if (pp->nIntronMinus == 1 || pp->nIntronMinus == 11)
+			      invokeDebugger () ;
+			  }
+			else
+			  pp->nIntronPlus  += px->mm->mult ;
+		      }
 		  }
 		for (ipx = 0 ; ipx < ipxMax ; ipx++)
 		  {
@@ -7981,7 +8118,7 @@ static int clipAlignOptimizeMergeIntrons (CLIPALIGN *pp)
       }
 
   return jj ;
-} /* clipAlignOptimizeMergeIntrons */
+} /* clipAlignOptimizeMergeIntrons fragment */
 
 /*************************************************************************************/
 /* merge the geneHits into the hits, while resetting the donors */
@@ -8118,11 +8255,11 @@ static int clipAlignOptimizeGeneHits (CLIPALIGN *pp)
   clipAlignSquish (pp, 1) ;
 
   if (debug)
-     fprintf (stderr, ".....clipAlignOptimizeGeneHits %s  received %ld hits :%s\n"
-	      , pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : dictName(pp->targetDict, pp->previousTarget) 
-	      , bigArrayMax (pp->exportGeneHits)
-	      , timeShowNow () 
-	      ) ;
+    fprintf (stderr, ".....clipAlignOptimizeGeneHits %s  received %ld hits :%s\n"
+	     , pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : dictName(pp->targetDict, pp->previousTarget) 
+	     , bigArrayMax (pp->exportGeneHits)
+	     , timeShowNow () 
+	     ) ;
   /* process by fragment or by read if there are no pairs */ 
   aa = pp->exportGeneHits ; 
   bigArraySort (aa,  pExportPairXOrder) ;
@@ -8163,7 +8300,7 @@ static int clipAlignOptimizeGeneHits (CLIPALIGN *pp)
   for (ii = 0,  px = bigArrp (aa, ii, PEXPORT) ;
        ii <  iMax ; ii++, px++)
     {
-       if (px->score > 60)
+      if (px->score > 60)
 	{
 	  int jj ;
 	  MM *mm = px->mm ;
@@ -8193,6 +8330,7 @@ static int clipAlignOptimizeGeneHits (CLIPALIGN *pp)
 	  if (jj) 
 	    nn += clipAlignOptimizeFragmentHits (pp) ;
 	  jj = 0 ;
+		    
 	  bigArrayDestroy (pp->exportGeneHits) ;
 	  pp->exportGeneHits = bigArrayCreate (100, PEXPORT) ;
 	}
@@ -8201,18 +8339,18 @@ static int clipAlignOptimizeGeneHits (CLIPALIGN *pp)
       fragment = px->mm->fragment ; mm = px->mm ;
     }
   if (jj)
-     nn += clipAlignOptimizeFragmentHits (pp) ;
-   bigArrayDestroy (pp->exportGeneHits) ;
-   bigArrayDestroy (aa) ;
-   pp->exportGeneHits = bigArrayCreate (100, PEXPORT) ;
+    nn += clipAlignOptimizeFragmentHits (pp) ;
+  bigArrayDestroy (pp->exportGeneHits) ;
+  bigArrayDestroy (aa) ;
+  pp->exportGeneHits = bigArrayCreate (100, PEXPORT) ;
 
-   if (debug)
-     fprintf (stderr, ".....clipAlignOptimizeGeneHits %s  done kept %d hits:%s\n"
-	      , pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : dictName(pp->targetDict, pp->previousTarget) 
-	      , nn 
-	      , timeShowNow () 
-	      ) ;
-   return nn ;
+  if (debug)
+    fprintf (stderr, ".....clipAlignOptimizeGeneHits %s  done kept %d hits:%s\n"
+	     , pp->previousTargetGene ? dictName(pp->targetDict, pp->previousTargetGene) : dictName(pp->targetDict, pp->previousTarget) 
+	     , nn 
+	     , timeShowNow () 
+	     ) ;
+  return nn ;
 } /* clipAlignOptimizeGeneHits */
 
 /*************************************************************************************/
@@ -8430,201 +8568,201 @@ static int clipAlignRunOne (CLIPALIGN *pp)
       line++ ;
       cp = aceInWord (ai) ;  /* do NOT accept spaces in target names, this creates havock downstream everywhere */
       if (cp) switch (state)
-	{
-	case 1:
-	case 2:
-	  if (*cp != '>')
-	    {
-	      if (state == 1)
 		{
-		  state = 2 ;
-		  pushText (s, cp) ;
-		}
-	      else
-		catText (s, cp) ;
-	      break ;
-	    }
-	  else
-	    {
-	      cq = stackText (s, seq) ;
-	      n = strlen (cq) ;
-	      array (dna , n, unsigned char) = 0 ; /* make room */
-	      arrayMax (dna) = n ;
-	      memcpy (arrp (dna, 0, unsigned char), cq, n) ;
-	      dnaEncodeArray (dna) ;
-	      if (pp->A2G)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == A_) *cr = R_ ;
-		}
-	      if (pp->G2A)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == G_) *cr = R_ ;
-		}
-	      if (pp->T2C)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == T_) *cr = Y_ ;
-		}
-	      if (pp->C2T)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == C_) *cr = Y_ ;
-		}
-	      if (pp->A2C)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == A_) *cr = M_ ;
-		}
-	      if (pp->C2A)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == C_) *cr = M_ ;
-		}
-	      if (pp->T2G)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == T_) *cr = K_ ;
-		}
-	      if (pp->G2T)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == G_) *cr = K_ ;
-		}
-	      if (pp->G2C)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == G_) *cr = S_ ;
-		}
-	      if (pp->C2G)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == C_) *cr = S_ ;
-		}
-	      if (pp->A2T)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == A_) *cr = W_ ;
-		}
-	      if (pp->T2A)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == T_) *cr = W_ ;
-		}
-
-	      if (pp->mutantMalus)
-		pp->targetMutantMalus =  strncmp (stackText (s, 0), "M:", 2) ? 0 : pp->mutantMalus ;
-	      pp->targetGene = 0 ;
-	      cq = strcasestr(stackText (s, 0), "|Gene|") ;
-	      if (cq) 
-		{
-		  *cq=0 ;
-		  cq += strlen( "|GENE|") ;
-		  if (*cq)
+		case 1:
+		case 2:
+		  if (*cp != '>')
 		    {
-		      char *cr ;
-		      cr = strstr (cq, "|") ;
-		      if (cr) *cr = 0 ;
-		      dictAdd (pp->targetDict, cq, &(pp->targetGene)) ;
-		      if (! strstr (stackText (s, 0), "unspliced"))
-			bitSet (pp->isSplicedTarget, pp->targetGene) ;
-		      if (strstr (cq, "--") || strstr (cq, "-AND-") || strstr (cq, "-and-"))
-			bitSet (pp->doubleGenes, pp->targetGene) ;
-		      if (cr) *cr = '|' ;
+		      if (state == 1)
+			{
+			  state = 2 ;
+			  pushText (s, cp) ;
+			}
+		      else
+			catText (s, cp) ;
+		      break ;
 		    }
-		}
-	      dictAdd (pp->targetDict,  stackText (s, 0), &(pp->target)) ;
-
-	      if (! pp->targetGene && pp->target2geneArray &&
-		  pp->target < arrayMax (pp->target2geneArray)
-		  )
-		{
-		  pp->targetGene = arr (pp->target2geneArray, pp->target, PEXPORT).targetGene ;
-		}
-	      if (! pp->targetGene && pp->target2geneArray)
-		{
-		  cq = stackText (s, 0) ;
-		  if (!strncmp (cq, "MRNA:", 4))
+		  else
 		    {
-		      int n1 = 0 ;
-		      if (dictFind (pp->targetDict, cq + 4, &n1) &&
-			   n1 < arrayMax (pp->target2geneArray)
+		      cq = stackText (s, seq) ;
+		      n = strlen (cq) ;
+		      array (dna , n, unsigned char) = 0 ; /* make room */
+		      arrayMax (dna) = n ;
+		      memcpy (arrp (dna, 0, unsigned char), cq, n) ;
+		      dnaEncodeArray (dna) ;
+		      if (pp->A2G)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == A_) *cr = R_ ;
+			}
+		      if (pp->G2A)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == G_) *cr = R_ ;
+			}
+		      if (pp->T2C)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == T_) *cr = Y_ ;
+			}
+		      if (pp->C2T)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == C_) *cr = Y_ ;
+			}
+		      if (pp->A2C)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == A_) *cr = M_ ;
+			}
+		      if (pp->C2A)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == C_) *cr = M_ ;
+			}
+		      if (pp->T2G)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == T_) *cr = K_ ;
+			}
+		      if (pp->G2T)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == G_) *cr = K_ ;
+			}
+		      if (pp->G2C)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == G_) *cr = S_ ;
+			}
+		      if (pp->C2G)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == C_) *cr = S_ ;
+			}
+		      if (pp->A2T)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == A_) *cr = W_ ;
+			}
+		      if (pp->T2A)
+			{
+			  register int i = n ;
+			  register char *cr = arrp (dna, 0, char) - 1 ;
+			  while (cr++, i--)
+			    if (*cr == T_) *cr = W_ ;
+			}
+
+		      if (pp->mutantMalus)
+			pp->targetMutantMalus =  strncmp (stackText (s, 0), "M:", 2) ? 0 : pp->mutantMalus ;
+		      pp->targetGene = 0 ;
+		      cq = (char *)strcasestr(stackText (s, 0), "|Gene|") ;
+		      if (cq) 
+			{
+			  *cq=0 ;
+			  cq += strlen( "|GENE|") ;
+			  if (*cq)
+			    {
+			      char *cr ;
+			      cr = strstr (cq, "|") ;
+			      if (cr) *cr = 0 ;
+			      dictAdd (pp->targetDict, cq, &(pp->targetGene)) ;
+			      if (! strstr (stackText (s, 0), "unspliced"))
+				bitSet (pp->isSplicedTarget, pp->targetGene) ;
+			      if (strstr (cq, "--") || strstr (cq, "-AND-") || strstr (cq, "-and-"))
+				bitSet (pp->doubleGenes, pp->targetGene) ;
+			      if (cr) *cr = '|' ;
+			    }
+			}
+		      dictAdd (pp->targetDict,  stackText (s, 0), &(pp->target)) ;
+
+		      if (! pp->targetGene && pp->target2geneArray &&
+			  pp->target < arrayMax (pp->target2geneArray)
 			  )
-			pp->targetGene = arr (pp->target2geneArray, n1, PEXPORT).targetGene ;
+			{
+			  pp->targetGene = arr (pp->target2geneArray, pp->target, PEXPORT).targetGene ;
+			}
+		      if (! pp->targetGene && pp->target2geneArray)
+			{
+			  cq = stackText (s, 0) ;
+			  if (!strncmp (cq, "MRNA:", 4))
+			    {
+			      int n1 = 0 ;
+			      if (dictFind (pp->targetDict, cq + 4, &n1) &&
+				  n1 < arrayMax (pp->target2geneArray)
+				  )
+				pp->targetGene = arr (pp->target2geneArray, n1, PEXPORT).targetGene ;
+			    }
+			}
+
+		      if (! pp->hashPhase && pp->targetGene && bitt (pp->scannedGenes, pp->targetGene) && ! pp->splice && pp->MRNAH && lastGene && 
+			  pp->targetGene != lastGene)
+			messcrash ("Target fasta file sorting error\nWhen the target fasta files refers to alternative transcripts denoted >name|GENE|geneName, the fasta file must be sorted by gene, then by transcript so that the aligner can correctly assign reads and pairs to the best transcript of a given gene\n--- Line %d of file %s\n--- In gene %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
+				   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
+				   , dictName (pp->targetDict, pp->targetGene)
+				   , dictName (pp->targetDict,  pp->targetGene), dictName (pp->targetDict,  pp->target)
+				   , lastGene ? dictName (pp->targetDict,  lastGene) : "-"
+				   , lastTarget ? dictName (pp->targetDict,  lastTarget) : "-"
+				   ) ;
+		      bitSet (pp->scannedGenes, pp->targetGene) ;
+		      if (! pp->hashPhase && pp->MRNAH && lastTarget && lastGene && 
+			  pp->targetGene   && ! pp->splice && pp->MRNAH  &&
+			  pp->targetGene == lastGene &&
+			  lexstrcmp (dictName (pp->targetDict,  lastTarget), dictName (pp->targetDict,  pp->target)) > 0
+			  )
+			messcrash ("Target fasta file sorting error\nOption -MRNAH requires that, for a given gene, the target fasta file be sorted in alphabetic order of the transcripts, since this affects the hierarchic mapping of the reads to the alternative transcripts.\n--- Line %d of file %s\n--- In gene: %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
+				   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
+				   , dictName (pp->targetDict, pp->targetGene)
+				   , dictName (pp->targetDict,  pp->target)
+				   , dictName (pp->targetDict,  pp->targetGene)
+				   , lastTarget ? dictName (pp->targetDict,  lastTarget) : "-"
+				   , lastGene ? dictName (pp->targetDict,  lastGene) : "-"
+				   ) ;
+		      lastGene = pp->targetGene ;
+		      lastTarget = pp->target ;
+
+		      nHits += clipAlignSearch (pp, dna) ;
+		      state = 0 ; /* and fall thru */
+		      stackClear (s) ;
+		      dna = arrayReCreate (dna,100000, unsigned char) ; 		
 		    }
+		  /* fall thru to new sequence */
+		case 0: /* expecting   >target_name */
+		  if (*cp == '#')
+		    break ;
+		  if (*cp != '>' || ! *(cp+1))
+		    {
+		      fprintf (stderr, "// bad character in file %s line %d, expecting a '>', got %s"
+			       , pp->targetFileName, line, cp) ;
+		      return FALSE ;
+		    }
+		  pushText (s, cp + 1) ;
+		  state = 1 ;
+		  seq = stackMark (s) ;
+		  break ;
 		}
-
-	      if (! pp->hashPhase && pp->targetGene && bitt (pp->scannedGenes, pp->targetGene) && ! pp->splice && pp->MRNAH && lastGene && 
-		  pp->targetGene != lastGene)
-		messcrash ("Target fasta file sorting error\nWhen the target fasta files refers to alternative transcripts denoted >name|GENE|geneName, the fasta file must be sorted by gene, then by transcript so that the aligner can correctly assign reads and pairs to the best transcript of a given gene\n--- Line %d of file %s\n--- In gene %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
-			   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
-			   , dictName (pp->targetDict, pp->targetGene)
-			   , dictName (pp->targetDict,  pp->targetGene), dictName (pp->targetDict,  pp->target)
-			   , lastGene ? dictName (pp->targetDict,  lastGene) : "-"
-			   , lastTarget ? dictName (pp->targetDict,  lastTarget) : "-"
-					   ) ;
-	      bitSet (pp->scannedGenes, pp->targetGene) ;
-	      if (! pp->hashPhase && pp->MRNAH && lastTarget && lastGene && 
-		  pp->targetGene   && ! pp->splice && pp->MRNAH  &&
-		  pp->targetGene == lastGene &&
-		  lexstrcmp (dictName (pp->targetDict,  lastTarget), dictName (pp->targetDict,  pp->target)) > 0
-		  )
-		messcrash ("Target fasta file sorting error\nOption -MRNAH requires that, for a given gene, the target fasta file be sorted in alphabetic order of the transcripts, since this affects the hierarchic mapping of the reads to the alternative transcripts.\n--- Line %d of file %s\n--- In gene: %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
-			   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
-			   , dictName (pp->targetDict, pp->targetGene)
-			   , dictName (pp->targetDict,  pp->target)
-			   , dictName (pp->targetDict,  pp->targetGene)
-			   , lastTarget ? dictName (pp->targetDict,  lastTarget) : "-"
-			   , lastGene ? dictName (pp->targetDict,  lastGene) : "-"
-			   ) ;
-	      lastGene = pp->targetGene ;
-	      lastTarget = pp->target ;
-
-	      nHits += clipAlignSearch (pp, dna) ;
-	      state = 0 ; /* and fall thru */
-	      stackClear (s) ;
-	      dna = arrayReCreate (dna,100000, unsigned char) ; 		
-	    }
-      /* fall thru to new sequence */
-	case 0: /* expecting   >target_name */
-	  if (*cp == '#')
-	    break ;
-	  if (*cp != '>' || ! *(cp+1))
-	    {
-	      fprintf (stderr, "// bad character in file %s line %d, expecting a '>', got %s"
-		       , pp->targetFileName, line, cp) ;
-	      return FALSE ;
-	    }
-	  pushText (s, cp + 1) ;
-	  state = 1 ;
-	  seq = stackMark (s) ;
-	  break ;
-	}
     }
   if (state > 0)
     {
@@ -8634,163 +8772,163 @@ static int clipAlignRunOne (CLIPALIGN *pp)
       arrayMax (dna) = n ;
       memcpy (arrp (dna, 0, unsigned char), cq, n) ;
       dnaEncodeArray (dna) ;
-	      if (pp->A2G)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == A_) *cr = R_ ;
-		}
-	      if (pp->G2A)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == G_) *cr = R_ ;
-		}
-	      if (pp->T2C)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == T_) *cr = Y_ ;
-		}
-	      if (pp->C2T)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == C_) *cr = Y_ ;
-		}
-	      if (pp->A2C)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  B2[M_] = B2[A_] ;
-		  B2[K_] = B2[T_] ;
-		  while (cr++, i--)
-		    if (*cr == A_) *cr = M_ ;
-		}
-	      if (pp->C2A)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  B2[M_] = B2[C_] ;
-		  while (cr++, i--)
-		    if (*cr == C_) *cr = M_ ;
-		}
-	      if (pp->T2G)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  while (cr++, i--)
-		    if (*cr == T_) *cr = K_ ;
-		}
-	      if (pp->G2T)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  B2[K_] = B2[G_] ;
-		  while (cr++, i--)
-		    if (*cr == G_) *cr = K_ ;
-		}
-	      if (pp->G2C)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  B2[S_] = B2[G_] ;
-		  while (cr++, i--)
-		    if (*cr == G_) *cr = S_ ;
-		}
-	      if (pp->C2G)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  B2[S_] = B2[C_] ;
-		  while (cr++, i--)
-		    if (*cr == C_) *cr = S_ ;
-		}
-	      if (pp->A2T)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  B2[W_] = B2[A_] ;
-		  while (cr++, i--)
-		    if (*cr == A_) *cr = W_ ;
-		}
-	      if (pp->T2A)
-		{
-		  register int i = n ;
-		  register char *cr = arrp (dna, 0, char) - 1 ;
-		  B2[W_] = B2[T_] ;
-		  while (cr++, i--)
-		    if (*cr == T_) *cr = W_ ;
-		}
-	      if (! cq) cq = strstr(stackText (s, 0), "|GENE|") ;
-	      if (pp->mutantMalus)
-		pp->targetMutantMalus =  strncmp (stackText (s, 0), "M:", 2) ? 0 : pp->mutantMalus ;
-	      pp->targetGene = 0 ;
-	      cq = strcasestr(stackText (s, 0), "|Gene|") ;
-	      if (cq) 
-		{
-		  *cq=0 ;
-		  cq += strlen( "|GENE|") ;
-		  if (*cq)
-		    {
-		      char *cr ;
-		      cr = strstr (cq, "|") ;
-		      if (cr) *cr = 0 ;
-		      pp->hasGenes = TRUE ;
-		      dictAdd (pp->targetDict, cq, &(pp->targetGene)) ;
-		      if (cr) *cr = '|' ;
-		    }
-		}
-	      dictAdd (pp->targetDict,  stackText (s, 0), &(pp->target)) ;
-	      if (! pp->targetGene && pp->target2geneArray &&
-		  pp->target < arrayMax (pp->target2geneArray)
+      if (pp->A2G)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  while (cr++, i--)
+	    if (*cr == A_) *cr = R_ ;
+	}
+      if (pp->G2A)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  while (cr++, i--)
+	    if (*cr == G_) *cr = R_ ;
+	}
+      if (pp->T2C)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  while (cr++, i--)
+	    if (*cr == T_) *cr = Y_ ;
+	}
+      if (pp->C2T)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  while (cr++, i--)
+	    if (*cr == C_) *cr = Y_ ;
+	}
+      if (pp->A2C)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  B2[M_] = B2[A_] ;
+	  B2[K_] = B2[T_] ;
+	  while (cr++, i--)
+	    if (*cr == A_) *cr = M_ ;
+	}
+      if (pp->C2A)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  B2[M_] = B2[C_] ;
+	  while (cr++, i--)
+	    if (*cr == C_) *cr = M_ ;
+	}
+      if (pp->T2G)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  while (cr++, i--)
+	    if (*cr == T_) *cr = K_ ;
+	}
+      if (pp->G2T)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  B2[K_] = B2[G_] ;
+	  while (cr++, i--)
+	    if (*cr == G_) *cr = K_ ;
+	}
+      if (pp->G2C)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  B2[S_] = B2[G_] ;
+	  while (cr++, i--)
+	    if (*cr == G_) *cr = S_ ;
+	}
+      if (pp->C2G)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  B2[S_] = B2[C_] ;
+	  while (cr++, i--)
+	    if (*cr == C_) *cr = S_ ;
+	}
+      if (pp->A2T)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  B2[W_] = B2[A_] ;
+	  while (cr++, i--)
+	    if (*cr == A_) *cr = W_ ;
+	}
+      if (pp->T2A)
+	{
+	  register int i = n ;
+	  register char *cr = arrp (dna, 0, char) - 1 ;
+	  B2[W_] = B2[T_] ;
+	  while (cr++, i--)
+	    if (*cr == T_) *cr = W_ ;
+	}
+      if (! cq) cq = strstr(stackText (s, 0), "|GENE|") ;
+      if (pp->mutantMalus)
+	pp->targetMutantMalus =  strncmp (stackText (s, 0), "M:", 2) ? 0 : pp->mutantMalus ;
+      pp->targetGene = 0 ;
+      cq = (char *)strcasestr(stackText (s, 0), "|Gene|") ;
+      if (cq) 
+	{
+	  *cq=0 ;
+	  cq += strlen( "|GENE|") ;
+	  if (*cq)
+	    {
+	      char *cr ;
+	      cr = strstr (cq, "|") ;
+	      if (cr) *cr = 0 ;
+	      pp->hasGenes = TRUE ;
+	      dictAdd (pp->targetDict, cq, &(pp->targetGene)) ;
+	      if (cr) *cr = '|' ;
+	    }
+	}
+      dictAdd (pp->targetDict,  stackText (s, 0), &(pp->target)) ;
+      if (! pp->targetGene && pp->target2geneArray &&
+	  pp->target < arrayMax (pp->target2geneArray)
+	  )
+	{
+	  pp->targetGene = arr (pp->target2geneArray, pp->target, PEXPORT).targetGene ;
+	}
+      if (! pp->targetGene && pp->target2geneArray)
+	{
+	  cq = stackText (s, 0) ;
+	  if (!strncmp (cq, "MRNA:", 4))
+	    {
+	      int n1 = 0 ;
+	      if (dictFind (pp->targetDict, cq + 4, &n1) &&
+		  n1 < arrayMax (pp->target2geneArray)
 		  )
-		{
-		  pp->targetGene = arr (pp->target2geneArray, pp->target, PEXPORT).targetGene ;
-		}
-	      if (! pp->targetGene && pp->target2geneArray)
-		{
-		  cq = stackText (s, 0) ;
-		  if (!strncmp (cq, "MRNA:", 4))
-		    {
-		      int n1 = 0 ;
-		      if (dictFind (pp->targetDict, cq + 4, &n1) &&
-			   n1 < arrayMax (pp->target2geneArray)
-			  )
-			pp->targetGene = arr (pp->target2geneArray, n1, PEXPORT).targetGene ;
-		    }
-		}
-	      if (! pp->hashPhase && pp->targetGene && bitt (pp->scannedGenes, pp->targetGene) && ! pp->splice && pp->MRNAH && 
-		  pp->targetGene != lastGene)
-		messcrash ("Target fasta file sorting error\nWhen the target fasta files refers to alternative transcripts denoted >name|GENE|geneName, the fasta file must be sorted by gene, then by transcript so that the aligner can correctly assign reads and pairs to the best transcript of a given gene\n--- Line %d of file %s\n--- In gene %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
-			   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
-			   , dictName (pp->targetDict, pp->targetGene)
-			   , dictName (pp->targetDict,  pp->targetGene), dictName (pp->targetDict,  pp->target)
-			   , dictName (pp->targetDict,  lastGene), dictName (pp->targetDict,  lastTarget)
-					   ) ;
-	      bitSet (pp->scannedGenes, pp->targetGene) ;
-	      if (! pp->hashPhase && pp->MRNAH && lastTarget  && 
-		  pp->targetGene  && ! pp->splice && pp->MRNAH &&
-		  pp->targetGene == lastGene &&
-		  lexstrcmp (dictName (pp->targetDict,  lastTarget), dictName (pp->targetDict,  pp->target)) > 0
-		  )
-		messcrash ("Target fasta file sorting error\nOption -MRNAH requires that, for a given gene, the target fasta file be sorted in alphabetic order of the transcripts, since this affects the hierarchic mapping of the reads to the alternative transcripts.\n--- Line %d of file %s\n--- In gene: %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
-			   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
-			   , dictName (pp->targetDict, pp->targetGene)
-			   , dictName (pp->targetDict,  pp->targetGene), dictName (pp->targetDict,  pp->target)
-			   , dictName (pp->targetDict,  lastGene), dictName (pp->targetDict,  lastTarget)
-			   ) ;
-	      lastGene = pp->targetGene ;
-	      lastTarget = pp->target ;
+		pp->targetGene = arr (pp->target2geneArray, n1, PEXPORT).targetGene ;
+	    }
+	}
+      if (! pp->hashPhase && pp->targetGene && bitt (pp->scannedGenes, pp->targetGene) && ! pp->splice && pp->MRNAH && 
+	  pp->targetGene != lastGene)
+	messcrash ("Target fasta file sorting error\nWhen the target fasta files refers to alternative transcripts denoted >name|GENE|geneName, the fasta file must be sorted by gene, then by transcript so that the aligner can correctly assign reads and pairs to the best transcript of a given gene\n--- Line %d of file %s\n--- In gene %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
+		   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
+		   , dictName (pp->targetDict, pp->targetGene)
+		   , dictName (pp->targetDict,  pp->targetGene), dictName (pp->targetDict,  pp->target)
+		   , dictName (pp->targetDict,  lastGene), dictName (pp->targetDict,  lastTarget)
+		   ) ;
+      bitSet (pp->scannedGenes, pp->targetGene) ;
+      if (! pp->hashPhase && pp->MRNAH && lastTarget  && 
+	  pp->targetGene  && ! pp->splice && pp->MRNAH &&
+	  pp->targetGene == lastGene &&
+	  lexstrcmp (dictName (pp->targetDict,  lastTarget), dictName (pp->targetDict,  pp->target)) > 0
+	  )
+	messcrash ("Target fasta file sorting error\nOption -MRNAH requires that, for a given gene, the target fasta file be sorted in alphabetic order of the transcripts, since this affects the hierarchic mapping of the reads to the alternative transcripts.\n--- Line %d of file %s\n--- In gene: %s,\n--- transcript %s|GENE|%s\n--- wrongly appeared below %s|GENE|%s\nPlease sort the target fasta file in alphabetic order of the transcripts names."
+		   , aceInStreamLine (ai), pp->targetFileName  /* aceInFileName is now null, since ai is closed, but the line number is ok */
+		   , dictName (pp->targetDict, pp->targetGene)
+		   , dictName (pp->targetDict,  pp->targetGene), dictName (pp->targetDict,  pp->target)
+		   , dictName (pp->targetDict,  lastGene), dictName (pp->targetDict,  lastTarget)
+		   ) ;
+      lastGene = pp->targetGene ;
+      lastTarget = pp->target ;
 
-	      bitUnSet (pp->isSplicedTarget, dictMax (pp->targetDict) + 1) ; /* make room */
+      bitUnSet (pp->isSplicedTarget, dictMax (pp->targetDict) + 1) ; /* make room */
 
-	      nHits += clipAlignSearch (pp, dna) ;
-	      state = 0 ; /* and fall thru */
+      nHits += clipAlignSearch (pp, dna) ;
+      state = 0 ; /* and fall thru */
       stackClear (s) ;
     }
 
@@ -8851,7 +8989,8 @@ static int clipAlignRun (CLIPALIGN *pp)
 	    }
 	  if (n == 3)
 	    {
-	      fprintf (stderr, "// ... %s : %s\n", timeShowNow (), pp->targetFileName) ;
+	      if (0)
+		fprintf (stderr, "// ... %s : %s\n", timeShowNow (), pp->targetFileName) ;
 	      nHits += clipAlignRunOne (pp) ;
 	    }
 	  else
@@ -8986,6 +9125,7 @@ static int clipAlignHashProbes (CLIPALIGN *pp)
   int N25 = 25 ;
   int nf, i, jx, jxB, ii, n1 = 0, gap, ok, ok2, nw, phase ;
   int na, nt, ng, nc ;
+  int nFoundIn1 = 0 ;
   int delta = pp->seedShift ? pp->seedShift :  pp->probeLengthMax ;
   unsigned long int oligo, oligoB, mask, maskB ;
   char cc, *cp, *cp0 ;
@@ -9024,6 +9164,7 @@ static int clipAlignHashProbes (CLIPALIGN *pp)
     } 
   if (hashPhase == 1)
     {
+      ac_free (pp->ass2) ;
       pp->ass2 = assInOnlyHandleCreate (1000 + pp->ass1->n, pp->h) ; 
       if (pp->doubleSeed)
 	pp->assB2 = assInOnlyHandleCreate (1000 + pp->assB1->n, pp->h) ; 
@@ -9051,7 +9192,7 @@ static int clipAlignHashProbes (CLIPALIGN *pp)
   jxB = is64 ? 32 : 16 ;
   maskB = is64 ? 0xffffffffffffffff  : 0xffffffff ;
 
- /* if nOk == 0 no probe is long enough */
+  /* if nOk == 0 no probe is long enough */
   for (ii = 0 ; ii < arrayMax (pp->probes) ; ii++)
     {
       int x00 = 0, deltaHack, deltaGap = 0 ; 
@@ -9063,8 +9204,7 @@ static int clipAlignHashProbes (CLIPALIGN *pp)
       nProbes++ ; nw = 0 ;
       is25 = FALSE ;
       ok = 0 ;
-      
-      if (1 && delta) deltaGap = ii % delta ;
+      if (1 && delta) deltaGap = ii % delta ; 
       for (nLoop = 0, gap = pp->gap + deltaGap, x00 = deltaHack = 0 ;  ; gap += delta + deltaHack, nLoop++)
 	{
 	  nw = 0 ;
@@ -9147,7 +9287,6 @@ static int clipAlignHashProbes (CLIPALIGN *pp)
 
 		  if (debug)
 		    debugOligo (messprintf ("...                               entropy ok probe %d, loop=%d phase=%d gap=%d",ii,nLoop,phase,gap), oligo) ;
-	   
 		  switch (hashPhase)
 		    {
 		    case 0:
@@ -9170,7 +9309,10 @@ static int clipAlignHashProbes (CLIPALIGN *pp)
 		      ok2 = 0 ;
 		      if (assFind (ass1, assVoid(oligo), &vp))
 			{
+			  nFoundIn1++ ;
 			  nOligo = assInt (vp) ;
+			  if (debug )
+			    fprintf(stderr, "....found in 1 nOligo=%d ii=%d\n", nOligo, ii) ;
 			  if (nOligo < arrayMax (oligoFrequency) &&
 			      (nf = arr (oligoFrequency, nOligo, unsigned char)) &&
 			      nf >= 0)
@@ -9218,7 +9360,8 @@ static int clipAlignHashProbes (CLIPALIGN *pp)
 	}
     }
   /* aceOutf (pp->ao, "#################// %s Created an associator for %d Probe\n", timeShowNow(), n1) ; */
-  fprintf (stderr, "// hashPhase=%d nProbes = %d nWords=%d nSkipped = %d nRejected=%d\n", hashPhase, nProbes, nWords, nSkipped, nHashRejected) ;
+  fprintf (stderr, "// hashPhase=%d nProbes = %d nWords=%d nFoundIn1=%d nSkipped = %d nRejected=%d\n"
+	   , hashPhase, nProbes, nWords, nFoundIn1, nSkipped, nHashRejected) ;
 
   return nProbes ;
 } /* clipAlignHashProbes */
@@ -9251,11 +9394,11 @@ static int clipAlignHashOLeg (CLIPALIGN *pp)
     insert in the hash not the name of the sequence but a second hash value
     so it is more compact and sufficient to be sure of quasi identity
 
-     scan genome,compute hash value h1, go in hash, read h2, compare to hash2(genome)
-     if correct export coordinates
-     suppose hash1 is 10 bits, corresponds to size 2^10 table but h2 has 32 bits
-     so now the reconnaissance pattern is 10+32=42 bit so is certain and
-     we only start careful analysys on certitude of correct seed
+    scan genome,compute hash value h1, go in hash, read h2, compare to hash2(genome)
+    if correct export coordinates
+    suppose hash1 is 10 bits, corresponds to size 2^10 table but h2 has 32 bits
+    so now the reconnaissance pattern is 10+32=42 bit so is certain and
+    we only start careful analysys on certitude of correct seed
 
   */
   /*
@@ -9268,39 +9411,39 @@ static int clipAlignHashOLeg (CLIPALIGN *pp)
     but we may also recognize series of shorter words with same target ?
     parallelize 30 times on the farm
 
-Dear Oleg
-i like very much the system of yesterday
-but we may have overlooked on point
-sequences are very repeated, so many
-will have identical  streches
-so ithink we cannot drop subsequences that hit an
-occupied spot of the hash table and wait, there will 
-be too many
+    Dear Oleg
+    i like very much the system of yesterday
+    but we may have overlooked on point
+    sequences are very repeated, so many
+    will have identical  streches
+    so ithink we cannot drop subsequences that hit an
+    occupied spot of the hash table and wait, there will 
+    be too many
 
-but we can do the following
-first i hash the sequences using h1 and i count the occurence
-so
-  counter[hash1(subseq)] is the number of times h1 is used
-which means probably this sequence is not informative
+    but we can do the following
+    first i hash the sequences using h1 and i count the occurence
+    so
+    counter[hash1(subseq)] is the number of times h1 is used
+    which means probably this sequence is not informative
 
-then i run again using a double hasher, but while i scan the
-subsequences, i first look at counter[] and if this number is
-over a threhold, i do NOT insert that subsequence in my
-double hasher
-this way i will have few bounces
+    then i run again using a double hasher, but while i scan the
+    subsequences, i first look at counter[] and if this number is
+    over a threhold, i do NOT insert that subsequence in my
+    double hasher
+    this way i will have few bounces
 
-this is equivalent to your proposal if threshold is counter[]<=1
-but if i use counter[] <= 5, i may be more efficient
+    this is equivalent to your proposal if threshold is counter[]<=1
+    but if i use counter[] <= 5, i may be more efficient
 
-other idea is to say that we scan a solexa sequence of length 45bases
-this creates 30 subword of length 16
-we use your system and count how many subword can be inserted in the
-hash,
-probes for which 16 words or more are used are considered succesful
-the others are reprocessed later 
+    other idea is to say that we scan a solexa sequence of length 45bases
+    this creates 30 subword of length 16
+    we use your system and count how many subword can be inserted in the
+    hash,
+    probes for which 16 words or more are used are considered succesful
+    the others are reprocessed later 
 
-yours
-jean
+    yours
+    jean
 
   */
   return 1 ;
@@ -9418,7 +9561,7 @@ static BOOL clipAlignGetProbes (CLIPALIGN *pp, int pass)
       pp->probeLengthMin = -1 ;
       
       /* it is imperative that we do not ceclare
-	 because we want to divide the offsets in pp->parobePir by STACL_ALIGNMENT
+	 because we want to divide the offsets in pp->probeDir by STACL_ALIGNMENT
 	 this is a horrible hack, we should find a better way to index the pairs 
       */
 
@@ -9966,7 +10109,7 @@ static BOOL clipAlignGetProbes (CLIPALIGN *pp, int pass)
 		  break ;
 		}
 	      n = strlen ((const char *)ce) ;
-	       if (xv && ln >= 15 && xv + ln < n) /* hard clip just downstrem of the adaptor */
+	      if (xv && ln >= 15 && xv + ln < n) /* hard clip just downstrem of the adaptor */
 		{
 		  pp->exitAdaptorFound[iv] += mult ;
 		  if (pp->exitAdaptorFound[iv] > 1000)
@@ -10050,7 +10193,7 @@ static BOOL clipAlignGetProbes (CLIPALIGN *pp, int pass)
 		  break ;
 		}
 	      n = strlen ((const char *)ce) ;
-	       if (xv && ln >= 15 && xv + ln < n) /* hard clip just downstrem of the adaptor */
+	      if (xv && ln >= 15 && xv + ln < n) /* hard clip just downstream of the adaptor */
 		{
 		  pp->exitAdaptor2Found[iv] += mult ;
 		  if (pp->exitAdaptor2Found[iv] > 1000)
@@ -10162,6 +10305,7 @@ static BOOL clipAlignGetProbes (CLIPALIGN *pp, int pass)
 	  nn = arrayMax (pp->probes) ;
 	  if (pp->mutantMalus)
 	    array (pp->originalScores, nn, short) = previousScore ;
+	  if (0) fprintf(stderr, "nn=%d Nam=%d name=%s\n", nn, probeName, stackText(pp->probeStack, probeName)) ;
 	  mm = arrayp (pp->probes, nn++, MM) ;
 	  mm->probeName = probeName ;
 	  mm->probeSetName = probeSetName ;
@@ -10566,7 +10710,7 @@ static void wordFrequencyConstructTable (CLIPALIGN *pp)
   char *cp ;
 
   if (pp->wffSize > 25)
-     messcrash ("Sorry you did set the length of the words to a value %d > 25", pp->wffSize) ;
+    messcrash ("Sorry you did set the length of the words to a value %d > 25", pp->wffSize) ;
   if (!pp->wffSize)
     messcrash ("Sorry you did not set the length of the words to be tabulated by wordFrequencyConstructTable, i suggest 14") ;
 
@@ -10587,7 +10731,7 @@ static void wordFrequencyConstructTable (CLIPALIGN *pp)
 	  arrayMax (dna) = n = 0 ;
 	}
     }
-  wordFrequencyRegister (pp, dna) ;
+  if (n) wordFrequencyRegister (pp, dna) ;
   wordFrequencyReport (pp) ;
   wordFrequencyExport (pp) ;
   
@@ -10650,10 +10794,11 @@ static void usage (const char commandBuf [], int argc, const char **argv)
 	   "// Example:  clipalign -i tags.fasta -t chromX.fasta -errMax 2\n"
 	   "// -t fileName : the name of a target fasta file on which we align the tags\n"
 	   "//      this file is read as needed, so there is no limit to its size\n"
-	   "//      all named files will be gzip decompressed if they are called *.gz\n"
+	   "//      all files named *.gz are automatically decompressed\n"
 	   "// -targets : multi targets\n"
 	   "//     example A_mito:1:f.mito.fasta.gz,B_rrna:2:f.rrna.fasta.gz\n"
 	   "//     each file is processed, the number is the bonus for that class\n"
+	   "// -sam : export in SAM format\n"
 	   "// -i : the name of a fasta/fastc/fastq file, possibly .gz, containing the tags to be aligned \n"
 	   "//      (tested with 10 Million tags, upper limit depends on hardware)\n"
 	   "// -fastq33 : the input is in fastq, the quality of the mismatches start at 33=!(NCBI)\n"
@@ -10671,11 +10816,12 @@ static void usage (const char commandBuf [], int argc, const char **argv)
 	   "//          fine tunes the cost of the mismatches and of the oo in a rather complex way\n" 
 	   "// -pacbio :  expects long reads with a rather high error rate \n"
 	   "// -nanopore :  expects very long reads with a rather very high error rate \n"
+	   "// -ultima :  expects short reads with a very low error rate \n"
 	   "// -hit fileName : hits file, possibly .gz, output of previous search, to be postprocessed\n"
 	   
 	   "// -o fileName : output file name, equivalent to redirecting stdout\n"
   
-	   "// -gzo : the output file is gziped\n"
+	   "// -gzo : the output files will be gziped\n"
   
 	   "// -strand : if this option is specified, the tags are only aligned on the forward strand of the target.\n"
 	   "//            This option may be useful if the target is mRNA and the tags are stranded\n"
@@ -10765,7 +10911,6 @@ static void usage (const char commandBuf [], int argc, const char **argv)
 	   
 	   
 	   "// -seedLength number : must be >7, specifies the seed length, the default is 16 or the length of the shortest tag\n"
-	   "//                  if errMax = 0ust be >7, specifies the seed length, the default is 16 or the length of the shortest tag\n"
 	   "//                  However, if errMax is zero, the seed length is allways the length of the shortest tag.\n"
 	   
 	   
@@ -10861,12 +11006,17 @@ static void usage (const char commandBuf [], int argc, const char **argv)
 	   "//           Each adaptor must be >= 8bp, ambiguous letters are accepted\n"
 	   "//           Triggers adaptor search upstream of the aligned part of the read\n"
 	   "//           If successful the adaptor is trimmed in this particular alignment\n"
+	   "//           The adpator must be present backwards relative to the read\n"
+	   "//           so in general exitAdaptor == entryAdaptor2 and exitAdaptor2 == entryAdaptor"
+	   "// -entryAdaptor2 string : comma delimited list of entry adaptors\n"
+	   "//           Same for the second read in paired sequencing\n"
 	   "// -exitAdaptor string : comma delimited list of exit adaptors\n"
 	   "//           Example: -exitAdaptor atgcggtatagg,ggttatmaycc\n"
 	   "//           Each adaptor must be >= 8bp, ambiguous letters are accepted\n"
 	   "//           Triggers adaptor search downstream of the aligned part\n"
 	   "//           and at the same time downstream of read 2, i.e. downstream of the fragment\n"
 	   "//           If successful the adaptor is trimmed in this particular alignment\n"
+	   "//           he adaptor is presented in the orientation of the read\n "
 	   "// -exitAdaptor2 string: comma delimited list of exit adaptors\n"
 	   "//           Each adaptor must be >= 8bp, ambiguous letters are accepted\n"
 	   "//           Triggers adaptor search downstream of the aligned part of read 2 in paired sequencing\n"
@@ -10899,6 +11049,12 @@ static void usage (const char commandBuf [], int argc, const char **argv)
 	   "//                     This table is then given as a parameter to the aligner using the option\n"
 	   "// -wf filename : binary table of frequency of short word, used to select seeds\n"
 	   "//          This table is needed by the classic AceView 'tacembly' aligner, but so far not used by this program\n"
+	   "//\n"
+	   "// Optional parameters used in the samStats output file\n"
+	   "//   -run <runName>\n"
+	   "//   -method <methodName>\n"
+	   "//   -nRawReads <long int>\n"
+	   "//   -nRawBases <long int>\n"
 	   "//\n"
 	   "// -silent : suppress title lines and status reports from the output, just report the hits\n"
 	   
@@ -10988,7 +11144,7 @@ int main (int argc, const char **argv)
       int ii, jj, mx = 0, mega = 1 << 20 ;
       AC_HANDLE h1 = ac_new_handle () ;
 
-       if (0 || getCmdLineInt (&argc, argv, "-memTest", &mx))
+      if (0 || getCmdLineInt (&argc, argv, "-memTest", &mx))
 	{
 	  /*	    bucketAssTest () ; */ 
 
@@ -11015,9 +11171,9 @@ int main (int argc, const char **argv)
 		}
 	      ac_free (h1) ;
 	    }
-	 if (1)  exit (0) ;
+	  if (1)  exit (0) ;
 	} 
-       ac_free (h1) ;
+      ac_free (h1) ;
     }
 
   for (ix = 0, cp = commandBuf ;  ix < argc && cp + strlen (argv[ix]) + 1 < commandBuf + 31000 ; cp += strlen (cp), ix++)
@@ -11068,10 +11224,11 @@ int main (int argc, const char **argv)
   p.solid  = getCmdLineBool (&argc, argv, "-solid") ;
   p.roche = getCmdLineBool (&argc, argv, "-roche") ;
   p.pacbio  = getCmdLineBool (&argc, argv, "-pacbio") ;
+  p.ultima  = getCmdLineBool (&argc, argv, "-ultima") ;
   p.nanopore = getCmdLineBool (&argc, argv, "-nanopore") ;
 
   p.solid |= getCmdLineBool (&argc, argv, "-solidC") ;
-   /* it make no sense not to use the correction code */
+  /* it make no sense not to use the correction code */
   if (getCmdLineBool (&argc, argv, "-SclipPolyA"))
     p.clipPolyA = p.strandedTarget = TRUE ;
   else
@@ -11132,10 +11289,10 @@ int main (int argc, const char **argv)
 	  p.strategy = STRATEGY_RNA_SEQ ;
 	}
       else
-       {
-	 fprintf (stderr, "-strategy %s , should be Exome, Genome or RNA_seq, sorry\n", ccp) ;
-	 exit (1) ;
-       }
+	{
+	  fprintf (stderr, "-strategy %s , should be Exome, Genome or RNA_seq, sorry\n", ccp) ;
+	  exit (1) ;
+	}
     }
   else if (p.solid)
     {
@@ -11147,6 +11304,8 @@ int main (int argc, const char **argv)
     { p.errCost =  4; p.seedShift = 2 ;  p.seedLength = 14 ; }
   if (p.pacbio)
     p.errCost =  4;
+  if (0 && p.ultima)
+    p.errCost =  8;
   getCmdLineInt (&argc, argv, "-errCost", &p.errCost) ;
 
   getCmdLineInt (&argc, argv, "-seedShift", &p.seedShift) ;
@@ -11166,9 +11325,11 @@ int main (int argc, const char **argv)
   if (getCmdLineInt (&argc, argv, "-slBonus", &p.slBonus))
     slInit (&p) ;
   {
-    const char *enV, *exV, *exV2 ;
+    const char *enV, *enV2, *exV, *exV2 ;
     if (getCmdLineOption (&argc, argv, "-entryAdaptor", &enV))
       entryAdaptorInit (&p, enV) ;
+    if (getCmdLineOption (&argc, argv, "-entryAdaptor2", &enV2))
+      entryAdaptor2Init (&p, enV2) ;
     if (getCmdLineOption (&argc, argv, "-exitAdaptor", &exV))
       exitAdaptorInit (&p, exV) ;
     if (getCmdLineOption (&argc, argv, "-exitAdaptor2", &exV2))
@@ -11218,6 +11379,12 @@ int main (int argc, const char **argv)
   getCmdLineInt (&argc, argv, "-probeMinMultiplicity", &p.probeMinMultiplicity) ;
   getCmdLineInt (&argc, argv, "-probeMinLength", &p.probeMinLength) ;
   getCmdLineInt (&argc, argv, "-probeMaxLength", &p.probeMaxLength) ;
+
+  getCmdLineOption (&argc, argv, "-run", &p.runName) ;
+  getCmdLineOption (&argc, argv, "-method", &p.method) ;
+  getCmdLineLong (&argc, argv, "-nRawReads", &p.nRawReads) ;
+  getCmdLineLong (&argc, argv, "-nRawBases", &p.nRawBases) ;
+
   getCmdLineInt (&argc, argv, "-decimate", &p.decimate) ;
   if (! p.decimate && (ccp =getenv ("DECIMATE")))
     p.decimate = atoi (ccp) ;
@@ -11237,12 +11404,12 @@ int main (int argc, const char **argv)
       fprintf (stderr, "##### ERROR -antiprobe and -clipPolyA are incompatible, sorry\n") ;
       exit (1) ;
     }
-  if (0 && p.stranded == 1 &&  p.clipPolyT)
+  if (0 && p.stranded > 0 &&  p.clipPolyT)
     {
       fprintf (stderr, "##### ERROR -clipPolyT -stranded \"n>0\"  are incompatible options, sorry\n") ;
       exit (1) ;
     }
-  if (0 && p.stranded == -1 &&  p.clipPolyA)
+  if (0 && p.stranded < 0 &&  p.clipPolyA)
     {
       fprintf (stderr, "##### ERROR -clipPolyA -stranded \"n<0\" are incompatible options, sorry\n") ;
       exit (1) ;
@@ -11411,6 +11578,7 @@ int main (int argc, const char **argv)
   
   np0 = clipAlignGetProbes (&p, 0) ;
   np1 = clipAlignGetProbes (&p, 1) ;
+  p.nReads = arrayMax (p.probes) ;
   ac_free (p.probeDict) ; /* no longer needed */
   ac_free (p.probePairs) ; /* no longer needed */
 

@@ -26,10 +26,6 @@
  */
 
 /* %W% %G% */
-/* debugging flags -> slower code 
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
 #define PLN 250
 
 #define debug 0 
@@ -238,7 +234,7 @@ static Array doGetProfile (LOOK *look, BOOL isMotif, BOOL isSymmetric, int *nnp)
 	    {
 	      cc = arr (dna, x, char) ;
 	      if (!pp->isDown) 
-		cc = complementBase[(int)cc] ;
+		cc = complementBase(cc) ;
 	      switch (cc)
 		{
 		case A_: i = 0 ; break ;
@@ -364,8 +360,8 @@ static double probeProbeScalar (char *ddna,
 	{
 	  cc1 = ddna[x1] ;
 	  cc2 = ddna[x2] ;
-	  if (isDown1) cc1 = complementBase[(int)cc1] ;
-	  if (isDown2) cc2 = complementBase[(int)cc2] ;
+	  if (isDown1) cc1 = complementBase(cc1) ;
+	  if (isDown2) cc2 = complementBase(cc2) ;
 	  if (cc1 == cc2) z++ ;
 	  nn++ ;
 	}
@@ -399,7 +395,7 @@ static double probeProfileScalar (char *ddna, PP *pp, int shift, BOOL probeDown,
 	  if (x >= pp->start && x < pp->stop)
 	    {
 	      cc = ddna[x] ;
-	      cc = complementBase[(int)cc] ;
+	      cc = complementBase(cc) ;
 	    }
 	  else
 	    continue ;
@@ -1119,7 +1115,7 @@ static int dnaFoldMotifs (LOOK *look)
 	  for (j = i+1 ; j < NN && j < pp->ln ; j++)
 	    {
 	      cq = ddna + x + j ;
-	      cc = complementBase[(int)(*cq)] ;
+	      cc = complementBase((*cq)) ;
 	      if (*cp == *cq)
 		hh[i + NN * j]++ ;
 	      if (*cp == cc)
@@ -3089,7 +3085,7 @@ static int parseFastaFile (ACEIN ai, LOOK *look)
 	      int j, n0 = NN ;
 	      array (dna, NN + seq->ln + 2, char) = 0 ; /* make room */
 	      for (cr = arrp (dna, seq->stop-2, char), j = seq->ln ; j-- ; cr--)
-		array (dna, NN++, char) = complementBase[(int)*cr] ;
+		array (dna, NN++, char) = complementBase(*cr) ;
 	      array (dna, NN++, char) = 0 ;
 	      array (dna, NN++, char) = 0 ;
 	      seq = arrayp (seqs, np++, PP) ;

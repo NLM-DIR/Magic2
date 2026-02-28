@@ -13,18 +13,20 @@
 #include <waceview/cgi.h>
 #include <bitset.h>
 
-typedef enum { FASTA=0, FASTC, FASTQ, CSFASTA, CSFASTC, CCFA, CCFAR, RAW,  CRAW, TAG_COUNT, CTAG_COUNT, COUNT, TENSORFLOW, LETTER, LETTERPLOT, LETTERSHOW } DNAFORMAT ;
+typedef enum { FASTA=0, FASTC, FASTQ, CSFASTA, CSFASTC, CCFA, CCFAR, RAW,  CRAW, TAG_COUNT, CTAG_COUNT, COUNT, TENSORFLOW, LETTER, LETTERPLOT, LETTERSHOW, POLYMER} DNAFORMAT ;
 
 #define MAXMULT 16
+#define POLYMER_MAX 1010
 typedef struct seqStruct { int dna, count, dnaLn ; vTXT id ;  } SEQ ;
-typedef struct shadowStruct { int mrna, gene, x1, x2, target, a1, a2, ID, Parent, type, ncRNA, GeneID, gene_name, gene_title, name, gene_biotype, note, description, Dbxref,protein_id,locus_tag ; BOOL isDown ; BOOL cds ; } SHADOW ;
+typedef struct shadowStruct { int mrna, gene, x1, x2, target, a1, a2, ID, Parent, type, ncRNA, GeneID, gene_name, gene_title, name, gene_biotype, note, description, Dbxref,protein_id,locus_tag ; BOOL isDown ; BOOL exon, cds ; } SHADOW ;
 
 typedef struct sxStruct {  
   DNAFORMAT in, out ; 
   int minEntropy, minLength, maxLength, minQuality, minMultiplicity, split, splitMb ;
   long int nProcessed, nRejected , fProcessed, fRejected, fmProcessed, fmRejected ;
-  int  nSplit, nExported, count, maxCount, minLn, maxLn, splitByPrefix, letterNN ;
+  int  nSplit, nExported, count, maxCount, minLn, maxLn, splitByPrefix, letterNN, polymer ;
   long int *letterCount, *letterProfile, *letterLength ; 
+  long int polymerCount[4], polymerProfile[4*POLYMER_MAX] ;
   long int tagProcessed, tagRejected ;
   long int bpSeqProcessed, bpSeqRejected ;
   long int bpTagsProcessed, bpTagsRejected ;
@@ -55,6 +57,7 @@ typedef struct sxStruct {
   BOOL gzi, gzo, doCount, getTm, appendByPrefix, keepName , keepName1 , keepName2, keepNameBam, isGff3, gffTAIR ;
   BOOL fastc_paired_end, gffBacteria ;
   BOOL noNameCheck ;
+  BOOL makeFastaUnique ;
   unsigned char **entryAdaptor ;
   unsigned char **inPhaseEntryAdaptor ;
   int dnaLn ; /* length of current dna */
@@ -557,7 +560,12 @@ static BOOL getDna (SX *sx, ACEIN ai)
 	  return ok ; 
 	}
       if (!aceInDnaCheck (sx, ccp, ok))
-	continue ;
+	{
+	  if (sx->in == FASTQ)
+	    return FALSE ;
+	  else
+	    continue ;
+	}
       ok = TRUE ;
       vtxtPrint (sx->dna, ccp) ;
 
@@ -588,6 +596,7 @@ BOOL isIdKosher (SX *sx, vTXT id)
       else
 	{
 	  char cc, *cp = strstr ( vtxtPtr (id), "|Gene|") ;
+	  if (!cp) cp = strstr ( vtxtPtr (id), "|GENE|") ;
 	  if (cp)
 	    {
 	      cc = *cp ; *cp = 0 ;
@@ -697,6 +706,7 @@ static BOOL getSequencePart (SX *sx, ACEIN ai)
     {
     case TENSORFLOW:
     case COUNT:
+    case POLYMER:
     case LETTER:
     case LETTERPLOT:
     case LETTERSHOW:
@@ -1060,8 +1070,8 @@ static void complementSequence (SX *sx)
   for (cp = dna, cq = dna + n - 1 ; cp <= cq ; cp++, cq--)
     {
       cc = *cp ;
-      *cp = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*cq]]] ;
-      *cq = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)cc]]] ;
+      *cp = complementLetter (*cq) ;
+      *cq = complementLetter (cc) ;
     }
 } /* complementSequence */
 
@@ -1127,6 +1137,7 @@ static BOOL encodeSequence (SX *sx)
   switch (sx->in)
     {
     case COUNT:
+    case POLYMER:
     case LETTER:
     case LETTERPLOT:
     case LETTERSHOW:
@@ -1145,6 +1156,7 @@ static BOOL encodeSequence (SX *sx)
 	  case TAG_COUNT:
 	  case RAW:
 	  case COUNT:
+	  case POLYMER:
 	  case LETTER:
 	  case LETTERPLOT:
 	  case LETTERSHOW:
@@ -1187,6 +1199,7 @@ static BOOL encodeSequence (SX *sx)
 	  cfa2cfa (sx) ;
 	  break ;
 	case COUNT:
+	case POLYMER:
 	case LETTER:
 	case LETTERPLOT:
 	case LETTERSHOW:
@@ -1229,6 +1242,88 @@ static void selectOutFile (SX *sx, const char *ccp)
      }
   return ;
 } /* selectOutFile */
+
+/*************************************************************************************/
+/* Cumul the histogram of the polymers */
+static void sxPolymerAccumulate (SX *sx)
+{
+  long int *b = sx->polymerCount ;
+  long int *bb = sx->polymerProfile ;
+  const char *ccp ;
+  int n, cc ;
+  BOOL isForward = TRUE ;
+
+  for (ccp = vtxtPtr (sx->dna) ; *ccp ; ccp++)
+    {
+      cc = *ccp ;
+      if (cc == '>') continue ;
+      if (cc == '<') { if (0) isForward = FALSE ; continue ;}
+      for (n = 0 ; *ccp == cc ; ccp++)
+	n++ ;
+      ccp-- ;
+
+      /* we have localized n repeats of base cc */
+      cc = dnaEncodeChar[cc] ;
+      if (!  isForward)
+	cc = complementBase(cc) ;
+      switch (cc)
+	{
+	case A_: cc = 0 ; break ;
+	case T_: cc = 1 ; break ;
+	case G_: cc = 2 ; break ;
+	case C_: cc = 3 ; break ;
+	default: continue ;
+	}
+      b[cc]+= n ;
+      if (n > sx->polymer)
+	n = sx->polymer ;
+      bb[4*n + cc]++ ;
+    }
+  return ;
+} /* sxPolymerAccumulate */
+
+/**************************/
+
+static void sxPolymerReport (SX *sx)
+{
+  long int *b = sx->polymerCount ;
+  long int *bb = sx->polymerProfile ;
+
+  if (0)
+    {
+      AC_HANDLE h = ac_new_handle () ;
+      ACEOUT ao = aceOutCreate (sx->outFileName, ".polymer.histo", FALSE, h) ;
+      aceOutDate (ao, "###", sx->title) ;
+      
+      aceOutf (ao, "# Base\tA\tT\tG\tC") ;
+      aceOutf (ao, "\n# Cumul") ;
+      for (int i = 0 ; i < 4 ; i++)
+	aceOutf (ao, "\t%ld", b[i]) ;
+      aceOutf (ao, "\n# Length\tpolyA\tpolyT\tpolyG\tpolyC") ;
+      for (int n = 1 ; n <= sx->polymer && n < POLYMER_MAX ; n++)
+	{
+	  aceOutf (ao, "\n%d", n) ;
+	  for (int i = 0 ; i < 4 ; i++)
+	    aceOutf (ao, "\t%ld", bb[4*n + i]) ;
+	}
+      aceOut (ao, "\n\n") ;
+      ac_free (h) ;
+    }
+  if (1)
+    {
+      AC_HANDLE h = ac_new_handle () ;
+      ACEOUT ao = aceOutCreate (sx->outFileName, ".polymer.tsf", FALSE, h) ;
+      aceOutDate (ao, "###", sx->title) ;
+      const char *run = sx->runTitle ? sx->runTitle : "X" ;
+      char base[4] = "ATGC" ;
+      int nMax = sx->polymer ;
+      for (int i = 0 ; i < 4 ; i++)
+	for (int n = 1 ; n <= nMax + 4 ; n++)
+	  if (bb[4*n+i] >  0)
+	    aceOutf (ao, "%s\t%c%d\ti\t%ld\n", run, base[i], n, bb[4*n + i]) ;
+      ac_free (h) ;
+    }
+} /* sxPolymerReport */
 
 /*************************************************************************************/
 /* Cumul the bp according to their position */
@@ -1644,10 +1739,10 @@ static void makeTestWithSNP (SX *sx, BOOL isExact, BOOL forward)
 	  int i ;
 	  char *cp, *cq ;
 	  for (i = 0, cp = buf2 + LN2 - 1, cq = buf ; i < LN2 ; i++, cp--, cq++) 
-	    *cp =  dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*cq]]] ;
+	    *cp =  complementLetter (*cq) ;
 	  buf2[LN2] = 0 ;
 	  for (i = 0, cp = eBuf2 + LN2 - 1, cq = eBuf ; i < LN2 ; i++, cp--, cq++) 
-	    *cp = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*cq]]] ; 
+	    *cp = complementLetter (*cq) ;
 	  eBuf2[LN2] = 0 ;
 	  for (i = 0, cp = qBuf2 + LN2 - 1, cq = qBuf ; cq < cp ; i++, cp--, cq++) 
 	    *cp = *cq ; 
@@ -1683,7 +1778,7 @@ static void makeTestWithSNP (SX *sx, BOOL isExact, BOOL forward)
 		  *cp = cc ;
 
 		  for (i = 0, cp = bufP, cq = eBuf2 + LN2 - 1 ; i < LN ; cp++, cq--, i++)
-		    *cp = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*cq]]] ;
+		    *cp = complementLetter (*cq) ;
 		  *cp = 0 ;
 		  aceOutf (ao, "%s\n",  bufP) ;
 		}
@@ -1715,7 +1810,7 @@ static void makeTestWithSNP (SX *sx, BOOL isExact, BOOL forward)
 		   *cp = cc ;
 		   
 		   for (i = 0, cp = bufP, cq = buf2 + LN2 - 1 ; i < LN ; cp++, cq--, i++)
-		     *cp = dnaDecodeChar[(int)complementBase[(int)dnaEncodeChar[(int)*cq]]] ;
+		     *cp = complementLetter (*cq) ;
 		   *cp = 0 ;
 		   aceOutf (ao, "%s\n",  bufP) ;
 		 }
@@ -1979,6 +2074,9 @@ static void exportSequence (SX *sx)
 	    vtxtPrintf(sq->id, "\t%s", vtxtPtr (sx->id)) ;
 	}
       break ;
+    case POLYMER:
+      sxPolymerAccumulate (sx) ;
+      break ;
     case LETTER:
     case LETTERPLOT:
     case LETTERSHOW:
@@ -2064,7 +2162,7 @@ static int parseShadowFile (SX *sx, int type)
   const char *ccp ;
   int a1, a2, x1, x2, oldX2 = 0, mrna = 0, oldMrna = 0, gene = 0, target = 0 ;
   char cutter ;
-  SHADOW *up ;
+  SHADOW *up, *vp ;
 
   if (type == 1)
     ai = aceInCreate (sx->shadowFileName, FALSE, h) ;
@@ -2084,10 +2182,14 @@ static int parseShadowFile (SX *sx, int type)
 	continue ;
       a1 = a2 = x1 = x2 = 0 ;
       dictAdd (sx->shadowDict, ccp, &mrna) ;
-      aceInStep (ai, '\t') ; aceInInt (ai, &x1) ;
+      aceInStep (ai, '\t') ;
+      if (! aceInInt (ai, &x1))
+	continue ;
       if (type == 1) { aceInStep (ai, '\t') ; aceInInt (ai, &x2) ;  }
       else { x2 = x1 + 1 ; }
       aceInStep (ai, '\t') ; ccp = aceInWordCut (ai, "\t", &cutter) ;
+      if (! ccp)
+	continue ;
       dictAdd (sx->selectDict, ccp, &target) ;
       if (strchr (ccp, ' '))
 	sx->selectDictHasSpace = TRUE ;
@@ -2128,6 +2230,53 @@ static int parseShadowFile (SX *sx, int type)
   arraySort (sx->shadowArray, shadowOrder) ;
   arrayCompress (sx->shadowArray) ;
 
+  int ii, jj ;
+  nn = arrayMax (sx->shadowArray) ;
+  for (ii = jj = 0, up = vp = arrayp (sx->shadowArray, 0, SHADOW) ; ii < nn ; ii++, up++)
+    {
+      /* faire un clean up si redondant */
+      /* crash si incoherent */
+      SHADOW *wp = ii < nn - 1 ? up + 1 : 0 ;
+      
+      if (! up->mrna) continue ;
+      if (wp && up->mrna == wp->mrna && up->x2 >= wp->x1) /* potential overlap */
+	{
+	  if (
+	      (up->target != vp->target) ||
+	      (up->a1 < up->a2 && wp->a1 > wp->a2) ||
+	      (up->a1 > up->a2 && wp->a1 < wp->a2) ||
+	      (up->a1 < up->a2 && up->a1 + wp->x1 - up->x1 != wp->a1) ||
+	      (up->a1 > up->a2 && up->a1 - wp->x1 + up->x1 != wp->a1)  ||
+	      (up->a1 < up->a2 && up->a2 + wp->x2 - up->x2 != wp->a2) ||
+	      (up->a1 > up->a2 && up->a2 - wp->x2 + up->x2 != wp->a2)
+	      )
+	    messcrash ("Parse error, distinct overlap in %s::%d:%d %s::%d:%d %s::%d:%d %s::%d:%d %s line %d"
+		       , dictName (sx->shadowDict, up->mrna)
+		       , up->x1, up->x2
+		       , dictName (sx->selectDict, up->target)
+		       , up->a1, up->a2
+		       , dictName (sx->shadowDict, wp->mrna)
+		       , wp->x1, wp->x2
+		       , dictName (sx->selectDict, wp->target)
+		       , wp->a1, wp->a2
+		       , aceInFileName (ai) ? aceInFileName (ai) : "-"
+		       , aceInStreamLine (ai)
+		       ) ;
+	  if (up->a1 <= up->a2) { up->x2 = wp->x1 - 1 ; up->a2 = wp->a1 - 1 ; }
+	  else                  { up->x2 = wp->x1 - 1 ; up->a2 = wp->a1 + 1 ; }
+	}
+      if (vp <= up && up->mrna && up->x1 <= up->x2)
+	{ *vp = *up ; vp++ ; jj++ ;
+	  if (0) fprintf (stderr, "%s %d %d %s %d %d\n"
+			  , dictName (sx->shadowDict, up->mrna)
+			  , up->x1, up->x2
+			  , dictName (sx->selectDict, up->target)
+			  , up->a1, up->a2
+			  ) ;
+	} 
+    }
+  arrayMax (sx->shadowArray) = jj ;
+  arraySort (sx->shadowArray, shadowOrder) ;
  done:
   ac_free (ai) ;
   ac_free (h) ;
@@ -2162,7 +2311,9 @@ static DICT *gtf2ace (BOOL isGff3, DICT *dict, KEYSET ks, char *buf, AC_HANDLE h
       if (*cp)
 	{
 	  cr = ac_unprotect (cp, h) ;
-	  url_decode_inplace(cr) ;	
+	  if (0) url_decode_inplace(cr) ;
+	  if (1 && ! strcmp (cr, "protein_coding"))
+	    cr = "CDS" ;
 	  dictAdd (dict, cr, &n) ;
 	  keySet (ks, item) = n ;
 	}
@@ -2187,7 +2338,7 @@ static DICT *gtf2ace (BOOL isGff3, DICT *dict, KEYSET ks, char *buf, AC_HANDLE h
 	  if (*cp)
 	    {
 	      cr = ac_unprotect (cp, h) ;
-	      url_decode_inplace(cr) ;	
+	      if (0) url_decode_inplace(cr) ;	
 	      dictAdd (dict, cr, &n) ;
 	      keySet (ks, item) = n ;
 	    }
@@ -2266,10 +2417,16 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
   int old = 0, oldParent = 0, x1 = 0, x2 = 0 ;
   BOOL isDown = TRUE ;
   BOOL hasCDS = FALSE ;
+  BOOL hasEXON = FALSE ;
   BOOL wantGene = !strcasecmp (featureType, "gene") ;
   BOOL wantMRNA = !strcasecmp (featureType, "mRNA") ;
+  BOOL wantrRNA = !strcasecmp (featureType, "rRNA") ;
+  BOOL wanttRNA = !strcasecmp (featureType, "tRNA") ;
+  BOOL wantncRNA = !strcasecmp (featureType, "ncRNA") ;
+  BOOL wantmiRNA = !strcasecmp (featureType, "miRNA") ;
+  BOOL wantpre_miRNA = !strcasecmp (featureType, "pre_miRNA") ;
   BOOL wantExon = !strcasecmp (featureType, "exon") ;
-  int ncRNA_type, mRNA_type, tRNA_type, Exon_type, CDS_type, gene_type ;
+  int mRNA_type, tRNA_type, rRNA_type, ncRNA_type, miRNA_type, pre_miRNA_type, Exon_type, CDS_type, gene_type, pseudogene_type ;
   DICT *itemDict, *dict ;
   SHADOW *shadow, *shadow2 ;
   Array shadows ; 
@@ -2284,18 +2441,35 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 
   if (wantGene) 
     ao = aceOutCreate (sx->outFileName, fileSuffix, sx->gzo, h) ;
-  if (! sx->shadowArray)
-    sx->shadowArray = arrayHandleCreate (10000, SHADOW, sx->h) ;
-  shadows = sx->shadowArray ;
+
+  if (wantGene )
+    {
+      /* the gene shadows must not be part of sx->shadowArray
+       * which is used to export the mRNAs fasta file
+       */
+      shadows = arrayHandleCreate (10000, SHADOW, sx->h) ;
+    }
+  else
+    {
+      if (! sx->shadowArray)
+	sx->shadowArray = arrayHandleCreate (10000, SHADOW, sx->h) ;
+      shadows = sx->shadowArray ;
+    }
+
+  if (0) arrayMax (shadows) = 0 ;
   nShadow = arrayMax (shadows) ;
 
   dictAdd (dict, "ZERO", 0) ;
   dictAdd (dict, "mRNA", &mRNA_type) ;
   dictAdd (dict, "tRNA", &tRNA_type) ;
+  dictAdd (dict, "rRNA", &rRNA_type) ;
   dictAdd (dict, "ncRNA", &ncRNA_type) ;
+  dictAdd (dict, "miRNA", &miRNA_type) ;
+  dictAdd (dict, "pre_miRNA", &pre_miRNA_type) ;
   dictAdd (dict, "exon", &Exon_type) ;
   dictAdd (dict, "CDS", &CDS_type) ;
   dictAdd (dict, "gene", &gene_type) ;
+  dictAdd (dict, "pseudogene", &pseudogene_type) ;
 
   aceInSpecial (ai, "\n") ;
   while (aceInCard (ai))
@@ -2315,21 +2489,32 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
       aceInStep (ai, '\t') ;
       cp = aceInWordCut (ai, "\t", &cutter) ;
       if (! cp)	continue ;
-      if (!strcmp (cp, "transcript_region"))
+      if (!strcasecmp (cp, "transcript_region"))
 	cp = "mrna" ;
-      if (!strcmp (cp, "antisense_lncRNA"))
+      if (!strcasecmp (cp, "antisense_lncRNA"))
+	cp = "ncrna" ;
+      if (!strcasecmp (cp, "antisense_RNA"))
 	cp = "mrna" ;
-      if (!strcmp (cp, "antisense_RNA"))
+      if (!strcasecmp (cp, "lnc_RNA"))
+	cp = "ncrna" ;
+      if (!strcasecmp (cp, "ncRNA"))
+	cp = "ncrna" ;
+      if (!strcasecmp (cp, "tRNA"))
+	cp = "trna" ;
+      if (!strcasecmp (cp, "rRNA"))
+	cp = "rrna" ;
+      if (!strcasecmp (cp, "miRNA"))
+	cp = "mirna" ;
+      if (!strcasecmp (cp, "pre_miRNA"))
+	cp = "pre_mirna" ;
+      if (!strcasecmp (cp, "pseudogenic_transcript"))
 	cp = "mrna" ;
-      if (!strcmp (cp, "lnc_RNA"))
-	cp = "mrna" ;
-      if (!strcmp (cp, "ncRNA"))
-	cp = "mrna" ;
-      if (!strcmp (cp, "pseudogenic_transcript"))
-	cp = "mrna" ;
-      if (!strcmp (cp, "pseudogenic_exon"))
+      if (!strcasecmp (cp, "exon"))
 	cp = "exon" ;
-
+      if (!strcasecmp (cp, "pseudogenic_exon"))
+	cp = "exon" ;
+      if (!strcasecmp (cp, "pseudogene"))
+	cp = "gene" ;
       if ( wantGene)
 	{
 	  if (strcasecmp (cp, "gene") &&
@@ -2342,22 +2527,50 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 	  if (strcasecmp (cp, "mRNA"))
 	    continue ;
 	}
+      else if (wantrRNA)
+	{
+	  if (strcasecmp (cp, "rRNA"))
+	    continue ;
+	}
+      else if (wanttRNA)
+	{
+	  if (strcasecmp (cp, "tRNA"))
+	    continue ;
+	}
+      else if (wantncRNA)
+	{
+	  if (strcasecmp (cp, "ncRNA"))
+	    continue ;
+	}
+      else if (wantmiRNA)
+	{
+	  if (strcasecmp (cp, "miRNA"))
+	    continue ;
+	}
+      else if (wantpre_miRNA)
+	{
+	  if (strcasecmp (cp, "pre_miRNA"))
+	    continue ;
+	}
       else if (wantCDS)
 	{
+	  if (!strcasecmp (cp, "stop_codon"))
+	    cp = "cds" ;
 	  if (strcasecmp (cp, "cds") &&
 	      (! sx->gffBacteria || strcasecmp (cp, "mrna"))
 	      )
 	    continue ;
 	}
       else
-	{ 
+	{
 	  if (! strcasecmp (cp, "cds")) 
 	    continue ;
 	  
 	  if (sx->isGff3)
 	    {
 	      char *cq = aceInPos (ai) ;
-	      if (strcasecmp (cp, "tRNA") && 
+	      if (strcasecmp (cp, "rRNA") && 
+		  strcasecmp (cp, "tRNA") && 
 		  strcasecmp (cp, "ncRNA") && /*  in mouse the ncRNA seem to have exons */
 		  strcasecmp (cp, "exon") && 
 		  (strcasecmp (cp, "mRNA") || ! sx->gffBacteria) && 
@@ -2476,7 +2689,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 		if (! wantCDS)
 		  shadow->gene = gtfItem ("gene", itemDict, ks) ;
 		if (! shadow->mrna &&
-		    ( type == tRNA_type || type == ncRNA_type)
+		    ( type == rRNA_type || type == tRNA_type || type == ncRNA_type)
 		    )
 		  shadow->mrna = shadow->ID ;
 	      }
@@ -2509,11 +2722,27 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 	    shadow->gene = gtfItem ("gene_id", itemDict, ks) ;
 	    shadow->GeneID = gtfItem ("NCBI_GeneID", itemDict, ks) ;
 	    shadow->mrna = gtfItem ("transcript_id", itemDict, ks) ;
+	    shadow->protein_id = gtfItem ("protein_id", itemDict, ks) ;
 	    shadow->gene_title = gtfItem ("gene_name", itemDict, ks) ;
+	    shadow->description = gtfItem ("description", itemDict, ks) ;	    
 	    shadow->gene_biotype = gtfItem ("gene_biotype", itemDict, ks) ;
 	    if (shadow->mrna && ! shadow->gene) shadow->gene = shadow->mrna ;
 	    shadow->isDown = isDown ;
 	    if (wantCDS) shadow->cds = TRUE ;
+	    shadow->exon = TRUE ;
+	    shadow->Dbxref = gtfItem ("db_xref", itemDict, ks) ;
+	    if (!  shadow->GeneID && shadow->Dbxref)
+	      {
+		const char *cp = strstr (dictName(dict, shadow->Dbxref), "GeneID:") ;
+		if (cp)
+		  {
+		    char *cq = strnew (cp+7,0) ;
+		    char *cr = strstr (cq, ",") ;
+		    if (cr) *cr = 0 ;
+		    dictAdd (dict, cq, &(shadow->GeneID)) ;
+		    messfree (cq) ;
+		  }
+	      }
 	  }
       }
     }
@@ -2619,13 +2848,22 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 	  if (shadow->locus_tag)
 	    aceOutf (ao, "Locus \"%s\"\n",dictName (dict, shadow->locus_tag)) ;
 	  if (shadow->gene_title)
-	    aceOutf (ao, "Title \"%s\"\n",dictName (dict, shadow->gene_title)) ;
-	  if (shadow->note)
-	    aceOutf (ao, "Concise_description \"%s\"\n",dictName (dict, shadow->note)) ;
-	  if (shadow->description)
-	    aceOutf (ao, "Concise_description \"%s\"\n",dictName (dict, shadow->description)) ;
+	    {
+	      aceOutf (ao, "Title \"%s\"\n",dictName (dict, shadow->gene_title)) ;
+	      if (shadow->note)
+		aceOutf (ao, "Concise_description \"%s\"\n",dictName (dict, shadow->note)) ;
+	      if (shadow->description)
+		aceOutf (ao, "Concise_description \"%s\"\n",dictName (dict, shadow->description)) ;
+	    }
+	  else
+	    {
+	      if (shadow->description)
+		aceOutf (ao, "Title \"%s\"\n",dictName (dict, shadow->description)) ;
+	    }
 	  if (shadow->gene_name)
-	    aceOutf (ao, "LocusLink3 \"%s\"\n",dictName (dict, shadow->gene_name)) ;
+	    aceOutf (ao, "LocusLink \"%s\"\n",dictName (dict, shadow->gene_name)) ;
+	  if (0 && shadow->locus_tag)
+	    aceOutf (ao, "WbId \"%s\"\n",dictName (dict, shadow->locus_tag)) ;
 	  if (shadow->Dbxref)
 	    {
 	      char *cq, *cp = strnew (dictName (dict, shadow->Dbxref), h) ;
@@ -2735,7 +2973,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 	  for (i = j = 0, shadow = shadow2 = arrp(shadows, i, SHADOW); i < arrayMax (shadows) ; i++, shadow++)
 	    {
 	      if (! shadow->mrna)
-		continue ;
+		shadow->mrna = shadow->Parent ;
 	      if (shadow->mrna && shadow->type == Exon_type)
 		bitSet (bb, shadow->mrna) ;
 	      if (i && shadow->type != Exon_type &&	
@@ -2941,7 +3179,8 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 		     , shadow->x1, shadow->x2
 		     , dictName(sx->selectDict, shadow->target)
 		     , shadow->a1, shadow->a2
-		     , dictName(dict, shadow->gene), showAll ? "" : "_CDS"
+		     , shadow->gene ? dictName(dict, shadow->gene) : ""
+		     , showAll ? "" : "_CDS"
 		     ) ;
 	}
     }
@@ -2957,7 +3196,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 	{
 	  if (shadow->cds) continue ;
 	  isDown = shadow->isDown ;
-	  if (old && shadow->mrna == old)
+	  if (old && shadow->mrna == old && (shadow->a1 - a2 > 12 || shadow->a1 - a2 < -12))
 	    aceOutf (ao, "%s\t%s\t%s\t%d\t%d\t%s\t%09d\t%09d\t%s\n"
 		     , sx->gtfRemapPrefix ? sx->gtfRemapPrefix : "-"
 		     , dictName(dict, shadow->gene)
@@ -2973,7 +3212,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
     }
   ac_free (ao) ;
 
-  if (1)
+  if (! strcasecmp (fileSuffix, ".mrnaRemap"))
     {
       int typ ;
       BOOL isDown = FALSE, cds = FALSE ;
@@ -3080,14 +3319,14 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 	      if (old)
 		{
 		  int dxCDS = 0 ;
-		  int gene, title, note, gene_name ;
+		  int gene, title, note, gene_name, locus_tag ;
 		  aceOutf (ao, "Sequence %s\nSubsequence %s %d %d\n\n"
 			   , dictName(sx->selectDict, target)
 			   , dictName(dict, old)
 			   , a1, a2
 			   ) ;
 		  
-		  aceOutf (ao, "Sequence %s\n-D source_exons\nIntMap %s %d %d\n"
+		  aceOutf (ao, "Sequence %s\nIntMap %s %d %d\n"
 			   , dictName(dict, old)
 			   , dictName(sx->selectDict, target)
 			   , a1, a2 
@@ -3098,13 +3337,16 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 		      int dx = a2 - a1 ;
 		      if (dx < 0) dx = -dx ;
 		      dx++ ;
-		      aceOutf (ao, "-D Source_exons\nSource_exons 1 %d CDS\n", dx) ;
+		      if (0) aceOutf (ao, "-D Source_exons\n") ;
+		      aceOutf (ao, "Source_exons 1 %d CDS\n", dx) ;
 		    }
 
-		  for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (shadow2->mrna == old) ; j--, shadow2--)  {} ;
+		  for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (! shadow2->mrna || shadow2->mrna == old) ; j--, shadow2--)  {} ;
 		  j++ ; shadow2++ ; 
-		  for ( gene = title = note = hasCDS = gene_name = 0 ; j < i ; j++, shadow2++)
+		  for ( gene = title = note = hasCDS = hasEXON = gene_name = locus_tag = 0 ; j < i ; j++, shadow2++)
 		    {
+		      if (! shadow2->mrna)
+			continue ;
 		      if (shadow2->ncRNA)
 			aceOutf (ao, "%s\n", dictName(dict, shadow2->ncRNA)) ;
 		      if (shadow2->gene && ! gene)
@@ -3112,27 +3354,12 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 			  int gene2 ;
 			  gene2 = gene = shadow2->gene ;
 			  aceOutf (ao, "Model_of \"X__%s\"\n", dictName(dict, gene2)) ;
+			  aceOutf (ao, "Model_of_gene \"%s\"\n", dictName(dict, gene2)) ;
 			  if (shadow2->GeneID) 
 			    {
 			      aceOutf (ao, "GeneId_pg %s\n", dictName(dict, shadow2->GeneID)) ;
 			      aceOutf (ao, "GeneId %s\n", dictName(dict, shadow2->GeneID)) ;
 			    }
-			  else 
-			    {
-			      if (shadow2->Dbxref)
-				{
-				  const char *cp = strstr (dictName(dict, shadow2->Dbxref), "GeneID:") ;
-				  if (cp)
-				    {
-				      char *cq = strnew (cp+7,0) ;
-				      char *cr = strstr (cq, ",") ;
-				      if (cr) *cr = 0 ;
-				      aceOutf (ao, "GeneId_pg %s\n", cq) ;
-				      messfree (cq) ;
-				    }
-				}
-			    }
-			  
 			}
 		      if (! shadow2->cds && shadow2->gene_title && ! title)
 			{
@@ -3158,7 +3385,13 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 			  aceOutf (ao, "LocusLink \"%s\"\n"
 				   ,  dictName(dict, gene_name)
 				   ) ;
-			} 
+			}
+		      if (1 && shadow2->locus_tag && !locus_tag)
+			{
+			  locus_tag = shadow2->locus_tag ;
+			  aceOutf (ao, "Locus \"%s\"\n",dictName (dict, shadow2->locus_tag)) ;
+			}
+
 		      if (sx->gffBacteria && shadow2->note && ! note)
 			{
 			  note = shadow2->note ;
@@ -3173,27 +3406,33 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 				   ) ;
 			}
 		    }
-		  for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (shadow2->mrna == old) ; j--, shadow2--) {} ;
+		  for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (! shadow2->mrna || shadow2->mrna == old) ; j--, shadow2--)  {} ;
 		  j++ ; shadow2++ ; 
 		  {
 		    int v1 = 0 ; /*  v2 = 0 ; */
 		    hasCDS = FALSE ;
-		    for ( ; j < i && ! hasCDS; j++, shadow2++)
+		    for ( ; j < i && ! hasCDS ; j++, shadow2++)
 		      {
+			if (! shadow2->mrna)
+			  continue ;
+			if (shadow2->exon)
+			  hasEXON = TRUE ;
 			if (shadow2->cds && ! hasCDS)
 			  {
 			    hasCDS = TRUE ;
-			    aceOutf (ao, "CDS\n") ; 
+			    aceOutf (ao, "CDS // a=%d %d   x=%d %d\n", shadow2->a1, shadow2->a2, shadow2->x1, shadow2->x2) ; 
 			    v1 = shadow2->a1 ;
 			    /* v2 = shadow2->a2 ;   v1, v2 first cds */
 			  }
 		      }
 		    if (hasCDS) /* start again on the exon to find the start of the CDS */
 		      {
-			for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (shadow2->mrna == old) ; j--, shadow2--) {} ;
+			for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (! shadow2->mrna || shadow2->mrna == old) ; j--, shadow2--)  {} ;
 			j++ ; shadow2++ ; 
 			for ( ; j < i ; j++, shadow2++)
 			  {
+			    if (! shadow2->mrna)
+			      continue ;
 			    if (shadow2->cds) continue ;
 			    if (shadow2->isDown)
 			      {
@@ -3219,7 +3458,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 		      }
 		  }
 		  
-		  for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (shadow2->mrna == old) ; j--, shadow2--) {} ;
+		  for (j = i - 1, shadow2 = shadow - 1 ; j >= 0 &&  (! shadow2->mrna || shadow2->mrna == old) ; j--, shadow2--)  {} ;
 		  j++ ; shadow2++ ; 
 		  for ( ; j < i ; j++, shadow2++)
 		    { int dv= 0 ; /* set to gene start to help debugging i.e. dv = 4195563 ; */
@@ -3228,6 +3467,8 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 		      BOOL ok1 ;
 		      
 		      if (shadow2->cds)
+			continue ;
+		      if (! shadow2->mrna)
 			continue ;
 		      
 		      /* if there is a CDS inside this exon it is below, thanks to shadowOrder */
@@ -3238,6 +3479,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 			    {
 			      if (! cds->cds)
 				continue ;
+
 			      b1 = cds->x1 + dxCDS > shadow2->x1 ? cds->x1 + dxCDS : shadow2->x1 ;
 			      b2 = cds->x2 + dxCDS < shadow2->x2 ? cds->x2 + dxCDS : shadow2->x2 ;
 			      if (b1 <= b2)
@@ -3262,7 +3504,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 				      v2 = shadow2->isDown ? u2 - a1 + 1 : a1 - u2 + 1 ;
 				      v2 = v1 + b2 - shadow2->x1 ;
 				      v1 = v1 + b1 - shadow2->x1 ;
-				      aceOutf (ao, "Source_exons %d %d %s\n" 
+				      aceOutf (ao, "Source_exons %d %d %s\n"
 					       , v1+ dv, v2+ dv
 					       , "CDS"
 					       ) ;
@@ -3349,7 +3591,7 @@ static void parseGtfFeature (SX *sx, const char *featureType, const char *fileSu
 	    a1 = shadow->a2 ;
 	    a2 = shadow2->a1 ;
 	    isDown = shadow->isDown ;
-	    
+	    if (0) continue ; /* 2024_07_22 */
 	    if (shadow->mrna  && shadow->mrna == shadow2->mrna &&
 		! shadow->cds && ! shadow2->cds
 		)
@@ -3384,10 +3626,17 @@ static void parseGtfFile (SX *sx)
   KEYSET mrna2gene = keySetCreate () ;
   /* CDS must be called first to allow the definition of the UTRs by substracting the CDS from the exons */
   sx->gnam2genes = arrayHandleCreate (20000, KEYSET, sx->h) ;
-  if (! sx->isGff3)
+  if (! sx->isGff3) /* i.e. when parsing a gtf file */
     {
+      /* must come first because we may edit the type when parsing mrnaRemap */
+      if (1) parseGtfFeature (sx, "pre_miRNA", ".pre_mirnaRemap", 1, FALSE,  mrna2gene) ; /* mrna */
+      if (1) parseGtfFeature (sx, "miRNA", ".mirnaRemap", 1, FALSE,  mrna2gene) ; /* mrna */
+      if (1) parseGtfFeature (sx, "rRNA", ".rRNA", 1, FALSE,  mrna2gene) ; /* mrna */
+      if (1) parseGtfFeature (sx, "tRNA", ".tRNA", 1, FALSE,  mrna2gene) ; /* mrna */
+      if (1) parseGtfFeature (sx, "ncRNA", ".ncRNA", 1, FALSE,  mrna2gene) ; /* mrna */
+
       /* edited for mouse/rat NCBI.gff3 2016_09_15 */
-      parseGtfFeature (sx, "gene",  ".geneTitle.ace",  0, FALSE,  mrna2gene) ; /* gene -> title */
+      /* edited for human T2T gtf 2025_07_19 */
       if (sx->gffBacteria)
 	{
 	  parseGtfFeature (sx, "mrna",  ".cdsRemap",  0, TRUE,  mrna2gene) ; /* mrna && CDS */
@@ -3395,20 +3644,18 @@ static void parseGtfFile (SX *sx)
 	}
       else
 	{
-	  parseGtfFeature (sx, "cds",  ".cdsRemap",  0, TRUE,  mrna2gene) ; /* CDS */
-	  parseGtfFeature (sx, "exon", ".mrnaRemap", 1, FALSE,  mrna2gene) ; /* mrna */
+	  if (1) parseGtfFeature (sx, "CDS",  ".cdsRemap",  0, TRUE,  mrna2gene) ; /* CDS */
+	  if (1) parseGtfFeature (sx, "exon", ".mrnaRemap", 1, FALSE,  mrna2gene) ; /* mrna */
 	}
-      parseGtfFeature (sx, "pre_miRNA", ".mirnaRemap", 1, FALSE,  mrna2gene) ; /* mrna */
-      parseGtfFeature (sx, "rRNA", ".rRNA", 1, FALSE,  mrna2gene) ; /* mrna */
-      parseGtfFeature (sx, "tRNA", ".tRNA", 1, FALSE,  mrna2gene) ; /* mrna */
+      if (1) 
+	parseGtfFeature (sx, "gene",  ".geneTitle.ace",  0, FALSE,  mrna2gene) ; /* gene -> title */
     }
-  else
+  else /* parse a gff3 file */ 
     {   /* written for the E.coli K12 gff dump from NCBY june 1 2015 
 	 * works for D.melano 2016_08
 	 * does not work for E coli K12 oct 2017
 	 */
       sx->rnaId2mrna = keySetHandleCreate (sx->h) ;
-      parseGtfFeature (sx, "gene",  ".geneTitle",  0, FALSE,  mrna2gene) ; /* gene -> title */
       if (sx->gffBacteria)
   	{
 	  parseGtfFeature (sx, "mrna",  ".cdsRemap",  0, TRUE,  mrna2gene) ; /* mrna && CDS */
@@ -3416,7 +3663,6 @@ static void parseGtfFile (SX *sx)
 	}
       else
 	{
-	  if (0) parseGtfFeature (sx, "exon", 0, 2, FALSE,  mrna2gene) ; /* mrna */
 	  if (sx->gffTAIR)
 	    {
 	      parseGtfFeature (sx, "mRNA", 0, 0, FALSE,  mrna2gene) ; /* mrna */
@@ -4673,11 +4919,55 @@ static void dna2dnaRun (SX *sx)
 	exportTagCount (sx) ;    
     }
 
-  else if (sx->letterCount)
+  if (sx->letterCount)
     sxLetterDistribReport (sx) ;
+  if (sx->polymer)
+    sxPolymerReport (sx) ;
 
   return ;
 } /* dna2dnaRun */
+
+/*************************************************************************************/
+/*************************************************************************************/
+/* hack: inputa fasta file with repeated id/dna entries, clean it */
+static void makeFastaUnique (SX *sx)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  DICT *dict = dictHandleCreate (100000,h) ;
+  ACEIN ai = sx->ai ;
+  ACEOUT ao = sx->ao ;
+  int state = 0 ;
+  int nIn = 0, nOut = 0 ;
+
+  while (aceInCard (ai))
+    {
+      const char *cp = aceInWord (ai) ;
+      if (cp)
+	switch (state)
+	  {
+	  case 0:
+	    if (cp[0] != '>')
+	      continue ;
+	    nIn++ ;
+	    if(dictAdd (dict, cp+1, 0))
+	      {
+		state = 1 ;
+		nOut++ ;
+		aceOut (ao, cp) ;
+		aceOut (ao, "\n") ;
+	      }
+	    break ;
+	  case 1:
+	    state = 0 ;
+	    aceOut (ao, cp) ;
+	    aceOut (ao, "\n") ;
+	    break ;
+	  }
+    }
+  ac_free (h) ;
+  fprintf (stderr, "#makeFastaUnique parsed %d ids and exported %d, %.2f%%\n", nIn, nOut, 100.0*nOut/(nIn+.001)) ; 
+  return ;
+} /* makeFastaUnique */
 
 /*************************************************************************************/
 /*************************************************************************************/
@@ -5034,6 +5324,11 @@ static void usage (char *message)
 	    "//     Notice that if you export a chromosome on a single fasta line, although this is\n"
 	    "//     semantically correct, most programs will crash (buffer size exceeded) when reading it\n"
 	    "//     this is why the default is chosen large, but not infinite\n"
+	    "//   -makeFastaUnique: hack to analyze Ultimal BAM files\n"
+	    "//     BamDeal bam2fasta takes a bam and exorts identifier + sequence in fasta format\n"
+	    "//     but the same identifier and DNA maybe exported several times\n"
+	    "//     This option exports a clean fasta file, with each identifier presnt only once\n"
+	    "//     We used this hack in septembre 2023 to clean our first NASA Ultima runs\n"
 	    "//\n"
 	    "// Letter/quality profiles\n"
 	    "//   [-qualityPlot] : plot the profile of the fastq qualities rather than the letter profile\n"
@@ -5043,6 +5338,7 @@ static void usage (char *message)
 	    "//          idem but exports the distribution in fil_name.txt and a picture in file_name.ps\n"
 	    "//   -gvplot <int> : requires -o file_name, and the programs \"gnuplot\" and \"gv\"\n"
 	    "//          idem but directly displays the postscript file file_name.ps using gv\n"
+	    "//   -polymer <int> : histogram of homopolymers of length 1 to n\n"
 	    "// Special applications\n"
 	    "//   -editGenome : edit the [-i genome] with subs and non-sliding indels\n"
 	    "//          -ctsPeriod p : periodic editions,  every p positions\n"
@@ -5269,6 +5565,10 @@ int main (int argc, const char **argv)
   sx.gffTAIR = getCmdLineBool (&argc, argv, "-gffTAIR") ;
   getCmdLineOption (&argc, argv, "-gtfGenome", &sx.gtfGenomeFastaFileName) ;
   getCmdLineOption (&argc, argv, "-gffgenome", &sx.gtfGenomeFastaFileName) ;
+  sx.makeFastaUnique = getCmdLineBool (&argc, argv, "-makeFastaUnique") ;
+
+  if (getCmdLineInt (&argc, argv, "-polymer", &sx.polymer))
+    sx.out = POLYMER ;
 
   getCmdLineOption (&argc, argv, "-fastqSelect", &sx.fastqSelect) ;
   sx.letterNN = -9999999 ;
@@ -5288,6 +5588,8 @@ int main (int argc, const char **argv)
     }
   if (sx.letterNN > -9999999 && sx.letterNN <= 0)
     usage ("The length of the requested letter profile should be a positive number") ;
+  if (sx.polymer < 0 || sx.polymer > POLYMER_MAX - 10)
+    usage ("The maximal polymer length should be between 1 and 1000") ;
 
   sx.prefix = "n" ; /* default */
   getCmdLineOption (&argc, argv, "-prefix", &sx.prefix) ;
@@ -5380,7 +5682,7 @@ int main (int argc, const char **argv)
   if (sx.runQualityFileName)
     sxParseQualityFile (&sx) ;
   
-  if (!sx.splitByPrefix && sx.letterNN <= 0 && ! sx.getTm  && ! sx.makeTest)
+  if (!sx.splitByPrefix && sx.letterNN <= 0 && sx.polymer <= 0 && ! sx.getTm  && ! sx.makeTest)
     {
       if (sx.outFileName)
 	{
@@ -5408,7 +5710,7 @@ int main (int argc, const char **argv)
 	  sx.outFileName = "stdout" ;
 	}
     }
-  else if (sx.splitByPrefix && sx.letterNN <= 0)
+  else if (sx.splitByPrefix && sx.letterNN <= 0 && sx.polymer <= 0)
     {
       if (sx.outFileName)
 	{
@@ -5548,6 +5850,12 @@ int main (int argc, const char **argv)
   if (! sx.gtfFileName && ! sx.inFileName && ! sx.inFileName1)
     sx.ai = aceInCreate (0, sx.gzi, h) ;
 
+  if (sx.makeFastaUnique)
+    {
+      sx.ao = aceOutCreate (sx.outFileName, ".unique.fasta", sx.gzo, h) ;
+      makeFastaUnique (&sx) ;
+    }
+
   if (sx.makeTestGenome)
     {
       sx.aoTestSeqs = sx.ao ; /* aceOutCreate (sx.outFileName, ".modified.fasta", sx.gzo, h) ; */
@@ -5607,7 +5915,7 @@ int main (int argc, const char **argv)
 	      cumul += i * n ;
 	      if (n > maxN) { maxN  = n ; mode = i ; }
 	    }
-	  average = cumul / nn ; 
+	  average = nn ? cumul / nn : 0 ;
 	  /* find the median */
 	  for (n = 0, i = 0 ; i < iMax ; i++)
 	    { 

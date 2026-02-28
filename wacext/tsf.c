@@ -53,11 +53,6 @@
  */
 
 #define VERSION "1.2"
-
-/*
-#define ARRAY_CHECK  
-#define MALLOC_CHECK  
-*/
 #include "ac.h"
 #include "topology.h"
 
@@ -222,8 +217,9 @@ static void tsfSampleSelectInit (TSF *tsf)
 {
   AC_HANDLE h = ac_new_handle() ;
   char *cq, *cp = strnew (tsf->sampleSelectList, h) ;
- 
-  tsf->sampleSelectOnly = TRUE ;
+  BOOL sampleSelectOnly = TRUE ;
+  tsf->sampleSelectOnly = FALSE ;
+  
   tsf->sampleSelectDict = dictHandleCreate (256, tsf->h) ;
   while (cp)
     {
@@ -237,7 +233,7 @@ static void tsfSampleSelectInit (TSF *tsf)
 	}
 
       if (strchr (cp, '*'))
-	tsf->sampleSelectOnly = FALSE ;
+	sampleSelectOnly = FALSE ;
       else
 	{
 	  dictAdd (tsf->sampleSelectDict, cp, 0) ;
@@ -245,6 +241,7 @@ static void tsfSampleSelectInit (TSF *tsf)
 	}
       cp = cq ;
     }
+  tsf->sampleSelectOnly = sampleSelectOnly ;
   ac_free (h) ;
 
 } /* tsfSampleSelectInit */
@@ -447,7 +444,8 @@ static long int tsfParseTsf (TSF *tsf, ACEIN ai)
   aceInSpecial (ai, "\n") ;
   while (aceInCard (ai))
     {
-      ccp = aceInWord (ai) ;
+      char cc ;
+      ccp = aceInWordCut (ai, "\t", &cc) ;
       line++ ;
       if (! ccp)
 	continue ;
@@ -488,7 +486,7 @@ static long int tsfParseTsf (TSF *tsf, ACEIN ai)
 
      /* parse the column/sample */
      aceInStep (ai, '\t') ;
-     ccp = aceInWord (ai) ;
+     ccp = aceInWordCut (ai, "\t", &cc) ;
      if (! ccp || *ccp == '#')
        continue ;
       if (! strncmp (ccp, "_P_", 3)) /* do not parse percensamplees */
@@ -1009,29 +1007,32 @@ static BOOL tsfMergeOne (HIT *hit, HIT *hit2, int action)
 static long int tsfMerge (TSF *tsf)
 {
   BigArray hits = tsf->hits ;
-  long int ii, jj, iMax = bigArrayMax (hits) ;
+  long int ii, jj = 0, iMax = bigArrayMax (hits) ;
   HIT *hit, *hit2 ;
   int action = 0 ;
 
   /* sort and cumulate the values */
-  bigArraySort (hits, tsfSampleOrder) ;
-  for (ii = 0, hit = bigArrp (hits, 0, HIT) ; ii < iMax ; ii++, hit++)
+  if (iMax)
     {
-      if ( !hit->sample)
-	continue ;
-      
-      for (jj = ii + 1, hit2 = hit+1 ; jj < iMax && (! hit2->sample || hit2->sample == hit->sample) && hit2->tag == hit->tag ; jj++, hit2++)
-	tsfMergeOne (hit, hit2, action) ;
+      bigArraySort (hits, tsfSampleOrder) ;
+      for (ii = 0, hit = bigArrp (hits, 0, HIT) ; ii < iMax ; ii++, hit++)
+	{
+	  if ( !hit->sample)
+	    continue ;
+	  
+	  for (jj = ii + 1, hit2 = hit+1 ; jj < iMax && (! hit2->sample || hit2->sample == hit->sample) && hit2->tag == hit->tag ; jj++, hit2++)
+	    tsfMergeOne (hit, hit2, action) ;
+	}
+      /* clean up */
+      for (ii = jj = 0, hit2 = hit = bigArrp (hits, ii, HIT) ; ii < iMax ; ii++, hit++)
+	{
+	  if ( !hit->sample)
+	    continue ;
+	  if (hit != hit2)
+	    *hit2 = *hit ;
+	  jj++ ; hit2++ ; 
+	}
     }
-  /* clean up */
-  for (ii = jj = 0, hit2 = hit = bigArrp (hits, ii, HIT) ; ii < iMax ; ii++, hit++)
-    {
-      if ( !hit->sample)
-	continue ;
-      if (hit != hit2)
-	*hit2 = *hit ;
-      jj++ ; hit2++ ; 
-    } 
   bigArrayMax (hits) = jj ;
   return bigArrayMax (hits) ;
 } /* tsfMerge */

@@ -467,7 +467,7 @@ static BOOL samSmokeCigar (SAM *sam, SR *sr, BOOL isFirst, BOOL isFirst1, BOOL i
 	      if (isReverse)
 		{
 		  for (i = 0 ; i < mult ; i++)
-		    buf[4+i] = ace_upper(dnaDecodeChar[(int)complementBase[(int)cpR[mult - i - 1]]]) ; 
+		    buf[4+i] = ace_upper(dnaDecodeChar[(int)complementBase(cpR[mult - i - 1])]) ; 
 		}
 	      else
 		{
@@ -560,7 +560,7 @@ static BOOL samSmokeCigar (SAM *sam, SR *sr, BOOL isFirst, BOOL isFirst1, BOOL i
 	      if (isReverse)
 		{
 		  for (i = 0 ; i < mult ; i++)
-		    buf[4+i] = ace_upper(dnaDecodeChar[(int)complementBase[(int)cpRead[posR + mult - 1 - i]]]) ;
+		    buf[4+i] = ace_upper(dnaDecodeChar[(int)complementBase(cpRead[posR + mult - 1 - i])]) ;
 		}
 	      else
 		{
@@ -685,8 +685,8 @@ static BOOL samSmokeCigar (SAM *sam, SR *sr, BOOL isFirst, BOOL isFirst1, BOOL i
 	  strcpy (buf, "Sub:") ;
 	  if (isReverse)
 	    {
-	      buf[4] = ace_upper(dnaDecodeChar[(int)complementBase[(int)*cpM]]) ;
-	      buf[5] = ace_upper(dnaDecodeChar[(int)complementBase[(int)*cpRead]]) ;
+	      buf[4] = ace_upper(dnaDecodeChar[(int)complementBase(*cpM)]) ;
+	      buf[5] = ace_upper(dnaDecodeChar[(int)complementBase(*cpRead)]) ;
 	    }
 	  else
 	    {

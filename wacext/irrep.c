@@ -840,7 +840,7 @@ static void wwsShow (SA *sa, char *title, int type, Array wws, WW *hw)
 		  int i ;
 		  char *sep = "\todd=" ;
 		  
-		  for (i = 0 ; i < bitSetMax (ww->oddB) ; i++)
+		  for (i = 0 ; i < bitSetCount (ww->oddB) ; i++)
 		    if (bit (ww->oddB, i))
 		      {
 			printf ("%s%d", sep, i+1) ;

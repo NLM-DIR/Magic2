@@ -1305,7 +1305,7 @@ static void  umiBridgeSupport (const UMI *umi, SEG *seg, Array hits, AC_HANDLE h
 	 {
 	   BitSet ebs = umi->externalBitSet ;
 	   int x ;
-	   int xMax = bitSetMax (ebs) ;
+	   int xMax = bitSetCount (ebs) ;
 	   for (x = seg->a1 ; x <= seg->a2 && x < xMax ; x++)
 	     if (bit (ebs, x))
 	       { isExternal = seg->isExternal = TRUE ; break ; }
@@ -3439,7 +3439,7 @@ static BOOL umiGetOneSamHit (const UMI *umi, LANE *lane)
       aceInStep (ai, '\t') ; aceInInt (ai, &dummy) ; /* a quality coefficient */
 
       aceInStep (ai, '\t') ; cigar =  aceInWord (ai) ; /* cigar */
-      samParseCigar (cigar, cigarettes, a1, &a2, &x1, &x2, 0) ;
+      samParseCigar (cigar, cigarettes, a1, &a2, &x1, &x2, 0, 0, 0, 0) ;
 
       aceInStep (ai, '\t') ; cp =  aceInWord (ai) ; /* not used */
       aceInStep (ai, '\t') ; cp =  aceInWord (ai) ; /* not used */

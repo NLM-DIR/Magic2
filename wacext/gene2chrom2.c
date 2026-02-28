@@ -180,7 +180,7 @@ static BOOL locateGene (AC_OBJ Gene, int mode, Array genes)
       nn->isUp = isUp ;
       
       cp = dictName (Maps, nn->map) ;
-      if (!strncmp(cp,"CHROMOSOME_",11))
+      if (0 && !strncmp(cp,"CHROMOSOME_",11))
 	cp += 11 ;
       if (!strcmp (dictName (Maps, nn->map),"I") ||
 	  (cp && !strcmp (cp,"I")))
@@ -370,7 +370,7 @@ static void newName (AC_DB db, Array genes)
       if (nn->isUp) { a1 = nn->a2 ; a2 = nn->a1 ;}
       else { a1 = nn->a1 ; a2 = nn->a2 ; }
 
-      if (!chromOnly || !strncasecmp("chrom",dictName (Maps, nn->map),5))
+      if (!chromOnly || !strncasecmp("chr",dictName (Maps, nn->map),3))
 	{
 	  if (showIntMap)
 	    printf("\nTranscribed_gene \"%s\"\nIntMap \"%s\" %d %d \n",
@@ -529,7 +529,7 @@ static BOOL loopOnAllGenome (int mode, AC_DB db)
 	for (n = 0 ; n < arrayMax(genes) ; n++)
 	  {
 	    gg = arrayp (genes, n, GENE) ;
-	    if (!chromOnly || !strncasecmp("chrom",dictName (Maps, gg->map),5))
+	    if (!chromOnly || !strncasecmp("chr",dictName (Maps, gg->map),3))
 	      {
 		int a1, a2 ;
 		
@@ -553,7 +553,7 @@ static BOOL loopOnAllGenome (int mode, AC_DB db)
 	for (n = 0 ; n < arrayMax(genes) ; n++)
 	  {
 	    gg = arrayp (genes, n, GENE) ;
-	    if (!chromOnly || !strncasecmp("chrom", dictName (Maps, gg->map),5))
+	    if (!chromOnly || !strncasecmp("chr", dictName (Maps, gg->map),3))
 	      {
 		int a1, a2 ;
 		
@@ -574,7 +574,7 @@ static BOOL loopOnAllGenome (int mode, AC_DB db)
 	for (n = 0 ; n < arrayMax(genes) ; n++)
 	  {
 	    gg = arrayp (genes, n, GENE) ;
-	    if (!chromOnly || !strncasecmp("chrom",dictName (Maps, gg->map),5))
+	    if (!chromOnly || !strncasecmp("chr",dictName (Maps, gg->map),3))
 	      {
 		int a1, a2 ;
 		
@@ -595,7 +595,7 @@ static BOOL loopOnAllGenome (int mode, AC_DB db)
 	for (n = 0 ; n < arrayMax(genes) ; n++)
 	  {
 	    gg = arrayp (genes, n, GENE) ;
-	    if (!chromOnly || !strncasecmp("chrom",dictName (Maps, gg->map),5))
+	    if (!chromOnly || !strncasecmp("chr",dictName (Maps, gg->map),3))
 	      {
 		int a1, a2 ;
 		
@@ -616,7 +616,7 @@ static BOOL loopOnAllGenome (int mode, AC_DB db)
 	for (n = 0 ; n < arrayMax(genes) ; n++)
 	  {
 	    gg = arrayp (genes, n, GENE) ;
-	    if (!chromOnly || !strncasecmp("chrom",dictName (Maps, gg->map),5))
+	    if (!chromOnly || !strncasecmp("chr",dictName (Maps, gg->map),3))
 	      {
 		int a1, a2 ;
 		
@@ -637,7 +637,7 @@ static BOOL loopOnAllGenome (int mode, AC_DB db)
 	for (n = 0 ; n < arrayMax(genes) ; n++)
 	  {
 	    gg = arrayp (genes, n, GENE) ;
-	    if (!chromOnly || !strncasecmp("chrom",dictName (Maps, gg->map),5))
+	    if (!chromOnly || !strncasecmp("chr",dictName (Maps, gg->map),3))
 	      {
 		int a1, a2 ;
 		
@@ -764,7 +764,7 @@ static void usage (void)
            "\t-xs:  export \'section->sequence\' coordinates\n"
 	   "\t-i: export IntMap values (to avoid float rounding)\n"
 	   "\t-G: export interpolated gmap\n"
-	   "\t-chrom: (default) export only if topmost sequence is called chrom*\n"
+	   "\t-chrom: (default) export only if topmost sequence is called chr*\n"
 	   "\t-any: export whatever the name of the topmost sequence\n"
 	   "\t-j: export gs or GS junctions based on overlap info\n"
 	   "\t-test: does some test program\n"
