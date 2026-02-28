@@ -1,0 +1,34 @@
+
+MAGIC is a pipeline to analyse next-generation sequencing
+author: mieg@ncbi.nlm.nih.gov
+
+The program has been extensively tested on ILLUMINA hiseq, Lifetech SOLiD and pgm,
+Roche-454, Helicos, and should be adaptable to other platforms.
+
+To instal the program, please read the user guide: MAGIC_User_gide.docx
+
+In a nutshell
+1) Download the source.tar.gz file
+2) Download the (human) target tar.gz file and the test fastq file (human).test.ILM.R[12].fastq.gz
+3) Open both the source code and the TARGET tar files
+   zcat magic*.tar.gz | tar xvf -
+   zcat TARGET.*tar.gz | tar tvf - 
+4) To compile on Linux:
+    You need the 'gcc' compiler
+    You need flex/bison and the X11 run-time libraries Xaw, Xmu...
+    The pipeline itself needs 'gawk' 
+    Everything else is included in the tar.gz file
+          cd magic....
+          tcsh
+          setenv MAGIC_SRC `pwd`
+          setenv ACEDB_MACHINE LINUX
+          make -k all
+
+5) To run the test, go back to the top directory and source the test script.
+   The test will probably take 2 hours to align 2M 100+100 paired fragments
+   on the human genome. If you have access to an SGE cluster with enough nodes
+   it would take about the same time to align a much larger data sets.
+          cd ..
+          source MAGIC_TEST.tcsh
+
+6) To run the code on your own data, look at the user manual.
