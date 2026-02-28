@@ -56,8 +56,10 @@ enum {
 
 #define MESH_LINK "https://www.nlm.nih.gov/cgi/mesh/2007/MB_cgi?term=%s"
 #define COG_LINK "https://www.ncbi.nlm.nih.gov/cgi-bin/COG/palox?%s"
-#define GO_LINK "http://amigo.geneontology.org/cgi-bin/amigo/go.cgi?view=details&depth=1&query=%s"
-#define PFAM_LINK "http://www.ebi.ac.uk/ego/DisplayGoTerm?id=%s"
+#define OLD_GO_LINK "http://amigo.geneontology.org/cgi-bin/amigo/go.cgi?view=details&depth=1&query=%s"
+#define GO_LINK "http://www.ebi.ac.uk/ego/DisplayGoTerm?id=%s"
+#define PFAM_LINK "http://ebi.ac.uk/interpro/entry/pfam/%s"
+#define PSORT_LINK "http://psort.hgc.jp/%s"
 #define KEGG_LINK_HUMAN "http://www.genome.jp/dbget-bin/show_pathway?hsa%s+%s"
 #define KEGG_LINK_MOUSE "http://www.genome.jp/dbget-bin/show_pathway?mmu%s+%s"
 #define KEGG_LINK_RAT "http://www.genome.jp/dbget-bin/show_pathway?rno%s+%s"
@@ -68,8 +70,8 @@ enum {
 #define MGI_LINK "http://www.informatics.jax.org/searches/accession_report.cgi?id=MGI:%s"
 #define MGI_ALLELE_LINK "http://www.informatics.jax.org/searches/allele_report.cgi?markerID=MGI:%s"
 
-#define PUBMED_LINK "https://www.ncbi.nlm.nih.gov/pubmed/"
-#define PUBMED_MULTILINK "https://www.ncbi.nlm.nih.gov/pubmed/"
+#define PUBMED_LINK      "https://www.ncbi.nlm.nih.gov/pubmed/"
+#define PUBMED_GENEID_LINK      "https://www.ncbi.nlm.nih.gov/pubmed?linkname=gene_pubmed&from_uid=%s"
 
 #define GENBANK_LINK "https://www.ncbi.nlm.nih.gov/nucest/%s"
 #define ENTREZ_LINK "https://www.ncbi.nlm.nih.gov/gene/%s"

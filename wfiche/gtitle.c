@@ -418,12 +418,6 @@ void gmpJumpPointShow (vTXT blkp, GMP *gmp, BOOL showNow, BOOL verbose)
 	}
 
       vtxtPrint (blkp, "</tr>\n") ;
-      if (0) /* second line of this table */
-	{
-	  vtxtPrint (blkp, "</table><table width=\"98%%\" border=1 bordercolor='blue'>") ;
-	  vtxtPrint (blkp, "  <tr VALIGN=TOP HALIGN=CENTER bgcolor=\"#e5e5ff\">\n") ; 
-	  vtxtPrint (blkp, "<td>Danielle</td><td>est</td><td>la</td><td>plus</td><td>belle</td></tr>\n") ;
-	}
      }
     vtxtPrint (blkp, "</table>") ;
   }
@@ -1279,9 +1273,9 @@ static void gtMolecularWeight (vTXT blkp, AC_OBJ oProduct, AC_OBJ oGF, BOOL show
       ) 
     {
       if (showPi)
-	vtxtPrintf (blkp, " (%.1f kD, pI %.1f)", mw, pI) ;
+	vtxtPrintf (blkp, " (%.1f kDa, pI %.1f)", mw, pI) ;
       else
-	vtxtPrintf (blkp, " (%.1f kD)", mw) ;
+	vtxtPrintf (blkp, " (%.1f kDa)", mw) ;
     }
   ac_free (h) ;
 } /* gtMolecularWeight */

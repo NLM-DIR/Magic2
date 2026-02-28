@@ -239,124 +239,61 @@ static void markupText (vTXT blkp, GMP *gmp, int type, char *txt)
     }
 }
 
-
+/*******************************************************/
+/* 2025_03 Tranfer the printing of the table to ac_table_display */
 static int fichePrintSquareTable (GMP *gmp, char style, Array Tbb, vTXT blkp, vTXT bfr, int doEmpty, int colColor, int sR, int eR, int colNum, ... )
 {
-  int iR, iC=0, colorTbb=0 ; 
-  char *ptr, *txt, *txt2 ; 
-  va_list marker ; 
-  char *oldType=ficheMarkupContent[2*_TD] ; 
+  AC_HANDLE h = ac_new_handle () ;
+  va_list marker ;
+  vtxtMarkup (blkp) ;
+  AC_TABLE table = 0 ;
+  Array titles = arrayHandleCreate (16, const char *, h) ;
+  int iC, nCol = -1 ;
 
-    
-  /* clean up the table, replace ooo cellends by zero */
-  
-  for  (iR=sR ; iR < eR ; iR++)
+  iC = colNum ; 
+  va_start  (marker, colNum) ; 
+  while (iC != -1)
     {
-      iC=colNum ; 
-      va_start  (marker, colNum) ; 
-      while  (iC!=-1)
+      nCol++ ;
+      /* clean up the table, replace ooo cellends by zero */
+      char *txt = vtxtPtr  (bfr) + TBB  (0, iC) ;
+      char *ptr = strstr  (txt, ooo) ;
+      if (ptr) *ptr=0 ;
+      /* insert in table */
+      if  (*txt)
+	array (titles, nCol, const char *) = txt ;
+      
+      iC= va_arg  (marker, int) ; 
+    }
+  va_end  ( marker ) ; 
+  table = ac_empty_table (1, arrayMax (titles), h) ; 
+  va_start  (marker, colNum) ;
+  nCol = -1 ;
+  iC = colNum ;
+  while (iC != -1)
+    {
+      nCol++ ;
+      for  (int jj = 0, iR = sR == 0 ? 1 : sR ; iR < eR ; iR++, jj++) /* jump title line */
 	{
-	  
 	  if  (TBB (iR, iC))
 	    {
-	      txt = vtxtPtr  (bfr) + TBB  (iR, iC) ;
-	      if  ( (ptr=strstr  (txt, ooo)))*ptr=0 ;  
-	      if  (!  (*txt))
-		{
-		  TBB  (iR, iC)=0 ; 
-		}
+	      /* clean up the table, replace ooo cellends by zero */
+	      char *txt = vtxtPtr  (bfr) + TBB  (iR, iC) ;
+	      char *ptr = strstr  (txt, ooo) ;
+	      if (ptr) *ptr=0 ;
+	      /* insert in table */
+	      if  (*txt)
+		ac_table_insert_text (table, jj, nCol, txt) ;
 	    }
-	  /* count how many non zero on this row and on this col */
-	  if  (TBB  (iR, iC))
-	    {TBB  (-1, iC)=TBB  (-1, iC)+1 ; TBB  (iR, -1)=TBB  (iR, -1)+1 ; }
-	  
-	  iC= va_arg  (marker, int) ; 
 	}
-      va_end  ( marker ) ; 
+      iC= va_arg  (marker, int) ; 
     }
-  /* Printing the table */
-  if (style == 'x')
-    {
-      markupStart  (blkp, gmp, _TB) ; 
-      for  (iR=sR ; iR < eR ; iR++)
-	{
-	  
-	  if  (!doEmpty && TBB  (iR, -1) < 1)continue ; 
-	  
-	  markupStart  (blkp, gmp, _TR) ; 
-	  
-	  iC=colNum ; 
-	  va_start  (marker, colNum) ; 
-	  while  (iC!=-1)
-	    {
-	      
-	      if  (!doEmpty && TBB  (-1, iC) < 2)
-		{iC= va_arg  (marker, int) ; continue ; }
-	      if  (iC==colNum && TBB (iR, colColor))
-		{
-		  if (!colorTbb)
-		    { 
-		      colorTbb=2;
-		      ficheMarkupContent[2*_TD]="<td VALIGN=TOP bgcolor=\"#d5d5ff\">\n" ;  
-		    }
-		  else
-		    {
-		      txt = TBB (iR, colColor)+vtxtPtr (bfr) ; 
-		      txt2 =  TBB (iR-1, colColor)+vtxtPtr (bfr) ; 
-		      if (strcmp (txt, txt2))
-			colorTbb++ ; 
-		      if (colorTbb%2)ficheMarkupContent[2*_TD]="<td VALIGN=TOP bgcolor=white>\n" ; 
-		      else ficheMarkupContent[2*_TD]="<td VALIGN=TOP bgcolor=\"#efefff\">\n" ; 
-		    }
-		}
-	      
-	      markupStart (blkp, gmp, _TD) ; 
-	      
-	      if (TBB (iR, iC))
-		{
-		  txt=TBB (iR, iC)+vtxtPtr (bfr) ; 
-		  vtxtPrint (blkp, txt) ; 
-		}
-	      markupEnd (blkp, gmp, _TD) ; 
-	      iC= va_arg (marker, int) ; 
-	    }
-	  va_end ( marker ) ; 
-	  
-	  markupEnd (blkp, gmp, _TR) ; 
-	}
-      markupEnd (blkp, gmp, _TB) ; 
-      
-      ficheMarkupContent[2*_TD]=oldType ; 
-      vtxtPrintf (blkp, "<br/>\n") ;
-    }
-  else
-    {
-      for  (iR=sR ; iR < eR ; iR++)
-	{
-	  if  (!doEmpty && TBB  (iR, -1) < 1) continue ; 
-	  
-	  iC = colNum ; 
-	  va_start  (marker, colNum) ; 
-	  while  (iC != -1)
-	    {	      
-	      if  (!doEmpty && TBB  (-1, iC) < 2)
-		{ iC = va_arg  (marker, int) ; vtxtPrintf (blkp, "        ") ; continue ; }
-	      
-	      if (TBB (iR, iC))
-		{
-		  txt=TBB (iR, iC) + vtxtPtr (bfr) ; 
-		  vtxtPrint (blkp, txt) ; 
-		  vtxtPrintf (blkp, "        ") ;
-		}
-	      iC= va_arg (marker, int) ; 
-	    }
-	  va_end ( marker ) ; 
-	  vtxtPrintf (blkp, "\n") ;
-	}
-    }
-  vtxtPrintf (blkp, "\n") ;
-  return iC ; 
-}
+  va_end  ( marker ) ; 
+  vtxtPrint (blkp, "\n<br>\n") ;
+  int nnn = ac_table_display (blkp, table, arrayp (titles, 0, const char *), 0, 0, 0, 0, 0, 0) ;
+  ac_free (h) ;
+  return nnn ;
+} /* fichePrintSquareTable2 */
 
 
 /* -===================================- /
@@ -1401,7 +1338,7 @@ laba:
 		{
 		  char *cq = strstr (txtAccession , ".") ; /* drop pfam version number */
 		  if (cq) *cq = 0 ;
-		  sprintf (linkBuf, "http://pfam.xfam.org/family/%s", txtAccession) ; 
+		  sprintf (linkBuf, PFAM_LINK, txtAccession) ; 
 		  gmpURL (blkp, gmp, linkBuf, familyName) ; 
 		}
 	      else if (*familyName)
@@ -1915,7 +1852,8 @@ static void ficheNewGeneDiseasePathwaysBioProcessTableDisease (AC_TABLE tbl1, GM
 	{
 	  int ir1 ;
 	  (*nGwithPapp)++  ;
-	  vtxtClear (bfr1) ; vtxtPrint (bfr1, PUBMED_MULTILINK) ; /* no %s included */
+	  vtxtClear (bfr1) ; 
+	  vtxtPrint (bfr1, PUBMED_LINK) ; /* no %s included */
 	  tbl = ac_keyset_table (ksPaper, 0, -1, 0, h) ;
 	  for (ir = tbl->rows - 1, ir1 = 0 ; ir >= 0 ; ir--)
 	    {
@@ -2472,7 +2410,7 @@ static int ficheNewGeneProcessFunctionLocalizationTableNew (AC_TABLE tbl1, GMP *
 		  int jr1 ;
 		  int ir1 = 0 ;
 
-		  vtxtClear (bfr1) ; vtxtPrint (bfr1, PUBMED_MULTILINK) ; /* no %s included */
+		  vtxtClear (bfr1) ; vtxtPrint (bfr1, PUBMED_LINK) ; /* no %s included */
 		  const char *ccp11, *ccp10 = ac_table_printable (tbl, ir, 0, 0) ;
 		  vtxtClear (bfr) ;
 		  /* subloop, because a single go_c_ace may have several types of support: ABCA2 */
@@ -2644,7 +2582,7 @@ static int ficheNewGeneDiseasePathwaysBioProcessTableNew (vTXT blkp, GMP *gmp, B
   /* format the table and add the http links */
   nGwithPap = 0, nnGwithPap = 0 ;  
   vtxtClear (bfrPap) ;
-  vtxtPrint (bfrPap, PUBMED_MULTILINK) ; /* no %s included */ 
+  vtxtPrint (bfrPap, PUBMED_LINK) ; /* no %s included */ 
 
   ficheNewGeneDiseasePathwaysBioProcessTableDisease (tbl, gmp, 0 /* OMIM */, bfrPap, &nGwithPap, &nnGwithPap, ksGPap, hasVotep, aa, h) ;
   ficheNewGeneDiseasePathwaysBioProcessTableDisease (tbl, gmp, 1 /* KEGG */, bfrPap, &nGwithPap, &nnGwithPap, ksGPap, hasVotep, aa, h) ;
@@ -2949,6 +2887,7 @@ static int ficheNewGeneDiseasePathwaysBioProcessTableJUNK (vTXT blkp, GMP *gmp)
 		  continue ;
 		if (strcasecmp (ptr, "Dileucine_domain"))
 		  continue ;
+		/* http://psort.org */
 		sprintf (linkBuf, "http://psort.nibb.ac.jp") ;
 		TBB (jt, COL_ORIGIN) = gmpURL (tBfr, gmp, linkBuf, "Psort"ooo) ;
 		if (!jt2++)
@@ -4346,72 +4285,53 @@ void ficheProductBlastPTableContent (vTXT blkp, GMP *gmp, int maxCol, const char
   AC_TABLE gBlastP ;
   AC_OBJ oBl ; 
   int	ir ; 
-  const char *ccp ;
-  char linkBuf[128+vSTRMAXNAME], buf[vSTRMAXNAME], *ptr, *oldtbl ; 
+  char linkBuf[128+vSTRMAXNAME], buf[vSTRMAXNAME], *ptr ;
+  const char *titles[] = {"score", "from aa to aa", "blastP Hit Title [species] eValue links to GenBank", "from aa to aa"} ; 
   AC_HANDLE h = ac_new_handle () ;
-
-  oldtbl=ficheMarkupContent[2*_TD] ; 
+  AC_TABLE  table = 0 ;
+  vTXT txt = vtxtHandleCreate (h) ;
   
   if ((gBlastP = ac_tag_table (gmp->kantor, "BlastP", h)))
     {
-      ficheMarkupContent[2*_TD]="<td VALIGN=TOP bgcolor=\"#d5d5ff\">\n" ;  		
-      markupStart (blkp, gmp, _TB) ; 
-      
-      markupStart (blkp, gmp, _TR) ; 
-      markupText (blkp, gmp, _TD, "score") ; 
-      markupText (blkp, gmp, _TD, "from aa to aa") ; 
-      markupText (blkp, gmp, _TD, "blastP Hit Title [species] eValue links to GenBank") ; 
-      markupText (blkp, gmp, _TD, "from aa to aa") ; 
-      markupEnd (blkp, gmp, _TR) ; 
-
-      if (!maxCol) maxCol = gBlastP->rows ;
+      const char *ccp ;
+      maxCol = gBlastP->rows ;
+      table = ac_empty_table (maxCol, 4, h) ;
       for (ir=0 ; ir<gBlastP->rows && ir<maxCol ;  ir++)
 	{
 	  oBl = ac_table_obj (gBlastP, ir, 0, h) ; 
-	  
-	  if (ir%2)ficheMarkupContent[2*_TD]="<td VALIGN=TOP bgcolor=\"#efefff\">\n" ; 
-	  else ficheMarkupContent[2*_TD]="<td VALIGN=TOP bgcolor=white>\n" ; 
-	  
-	  markupStart (blkp, gmp, _TR) ; 
-	  
-	  markupStart (blkp, gmp, _TD) ; 
-	  vtxtPrintf (blkp, "   %12.0f", ac_table_float (gBlastP, ir, 2, 0)) ;
-	  markupEnd (blkp, gmp, _TD) ; 
-	  markupStart (blkp, gmp, _TD) ; 
-	  vtxtPrintf (blkp, "%4d to %4d", ac_table_int (gBlastP, ir, 3, 0), ac_table_int (gBlastP, ir, 4, 0) ) ;
-	  markupEnd (blkp, gmp, _TD) ; 
-	  markupStart (blkp, gmp, _TD) ; 
+	  ccp = vtxtPtr (txt) ;
+	  vtxtPrintf (txt, "%12.0f", ac_table_float (gBlastP, ir, 2, 0)) ;
+	  ccp = strnew (vtxtPtr (txt), h) ;
+	  ac_table_insert_text (table, ir, 0, ccp) ;
+
+	  vtxtClear (txt) ;
+	  vtxtPrintf (txt, "%4d to %4d", ac_table_int (gBlastP, ir, 3, 0), ac_table_int (gBlastP, ir, 4, 0) ) ;
+	  ccp = strnew (vtxtPtr (txt), h) ;
+	  ac_table_insert_text (table, ir, 1, ccp) ;
+
+	  vtxtClear (txt) ;
 	  strcpy (buf, ac_name (oBl)) ; 
 	  if ((ptr=strchr (buf, ' ')))*ptr=0 ; 
 	  sprintf (linkBuf, "https://www.ncbi.nlm.nih.gov/entrez/viewer.fcgi?val=%s", buf) ; 
 	  if ((ccp = ac_table_printable (gBlastP, ir, 7, 0)))
-	    gmpURL (blkp, gmp, linkBuf, ccp) ; 
+	    gmpURL (txt, gmp, linkBuf, ccp) ; 
 	  else
-	    gmpURL (blkp, gmp, linkBuf, "segment of previous") ; 
+	    gmpURL (txt, gmp, linkBuf, "segment of previous") ; 
+	  ccp = strnew (vtxtPtr (txt), h) ;
+	  ac_table_insert_text (table, ir, 2, ccp) ;
 
-	  markupEnd (blkp, gmp, _TD) ; 
-	  markupStart (blkp, gmp, _TD) ; 
-	  vtxtPrintf (blkp, "%4d to %4d", ac_table_int (gBlastP, ir, 5, 0), ac_table_int (gBlastP, ir, 6, 0)) ;
-	  markupEnd (blkp, gmp, _TD) ; 
-	  
-	  markupEnd (blkp, gmp, _TR) ; 
+	  vtxtClear (txt) ;
+	  vtxtPrintf (txt, "%4d to %4d", ac_table_int (gBlastP, ir, 5, 0), ac_table_int (gBlastP, ir, 6, 0)) ;
+	  ccp = strnew (vtxtPtr (txt), h) ;
+	  ac_table_insert_text (table, ir, 3, ccp) ;
 	}
-      if (ir<gBlastP->rows)
+      if (ir < gBlastP->rows)
 	{ 
-	  int icol ;
-	  ficheMarkupContent[2*_TD]="<td VALIGN=TOP bgcolor=#d0d0ff>\n" ; 
-	  markupStart (blkp, gmp, _TR) ; 
-	  for (icol = 0 ; icol < 4 ; icol++)
-	    {
-	      markupStart (blkp, gmp, _TD) ; 
-	      vtxtPrint (blkp, more) ;
-	      markupEnd (blkp, gmp, _TD) ; 
-	    }
-	  markupEnd (blkp, gmp, _TR) ;
+	  for (int icol = 0 ; icol < 4 ; icol++)
+	    ac_table_insert_text (table, ir + 1, icol, more) ;
 	}
-      markupEnd (blkp, gmp, _TB) ; 
     }
-  ficheMarkupContent[2*_TD]=oldtbl ; 
+  ac_table_display (blkp, table, titles, 0, 0, 0, 0, 0, 0) ;
   ac_free (h) ;
 } /* ficheProductBlastPTableContent */
 
@@ -5931,7 +5851,7 @@ void ficheNewGeneBiblioChapter  (vTXT blkp, GMP *gmp, int gRif)
 {
   AC_OBJ oPap ;
   AC_TABLE gPap ;
-  int ir, ir1, ir2, j, nn, nRif = 0, nPubMed ;
+  int ir, ir1 = 0, ir2 = 0, j, nn, nRif = 0, nPubMed ;
   const char *pm, *ptr, *cit, *ccp ;
   AC_HANDLE h = ac_new_handle () ;
   vTXT bfr1 = vtxtHandleCreate (h) ;
@@ -5950,21 +5870,25 @@ void ficheNewGeneBiblioChapter  (vTXT blkp, GMP *gmp, int gRif)
   /* report the global link to pubmed */
 
   vtxtClear (bfr1) ;
-  vtxtPrint (bfr1, PUBMED_MULTILINK) ; /* no %s included */
-  for (ir = gPap->rows - 1, ir1 = ir2 = 0, j = 0 ; ir >= 0 ; ir--)
-    {
-      ccp = ac_table_printable (gPap, ir, 0, 0) ;
-
-      if (ccp && !strncasecmp (ccp, "pmp", 2))
-	{
-	  if (ir1++) 
-	    { if (j < 300) vtxtPrint (bfr1, ",") ; }
-	   if (j++ < 300) vtxtPrint (bfr1, ccp+2) ; 
-	}
-      else
+  /*   vtxtPrint (bfr1, PUBMED_LINK) ;  no %s included */
+  vtxtPrintf (bfr1, PUBMED_GENEID_LINK, ac_tag_printable (gmp->gene, "GeneId", "toto" )) ; /* no %s included */
+  if (0) 
+    for (ir = gPap->rows - 1, ir1 = ir2 = 0, j = 0 ; ir >= 0 ; ir--)
+      {
+	ccp = ac_table_printable (gPap, ir, 0, 0) ;
+	
+	if (ccp && !strncasecmp (ccp, "pmp", 2))
+	  {
+	    if (ir1++) 
+	      { if (j < 300) vtxtPrint (bfr1, ",") ; }
+	    if (j++ < 300) vtxtPrint (bfr1, ccp+2) ; 
+	  }
+	else
 	ir2++ ;
-    }
-  nPubMed = ir1 ;
+      }
+  if (0) nPubMed = ir1 ;
+  ir2 = 0 ;
+  nPubMed = gPap->rows ; ;
   if (gmp->Spc == WORM && ir1)
     {
       vtxtPrintf (bfr2, "Please see %s ",  _theese(ir1)) ;
@@ -5983,60 +5907,63 @@ void ficheNewGeneBiblioChapter  (vTXT blkp, GMP *gmp, int gRif)
   else
     goto done ;
 
-  vtxtPrintf (bfr2,"<ul>") ;  
-  for (ir = gPap->rows - 1, oPap = 0 ; ir >= 0 ; ac_free (oPap), ir--)
+  if (0)
     {
-      cit = 0 ;
-      oPap = ac_table_obj (gPap, ir, 0, h) ; 
-      if (gRif && ac_has_tag (oPap, "Gene_rif") &&
-	  (pm = ac_tag_printable (oPap, "PMID", 0)) &&
-	  (cit = ac_tag_printable (oPap,"Citation", 0)))
+      vtxtPrintf (bfr2,"<ul>") ;  
+      for (ir = gPap->rows - 1, oPap = 0 ; ir >= 0 ; ac_free (oPap), ir--)
 	{
-	  vtxtPrintf (bfr2,"\n<li>") ;
-	  markupLinkPubmed (bfr2, gmp, pm, cit) ; 
-	  if ((ptr = ac_tag_printable (oPap,"Title", 0)))
-	    vtxtPrintf (bfr2, " %s", ptr) ;
-	  vtxtDot (bfr2) ;
-	  if ((ptr = ac_tag_printable (oPap, "Gene_rif", 0)))
-	    {	      
-	      vtxtPrintf (bfr2, "\n     <span class='rif'>") ;
-	      vtxtPrintf (bfr2, " %s", ptr) ;    
-	      vtxtPrintf (bfr2, "</span>\n") ; 
-	    }
-	}
-      else if (!gRif && !ac_has_tag (oPap, "PMID"))
-	{
-	  vtxtPrintf (bfr2,"\n<li>") ;
-	  
-	  if (gmp->Spc == WORM && (ac_name (oPap)[0] == '['))
-	    { 
-	      markupLinkAvery (bfr2, gmp, ac_tag_printable (oPap, "LeonID", ac_name (oPap))) ;
+	  cit = 0 ;
+	  oPap = ac_table_obj (gPap, ir, 0, h) ; 
+	  if (gRif && ac_has_tag (oPap, "Gene_rif") &&
+	      (pm = ac_tag_printable (oPap, "PMID", 0)) &&
+	      (cit = ac_tag_printable (oPap,"Citation", 0)))
+	    {
+	      vtxtPrintf (bfr2,"\n<li>") ;
+	      markupLinkPubmed (bfr2, gmp, pm, cit) ; 
 	      if ((ptr = ac_tag_printable (oPap,"Title", 0)))
 		vtxtPrintf (bfr2, " %s", ptr) ;
-	      continue ;
+	      vtxtDot (bfr2) ;
+	      if ((ptr = ac_tag_printable (oPap, "Gene_rif", 0)))
+		{	      
+		  vtxtPrintf (bfr2, "\n     <span class='rif'>") ;
+		  vtxtPrintf (bfr2, " %s", ptr) ;    
+		  vtxtPrintf (bfr2, "</span>\n") ; 
+		}
 	    }
-	  
-	  vtxtPrint (bfr2, ac_name (oPap)) ; 
-	  if ((ptr = ac_tag_printable (oPap,"Title", 0)))
-	    vtxtPrintf (bfr2, " %s", ptr) ;
-	  
-	  if ((ptr = ac_tag_printable (oPap,"Citation", 0))) /* cit but no pmid, unlikely */
-	    vtxtPrintf (bfr2, " %s", ptr) ;
-	  else
+	  else if (!gRif && !ac_has_tag (oPap, "PMID"))
 	    {
-	      if ((ptr = ac_tag_printable (oPap,"Journal", 0)))
+	      vtxtPrintf (bfr2,"\n<li>") ;
+	      
+	      if (gmp->Spc == WORM && (ac_name (oPap)[0] == '['))
+		{ 
+		  markupLinkAvery (bfr2, gmp, ac_tag_printable (oPap, "LeonID", ac_name (oPap))) ;
+		  if ((ptr = ac_tag_printable (oPap,"Title", 0)))
+		    vtxtPrintf (bfr2, " %s", ptr) ;
+		  continue ;
+		}
+	      
+	      vtxtPrint (bfr2, ac_name (oPap)) ; 
+	      if ((ptr = ac_tag_printable (oPap,"Title", 0)))
 		vtxtPrintf (bfr2, " %s", ptr) ;
-	      if ((nn = ac_tag_int (oPap,"Year", 0)))
-		vtxtPrintf (bfr2, " %d", nn) ;
-	      if ((ptr = ac_tag_printable (oPap,"Volume", 0)))
+	      
+	      if ((ptr = ac_tag_printable (oPap,"Citation", 0))) /* cit but no pmid, unlikely */
 		vtxtPrintf (bfr2, " %s", ptr) ;
-	      if (!strncmp(ac_name (oPap),"[cgc",4) && 
-		  (ptr = ac_tag_printable (oPap,"Page", 0)))
-		vtxtPrintf (bfr2, " %s", ptr) ;
-	    }	  
+	      else
+		{
+		  if ((ptr = ac_tag_printable (oPap,"Journal", 0)))
+		    vtxtPrintf (bfr2, " %s", ptr) ;
+		  if ((nn = ac_tag_int (oPap,"Year", 0)))
+		    vtxtPrintf (bfr2, " %d", nn) ;
+		  if ((ptr = ac_tag_printable (oPap,"Volume", 0)))
+		    vtxtPrintf (bfr2, " %s", ptr) ;
+		  if (!strncmp(ac_name (oPap),"[cgc",4) && 
+		      (ptr = ac_tag_printable (oPap,"Page", 0)))
+		    vtxtPrintf (bfr2, " %s", ptr) ;
+		}	  
+	    }
 	}
+      vtxtPrintf (bfr2,"</ul>") ;
     }
-  vtxtPrintf (bfr2,"</ul>") ;
 
  done:
   if (gRif)
@@ -8007,7 +7934,7 @@ static int ficheNewGenePathwaysProcessFunctionLocalizationTableNew (vTXT blkp, G
   /* format the table and add the http links */
   nGwithPap = 0, nnGwithPap = 0 ;  
   vtxtClear (bfrPap) ;
-  vtxtPrint (bfrPap, PUBMED_MULTILINK) ; /* no %s included */ 
+  vtxtPrint (bfrPap, PUBMED_LINK) ; /* no %s included */ 
 
   ficheNewGeneDiseaseKeggPathwaysTableNew (tbl, gmp, aa) ;
   ficheNewGeneProcessFunctionLocalizationTableNew (tbl, gmp, bfrPap, &nGwithPap, &nnGwithPap, ksGPap, 0, aa) ;
@@ -8388,7 +8315,7 @@ static void ficheNewGeneProductPsortMotifTableTable (AC_TABLE tbl1, GMP *gmp, Ar
 
 	  if (!jj++)
 	    {
-	      gmpURL (bfr, gmp, "http://psort.nibb.ac.jp/helpwww2.html", *(cpp+1)) ;
+	      gmpURL (bfr, gmp, PSORT_LINK, *(cpp+1)) ;
 	      vtxtPrintf (bfr, " is seen") ;
 	    }
 	  else
@@ -8490,7 +8417,7 @@ static int ficheNewGeneProductPfamPsortMotifTableNew (vTXT blkp, GMP *gmp, Array
   /* format the table and add the http links */
   nGwithPap = 0, nnGwithPap = 0 ;  
   vtxtClear (bfrPap) ;
-  vtxtPrint (bfrPap, PUBMED_MULTILINK) ; /* no %s included */ 
+  vtxtPrint (bfrPap, PUBMED_LINK) ; /* no %s included */ 
   if (nGwithPap > 1)
     {
       int row = tbl->rows ;
@@ -8505,7 +8432,7 @@ static int ficheNewGeneProductPfamPsortMotifTableNew (vTXT blkp, GMP *gmp, Array
 
   nGwithPap = 0, nnGwithPap = 0 ;  
   vtxtClear (bfrPap) ;
-  vtxtPrint (bfrPap, PUBMED_MULTILINK) ; /* no %s included */ 
+  vtxtPrint (bfrPap, PUBMED_LINK) ; /* no %s included */ 
 
   ficheNewGeneProductPfamMotifTableTable (tbl, gmp, aa) ;
   ficheNewGeneProductPsortMotifTableTable (tbl, gmp, aa) ;
@@ -9512,7 +9439,7 @@ static void ficheNewGeneInteractionsTableTable (AC_TABLE tbl1, GMP *gmp, Array b
   if (gmp->markup) vtxtMarkup (bfr1) ;   
   if (gmp->markup) vtxtMarkup (bfrPap) ;
 
-  vtxtPrint (bfrPap, PUBMED_MULTILINK) ; /* no %s included */ 
+  vtxtPrint (bfrPap, PUBMED_LINK) ; /* no %s included */ 
   /* Interactions */
   /*  AC_KEYSET geneidKs = ac_objquery_keyset (gmp->gene, ">geneid", h) ; */
   k0 = ac_obj_key (gmp->gene) ;
@@ -9547,7 +9474,7 @@ static void ficheNewGeneInteractionsTableTable (AC_TABLE tbl1, GMP *gmp, Array b
       
 	  vtxtClear (bfr) ;
 	  vtxtClear (bfr1) ;
-	  vtxtPrint (bfr1, PUBMED_MULTILINK) ; /* no %s included */ 
+	  vtxtPrint (bfr1, PUBMED_LINK) ; /* no %s included */ 
 
 	  ks2 = ac_objquery_keyset (obj, with_protein ? ">with_protein" : "{>with_gene}SETOR{>with_protein}", h) ;
 	  if (ks2 && ac_keyset_count (ks2))
@@ -9821,7 +9748,7 @@ static int ficheNewGeneInteractionsTableNew (vTXT blkp, GMP *gmp, Array bb, BOOL
 
   /* format the table and add the http links */
   vtxtClear (bfrPap) ;
-  vtxtPrint (bfrPap, PUBMED_MULTILINK) ; /* no %s included */ 
+  vtxtPrint (bfrPap, PUBMED_LINK) ; /* no %s included */ 
   ficheNewGeneInteractionsTableTable (tbl, gmp, bb, with_protein) ;
   /* export */
   if ((row = tbl->rows))
@@ -9900,6 +9827,7 @@ static BOOL ficheNewGeneExpressionTissueIsBaddy (const char *ccp)
   const char *baddies[] =
     { 
       "syntheti*"
+      , "partial"
       , "pooled"
       , "pcr*"
       , "mixed"
@@ -11392,7 +11320,7 @@ static int ficheNewGeneFunctionStatement (vTXT blkp, GMP *gmp)
 	    
 	  if (gmp->markup) vtxtMarkup (bfr1) ;   
 
-	  vtxtPrint (bfr1, PUBMED_MULTILINK) ; /* no %s included */
+	  vtxtPrint (bfr1, PUBMED_LINK) ; /* no %s included */
 	  for (ir = tbl->rows - 1, ir1 = 0 ; ir >= 0 ; ir--)
 	    {
 	      const char *cp = ac_table_printable (tbl, ir, 0, 0) ;
@@ -13502,7 +13430,7 @@ static void ficheNewGeneIntronsParagraph (vTXT blkp, GMP *gmp)
  
 static int ficheTableConfigureColumns (const char **titles, const char **trueTitles, int *cols) 
 {
-  int i, j, j1, colorControl =  1 ;
+  int i, j, j1, colorControl =  0 ;
   const char *cp ;
   
   for (i = 0 ; i < 60 ; i++)
@@ -13512,7 +13440,7 @@ static int ficheTableConfigureColumns (const char **titles, const char **trueTit
       cp = titles[i] ;
       trueTitles [i] = titles[i] ;
       if (*cp == '+')	
-	{cp++; colorControl = i + 1 ;}
+	{cp++; if (! colorControl)  colorControl= i + 1 ;}
       if (*cp == '-')	
 	continue ;
       if (sscanf (cp,"%d:",&j1) == 1 && j1 >= 1 && j1 < 60)

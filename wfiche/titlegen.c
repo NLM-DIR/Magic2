@@ -986,7 +986,8 @@ static void titleRefineOrder(vMEG * dicWrd, vMEG * dicStc, char * dst,int * cwrd
 			  
 			}
 		      
-		      strncpy(buf1,caseBuf+ii,l);ptr=buf1;buf1[l]=0;
+		      if (l < vTEXTMAXLINE - 1)
+			{ strncpy(buf1,caseBuf+ii,l);ptr=buf1;buf1[l]=0; }
 		      if(l<4 || allCaps!=allLets)
 			break;
 		    }
