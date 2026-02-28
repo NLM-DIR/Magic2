@@ -15,6 +15,10 @@
 
 #define NAMMAX 1024
 
+/* download SRA runs as FASTA or FASTQ */
+#define SRA_FASTA 0
+#define SRA_FASTQ 1
+
 /* static atomic_int lane = 0 ; */
 
 /**************************************************************/
@@ -718,7 +722,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   SRAObj* sra = SraObjNew(sraID);
   format = SRACACHE ;
   
-  while ((!Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, BMAX)))
+  while ((!Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, BMAX, SRA_FASTA)))
     {
       if (ao)	aceOut (ao, ccp) ;  /* caching */
 
@@ -1233,7 +1237,7 @@ int saSequenceParseSraDownload (const PP *pp, const char *sraID)
   fprintf (stderr, "%s : SRA download %s ", timeBufShowNow(tBuf), sraID) ;
   if (Gb) fprintf (stderr, "(top %d GigaBases) ", Gb) ;
 
-  while ((! Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, num_bases)))
+  while ((! Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, num_bases, SRA_FASTA)))
     {
       fprintf (stderr, ".") ;
       aceOut (ao, ccp) ;

@@ -1976,6 +1976,8 @@ int main (int argc, const char *argv[])
       
       /* wait untill the genome is ready */
       channelGet (p.gmChan, &p.bbG, BB) ;
+      p.genomeLength = p.bbG.genomeLength ;
+      
       if (! p.bbG.cwsN[0])
 	messcrash ("matchHits received no target words") ;
       saGffBinaryParser (&p) ;

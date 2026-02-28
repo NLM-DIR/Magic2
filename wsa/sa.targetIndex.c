@@ -700,6 +700,8 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
       dna->base = bigArrp(bbG->globalDna, x1, char) ; 
       dna->max = dna->dim = x2 - x1 ;
       bbG->length += dna->max ;
+      const char *cp = dictName (bbG->dict, ii) ;
+      if (cp && *cp == 'G') bbG->genomeLength += dna->max ;
       arrayLock (dnaR) ; /* protect dnaR->base */
       messfree (dnaR->base) ;
       dnaR->base = bigArrp(bbG->globalDnaR, x1, char) ; 

@@ -635,6 +635,7 @@ void saRunStatExport (const PP *pp, Array runStats)
 		   ) ;
 
 	  up->intergenic = up->wiggleCumul - up->cds - up->utr - up->intronic ;
+	  aceOutf (ao, "%s\tGenome_length\ti\t%ld\n", runNam, pp->genomeLength) ;
 	  aceOutf (ao, "%s\tCDS_utr_intronic_intergenic_Bases\tifififif\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\n"
 		   , runNam
 		   , up->cds
