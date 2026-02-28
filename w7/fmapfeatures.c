@@ -93,7 +93,7 @@ void fMapBoxInfo (LOOK look, int box, void *aseg)
 void fMapShowMiniSeq (LOOK look, float *offset)
 {
   int i ;
-  float y, newoff, x0 ;
+  float y, y0 = -10, newoff, x0 ;
   SEG *seg ;
 
   if (!fmapView (look->view, str2tag ("Fmap_Locator")))
@@ -108,7 +108,9 @@ void fMapShowMiniSeq (LOOK look, float *offset)
     { seg = arrp (look->segs,i,SEG) ;
       if (class (seg->key) == _VLocus)
 	{ y = MAP2WHOLE (look->map, (seg->x1 + seg->x2 - 2*x0)/2.0) ;
-	  graphText (name (seg->key), *offset+0.5, y-0.4) ;
+	  if (y > y0 + 2)
+	    graphText (name (seg->key), *offset+0.5, y-0.4) ;
+	  y0 = y ;
 	}
     }
   graphTextHeight (0) ;

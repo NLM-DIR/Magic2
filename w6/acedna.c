@@ -45,12 +45,12 @@ void reverseComplement (Array dna)
 { char  c,  *cp = arrp(dna,0,char), *cq = cp + arrayMax(dna) - 1 ;
 
   while (cp < cq)
-    { c = complementBase[(int)*cp] ; 
-      *cp++ = complementBase[(int)*cq] ; 
+    { c = complementBase (*cp) ; 
+      *cp++ = complementBase(*cq) ; 
       *cq-- = c  ;
     }
   if (cp == cq)
-    *cp = complementBase[(int)*cp] ;
+    *cp = complementBase(*cp) ;
 
   /* add a terminal zero, 
      I do it again here because we might have done
@@ -61,8 +61,11 @@ void reverseComplement (Array dna)
      but if it is allocated at size max, it implies a new array reallocation
      reverseComplement(dnaR) ;
   */
-  array(dna, arrayMax(dna), char) = 0 ;
-  --arrayMax(dna) ;
+  if (! dna->lock)
+    {
+      array(dna, arrayMax(dna), char) = 0 ;
+      --arrayMax(dna) ;
+    }
 }
 
 /**************************************************************/
@@ -830,6 +833,23 @@ JUMP reAligner [] = {  /* called from abifix.c */
  *     n <= -2 stop on first error
 */
  
+/**************************************************************/
+
+#ifdef __SSE2__   /* use 128 bit intructions  */
+#define EP128
+#include <emmintrin.h> // SSE2
+/*  aaaa aaaa aaaa aaaa  / aaaa aaaa aaaa aaga   -> 14 (number of exact matches)
+static int first_non_equal_byte(unsigned char *cp, unsigned char *cq) {
+    __m128i v1 = _mm_loadu_si128((__m128i*)cp); // aaaaaaaaaaaaaaaa
+    __m128i v2 = _mm_loadu_si128((__m128i*)cq); // aaaaaaaaaaaaaaga
+    __m128i cmp = _mm_cmpeq_epi8(v1, v2);       // 0xff for equal, 0x00 for non-equal
+    int mask = _mm_movemask_epi8(cmp);          // 0xffff for equal, bit 0 for non-equal
+    return mask == 0xffff ? 16 : __builtin_ctz(~mask); // First 0 bit
+}
+*/
+#endif
+
+
 Array aceDnaTrackErrors (Array  dna1, int pos1, int *pp1, 
 			 Array dna2, int pos2, int *pp2, int *NNp, Array errArray, 
 			 int maxJump, int maxError, BOOL doExtend, int *maxExactp, BOOL isErrClean)
@@ -847,6 +867,15 @@ Array aceDnaTrackErrors (Array  dna1, int pos1, int *pp1,
   /* on one worm chromo we have 240 M calls to this function, so chrone may be too expansive */
   /* chrono("aceDnaTrackErrors") ; */
 
+#ifdef JUNK
+  /* pedantic runtime check if we cross compile */
+#ifdef EP128       /* use 128 bit intructions  */
+  int hasSSE2 = __builtin_cpu_supports("sse2") ;
+#else
+  int hasSSE2 = 0 ;
+#endif
+#endif
+  
   switch (useJumper)
     {
     case 1: /* illumina */
@@ -893,14 +922,27 @@ Array aceDnaTrackErrors (Array  dna1, int pos1, int *pp1,
   nExact = 0 ;
   while (++cq, ++cp < cpmax && cq < cqmax) /* always increment both */
     {
-      /* idee essayee le 2010_09_06: marche pas, sans doute parceque cp et cq ne sont pas word-aligned ?
-
-	if (cp < cpmax4 && cq < cqmax4 && !(((*(int*)cp) ^ (*(int*)cq) ) & mask4))
-	{
-	nExact += 4 ;cp+= 3 ; cq+= 3 ;
-	continue ;
- 	}
-      */
+#ifdef EP128       /* use 128 bit intructions  */
+      /* if (hasSSE2) pedantic costly run time check */
+	while (cp < cpmax - 16 && cq < cqmax - 16)
+	  {
+	    __m128i v1 = _mm_loadu_si128((__m128i*)cp);
+	    __m128i v2 = _mm_loadu_si128((__m128i*)cq);
+	    __m128i cmp = _mm_cmpeq_epi8(v1, v2);
+	    int mask = _mm_movemask_epi8(cmp);
+	    if (mask != 0xffff)
+	      {
+		int pos = __builtin_ctz(~mask);
+		cp +=  pos ; cq += pos ;
+		break; /* Mismatch at cp/cq */
+	      }
+	    else
+	      {
+		cp += 16; cq += 16; 
+		nExact += 16 ;
+	      }
+	  }
+#endif      
       if (*cp == *cq)
 	{
 	  nExact++ ;
@@ -915,6 +957,8 @@ Array aceDnaTrackErrors (Array  dna1, int pos1, int *pp1,
 	  nExact++ ;
 	  continue ;
 	}
+      if (maxError == 0)
+	break ;
       jp = activeJumper ;
       jp-- ;
       while (jp++) /* 1, 1, 0, 0 = last always accepted */
@@ -1051,7 +1095,7 @@ Array aceDnaTrackErrors (Array  dna1, int pos1, int *pp1,
 	  ep->iShort < (ep - 5)->iShort + 10)
 	break ;
       /* we need a cast because we allow calls with maxError<0 to stop on first error */
-      if (maxError &&  maxError != -1 && (int)arrayMax(errArray) > maxError)
+      if (maxError >= 0 &&  maxError != -1 && (int)arrayMax(errArray) > maxError)
 	break ;
     }
   *pp1 = cp - cp0 ;
@@ -1068,7 +1112,7 @@ Array aceDnaTrackErrors (Array  dna1, int pos1, int *pp1,
 } /* aceDnaTrackErrors */
 
 /**************************************************************************/
-/* dna1 is the EST or tag to ba analysed, dna2 is the reference
+/* dna1 is the EST or tag to be analysed, dna2 is the reference
  * if NNp != 0, report the N in the EST, but not in the reference
  */
 Array aceDnaTrackErrorsBackwards (Array  dna1, int pos1, int *pp1, 
@@ -1104,6 +1148,8 @@ Array aceDnaTrackErrorsBackwards (Array  dna1, int pos1, int *pp1,
 	{ jp = jumpN ; goto foundjp ; }
       if (*cp & *cq) /* other kind of ambiguous letter */
 	continue ;
+      if (maxError == 0)
+	break ;
       jp = jumper ; jp-- ;
       while (jp++) /* 1, 1, 0, 0 = last always accepted */
 	{ 
@@ -1237,11 +1283,11 @@ Array aceDnaTrackErrorsBackwards (Array  dna1, int pos1, int *pp1,
 /* to be used when the est is goind up in the mrna */
 
 static void fuseErr (Array err1, Array err2)
-{ int i, n1 = arrayMax(err1), n2 = arrayMax(err2) ;
-  for (i = 0 ; i < n2 ; i++)
+{ int i, j, n1 = arrayMax(err1), n2 = arrayMax(err2) ;
+  for (i = j = 0 ; i < n2 ; i++)
     {
-      if (n1 == 0 || memcmp (arrp (err1, n1 + i - 1, A_ERR), arrp(err2, i, A_ERR), sizeof (A_ERR)))
-	array(err1, n1 + i, A_ERR) = arr(err2, i, A_ERR) ;
+      if (n1 == 0 || memcmp (arrp (err1, n1 + j - 1, A_ERR), arrp(err2, i, A_ERR), sizeof (A_ERR)))
+	{ array(err1, n1 + j, A_ERR) = arr(err2, i, A_ERR) ; j++ ; }
     }
 }
 
@@ -1270,7 +1316,54 @@ static Array spliceTrackAllErrors (Array  dna1, int pos1, int *pp1,
 
 /***************************************************************************************/
 
-static void spliceTrackSlideErrors (Array err, Array dnaLong, Array dnaShort)
+static void spliceTrackSlideErrors (Array errors, Array dnaLong, Array dnaShort)
+{
+  A_ERR *ep = arrp (errors, 0, A_ERR) ;
+  int ii, nerr = arrayMax (errors) ;
+
+  for (ii = 0 ; ii < nerr ; ii++, ep++)
+    {
+      int x1 = ep->iShort ;
+      int a1 = ep->iLong ;
+      int dx = 0 ;
+      int da = 0 ;
+      switch (ep->type)
+	{
+	case TYPE80:
+	case AMBIGUE:
+	case ERREUR:
+	  continue ;
+	  break ;
+	case INSERTION: dx = 1 ; break ;
+	case INSERTION_DOUBLE: dx = 2 ; break ;
+	case INSERTION_TRIPLE: dx = 3 ; break ;
+	case TROU: da = 1 ; break ;
+	case TROU_DOUBLE: da = 2 ; break ;
+	case TROU_TRIPLE: da = 3 ; break ;
+	}
+      /* push left on read and right on target target */
+      if (dx > 0)
+	{
+	  x1 = ep->iShort = x1 + dx - 1 ;
+	  a1 = ep->iLong = a1 + 1 ;
+	}
+      if (da > 0)
+	{
+	  x1 = ep->iShort = x1 - 1 ;
+	  a1 = ep->iLong = a1 + 1 - da ;
+	}
+      char *cS = arrp (dnaShort, x1, char) ;  /* inserted base */
+      char *cL = arrp (dnaLong, a1, char)  ; /* base after the insertion */
+      while (*cS == complementBase(*cL))
+	{ ep->iShort-- ; ep->iLong++ ; cS-- ; cL++ ; }
+      /* ep->iShort += dx ; ep->iLong += da  ; cS++ ; cL-- ;  */
+    }
+
+  return ;
+} /* spliceTrackSlideErrors  */
+
+#ifdef JUNK
+static void spliceTrackSlideErrorsOld (Array err, Array dnaLong, Array dnaShort)
 {
   int i, n ;
   A_ERR *ep ;
@@ -1319,22 +1412,30 @@ static void spliceTrackSlideErrors (Array err, Array dnaLong, Array dnaShort)
             }
           ep->iLong++ ; /* bonus long sliding */
           break ;
-        case INSERTION_TRIPLE:        
-	  ep->iShort-=2 ;
-	  break ;
         case INSERTION_DOUBLE:        
           cs = arrp(dnaLong, ep->iLong - 1, char) ;
           cc = ep->baseShort ; i = arrayMax(dnaLong) - ep->iLong ;
-          while (i-- && *(++cs) == cc)
+	  if (0)           while (i-- && *(++cs) == cc)
             { 
               ep->iShort-- ;
               ep->iLong++ ;
             }
           ep->iLong++ ; ep->iShort++ ;  /* bonus double sliding */
           break ;
+        case INSERTION_TRIPLE:
+          cs = arrp(dnaLong, ep->iLong - 1, char) ;
+          cc = ep->baseShort ; i = arrayMax(dnaLong) - ep->iLong ;
+          if (0) while (i-- && *(++cs) == cc)
+            { 
+              ep->iShort-- ;
+              ep->iLong++ ;
+            }
+	  ep->iLong++ ; ep->iShort+=2 ;  /* bonus double sliding */
+	  break ;
         }
     }
 }
+#endif
 
 /*************************************************************/
 /*********************************************************************/
@@ -1344,6 +1445,9 @@ static void spliceTrackSlideErrors (Array err, Array dnaLong, Array dnaShort)
  * else the code to extend backwards is not written  
  */
 
+
+
+
 Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
 			       Array dna2, Array dna2R, int *a1p, int *a2p, 
 			       int *NNp, Array err, int maxJump, int maxError, 
@@ -1352,7 +1456,9 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
   int i, j, nn, u1, u2, y1 = *x1p, b1 = *a1p ;
   A_ERR *ep, *ep2, *eptmp ;
   Array err1 = 0, err2 = 0 ;
-
+  int maxErrorOld = maxError ;
+  BOOL doExtendOld = doExtend ;
+  
   if (isDown)      /* Plato */
     {
       if (*x1p < 1) *x1p = 1 ;
@@ -1361,9 +1467,25 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
       if (*a1p < 1) *a1p = 1 ;
       if (*a2p > arrayMax(dna2)) *a2p = arrayMax(dna2) ;
 
+      if (maxErrorOld == -2)
+	{ maxError = -2 ; doExtend = FALSE ; }
+      if (maxErrorOld == -3)
+	{ maxError = -2 ; doExtend = TRUE ; }
+      if (maxError == -9)
+	{
+	  spliceTrackAllErrors (dna1, *x1p - 1, x2p, dna2, *a1p - 1, a2p, NNp, err, maxJump, maxError
+				, FALSE, maxExactp) ;
+	  return err ;
+	}
       err1 = arrayCreate (5, A_ERR) ; /* smaller value 5 limits the number of memset 0 */
       err1 = spliceTrackAllErrors (dna1, *x1p - 1, x2p, dna2, *a1p - 1, a2p, NNp, err1, maxJump, maxError
 				   , doExtend, maxExactp) ;
+      
+	
+      if (maxErrorOld == -2)
+	{ maxError = -2 ; doExtend = doExtendOld ; }
+      if (maxErrorOld == -3)
+	{ maxError = -3 ; doExtend = doExtendOld ; }
 
       u1 = *x1p - 1 ; u2 = *a1p - 1 ; /* C type coord of first base */
       if (err1 && arrayMax (err1))
@@ -1377,6 +1499,10 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
 	      u1 = *x1p ; u2 = *a1p ; /* C type coord of first error */
 	    }
 	}
+      if (maxErrorOld == -2)
+	{ maxError = -2 ; doExtend = TRUE ; }
+      if (maxErrorOld == -3)
+	{ maxError = -2 ; doExtend = FALSE ; }
       if ((u1 > y1 && u2 >= b1) || doExtend)
 	  {
 	    int uz1 = u1 - 1, uz2 = u2 - 1 ;
@@ -1385,6 +1511,10 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
 	    err2 = aceDnaTrackErrorsBackwards (dna1, uz1, &u1, dna2, uz2, &u2, NNp, err2, maxJump, maxError, doExtend) ;
 	    *x1p = u1 + 1 ; *a1p = u2 + 1 ;
 	  }
+      if (maxErrorOld == -2)
+	{ maxError = -2 ; doExtend = doExtendOld ; }
+      if (maxErrorOld == -3)
+	{ maxError = -3 ; doExtend = doExtendOld ; }
       j = 0 ; 
       if (err2 && arrayMax (err2))
 	for (i = arrayMax (err2) - 1 ; i >= 0 ; i--)
@@ -1392,12 +1522,18 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
 	    ep = arrp (err2, i, A_ERR) ;
 	    if (ep->iShort < *x1p - 1)
 	      continue ;
-	    if (i > 1 && ep->type == ERREUR && (ep->iShort > (ep[-1].iShort-2)))
+	    if (i > 1 && ep->type == ERREUR)
 	      {
-		if (*x1p < ep->iShort)
-		  { *x1p = ep->iShort ; *a1p = ep->iLong ; }
-		continue ;
+		if (*x1p < ep->iShort + 1 && ep->iShort > (ep[-1].iShort-2))
+		  { *x1p = ep->iShort + 1 ; *a1p = ep->iLong + 1 ; }
 	      }
+	  }
+      if (err2 && arrayMax (err2))
+	for (i = arrayMax (err2) - 1 ; i >= 0 ; i--)
+	  { 
+	    ep = arrp (err2, i, A_ERR) ;
+	    if (ep->iShort < *x1p + 1)
+	      continue ;
 	    if ( (NNp && ep->baseShort == N_) || ep->type)
 	      {
 		ep2 = arrayp (err, j++, A_ERR) ;
@@ -1459,14 +1595,14 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
       if (*x2p < 1) *x2p = 1 ;
       if (*x1p > arrayMax(dna1)) *x1p = arrayMax(dna1) ;
 
-      if (*a1p < 1) *a1p = 1 ;
-      if (*a2p > arrayMax(dna2)) *a2p = arrayMax(dna2) ;
+      if (*a2p < 1) *a2p = 1 ;
+      if (*a1p > arrayMax(dna2)) *a1p = arrayMax(dna2) ;
 
       u1 = nn - *a1p + 1 ; u2 = nn - *a2p + 1 ; /* reversed biologist coordinates */
       
-      err = spliceTrackAllErrors (dna1, *x2p - 1, x1p, dna2R, u2 - 1, &u1, NNp, err, maxJump, maxError, doExtend, maxExactp) ;
+      err = spliceTrackAllErrors (dna1, *x1p - 1, x2p, dna2R, u1 - 1, &u2, NNp, err, maxJump, maxError, doExtend, maxExactp) ;
       
-      *a1p = nn - u1 + 1 ; /* restore */
+      *a2p = nn - u2 + 1 ; /* restore */
       
       /* remove the ambiguous errors */
       if (arrayMax(err) && ! NNp)
@@ -1488,7 +1624,7 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
             {
               /* ep is base-0 non-bio coords */
               ep->iLong = nn - ep->iLong - 1 ;
-	      ep->baseShort = complementBase[(int)ep->baseShort] ;
+	      ep->baseShort = complementBase(ep->baseShort) ;
             }
         }
       /* reverse the table of errors */
@@ -1851,53 +1987,51 @@ static int oligoEntropy4 (unsigned const char *dna, int ln, int minEntropy)
 #endif
 
 /*********************************************************************/
-/* bp equivalent of the oligo complexity seen in dimers
- *
- * input is dna, x1/x2 in bio-coords
- */
+/* bp equivalent of the oligo complexity seen in dimers */
 
 static int oligoEntropy16 (unsigned const char *dna, int ln, int minEntropy) 
 {
   int ss = 0 ;
-  int n, nn, dx = ln ;
+  int n, nn = 0, dx = ln ;
   unsigned const char *ccp ;
   static Array ee = 0 ;
   int cc, bb[16] ;
   BOOL complement = FALSE ;
 
-  if (! dna)
-    return 0 ;
-  /* count all non N dimers */
-  
-  /* if (dx > 1000) dx = 1000 ; */
-  if (dx < 0) dx = 0 ;
   memset (bb, 0, sizeof(bb)) ;
-  for (n = nn = 0, cc = 0, ccp = dna ; dx ; dx--, ccp++)
-    {
-      cc = (cc << 2) & 0xf ; n++ ;
-      switch ((int)(*ccp))
-	{
-	case A_: case 'a': if ( complement) cc |= 0x1 ; break ;
-	case T_: case 't': if (!complement) cc |= 0x1 ; break ;
-	case G_: case 'g': if ( complement) cc |= 0x3 ; else cc |= 0x2 ; break ;
-	case C_: case 'c': if ( complement) cc |= 0x2 ; else cc |= 0x3 ; break ;
-	case FS_: if (ccp[1] == RS_) complement = TRUE ; n = 0 ; break ;
-	default: n = 0 ; break ;
-	}
-      if (n >= 2) { nn++ ; bb[cc]++ ;}
-    }
-  if (minEntropy && nn < minEntropy)
-    return FALSE ;
 
+  if (dna)
+    {
+      /* count all non N dimers */
+      
+      /* if (dx > 1000) dx = 1000 ; */
+      if (dx < 0) dx = 0 ;
+      for (n = nn = 0, cc = 0, ccp = dna ; dx ; dx--, ccp++)
+	{
+	  cc = (cc << 2) & 0xf ; n++ ;
+	  switch ((int)(*ccp))
+	    {
+	    case A_: case 'a': if ( complement) cc |= 0x1 ; break ;
+	    case T_: case 't': if (!complement) cc |= 0x1 ; break ;
+	    case G_: case 'g': if ( complement) cc |= 0x3 ; else cc |= 0x2 ; break ;
+	    case C_: case 'c': if ( complement) cc |= 0x2 ; else cc |= 0x3 ; break ;
+	    case FS_: if (ccp[1] == RS_) complement = TRUE ; n = 0 ; break ;
+	    default: n = 0 ; break ;
+	    }
+	  if (n >= 2) { nn++ ; bb[cc]++ ;}
+	}
+      if (minEntropy && nn < minEntropy)
+	return FALSE ;
+    }
   /* lazy calculation of all the logs */
-  if (nn < 1000)
+  if (nn < 128)
     {
       double s1 = 0 ;
       if (! ee || nn * nn + nn  >= arrayMax(ee))
 	{
 	  double s = 0, log16 = log(16.0) ; /* divide by log16 to be in base equivalent */ 
 	  int n, j, n2 ;
-	  
+	  nn = 128 ;	  
 	  ee = arrayReCreate (ee, nn*nn + nn, int) ;
 	  for (n2 = 1 ; n2 < nn ; n2 <<= 1) ;
 	  for (n = 1 ; n <= n2 ; n++)
@@ -1908,7 +2042,7 @@ static int oligoEntropy16 (unsigned const char *dna, int ln, int minEntropy)
 	    }
 	}
       
-      for (s1 = 0, n = 0 ; n < 16 ; n++)
+      for (s1 = 0, n = 0 ; dna && n < 16 ; n++)
 	{ 
 	  s1 += arr (ee, nn * nn + bb[n], int) ; 
 	  /* fprintf (stderr,  "   %d\t%d\t%.2f\n", n, bb[n], s1) ;  */
@@ -1920,7 +2054,7 @@ static int oligoEntropy16 (unsigned const char *dna, int ln, int minEntropy)
     { 
       double s = 0, s1 = 0, log16 = log(16.0) ; /* divide by log16 to be in base equivalent */ 
       ss = 0 ;
-      for (ss = 0, n = 0 ; n < 16 ; n++)
+      for (ss = 0, n = 0 ; dna && n < 16 ; n++)
 	if (bb[n])
 	  { 
 	    s = bb[n] ; s1 -=  (1000.0 * s * log(s/nn)/log16 ) ; 
@@ -1936,6 +2070,7 @@ static int oligoEntropy16 (unsigned const char *dna, int ln, int minEntropy)
 } /* oligoEntropy16 */
 
 /********************************************************************/
+
 
 int oligoEntropy (unsigned const char *dna, int ln, int minEntropy) 
 {

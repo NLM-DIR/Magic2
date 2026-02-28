@@ -876,7 +876,7 @@ static void spreadHtmlDump(void)
   filclose(f) ;
 
   return;
-} /* spreadAsciiDump */
+} /* spreadHtmlDump */
 
 /**********************************************************/
 
@@ -992,7 +992,9 @@ void spreadDisplayData(SPREAD spread)
       array(spread->flags, arrayMax(spread->tableau) - 1 , char) = 0 ;
 				    
       for (j = 0, col = 4; j < maxCol; j++)
-	{ c = arrp(spread->colonnes,j1 = arr(pos2col,j, int) ,COL) ;
+	{
+	  j1 = arr(pos2col,j, int) ;
+	  c = arrp(spread->colonnes,j1,COL) ;
 	  if (!c->hidden)
 	    { graphBoxStart() ; /* mhmp 20.11.02 */
 				if (*c->subtitleBuffer)
@@ -1014,7 +1016,9 @@ void spreadDisplayData(SPREAD spread)
 	  nn++ ;
 	  oldLineArray = lineArray ;
 	  for(j = jj = 0,  col = 4; j < maxCol; j++)
-	    { c = arrp(spread->colonnes,j1 = arr(pos2col,j, int) ,COL) ;
+	    {
+	      j1 = arr(pos2col,j, int) ;
+	      c = arrp(spread->colonnes,j1,COL) ;
 	      if (!c->hidden)
 		{ 
 		  su = arrp(lineArray, j1,SPCELL) ;
@@ -1109,7 +1113,9 @@ void spreadDisplayData(SPREAD spread)
 
   i = 0 ;
   for(j = 0 ,  col = 4; j < maxCol; j++)
-    { c = arrp(spread->colonnes,j1 = arr(pos2col,j, int) ,COL) ;
+    {
+      j1 = arr(pos2col,j, int) ;
+      c = arrp(spread->colonnes,j1,COL) ;
       if (!c->hidden)
 	i++ ;
     }
@@ -1159,7 +1165,9 @@ static void spreadSelect(SPREAD spread, int box)
       }
   n = n%max ;
   for(j = 0 ; j < maxCol; j++)
-    { c = arrp(spread->colonnes,j1 = arr(pos2col,j, int) ,COL) ;
+    {
+      j1 = arr(pos2col,j, int) ;
+      c = arrp(spread->colonnes,j1,COL) ;
       if (!c->hidden)
 	{ if (!n--)
 	    { spread->activeColonne  = j1 ;  /* may be j */
@@ -1220,7 +1228,9 @@ void spreadSelectFromMap(SPREAD spread, int line, int colonne)
     return ; /* failure */
   
   for(j = 0 ; j < maxCol; j++)
-    { c = arrp(spread->colonnes,j2 = arr(pos2col,j, int) ,COL) ;
+    {
+      j2 = arr(pos2col,j, int) ;
+      c = arrp(spread->colonnes,j2,COL) ;
       if (!c->hidden)
 	{ if (j2 == colonne)
 	    { spreadSelect(spread, max*j1 + j  +  spread->tableauBox + 1 ) ;
@@ -1411,7 +1421,8 @@ static void spreadPick (int box, double x, double y)
 	    n = n%max ;
 	    for(j = 0 ; j < maxCol; j++)
 	      { 
-		c = arrp(spread->colonnes,j1 = arr(pos2col,j, int) ,COL) ;
+		j1 = arr(pos2col,j, int) ;
+		c = arrp(spread->colonnes,j1,COL) ;
 		if (!c->hidden && !n--)
 		  break ;
 	      }

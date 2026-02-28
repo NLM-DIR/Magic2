@@ -27,9 +27,6 @@
  */
 
 /* $Id: fmapcontrol.c,v 1.77 2019/09/26 20:38:10 mieg Exp $ */
-
-/* #define ARRAY_CHECK */
-
 #include "fmap_.h"
 #include "bitset.h"
 #include "chrono.h"
@@ -149,7 +146,7 @@ static KEY _EMBL_feature ;
        KEY _Arg1_URL_suffix ;
        KEY _Arg2_URL_prefix ;
        KEY _Arg2_URL_suffix ;
-static KEY _Spliced_cDNA, _Spliced_cDNA_Decorate,  _Gene_name, _Transcribed_gene, _From_gene ;
+static KEY _Exon_support, _Spliced_cDNA, _Spliced_cDNA_Decorate,  _Gene_name, _Transcribed_gene, _From_gene ;
 static KEY _Probe_hit, _Probe_exact_hit ;
 static KEY _VIntron = 0, _VTranscribed_gene = 0, _VTranscript = 0 , _VmRNA = 0,  _VmProduct = 0, _VRNAi = 0, _VIST = 0, _VOST = 0 ;
 static KEY _Fmap_Header
@@ -202,6 +199,7 @@ void fMapInitialise (void)
   _Arg2_URL_prefix = str2tag ("Arg2_URL_prefix") ;
   _Arg2_URL_suffix = str2tag ("Arg2_URL_suffix") ;
   _From_gene  = str2tag ("From_gene") ;
+  _Exon_support = str2tag ("Exon_support") ;
   _Spliced_cDNA  = str2tag ("Spliced_cDNA") ;
   _Spliced_cDNA_Decorate  = str2tag ("Spliced_cDNA_Decorate") ;
   _Gene_name = str2tag ("Gene_name") ;
@@ -650,6 +648,7 @@ static void setZoneUserCoords (LOOK look, int x0, int x1)
 			 COORD (look, look->zoneMax)-1),
 	     15) ;
   if (look->zoneBox) graphBoxDraw (look->zoneBox, -1, -1) ;
+
   fMapReDrawDNA (look) ;
 }
 
@@ -778,21 +777,26 @@ static void drawHeader (LOOK look)
     graphTextScrollEntry (look->zoneBuf, 23, 14, 56.5, .5, 
 			  TEXT_ENTRY_FUNC_CAST fMapSetZone) ;
 
+  graphText ("Centre:", 72., .5) ;
+  sprintf (look->centreBuf, "%d", (int)COORD(look, look->map->centre)) ;
+  look->centreBox = graphBoxStart () ;
+  graphTextPtr (look->centreBuf, 80., .5, 9) ;
+  graphBoxEnd () ;
   /* mhmp 02.06.98 + 08.09.98 */
   graphEntryDisable () ;
   graphRegister (KEYBOARD, fMapKbd) ;			
   if (look->flag & FLAG_COMPLEMENT)
-    graphText ("COMPLEMENT", 70, 0) ;
+    graphText ("COMPLEMENT", 90, 0) ;
   if (look->flag & FLAG_COMPLEMENT_SUR_PLACE)
     {
-      graphText ("COMP_DNA", 81, 0) ;
-      graphText ("IN_PLACE", 81, 1) ;
+      graphText ("COMP_DNA", 101, 0) ;
+      graphText ("IN_PLACE", 101, 1) ;
     }
   if (( (look->flag & FLAG_COMPLEMENT) && 
        ! (look->flag & FLAG_REVERSE)) || 
       (! (look->flag & FLAG_COMPLEMENT) &&
        (look->flag & FLAG_REVERSE)))
-    graphText ("REVERSED", 70, 1) ;
+    graphText ("REVERSED", 90, 1) ;
 
   look->segBox = graphBoxStart () ;
   graphTextPtr (look->segTextBuf, 2, 2, 126) ;
@@ -993,6 +997,7 @@ void fMapDraw (LOOK look, KEY from)
 
   graphClear () ;
   look->summaryBox = 0 ;
+  look->mrnaOffset = 0 ;
   graphFitBounds (&mapGraphWidth, &mapGraphHeight) ;
   graphMenu (fMapMenu) ;
   if (!look->isOspSelecting)
@@ -1244,6 +1249,9 @@ static void fMapLeftDrag (double x, double y)
 {
   graphXorLine (0, oldy, mapGraphWidth, oldy) ;
   oldy = y ;
+  int centre = COORD (oldlook, y) ;
+  sprintf (oldlook->centreBuf, "%d", centre) ;
+  graphBoxDraw (oldlook->centreBox, BLACK, WHITE) ;
   graphXorLine (0, y, mapGraphWidth, y) ;
 }
 
@@ -1369,6 +1377,7 @@ static void fMapPick (int box, double x, double y)
   float x1,x2,y1,y2 ;
   int xxx, ii ;
   FMAPLOOKGET ("fMapPick") ;
+  SEG *seg = BOXSEG (box) ;
   
   if (look != selectedfMap)
     fMapSelect (look) ; 
@@ -1377,6 +1386,7 @@ static void fMapPick (int box, double x, double y)
     { graphBoxDim (box, &x1, &y1, &x2, &y2) ;
       y += y1 ;
       oldy = y ;
+      oldlook = look ;
       graphColor (BLACK) ;
       graphXorLine (0, y, mapGraphWidth, y) ;
       graphRegister (LEFT_DRAG, (GraphFunc)fMapLeftDrag) ;
@@ -1399,7 +1409,7 @@ static void fMapPick (int box, double x, double y)
     graphTextEntry (look->zoneBuf,0,0,0,0) ;
   else if (box >= look->minLiveBox &&
 	   box != look->summaryBox && 
-	   BOXSEG (box))
+	   seg)
     {
       if (box == look->activeBox &&
 	  BOXSEG (box)->type != DNA_SEQ &&
@@ -1846,36 +1856,20 @@ int fMapOrder (const void *a, const void *b)
   else if (diff < 0)
     return -1 ;
 
-  if ((seg1->type | 0x1) == SPLICED_cDNA_UP)
+  if ((seg1->type | 0x1) == SPLICED_cDNA_UP || (seg1->type | 0x1) == EXON_SUPPORT_UP)
     {
       if (! (seg1->source && seg2->source)) /* The transcribed_gene */
 	return seg1->source ? -1 : 1 ;
-      diff = * (int*) (&seg1->source) - * (int*) (&seg2->source) ;
-      if (diff)
-	return diff ;
-      diff = seg1->parent - seg2->parent ;  /* The cdna top coord */
-      if (diff)
-	return (seg1->type & 0x1) ? -diff : diff ;
-      else /* same parent */
-      {
-	int x1, x2, y1, y2 ;  /* the way this est-seg goes in the gene */
+      if (seg1->source < seg2->source) return -1 ;
+      if (seg1->source > seg2->source) return 1 ;
 
-	x1 = seg1->data.i >> 14 & 0x3FFF ;
-	x2 = seg1->data.i & 0x3FFF ;
-	y1 = seg2->data.i >> 14 & 0x3FFF ;
-	y2 = seg2->data.i & 0x3FFF ;
-	
-	if ((x1 - x2) * (y1 - y2) < 0) 
-	  {
-	    if (seg1->type & 0x1)
-	      return x1 > x2 ? -1 : 1 ;
-	    else
-	      return x1 < x2 ? -1 : 1 ;
-	  }
-	diff = seg1->key - seg2->key ;
-	if (diff) /* different reads from same clone */
-	  return diff ;
-      }
+      if (seg1->key < seg2->key) return -1 ;
+      if (seg1->key > seg2->key) return 1 ;
+
+      if (seg1->x1 < seg2->x1) return -1 ;
+      if (seg1->x1 > seg2->x1) return 1 ;
+
+      return 0 ;
     }
   if ((seg1->type | 0x1) == TRANSCRIBEDGENE_UP ||
       (seg1->type | 0x1) == TRANSCRIPT_UP ||
@@ -2077,13 +2071,15 @@ void fMapProcessMethods (LOOK look)
 	    processMethod (look, key, 3.25, fMapcDNAShowProbe) ; 
 	    break ;
 	  case MOST: case MOST_UP:
-	    processMethod (look, key, 3.28, fMapcDNAShowOST) ; 
+	    processMethod (look, key, 3.27, fMapcDNAShowOST) ; 
 	    break ;
 	  case MPRODUCT: case MPRODUCT_UP:
 	    processMethod (look, key, 3.08, fMapcDNAShowMProduct) ; 
 	    break ;
+	  case EXON_SUPPORT: case EXON_SUPPORT_UP:
+	    processMethod (look, key, 3.28, fMapcDNAShowExonSupport) ; 
 	  case SPLICED_cDNA: case SPLICED_cDNA_UP:
-	    processMethod (look, key, 3.32, fMapcDNAShowSplicedcDNA) ; 
+	    processMethod (look, key, 3.30, fMapcDNAShowSplicedcDNA) ; 
 	  case SPLICED_cDNA_DECORATE: case SPLICED_cDNA_DECORATE_UP:
 	    processMethod (look, key, 3.30, fMapcDNADecorateSplicedcDNA) ; 
 	    break ;
@@ -2235,7 +2231,8 @@ BOOL fMapConvert (LOOK look, BOOL force)
   BOOL	isDown, isExons ;
   AC_HANDLE oldSegsHandle ;
   SEQINFO *sinf ;
-  KEY M_Transposon, M_SPLICED_cDNA, M_SPLICED_cDNA_DECORATE, M_GENE_NAME, M_RNA ;
+  KEY _PolyA_found = str2tag("PolyA_found") ;
+  KEY M_Transposon, M_EXON_SUPPORT, M_SPLICED_cDNA, M_SPLICED_cDNA_DECORATE, M_GENE_NAME, M_RNA ;
   KEY M_TRANSCRIBEDGENE, M_TRANSCRIPT, M_mRNA, M_PmRNA, M_mProduct, M_GENES, M_RNAI, M_SOLEXA, M_OST, M_Pseudogene, M_Coding ;
   KEY _Best_product = str2tag ("Best_product") ;
   Array units = 0 ;
@@ -2262,6 +2259,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
   M_OST = defaultSubsequenceKey ("OST", DARKGRAY, 3.06, TRUE) ;
   M_mProduct = defaultSubsequenceKey ("mProduct", DARKGRAY, 3.3, TRUE) ;
   M_TRANSCRIPT = defaultSubsequenceKey ("TRANSCRIPT", DARKGRAY, 3.24, FALSE) ;
+  M_EXON_SUPPORT = defaultSubsequenceKey ("EXON_SUPPORT", DARKGRAY, 3.35, TRUE) ;
   M_SPLICED_cDNA = defaultSubsequenceKey ("SPLICED_cDNA", DARKGRAY, 3.4, FALSE) ;
   M_SPLICED_cDNA_DECORATE = defaultSubsequenceKey ("SPLICED_cDNA_DECORATE", DARKGRAY, 3.4, FALSE) ;
   M_GENE_NAME = defaultSubsequenceKey ("GENE_NAME", DARKGRAY, 10.0, FALSE) ;
@@ -2645,8 +2643,11 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	}
       
       parent = seg->key ;
-      sinf = arrp (look->seqInfo, seg->data.i, SEQINFO) ;
-
+      int myFlag = (seg->type | 0x1) == TRANSCRIBEDGENE_UP && seg->key == seg->parent ? seg->data.i : 0 ; /* restore the SL info of the transcribed gene, this looks fragile. 2025_01_09 */
+      seg->data.i = arrayMax (look->seqInfo) ;
+      sinf = arrayp (look->seqInfo, seg->data.i, SEQINFO) ;
+      sinf->flags = myFlag ;
+      
       if (bsFindTag (obj, str2tag ("Genomic_canonical")) ||
 	  /* bsFindTag (obj, str2tag ("IS_bac")) || */
 	  bsFindTag (obj, str2tag ("Genomic")))
@@ -2907,6 +2908,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	    { 
 	      char *cp ;
 	      int mycol = 0 ;
+	      int cover = 0 ;
 	      KEY intr ;
 	      KEY chrom ;
 	      int tg1 , tg2 ;
@@ -2945,6 +2947,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
 				iCol = 8 ;
 			      if (iCol > 0)
 				mycol = iCol ;
+			      cover = x ;
 			    }
 			  bsDestroy (Intr) ;
 			}
@@ -2971,8 +2974,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
 			    lexaddkey ("Other", &seg1->data.k,0) ;
 			}
 		    }
-		  if (mycol)
-		    seg1->data.k |= (mycol << 24) ;
+		  seg1->data.k = mycol ? KEYMAKE (mycol, cover) : 0 ;
 		}
 	    }
 	}
@@ -3143,7 +3145,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	  bsGetArray (obj, str2tag ("Coding"), units, 5))
 	{ 
 	  char bestP[1024], *bp, *cp ;
-	  int ibp = 0, nbp = 0, isExon ;
+	  int ibp = 0, nbp = 0, isExon, nX = 0 ;
 	  KEY prod ;
 	  BSunit *uu ;
 
@@ -3195,7 +3197,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	      seg1->key = M_mRNA ;
 	      seg1->type = (isDown) ? MRNA : MRNA_UP ;
 	    }
-	  seg1->parent = seg->key ; 
+	  seg1->parent = seg->key ;
 
 	  for (i = 0 ; i < arrayMax (units) ; i += 5)
 	    { 
@@ -3225,40 +3227,108 @@ BOOL fMapConvert (LOOK look, BOOL force)
 		seg1->type = (isDown) ? MRNA : MRNA_UP ;
 	      seg1->data.i = 0 ;
 	      if (isExon)
-		seg1->data.i |= 2 ;
+		{		     
+		     switch (nX % 7)
+		       {
+		       case 0: seg1->data.i = 2 ; break ;
+		       case 1: seg1->data.i = 3 ; break ;
+		       case 2: seg1->data.i = 6 ; break ;
+		       case 3: seg1->data.i = 7 ; break ;
+		       case 4: seg1->data.i = 10 ; break ;
+		       case 5: seg1->data.i = 14 ; break ;
+		       case 6: seg1->data.i = 15 ; break ;
+		       }
+		     nX++ ; /* RED YELLOW */
+		}
+
 	    }
 	}
 
          /* mRNA pieces, Valid3p  mieg */
       pos1 = 0 ;
-      if (( (seg->type | 0x1) == PMRNA_UP || (seg->type | 0x1) == MRNA_UP) &&
-	  bsGetArray (obj, str2tag ("Valid3p"), units, 5))
-	{ 
-	  BSunit *uu ; char *cp ;
-
-	  for (i = 0 ; i < arrayMax (units) ; i += 5)
+      if (( (seg->type | 0x1) == PMRNA_UP || (seg->type | 0x1) == MRNA_UP))
+	{
+	  if (bsGetArray (obj, str2tag ("Valid3p"), units, 5))
 	    { 
-	      if (arrayMax (units) < i + 1)
-		continue ;
-	      uu = arrp (units, i, BSunit) ; 
-	      pos1 = uu[0].i ;
-	      pos2 = pos1 ;
-
-	      seg1 = arrayp (segs,nsegs++,SEG) ; seg = arrp (segs,iseg,SEG) ;
-	      POS_TO_SEG1 ;
-	      seg1->key = str2tag ("Valid3p") ;
-	      seg1->parent = seg->key ; 
-	      seg1->source = seg->source + 1 ; /* needed for correct order */
-	      seg1->sourceDx = seg->sourceDx - 2 ;
-	      if ((seg->type | 0x1) == PMRNA_UP)
-		seg1->type = (isDown) ? PMRNA : PMRNA_UP ;
-	      else
-		seg1->type = (isDown) ? MRNA : MRNA_UP ;
-	      seg1->data.i = uu[2].i ; /* nb of supporting clones */
-	      cp = arr (units, i + 3, BSunit).s ;
-	      if (cp && *cp && strcasecmp (cp, "AATAAA"))
-		seg1->data.i = - seg1->data.i ;
+	      BSunit *uu ; char *cp ;
+	      
+	      for (i = 0 ; i < arrayMax (units) ; i += 5)
+		{ 
+		  if (arrayMax (units) < i + 1)
+		    continue ;
+		  uu = arrp (units, i, BSunit) ; 
+		  pos1 = uu[0].i ;
+		  pos2 = pos1 ;
+		  
+		  seg1 = arrayp (segs,nsegs++,SEG) ; seg = arrp (segs,iseg,SEG) ;
+		  POS_TO_SEG1 ;
+		  seg1->key = str2tag ("Valid3p") ;
+		  seg1->parent = seg->key ; 
+		  seg1->source = seg->source + 1 ; /* needed for correct order */
+		  seg1->sourceDx = seg->sourceDx - 2 ;
+		  if ((seg->type | 0x1) == PMRNA_UP)
+		    seg1->type = (isDown) ? PMRNA : PMRNA_UP ;
+		  else
+		    seg1->type = (isDown) ? MRNA : MRNA_UP ;
+		  seg1->data.i = uu[2].i ; /* nb of supporting clones */
+		  cp = arr (units, i + 3, BSunit).s ;
+		  if (cp && *cp && strcasecmp (cp, "AATAAA"))
+		    seg1->data.i = - seg1->data.i ;
+		  if (bsFindTag (obj, str2tag ("Aggregated_3p_clones")))
+		    seg1->data.i |= (1 << 24) ;
+		}
 	    }
+	  else
+	    {
+	      static Array pA = 0 ;
+	      if (bsFindTag (obj, str2tag ("PolyA_found")))
+		{
+		  /* last mRNA exons, reclip on the polyA */
+		  int dx = 0, maxA = 0 ;
+		  pA = arrayReCreate (pA, 40, BSunit) ;
+		  bsGetArray (obj, _PolyA_found, pA, 3) ;
+		  for (int j = 0 ; j < arrayMax (pA) ; j+= 3)
+		    {
+		      BSunit *pp = arrp (pA, j, BSunit) ;
+		      if (pp[2].i > maxA)
+			{ dx = pp[0].i ; maxA = pp[2].i ; }
+		    }
+
+		  pos1 = pos2 = seg->x2 - seg->x1 + dx ;
+		  seg1 = arrayp (segs,nsegs++,SEG) ; seg = arrp (segs,iseg,SEG) ;
+		  POS_TO_SEG1 ;
+		  seg1->key = str2tag ("Valid3p") ;
+		  seg1->parent = seg->key ; 
+		  seg1->source = seg->source + 1 ; /* needed for correct order */
+		  seg1->sourceDx = seg->sourceDx - 2 ;
+		  
+		  if ((seg->type | 0x1) == PMRNA_UP)
+		    seg1->type = (isDown) ? PMRNA : PMRNA_UP ;
+		  else
+		    seg1->type = (isDown) ? MRNA : MRNA_UP ;
+		  seg1->data.i = 10 ;
+		  seg1->data.i = - seg1->data.i ;
+		  seg1->data.i |= (1 << 24) ;
+		}
+	      else if (bsFindTag (obj, str2tag ("Aggregated_3p_clones")))
+		{
+		  pos1 = pos2 = seg->x2 - seg->x1 ;
+		  seg1 = arrayp (segs,nsegs++,SEG) ; seg = arrp (segs,iseg,SEG) ;
+		  POS_TO_SEG1 ;
+		  seg1->key = str2tag ("Valid3p") ;
+		  seg1->parent = seg->key ; 
+		  seg1->source = seg->source + 1 ; /* needed for correct order */
+		  seg1->sourceDx = seg->sourceDx - 2 ;
+		  
+		  if ((seg->type | 0x1) == PMRNA_UP)
+		    seg1->type = (isDown) ? PMRNA : PMRNA_UP ;
+		  else
+		    seg1->type = (isDown) ? MRNA : MRNA_UP ;
+		  seg1->data.i = 10 ;
+		  seg1->data.i = - seg1->data.i ;
+		  seg1->data.i |= (1 << 24) ;
+		}
+	    }	    
 	}
 
            /* mRNA pieces, Valid5p  mieg */
@@ -3274,7 +3344,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	  BSunit *uu ;
 	  KEYSET testKs = 0 ;
 	  testKs = queryKey (seg->key, ">product ; mRNA_5p_complete && best_product && !at_position_1") ; 
-	  if (!testKs) 
+	  if (! keySetMax(testKs)) 
 	    for (i = 0 ; i < arrayMax (units) ; i += 3)
 	      { 
 		if (arrayMax (units) < i + 1)
@@ -3404,6 +3474,8 @@ BOOL fMapConvert (LOOK look, BOOL force)
 		      cp = arr (units, i + 3, BSunit).s ;
 		      if (cp && *cp && strcasecmp (cp, "AATAAA"))
 			seg1->data.i = - seg1->data.i ;
+		      if (bsFindTag (Mrna, str2tag ("Aggregated_3p_clones")))
+			seg1->data.i |= (1 << 24) ;
 		    }
 		  /* disregard a valid5p if protein was constructed from AA==1 
 		   * it means that the protein was computed before we decided
@@ -3467,7 +3539,9 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	  seg1 = arrayp (segs,nsegs++,SEG) ; seg = arrp (segs,iseg,SEG) ;
 	  seg1->key = M_SPLICED_cDNA ;
 	  seg1->type = (isDown) ? SPLICED_cDNA : SPLICED_cDNA_UP ;
-
+	  seg1 = arrayp (segs,nsegs++,SEG) ; seg = arrp (segs,iseg,SEG) ;
+	  seg1->key = M_EXON_SUPPORT ;
+	  seg1->type = (isDown) ? EXON_SUPPORT : EXON_SUPPORT_UP ;
 	  for (i = 0 ; !foundGeneName && i < arrayMax (units) ; i += 5)
 	    { 
 	      KEY est = arr (units, i+2, BSunit).k ;
@@ -3519,7 +3593,9 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	      fMapcDNADoFillData (seg1) ; /* implies objCreate, unfortunate, but needed for ordering */ 
 	      /* now seg1->parent == KEYKEY (cdna_clone */
 	      seg1->type = (isDown) ? SPLICED_cDNA : SPLICED_cDNA_UP ;
-	      seg1->source = seg->x1 + 1 ;  /* avoid zero , as happens in mRNA case where parent is main object*/
+	      if (! strncmp (name(seg1->key), "XH_",3)|| ! strncmp (name(seg1->key), "XG_",3))
+		seg1->type = (isDown) ? EXON_SUPPORT : EXON_SUPPORT_UP ;
+	      seg1->parent = seg->x1 + 1 ;  /* avoid zero , as happens in mRNA case where parent is main object*/
 	    }
 	  for (i = i0 ; i < nsegs ; i++) /* get the lowest x1 for each clone */
 	    {
@@ -3527,7 +3603,8 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	      KEY myparent, mysource, mytag ;
 	      BOOL myup ;
 	      seg = arrp (segs, i , SEG) ;
-	      if ((seg->type | 0x1) != SPLICED_cDNA_UP)
+	      if ((seg->type | 0x1) != SPLICED_cDNA_UP &&
+		  (seg->type | 0x1) != EXON_SUPPORT_UP)
 		continue ;
 
 	      if (class (seg->key) == _VMethod)
@@ -3581,10 +3658,12 @@ BOOL fMapConvert (LOOK look, BOOL force)
 		{
 		  /* cheat so that tilingEst appear globaly left of the non tiling est if fMapOrder */
 		case SPLICED_cDNA:
+		case EXON_SUPPORT:
 		  if (keySetFind (tilingEst, seg1->key, 0))
 		    seg1->source-- ; 
 		  break ;
 		case SPLICED_cDNA_UP:
+		case EXON_SUPPORT_UP:
 		  if (keySetFind (tilingEst, seg1->key, 0))
 		    seg1->source++ ; 
 		  break ;
@@ -3841,7 +3920,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	    else
 	      seg1->data.s = 0 ;
 	  }
-      
+    
       /* EMBL features */
       if (bsFindTag (obj, _EMBL_feature) && bsFlatten (obj, 4, units))
 	for (i = 0 ; i < arrayMax (units) ; i += 4)
@@ -3981,7 +4060,7 @@ BOOL fMapConvert (LOOK look, BOOL force)
   /* confirmed introns: add all now, and remove duplicates with those
      from genes later in fMapFindCoding ()
   */
-
+    
       { KEY _Confirmed_intron = str2tag ("Confirmed_intron") ;
 	KEY _EST = str2tag ("EST") ;
 	KEY _cDNA = str2tag ("cDNA") ;
@@ -4034,6 +4113,8 @@ BOOL fMapConvert (LOOK look, BOOL force)
 	    seg->type ^= 1 ;
 	  if ((seg->type | 0x1) == TRANSCRIBEDGENE_UP)
 	    seg->source = top - seg->source - seg->sourceDx ;
+	  if ((seg->type | 0x1) == EXON_SUPPORT_UP)
+	    seg->source = top - seg->source  - seg->sourceDx;
 	  if ((seg->type | 0x1) == SPLICED_cDNA_UP)
 	    seg->source = top - seg->source  - seg->sourceDx;
 	  if ((seg->type | 0x1) == TRANSCRIPT_UP)
@@ -4129,6 +4210,7 @@ char* fMapSegTypeName[] = {
   "SPLICE5", "SPLICE5_UP",
   "CODING", "CODING_UP",
   "TRANSCRIBEDGENE", "TRANSCRIBEDGENE_UP",
+  "EXON_SUPPORT", "EXON_SUPPORT_UP",
   "SPLICED_cDNA", "SPLICED_cDNA_UP",
   "SPLICED_cDNA_DECORATE", "SPLICED_cDNA_DECORATE_UP",
   "GENE_NAME", "GENE_NAME_UP",
@@ -4223,7 +4305,7 @@ void fMapReportLine (LOOK look, SEG *seg, BOOL isGIF, float x)
     case EXON: case EXON_UP:
     case EXON_GAP: case EXON_GAP_UP:
     case INTRON: case INTRON_UP:
-      sinf = arrp (look->seqInfo, seg->data.i, SEQINFO) ;
+      sinf = arrayp (look->seqInfo, seg->data.i, SEQINFO) ;
       if (sinf->method)
 	strncat (look->segTextBuf, name (sinf->method), 40) ;
       if (sinf->flags & SEQ_SCORE)
@@ -4415,6 +4497,7 @@ void fMapReportLine (LOOK look, SEG *seg, BOOL isGIF, float x)
 			     look->gf.cum[seg->x2 + 1 - look->gf.min] -
 			     look->gf.cum[seg->x1 - look->gf.min]), 64) ;
       break ;
+    case EXON_SUPPORT: case EXON_SUPPORT_UP:
     case SPLICED_cDNA: case SPLICED_cDNA_UP:
      	fMapcDNAReportLine (look->segTextBuf,seg,256) ;
       break ;
@@ -4609,7 +4692,7 @@ static void fMapSelectBox (LOOK look, int box, double x, double y)
 	    {
 	       *cq++ =
 		doComplementSurPlace ?
-		dnaDecodeChar[ (int)complementBase [ (int)*cq1++]] :
+		 dnaDecodeChar[ (int)complementBase(*cq1++)] :
 		dnaDecodeChar[ (int)*cq1++] ;
 	      if ( ! ((imax - i) % 50) ) 
 		*cq++ = '\n' ;
@@ -4881,6 +4964,7 @@ static void fMapFollow (LOOK look, double x, double y)
     }
 
   if ((seg->type | 0x1) == SPLICED_cDNA_UP ||
+      (seg->type | 0x1) == EXON_SUPPORT_UP ||
       (seg->type | 0x1) == TRANSCRIBEDGENE_UP )
     { if (fMapcDNAFollow (look->activeBox))
 	return ;
@@ -4905,7 +4989,7 @@ static void fMapFollow (LOOK look, double x, double y)
     }
   else if (seg->type == SEQUENCE || seg->type == SEQUENCE_UP )
     {
-      SEQINFO *sinf = arrp (look->seqInfo, seg->data.i, SEQINFO) ;
+      SEQINFO *sinf = arrayp (look->seqInfo, seg->data.i, SEQINFO) ;
       if (sinf->flags & SEQ_CANONICAL)
 	{
 #ifdef ACEMBLY
@@ -5018,6 +5102,7 @@ void fMapRC (LOOK look)
       if (seg->type >= SEQUENCE && seg->type <= ALLELE_UP)
 	seg->type ^= 1 ;
       if ((seg->type | 0x1) == SPLICED_cDNA_UP ||
+	  (seg->type | 0x1) == EXON_SUPPORT_UP ||
 	  (seg->type | 0x1) == TRANSCRIBEDGENE_UP ||
 	  (seg->type | 0x1) == TRANSCRIPT_UP ||
 	  (seg->type | 0x1) == PMRNA_UP ||
@@ -5043,8 +5128,8 @@ void fMapRC (LOOK look)
       cj = arrp (look->dna, top, char) ;
       while (ci <= cj)
 	{ ctmp = *ci ;
-	*ci++ = complementBase[ (int)*cj] ;
-	*cj-- = complementBase[ (int)ctmp] ;
+	  *ci++ = complementBase(*cj) ;
+	  *cj-- = complementBase(ctmp) ;
 	}
     }
 
@@ -5280,7 +5365,7 @@ static BOOL fMapDumpGFF (LOOK look, int version,
       switch (type)
 	{
 	case SEQUENCE: case EXON: case INTRON:
-	  sinf = arrp (look->seqInfo, seg->data.i, SEQINFO) ;
+	  sinf = arrayp (look->seqInfo, seg->data.i, SEQINFO) ;
 	  if ( seg->key && (version == 2) ) {
 	    featName = className (seg->key);
 	  } else 
@@ -5474,7 +5559,7 @@ static BOOL fMapDumpGFF (LOOK look, int version,
 	    }
 	  break ;
 	case INTRON:
-	  sinf = arrp (look->seqInfo, seg->data.i, SEQINFO) ;
+	  sinf = arrayp (look->seqInfo, seg->data.i, SEQINFO) ;
 	  if (version == 1)
 	    { if (seg->parent)
 	        { freeOutf ("\t%s", name (seg->parent)) ;

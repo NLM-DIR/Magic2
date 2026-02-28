@@ -769,7 +769,8 @@ static void estBubbleInfo (int box, SEG *seg, int origin, int type)
     }
 }
 
-void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
+
+void fMapcDNAShowSplicedcDNAorExon (LOOK look, float *offset, BOOL showExonSupport)
 {
   int ii, box = -1, x1, x2; KEY bgCol ;
   SEG *seg ;
@@ -783,6 +784,7 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
   BSMARK mark = 0 ;
   int MY_MAGENTA = LIGHTGRAY ;
   KEY _aForward = 0, _aReverse = 0 ;
+  BOOL foundCompositeColour = FALSE ;
 
   if (*offset > mapGraphWidth)
     return ;
@@ -803,13 +805,27 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 
   for (ii = 1 ; ii < arrayMax(look->segs) ; ++ii)
     { 
+      foundCompositeColour = FALSE ;	       
       seg = arrp(look->segs,ii,SEG) ;
-      switch (seg->type)
+      if (showExonSupport)
 	{
-	case SPLICED_cDNA: if (isDown) break ; else continue ;
-	case SPLICED_cDNA_UP: if (!isDown) break ; else continue ;
-	default: continue ;
-	} 
+	  switch (seg->type)
+	    {
+	    case EXON_SUPPORT: if (isDown) break ; else continue ;
+	    case EXON_SUPPORT_UP: if (!isDown) break ; else continue ;
+	    default: continue ;
+	    }
+	}
+      else
+	{
+	  switch (seg->type)
+	    {
+	    case SPLICED_cDNA: if (isDown) break ; else continue ;
+	    case SPLICED_cDNA_UP: if (!isDown) break ; else continue ;
+	    default: continue ;
+	    }
+	}
+
 
      if (class(seg->key) == _VMethod)
        continue ;
@@ -1017,6 +1033,10 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 			  }
 			bsGoto(obj, mark);
 		      } while (bsGetKey (obj, _bsDown, &motif)) ;
+		  else if (bsFindTag (obj, _Real_3prime))
+		    {
+		      bestMotif = _Real_3prime ; bold = TRUE ;
+		    }
 
 		  if (bestMotif) 
 		    motif = bestMotif ;
@@ -1038,7 +1058,24 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 			    graphBubbleInfo (bx1, 0, 0, messprintf ("Transpliced leader %s", name(motif))) ;
 			}
 		      else if (motif == _Real_5prime)
-			graphText("=", x + .3, y1 - .95) ;
+			{
+			  if (isDown)
+			    {
+			      float y11 = MAP2GRAPH (look->map, seg->x1 - 30) ;
+			      graphLine (look->mrnaOffset, y11, x + 5, y11) ;
+			    }
+			  graphLine (x + .1, y1 - .1, x + 1.5, y1 - .1) ; 
+			  graphText("=", x + .3, y1 - .95) ;
+			}
+		      else if (motif == _Real_3prime)
+			{
+			  if (isDown)
+			    {
+			      float y22 = MAP2GRAPH (look->map, seg->x2 + 30) ;
+			      graphLine (look->mrnaOffset, y22, x + 5, y22) ;
+			    }
+			  graphLine (x + .1, y2 + .1, x + 1.5, y2 + .1) ; 
+			}
 		      else if (strcmp(name(motif),"gccgtgctc") &&
 			       strncmp(name(motif),"gagaga",6)) ; /* rien du tout */
 		      else if (*name(motif) == 'a')
@@ -1087,6 +1124,61 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
       if (x >= xMax) continue ;
       if (0) printf ("est:%s ix=%d x1=%d x2=%d", name(seg->key), ix, seg->x1, seg->x2) ;
 
+      if (
+	  (!strncmp (name(seg->key), "XH_",3) || !strncmp (name(seg->key), "XG_",3))  &&
+	  keyFindTag (seg->key, _Is_read) && keyFindTag (seg->key, _Composite))
+	{
+	  OBJ obj = bsCreate(seg->key) ;
+	  Array aa =  arrayCreate (24, BSunit) ;
+	  
+	  if (bsGetArray (obj, _Composite, aa, 3) &&
+	      arrayMax (aa) >= 3)
+	    {
+	      int r, rMax = arrayMax (aa) ;
+	      for (r = 0 ; r < rMax ; r+=3)
+		{
+		  BSunit *u = arrp (aa, r, BSunit) ;
+		  int x1 = u[0].i ;
+		  int x2 = u[1].i ;
+		  int cover = u[2].i ; 
+		  float z = log(1.0+cover) ;
+		  float z1 = log(8000.0)/8 ;
+		  float yy1, yy2 ;
+		  int iCol = .5 + z/z1 ;
+		  if (iCol > 8) 
+		    iCol = 8 ;
+		  if (iCol < 0)
+		    iCol = 0 ;
+		  bgCol = GREEN1 + iCol - 1 ;
+
+		  if (isDown)
+		    {
+		      yy1 = MAP2GRAPH(look->map,seg->x1 + x1 - 1 - .5) ;
+		      yy2 = MAP2GRAPH(look->map,seg->x1 + x2 - 1 + .5) ;
+		    }
+		  else
+		    {
+		      yy1 = MAP2GRAPH(look->map,seg->x2 - x2 + 1 - .5) ;
+		      yy2 = MAP2GRAPH(look->map,seg->x2 - x1 + 1 + .5) ;
+		    }
+		  if (yy1 < .2 + topMargin) yy1 = .2 + topMargin ;
+		  if (yy2 > mapGraphHeight - .2)  yy2 = mapGraphHeight - .2 ;  
+		  if (yy1 < yy2 - .01)
+		    {
+		      int box2 = graphBoxStart() ; 
+		      int oldColour = graphColor (bgCol) ;
+		      graphRectangle (x+.1, yy1, x+1.5, yy2) ;
+		      graphBoxEnd () ;
+		      graphBoxDraw (box2, WHITE, bgCol) ;
+		      graphColor (oldColour) ;
+		    }
+		  bgCol = TRANSPARENT ;
+		  foundCompositeColour = TRUE ;		}
+	    }
+	  arrayDestroy (aa) ;
+	  bsDestroy (obj) ;
+	}
+
       /* draw the beginning of the est line as arrow circle or line*/
       if (seg->key != (seg-1)->key)
 	{
@@ -1108,7 +1200,7 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 			  float yy = MAP2GRAPH(look->map, seg->x1 + .5 - .5) ; 
 			  int bx1 = graphBoxStart () ;
 			  
-			  graphColor (RED) ; 
+			  graphColor (RED) ;
 			  if (yy - y1 < .20) yy = y1 + .20 ;
 			  graphFillRectangle (x + .1, y1, x + 1.5, yy) ; 
 			  graphColor (TRANSPARENT) ;
@@ -1142,7 +1234,8 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 		    }
 		  else
 		    { 
-		      if (seg->data.i & 0x20000000) graphColor (RED) ;
+		      if (seg->data.i & 0x20000000) 
+			graphColor (RED) ;
 		      graphLine (x + .1 , y1 + .6, x + .8, y1) ;
 		      graphLine (x + 1.5, y1 + .6, x + .8, y1) ; 
 		      if (seg->data.i & 0x20000000) graphColor (BLACK) ;
@@ -1209,7 +1302,9 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
       bgCol =  fMapQueryColor (seg->key) ;
 
 #endif
-      if (keyFindTag (seg->key, _Colour))
+      if (foundCompositeColour)
+	bgCol = TRANSPARENT ;
+      else if (keyFindTag (seg->key, _Colour))
 	{
 	  OBJ obj = bsCreate(seg->key) ;
 	  bsGetKeyTags (obj,_Colour, &bgCol) ;
@@ -1242,10 +1337,12 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 		{
 		  if (seg->data.i & 0x40000000)
 		    {
-		      int bx1 = graphBoxStart () ;
+		      /* int bx1 = 0 ; obsured the mouse click  graphBoxStart () ; */
 		      graphCircle (x + .9, y2, .6) ; 
-		      graphBoxEnd () ;
-		      estBubbleInfo (bx1, seg, look->origin, 3) ;
+		      /*
+			graphBoxEnd () ;
+			estBubbleInfo (bx1, seg, look->origin, 3) ;
+		      */
 		      y2 += .6 ;
 		    }
 		  else
@@ -1270,7 +1367,8 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 		}
 	      else /* (is3p && !isReadUp) */
 		{  
-		  if (seg->data.i & 0x20000000) graphColor (RED) ;
+		  if (seg->data.i & 0x20000000)
+		    graphColor (RED) ;
 		  graphLine (x + .1 , y2 - .6, x + .8, y2) ;
 		  graphLine (x + 1.5, y2 - .6, x + .8, y2) ;  
 		  if (seg->data.i & 0x20000000) graphColor (BLACK) ;
@@ -1282,11 +1380,13 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 		{
 		  if (seg->data.i & 0x40000000)
 		    {
-		      int bx1 = graphBoxStart () ;
+		      /* int bx1 = 0 ; obscured the mouse click */
 		      
 		      graphCircle (x + .9, y2, .6) ; 
-		      graphBoxEnd () ;
-		      estBubbleInfo (bx1, seg, look->origin, 3) ;
+		      /*
+			graphBoxEnd () ;
+			estBubbleInfo (bx1, seg, look->origin, 3) ;
+		      */
 		      y2 += .6 ;
 		      if (0) /* test TRANSPARENT */
 			{ 
@@ -1298,7 +1398,8 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
 		    }
 		  else
 		    { 
-		      if (seg->data.i & 0x20000000) graphColor (RED) ;
+		      if (seg->data.i & 0x20000000) 
+			graphColor (RED) ;
 		      graphLine (x + .1 , y2 - .6, x + .8, y2) ;
 		      graphLine (x + 1.5, y2 - .6, x + .8, y2) ; 
 		      if (seg->data.i & 0x20000000) graphColor (BLACK) ;
@@ -1404,6 +1505,15 @@ void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
   graphColor (BLACK) ;
 
 } /* fMapcDNAShowSplicedcDNA */
+
+void fMapcDNAShowSplicedcDNA (LOOK look, float *offset)
+{
+  return fMapcDNAShowSplicedcDNAorExon (look, offset, FALSE) ;
+}
+void fMapcDNAShowExonSupport (LOOK look, float *offset)
+{
+  return fMapcDNAShowSplicedcDNAorExon (look, offset, TRUE) ;
+}
 
 /*********************************************************************/
 
@@ -1593,7 +1703,7 @@ static void cleanErr (Array err, Array dnaLong, Array dnaShort, BOOL isUp)
 		  i = j = 0 ;
 		  cc = *cl ; while (*cl++ == cc) i++ ;
 		  if (sens == -1)
-		    { cc = complementBase[(int)cc] ;
+		    { cc = complementBase(cc) ;
 		      while (*cs-- == cc) j++ ;
 		    }
 		  else
@@ -1619,7 +1729,7 @@ static void cleanErr (Array err, Array dnaLong, Array dnaShort, BOOL isUp)
 		  i  = j = 0 ;
 		  cc = *cl ; while (*cl++ == cc) i++ ;
 		  if (sens == -1)
-		    { cc = complementBase[(int)cc] ;
+		    { cc = complementBase(cc) ;
 		      while (*cs-- == cc) j++ ;
 		    }
 		  else
@@ -1648,7 +1758,7 @@ static void cleanErr (Array err, Array dnaLong, Array dnaShort, BOOL isUp)
 		  i = j = 0 ;
 		  cc = *cl ; while (*cl++ == cc) i++ ;
 		  if (sens == -1)
-		    { cc = complementBase[(int)cc] ;
+		    { cc = complementBase(cc) ;
 		      while (*cs-- == cc) j++ ;
 		    }
 		  else
@@ -1979,8 +2089,8 @@ void fMapcDNAReportTranscript (char *buffer, SEG *seg1, int maxBuf)
 void fMapcDNAReportTranscribedgene (char *buffer, SEG *seg1, int maxBuf)
 {
   char *cp = strnew(buffer,0) ;
-  strncpy (buffer, messprintf ("Gene %s, %s  %s", name(seg1->parent), 
-			       cp, seg1->data.k ? name(seg1->data.k) : ""), maxBuf) ;
+  strncpy (buffer, messprintf ("Gene %s, %s #%d", name(seg1->parent), 
+			       cp, seg1->data.k ? KEYKEY(seg1->data.k) : 0), maxBuf) ;
   messfree (cp) ;
 }
 
@@ -2550,10 +2660,11 @@ void fMapcDNADoShowMrna (LOOK look, float *offset, BOOL isPredicted)
   int TR_COLOR3 =  PALEBLUE ; /* YELLOW LIGHTGREEN ;  palemagenta for the web */
   int TR_COLOR4 =  PALEORANGE ; /* YELLOW LIGHTGREEN ;  palemagenta for the web */
   KEY _Valid3p = str2tag ("Valid3p") ;
-  KEY _Valid5p = str2tag ("Valid5p") ;
+  KEY _Valid5p = str2tag ("Valid5p") ; /* RED YELLOW */
 
   cDNAAlignInit () ; 
 
+  look->mrnaOffset = *offset ;
   if (0 && look->view && isPredicted)
     return ;
 
@@ -2764,10 +2875,14 @@ void fMapcDNADoShowMrna (LOOK look, float *offset, BOOL isPredicted)
 	    case 0: color = WHITE ; break ;  /* utr */
 	    case 1: color = WHITE ; break ;  /* non best product */
 	    case 2:
+	      color = TR_COLOR2 ; color = YELLOW ; break ;
 	    case 3:
-	      color = TR_COLOR2 ; break ; /* best product */
-	    case 4: color = TR_COLOR3 ; break ;
-	    case 5: color = TR_COLOR4 ; break ;
+	      color = TR_COLOR2 ; color=RED ; break ; /* best product */
+	    case 6: color = TR_COLOR3 ; color=GREEN ; break ;
+	    case 7: color = TR_COLOR4 ; color=ORANGE ; break ;
+	    case 10: color = TR_COLOR4 ; color=PALECYAN ; break ;
+	    case 14: color = TR_COLOR4 ; color=GREEN3 ; break ;
+	    case 15: color = TR_COLOR4 ; color=PALEYELLOW ; break ;
 	    }
 	  if (0 && useAm)
 	    color = TR_COLOR ;	      
@@ -3653,34 +3768,38 @@ void fMapcDNAShowTranscribedgene  (LOOK look, float *offset)
 
       if (seg->key == seg->parent) /* the overall transcribedgene, do not draw */
 	{ int dy = 1 ;
-	  if (seg->data.i & 0x1)
+	  if (seg->data.i)
 	    {
-	      if (seg->type == TRANSCRIBEDGENE)
-		graphText ("*", *offset, MAP2GRAPH(look->map,seg->x1) - 1) ;
-	      else if (seg->type == TRANSCRIBEDGENE_UP)
-		graphText ("*", *offset, MAP2GRAPH(look->map,seg->x2) + 1) ; 
-	    }
-	  if (seg->data.i & 0x1) dy = 2 ;
-	  if (seg->data.i & 2)
-	    {
-	      if (seg->type == TRANSCRIBEDGENE)
-		graphText ("SL1", *offset, MAP2GRAPH(look->map,seg->x1) - dy) ;
-	      else if (seg->type == TRANSCRIBEDGENE_UP)
-		graphText ("SL1", *offset, MAP2GRAPH(look->map,seg->x2) + dy) ;
-	    }
-	  if (seg->data.i & 4)
-	    {
-	      if (seg->type == TRANSCRIBEDGENE)
-		graphText ("SL2", *offset, MAP2GRAPH(look->map,seg->x1) - dy) ;
-	      else if (seg->type == TRANSCRIBEDGENE_UP)
-		graphText ("SL2", *offset, MAP2GRAPH(look->map,seg->x2) + dy) ;
-	    }
-	  if (seg->data.i & 8)
-	    {
-	      if (seg->type == TRANSCRIBEDGENE)
-		graphText ("SL1&2", *offset, MAP2GRAPH(look->map,seg->x1) - dy) ;
-	      else if (seg->type == TRANSCRIBEDGENE_UP)
-		graphText ("SL1&2", *offset, MAP2GRAPH(look->map,seg->x2) + dy) ;
+	      SEQINFO *sinf = arrayp (look->seqInfo, seg->data.i, SEQINFO) ;
+	      if (sinf->flags & 0x1)
+		{
+		  if (seg->type == TRANSCRIBEDGENE)
+		    graphText ("*", *offset, MAP2GRAPH(look->map,seg->x1) - 1) ;
+		  else if (seg->type == TRANSCRIBEDGENE_UP)
+		    graphText ("*", *offset, MAP2GRAPH(look->map,seg->x2) + 1) ; 
+		}
+	      if (sinf->flags & 0x1) dy = 2 ;
+	      if (sinf->flags & 2)
+		{
+		  if (seg->type == TRANSCRIBEDGENE)
+		    graphText ("SL1", *offset, MAP2GRAPH(look->map,seg->x1) - dy) ;
+		  else if (seg->type == TRANSCRIBEDGENE_UP)
+		    graphText ("SL1", *offset, MAP2GRAPH(look->map,seg->x2) + dy) ;
+		}
+	      if (sinf->flags & 4)
+		{
+		  if (seg->type == TRANSCRIBEDGENE)
+		    graphText ("SL2", *offset, MAP2GRAPH(look->map,seg->x1) - dy) ;
+		  else if (seg->type == TRANSCRIBEDGENE_UP)
+		    graphText ("SL2", *offset, MAP2GRAPH(look->map,seg->x2) + dy) ;
+		}
+	      if (sinf->flags & 8)
+		{
+		  if (seg->type == TRANSCRIBEDGENE)
+		    graphText ("SL1&2", *offset, MAP2GRAPH(look->map,seg->x1) - dy) ;
+		  else if (seg->type == TRANSCRIBEDGENE_UP)
+		    graphText ("SL1&2", *offset, MAP2GRAPH(look->map,seg->x2) + dy) ;
+		}
 	    }
 	  continue ;
 	}
@@ -3832,7 +3951,7 @@ void fMapcDNAShowTranscribedgene  (LOOK look, float *offset)
       graphBoxDraw (box, BLACK, color) ;
       /* mhmp 30.09.99 
       graphBoxInfo (box, seg->key, name(seg->key)) ; */
-      fMapBoxInfo (look, box, seg) ;
+      fMapBoxInfo (look, box, seg) ; /*  */
       graphBoxFreeMenu(box, fMapTranscribedgeneAction, fMapTranscribedgeneMenu) ;
       graphBubbleInfo (box, seg->parent, className(seg->parent),
 		       messprintf("%s %s", seg->key ? name(seg->key) : "", seg->data.k ? name(seg->data.k) : "")) ;
@@ -5081,6 +5200,7 @@ lao:
     case 's': /* Recompute Splicing */
     case 'S': /* Limit this gene to the active zone */
     case 'T': /* Shed weakly connected variants */
+    case 'U': /* split genebox by geneId */
      if (gene)
 	{
 	  KEY cosmid = keyGetKey (gene, _Genomic_sequence) ;
@@ -5102,6 +5222,14 @@ lao:
 		cDNARealignGene (gene, z2 - myMax, z2 - myMin, 1, FALSE, 1, 0, 2) ;
 	      else
 		cDNARealignGene (gene, myMin - z1, myMax - z1, 2, FALSE, 1, 0, 2) ;
+	    }
+	  else if ( key == 'U')
+	    { 
+	      myMin = look->zoneMin ; myMax = look->zoneMax;  
+	      if (seg1->type & 0x1) /* up cosmid */
+		cDNARealignGene (gene, z2 - myMax, z2 - myMin, 1, FALSE, 1, 0, 4) ;
+	      else
+		cDNARealignGene (gene, myMin - z1, myMax - z1, 2, FALSE, 1, 0, 4) ;
 	    }
 	  else 
 	    { 
@@ -5193,8 +5321,15 @@ lao:
 	    gene = keySet(aa,0) ;
 	    keySetKill (aa) ;
 	    Gene = bsUpdate (gene) ;
-	    if (Gene) for (j = 0 ; j < keySetMax(clones) ; j++)
-	      bsAddKey (Gene, _cDNA_clone, keySet(clones, j)) ;
+	    if (Gene)
+	      {
+		KEYSET reads = query (clones, ">Read") ;
+		for (j = 0 ; j < keySetMax(clones) ; j++)
+		    bsAddKey (Gene, _cDNA_clone, keySet(clones, j)) ;
+		for (j = 0 ; j < keySetMax(reads) ; j++)
+		  bsAddKey (Gene, _Read, keySet(reads, j)) ;
+		keySetDestroy (reads) ;
+	      }
 	    bsAddKey (Gene, _Genomic_sequence, cosmid);
 	    if (bsFindTag (Gene, str2tag("To_be_fused_with")))
 	      bsRemove (Gene) ; /* no more fusions than what i did here */
@@ -5407,8 +5542,6 @@ lao:
       fMapTranscribedGeneAbsorbInGeneBoxTg = gene ;
       displayBlock (fMapTranscribedGeneAbsorbInGeneBoxPick, 0) ;
       return ; /* no fmapredraw needed */
-    case 'U': /* split genebox by geneId */
-      break ; /* fmapredraw needed */
      case 'B': /* new annotator */
       if ((key = keyGetKey (gene, str2tag ("Derived_from_gene"))))
 	geneAnnotDisplay (0, key, 0) ;

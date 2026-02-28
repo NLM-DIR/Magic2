@@ -41,6 +41,10 @@
 #include "query_.h"
 #include "query.h"
 #include "parse.h"
+#include "command.h"
+#include <wac/ac.h>
+#include <wac/ac_.h>
+#include <wac/acinside_.h>
 
 typedef struct QCTRLSTUFF
 { int   magic;        /* == MAGIC*/
@@ -503,7 +507,7 @@ static void querDisplay(void)
     graphTextFormat(BOLD);
     graphText("Direct Query Commands:", 1.5 , QC_OFFSET - 2.2);
     graphTextFormat(PLAIN);
-    graphText("Click line to select",
+    graphText("Click line,   select as first word implies BQL syntax",
 	       24.5, QC_OFFSET - 2.5);
     graphText("(Press Return key to execute, F4 to interrupt.)",   
 	       24.5, QC_OFFSET - 1.5);
@@ -513,14 +517,14 @@ static void querDisplay(void)
       graphText("Query:", 2, i*1.5 + QC_OFFSET);
       quer->curr =
 	graphTextScrollEntry(ARR2STRING(quer->pgm, i),
-			     QBUFF_MULT*BUFFER_SIZE - 1, 73, 9, 
+			     QBUFF_MULT*BUFFER_SIZE - 1, 183, 9, 
 			     i*1.5 + QC_OFFSET, 
 			     TEXT_ENTRY_FUNC_CAST queryCommandEdit) ;
     }
   }
   graphBoxEnd() ;
   
-  graphTextBounds (80, (int)(QC_OFFSET + 1.5*i + 2)) ;        /* see queryCreate */
+  graphTextBounds (180, (int)(QC_OFFSET + 1.5*i + 2)) ;        /* see queryCreate */
   graphRedraw() ;
 }
 
@@ -593,7 +597,21 @@ void queryCommandEdit (void)
       newKeySet("Query Answer") ;
     if(keySetActive(&oldSet, &look))  { 
       messStatus("Searching") ;
-      newSet = query(oldSet, querText) ;
+      if (!strncasecmp (querText, "select ",7))
+	{
+	  AC_HANDLE h = ac_new_handle () ;
+	  const char *errors = 0 ;
+	  AC_DB db = ac_open_db (0, &errors) ;
+	  AC_KEYSET aksOld = ac_new_keyset (db , h) ;
+	  aksOld->ks = oldSet ;
+	  AC_TABLE tbl = ac_bql_table (db, querText, aksOld, 0, &errors, h) ;
+	  aksOld->ks = 0 ; /* so oldSet will not be destroyed */
+	  AC_KEYSET aks = ac_table_keyset (db, tbl,0, h) ;
+	  newSet = keySetCopy (aks->ks) ; 
+	  ac_free (h) ;
+	}
+      else
+	newSet = query(oldSet, querText) ;
       if (newSet != oldSet )
 	{ if(keySetExists(query_undo_set) &&
 	     query_undo_set != oldSet )
@@ -657,7 +675,7 @@ void queryCreate (void)
   quer->graph = querGraph ; /* provision for multi windows */
   quer->last_find = -1 ;
   
-  graphTextBounds (80,40) ;   /* needed yfor text box sizing */
+  graphTextBounds (180,40) ;   /* needed for text box sizing */
   graphRegister (DESTROY, querDestroy) ;
   graphRegister (PICK, querPick) ;
   graphRetitle ("Query Commands"); /* acedb 1.9.1 prepends "DtQuery :" */

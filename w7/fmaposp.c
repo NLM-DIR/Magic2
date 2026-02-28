@@ -345,7 +345,7 @@ BOOL fMapOspPositionOligo (LOOK look, SEG *seg, KEY oligo, int *a1p, int *a2p)
 
   if (i>0)
     while (i--)
-      *cq++ = complementBase[(int)(*cp--)] ;
+      *cq++ = complementBase(*cp--) ;
  
   
   cp = arrp(look->dna,from, unsigned char) ;

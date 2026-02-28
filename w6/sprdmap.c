@@ -827,7 +827,9 @@ static void spreadMapConvert (SPREAD spread)
   maxLine = arrayExists(spread->tableau) ? arrayMax(spread->tableau) : 0 ; 
 
   for (j = 0 ; j < maxCol ; j++)
-    { c = arrp(spread->colonnes,j1 = arr(spread->pos2col,j, int) ,COL) ;
+    {
+      j1 = arr(spread->pos2col,j, int) ;
+      c = arrp(spread->colonnes,j1,COL) ;
       if (!j1 || c->map)
 	c->segs = arrayReCreate (c->segs, maxLine, SEG) ;
       else
@@ -842,7 +844,9 @@ static void spreadMapConvert (SPREAD spread)
 	    continue ;  /* Useful if some colonnes are hidden */
 	  oldSeg = 0 ;
 	  for(j = 0 ; j < maxCol ; j++)
-	    { c = arrp(spread->colonnes,j1 = arr(spread->pos2col,j, int) ,COL) ;
+	    {
+	      j1 = arr(spread->pos2col,j, int) ;
+	      c = arrp(spread->colonnes,j1,COL) ;
 	      
 	      if (!c->map)
 		continue ;

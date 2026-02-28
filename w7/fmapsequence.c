@@ -287,7 +287,7 @@ static void showSequence (LOOK look, float offset,
 		if (i < seqEnd)  /* end may be seqEnd+2 for protein sake */
 		  *letter = 
 		    ( doComplementSurPlace ?
-		      dnaDecodeChar[(int)complementBase[(int)(*cp & 15)]] : 
+		      dnaDecodeChar[(int)complementBase(*cp & 15)] : 
 		      dnaDecodeChar[(int)(*cp & 15)]
 		      ) ;
 		else *letter = 0 ;

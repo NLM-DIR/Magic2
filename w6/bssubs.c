@@ -719,6 +719,62 @@ KEY keyGetTag2Key(KEY key, KEY tag)
 
 /*******************************************************************/
 
+int keyGetInt (KEY key, KEY tag)
+{
+  OBJ obj = 0 ;
+  int val = 0 ;
+
+  if (!tag)
+    messcrash ("keyGetKey called with NULL tag, may be this tag is not initialised") ;
+  if (key && bIndexFind(key, tag) &&
+      (obj = bsCreate(key)))
+    { bsGetData (obj, tag, _Int, &val) ;
+      bsDestroy (obj) ;
+    }
+  return val ;
+}
+
+/*******************************************************************/
+
+float keyGetFloat (KEY key, KEY tag)
+{
+  OBJ obj = 0 ;
+  int val = 0 ;
+
+  if (!tag)
+    messcrash ("keyGetKey called with NULL tag, may be this tag is not initialised") ;
+  if (key && bIndexFind(key, tag) &&
+      (obj = bsCreate(key)))
+    { bsGetData (obj, tag, _Float, &val) ;
+      bsDestroy (obj) ;
+    }
+  return val ;
+}
+
+/*******************************************************************/
+
+const char *keyGetText (KEY key, KEY tag) /* not paralelisable */
+{
+  OBJ obj = 0 ;
+  static char buf[1024] ;
+  char *cp ;
+
+  buf[0] = 0 ;
+  if (!tag)
+    messcrash ("keyGetKey called with NULL tag, may be this tag is not initialised") ;
+  if (key && bIndexFind(key, tag) &&
+      (obj = bsCreate(key)))
+    {
+      if (bsGetData (obj, tag, _Text, &cp))
+	strncpy (buf, cp, 1023) ;
+      buf[1023] = 0 ;
+      bsDestroy (obj) ;
+    }
+  return buf ; /* not paralelisable */}
+
+/*******************************************************************/
+
+
 KEY keyFindTag (KEY key, KEY tag)
 {
   OBJ obj = 0 ;

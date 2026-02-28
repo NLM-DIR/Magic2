@@ -60,7 +60,7 @@
 
 /* KEY isGifDisplay = FALSE ; now in w2/graphAcedbInterface.c,  used to unset useless buttons etc */
 
-#define MAXNDISPLAY 16
+#define MAXNDISPLAY 64
 static int nDisplays = 0 ;
 
 static Array  previous = 0 ; 
@@ -431,7 +431,7 @@ static FREEOPT graphTypeOptions[] =
   {TEXT_FULL_SCROLL, "TEXT_FULL_SCROLL"}
 } ;
 
-#define MAXDISPMENU 30
+#define MAXDISPMENU 64 
 static FREEOPT dispOptMenu[MAXDISPMENU] = {
   {1, ""},
   {0, "Graph"},   /* shorter name, not too inacurate */
@@ -519,29 +519,33 @@ Graph displayCreate(char *displayName)
 /**************************************/
 
 void pickDefaultDisplays (void)
-{ KEY zeroKey, treeKey, key ;
-  int   d ;
+{
+  KEY key ;
+  int   n, d ;
   AcedbDisplay *dp ;
-
+  const char **type, *types[] = {"TREE", "DtKeySet", "DtLongText", "DtBqlDisp", 0} ;
+  float xx[]            = {  .001, .1, .12, 0.2, 0} ;
+  float yy[]            = {  .001, .1, .12, 0.2, 0} ;
+  float ww[]            = {  .55,  .2, .30, 1.9, 0} ;
+  float hh[]            = {  .3,   .3, .30, 0.9, 0} ;
+  
   dArray = arrayReCreate (dArray, 12, AcedbDisplay) ;
 
-  lexaddkey("ZERO", &zeroKey, _VDisplay) ;
-  lexaddkey("TREE", &treeKey, _VDisplay) ;
-  lexaddkey("DtKeySet", &key, _VDisplay) ;
-  lexaddkey("DtLongText", &key, _VDisplay) ;
-
-  d = KEYKEY (zeroKey) ;
+  lexaddkey("ZERO", &key, _VDisplay) ;
+  d = KEYKEY (key) ;
   dp = arrayp(dArray, d, AcedbDisplay) ;
   dp->type = 0 ;  
 
-/*
-  d = KEYKEY (treeKey) ;
-  dp = arrayp(dArray, d, AcedbDisplay) ;
-  dp->type = TEXT_FULL_SCROLL ;
-  dp->x = .001 ; dp->y = 0.001 ; dp->width = .55  ; dp->height = .3 ;
-  strncpy(dp->title, "", 31) ;
-  strncpy(dp->help, "acedb", 31) ;
-*/
+  for (type = types, n = 0 ; *type ; type++, n++)
+    {
+      lexaddkey(*type, &key, _VDisplay) ;
+      d = KEYKEY (key) ;
+      dp = arrayp(dArray, d, AcedbDisplay) ;
+      dp->type = TEXT_FULL_SCROLL ;
+      dp->x = xx[n] ; dp->y = yy[n] ; dp->width = ww[n] ; dp->height = hh[n] ;
+      strncpy(dp->title, *type, 31) ;
+      strncpy(dp->help, *type, 31) ;
+    }
 } /* pickDefaultDisplays */
 
 
@@ -550,8 +554,6 @@ FREEOPT *pickGetDisplayMenu(void)
   return dispOptMenu;
 } /* pickGetDisplayMenu */
 
-
-
 void pickGetDisplayTypes(void)
 {
   AcedbDisplay *dp ;
@@ -559,17 +561,19 @@ void pickGetDisplayTypes(void)
   int line = 0 ;
   char *cp ; float x ;
   KEY option, displayKey, treeKey;
-  FILE * fil = filopen("wspec/displays", "wrm", "r") ;
+  FILE *fil ;
   AC_HANDLE h = ac_new_handle () ;
   /*   ACEIN ai = aceInCreate ("wspec/displays.wrm", FALSE, h) ; */
 
   dispOptMenu[0].key = 2; /* since this gets called twice... */
   lexaddkey("TREE", &treeKey, _VDisplay);
   dispOptMenu[2].key = treeKey ; /* provide a tree default unless overridden */
-
+    
+  fil = filopen("wspec/displays", "wrm", "r") ;
   if (!fil)
     messExit("Cannot find display definition file : wspec/displays.wrm");
 
+  
   /* Defaults */
   freespecial ("\n\t\"\\") ;
   while(line ++ ,freeread(fil))
@@ -588,7 +592,7 @@ void pickGetDisplayTypes(void)
 	    strncpy(dp->title, "acedb", 31) ;
 	    strncpy(dp->help, "No_help", 31) ;
 	  }
-    
+	
 	dp = arrayp(dArray, d, AcedbDisplay) ;
 	
 	while (TRUE)
@@ -623,7 +627,7 @@ void pickGetDisplayTypes(void)
 	      case 't':
 		cp = freeword() ;
 		strncpy(dp->title, cp, 41) ;
-		break ;
+		    break ;
 	      case 'a':
 		if ((cp = freeword()))
 		  strncpy(dp->help, cp, 31) ;
@@ -640,16 +644,16 @@ void pickGetDisplayTypes(void)
 		  messcrash("Missing float x value in line %d of wspec/displays.wrm at %s",
 			    line,  freepos()) ;
 		if (x < 0 || x > 1.3)
-		  messout ("In wsepc/displays.wrm, line %d, x value %f out of range 0 1.3",
-			   line, x ) ;
+		      messout ("In wsepc/displays.wrm, line %d, x value %f out of range 0 1.3",
+			       line, x ) ;
 		else
 		  dp->x  = x ;
 		break ;
 	      case 'w':
 		if (!freefloat(&x))
 		  messcrash("Missing float width value in line %d of wspec/displays.wrm at %s",
-			    line,  freepos()) ;
-		if (x < 0 || x > 1.3)
+				line,  freepos()) ;
+		if (x < 0 || x > 1.99)
 		  messout ("In wsepc/displays.wrm, line %d, width value %f out of range .0 1.3",
 			   line, x ) ;
 		else
@@ -716,7 +720,7 @@ void pickSetGraphTypes (void)
   pickSetGraphType ("DtUpdate", TEXT_SCROLL) ;
   pickSetGraphType ("DtLongText", TEXT_FULL_SCROLL) ;
   pickSetGraphType ("DtQuery", TEXT_SCROLL) ;
-  pickSetGraphType ("DtBqlDisplay", TEXT_FULL_SCROLL) ;
+  pickSetGraphType ("DtBqlDisp", TEXT_FULL_SCROLL) ;
   pickSetGraphType ("DtQueryBuilder", TEXT_FULL_SCROLL) ;
   pickSetGraphType ("DtQueryByExample", TEXT_FULL_SCROLL) ;
   pickSetGraphType ("DtSpreadSheet", TEXT_FULL_SCROLL) ;

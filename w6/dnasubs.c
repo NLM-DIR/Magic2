@@ -963,7 +963,7 @@ static int dnaDoAdd (Array a, KEY seq, int start, int stop, BOOL noMismatch, BOO
 	{ cp = arrp(dna, start, char) ;
 	  for (i = start ; i >= stop ; --i) /* RD added complementBase! */
 	    { 
-	      if (*cp && *cq && !(complementBase[(int)*cp] & *cq))
+	      if (*cp && *cq && !(complementBase(*cp) & *cq))
 		{
 		  /* Complain at most once for each bit of dna and only      */
 		  /* if caller wants errors reported.                        */
@@ -974,7 +974,7 @@ static int dnaDoAdd (Array a, KEY seq, int start, int stop, BOOL noMismatch, BOO
 		      result = 0 ;
 		    }
 		}
-	      *cq++ |= complementBase[(int)*cp--] ;  /* mix the 2 values */
+	      *cq++ |= complementBase(*cp--) ;  /* mix the 2 values */
 	    }
 	}
 

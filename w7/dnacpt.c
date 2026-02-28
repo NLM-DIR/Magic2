@@ -450,9 +450,7 @@ static int dnacptMatch (Array dna, int frame,
 	    { tableInt(table,j,1) = cp - cp0 + templateLength - 1 ;
 	      tableInt(table,j,2) = cp - cp0 ;
 	      for (k = 0 ; k < templateLength ; ++k)
-		matchString[k] = dnaDecodeChar[
-				   (int)complementBase[
-				      (int)*(cp+templateLength-k-2)]] ;
+		matchString[k] = dnaDecodeChar[(int)complementBase(*(cp+templateLength-k-2))] ;
 	      tableSetString(table,j,3,matchString) ;
 	    }
 	  else
@@ -573,7 +571,7 @@ void dnacptMultipleMatch (Array sites,
 	  while(*cs) cs++ ;
 	  while(--cs >= cp) *cq++ = *cs ;
 	  *cq = 0 ; cq = cr ;
-	  while(*cq = complementBase[(int)*cq], *++cq) ; /* complement */
+	  while(*cq = complementBase(*cq), *++cq) ; /* complement */
 	  if (!strcmp(cp, cr))
 	    { if (frame == 0) /* flag as palindrome on +ve search */ 
 		dnacptMatch (dna, 1, sites, cp, 
@@ -1411,7 +1409,7 @@ void dnacptMakeTestSequences(void)
 		  if (taux)
 		    offset-- ;
 		  *ip = TINT_LIGHTGREEN ;
-		  putc((int)dnaDecodeChar[(int)complementBase[(int)*cp]], fil) ;
+		  putc((int)dnaDecodeChar[(int)complementBase(*cp)], fil) ;
 		}
 	    }
 	}
@@ -1547,10 +1545,10 @@ static int dnacptAddSplice (Array dna, Array  site5, Array site3,
   else
     {
       cp = arrp(dna, 0, char) + from ;
-      if (!((*cp) && complementBase[(int)(*f)]) || ! (*(cp+1) && complementBase[(int)(*(f+1))]))
+      if (!((*cp) && complementBase((*f))) || ! (*(cp+1) && complementBase((*(f+1)))))
 	return 0 ;
       cp = arrp(dna, 0, char) + to ;
-      if (!((*cp) && complementBase[(int)(*(f+3))]) || ! (*(cp+1) && complementBase[(int)(*(f+4))]))
+      if (!((*cp) && complementBase((*(f+3)))) || ! (*(cp+1) && complementBase((*(f+4)))))
 	return 0 ;
       for(i = from + lengthEx , cp = arrp(dna, 0, char) + i , ip = arrp(site5, 0, int);
 	  i >= from - lengthIn  && i >= 0 ; cp--, i--, ip++ )
@@ -2194,8 +2192,8 @@ static int dnacptAddCds (Array dna, Array cds, Array usage,KEY dnaKey)
       else
 	for (j = from ; j >= to ; j--, cp--)
 	  { if (ne || !(n%3))
-	      array(exon,ne++,char) = complementBase[(int)*cp] ;
-	    array(gene,n++,char) = complementBase[(int)*cp] ;
+	      array(exon,ne++,char) = complementBase(*cp) ;
+	    array(gene,n++,char) = complementBase(*cp) ;
 	  }
 
 #ifdef CODE_FILE

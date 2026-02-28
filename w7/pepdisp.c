@@ -16,7 +16,6 @@
  */
 
 /*
-#define ARRAY_CHECK
 #define PEP_DEBUG
 */
 

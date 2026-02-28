@@ -331,7 +331,8 @@ static void lazySegBuild (GridDisp look, int *n, char *prefix, BOOL blank)
       xstart = xend ;
       xend = temp1 ;
     }
-  
+  if (xend > 254) xend = 254 ;
+  if (yend > 254) yend = 254 ;
   classe = class(look->template);
 /*  n = MIN_LIVE_BOX;*/
   nn = *n;
@@ -339,12 +340,12 @@ static void lazySegBuild (GridDisp look, int *n, char *prefix, BOOL blank)
     if(YAlpha)
       sprintf(colchar,"%c",row[k]);
     else
-      sprintf(colchar,"%d",k+1);
+      sprintf(colchar,"%c",k+1);
     for(i=xstart-1;i<=xend-1;i++){ /* for each colomn */
       if(XAlpha)
 	sprintf(rowchar,"%c",row[i]);
       else
-	sprintf(rowchar,"%d",i+1);
+	sprintf(rowchar,"%c",i+1);
       seg = arrayp(look->segs, nn, SEG);
       seg->flag = seg->flagStore = 0;
       sprintf(temp,"%s%s%s",prefix,colchar,rowchar);

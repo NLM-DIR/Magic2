@@ -89,9 +89,9 @@ char e_reverseCodon (const char* cp, const char *translationTable)
 {
   char temp[3] ;
 
-  temp[0] = complementBase[(int)cp[2]] ;
-  temp[1] = complementBase[(int)cp[1]] ;
-  temp[2] = complementBase[(int)cp[0]] ;
+  temp[0] = complementBase(cp[2]) ;
+  temp[1] = complementBase(cp[1]) ;
+  temp[2] = complementBase(cp[0]) ;
   return e_codon (temp, translationTable) ;
 }
 /****************/
@@ -100,9 +100,9 @@ char e_antiCodon (const char* cp, const char *translationTable)
 {
   char temp[3] ;
 
-  temp[0] = complementBase[(int)cp[0]] ;
-  temp[1] = complementBase[(int)cp[-1]] ;
-  temp[2] = complementBase[(int)cp[-2]] ;
+  temp[0] = complementBase(cp[0]) ;
+  temp[1] = complementBase(cp[-1]) ;
+  temp[2] = complementBase(cp[-2]) ;
   return e_codon (temp, translationTable) ;
 }
 
@@ -563,8 +563,9 @@ Array peptideTranslate(KEY key, BOOL CDS_only)
   /* N.B. we could issue a warning if it doesn't but perhaps this is         */
   /* overkill.                                                               */
 
-    if (cc == '*')
-      --arrayMax(pep) ;
+      if (0 &&           /* 2023_11-15 : export the stop */
+	  cc == '*') 
+	--arrayMax(pep) ;
     }
 
  done:

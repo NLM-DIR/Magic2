@@ -1560,7 +1560,7 @@ void spreadDefineColonne (BOOL force)
 			 extendChoice) ;
       else
 	graphBoxMarkAsClear(box) ;
-      if (!c->from) c->from = 1 ;
+      if (c->from <= 0) c->from = 1 ;
       sprintf(c->fromBuffer,"%d", from = c->from) ;
       spread->fromBox = box =
 	graphTextEntry (c->fromBuffer, 4, 18, line, 
@@ -1573,19 +1573,19 @@ void spreadDefineColonne (BOOL force)
       graphText ("DNA" , 28, line) ;
       graphBoxEnd() ; 
        if (i &&
-	  c->extend == 'f' &&
-	  c->from > 0 &&
-	  arrp(spread->colonnes, c->from - 1 , COL) &&
-	  dnaInClass (superClass( arr(spread->colonnes, c->from - 1 , COL).classe))
+	   c->extend == 'f' &&
+	   c->from <= arrayMax (spread->colonnes) &&
+	   arr(spread->colonnes, c->from - 1 , COL).classe &&
+	   dnaInClass (superClass( arr(spread->colonnes, c->from - 1 , COL).classe))
 	  )  { graphBoxBox(box) ; }
       else graphBoxMarkAsClear(box) ;
       box = spread->pepBox = graphBoxStart() ;
       graphText ("PEP" , 28, line) ;
       graphBoxEnd() ; 
-       if (i &&
+      if (i &&
 	  c->extend == 'f' &&
-	  c->from > 0 &&
-	  arrp(spread->colonnes, c->from - 1 , COL) &&
+	  c->from <= arrayMax (spread->colonnes) &&
+	  arr(spread->colonnes, c->from - 1 , COL).classe &&
 	  pepInClass (superClass( arr(spread->colonnes, c->from - 1 , COL).classe))
 	  )  { graphBoxBox(box) ; }
       else graphBoxMarkAsClear(box) ;
