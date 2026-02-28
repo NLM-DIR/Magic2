@@ -88,7 +88,6 @@ static char usage[] = "Usage: aceserver database_dir [port_number [params]]\n"
    implementations 
 */
 
-extern char *stackorigin ;            /* in arraysub */
 extern int isInteractive ;           /* in freesubs */
 extern BOOL parseKeepGoing ;
 
@@ -687,7 +686,7 @@ return out;
 }
 
 int main (int argc, char **argv)
-{ char x ;
+{ 
   u_long p ;
   int n, t ;
   char *cp ;
@@ -714,8 +713,6 @@ int main (int argc, char **argv)
 
 
   out = stderr ; /* this static cannot be initialized at file scope in WIN32? */
-
-  stackorigin = &x ;
 
   /* This code determines whether we are running from inetd.
      It relies on the fact that if we are running under inetd,
