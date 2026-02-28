@@ -24,6 +24,7 @@ int main(int argc, char **argv)
 
   rr = fread_reading(stdin, "stdin", 0) ; 
   fwrite_reading (stdout, rr, TT_CTF) ; 
+  fwrite_reading (stderr, rr, TT_PLN) ; 
 
   return 0 ;
 
