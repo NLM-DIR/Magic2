@@ -17,11 +17,9 @@
  */
 
 /* %W% %G% */
-/*
 #define ARRAY_CHECK
 #define MALLOC_CHECK
-#define CHRONO 
-*/
+
 
 #include "acembly.h"
 #include "freeout.h"
@@ -1138,30 +1136,32 @@ static int assSequence (Array words,
    */
  cutAgain: /* CF y2L761b8.3 vecteur start=543, pure N after 585, length = 980 */
   j = 0 ; vendold = vend ;
-  for (pos = pos1 = ii = (vtop+vend)/2 , cp = arrp (dna, ii, char) ; ii < vend ; ii++, cp++)
-    {
-      switch ((int)*cp)
-        {
-        case A_: case T_: case G_: case C_: j-- ; break ;
-        default: j += 2 ; break ;
-        }
-      if (j < 0) { j = 0 ; pos = ii ; }
-      if (j > 20) /* about 10 N in a stretch */
-        { vend = pos + 5 ; break ; }
-    }
+  if (2 * arrayMax (dna) > vtop + vend)
+    for (pos = pos1 = ii = (vtop+vend)/2 , cp = arrp (dna, ii, char) ; ii < vend ; ii++, cp++)
+      {
+	switch ((int)*cp)
+	  {
+	  case A_: case T_: case G_: case C_: j-- ; break ;
+	  default: j += 2 ; break ;
+	  }
+	if (j < 0) { j = 0 ; pos = ii ; }
+	if (j > 20) /* about 10 N in a stretch */
+	  { vend = pos + 5 ; break ; }
+      }
   if (vend < vendold - 20 && pos < pos1 + 20 && vend > vtop + 60) goto cutAgain ;
   j = 0 ;
-  for (pos = ii = (vtop+vend)/2 , cp = arrp (dna, ii, char) ; ii > vtop ; ii--, cp--)
-    {
-      switch ((int)*cp)
-        {
-        case A_: case T_: case G_: case C_: j-- ; break ;
-        default: j += 2 ; break ;
-        }
-      if (j < 0) { j = 0 ;pos = ii ; }
-      if (j > 20) /* about 10 N in a stretch */
-        { vtop = pos - 5 ; break ; }
-    }
+  if (2 * arrayMax (dna) > vtop + vend)
+    for (pos = ii = (vtop+vend)/2 , cp = arrp (dna, ii, char) ; ii > vtop ; ii--, cp--)
+      {
+	switch ((int)*cp)
+	  {
+	  case A_: case T_: case G_: case C_: j-- ; break ;
+	  default: j += 2 ; break ;
+	  }
+	if (j < 0) { j = 0 ;pos = ii ; }
+	if (j > 20) /* about 10 N in a stretch */
+	  { vtop = pos - 5 ; break ; }
+      }
   
   if (minPos < vtop) minPos = vtop ;
   if (! eMap && minPos + nn + 10 > vend)
@@ -2983,7 +2983,7 @@ static void dropBadQualityGlobalHits (Array dna, Array dnaR, Array hits, int *jp
       if (14 * nerr > nmatch) /* 14 per 100 global error rate, one ok zone  , reject */
         return ;
       if (x1min < 250 && nmatch > 150 &&
-          (keyFindTag (up->est, _CTF_File) || keyFindTag (up->est, _CTF_File)))
+          (keyFindTag (up->est, _CTF_File) || keyFindTag (up->est, _SCF_File)))
         break ; /* could be salvaged by editing */
       else      /* hopeless */
         return ; 
@@ -5415,7 +5415,7 @@ static BOOL locateNewExon (KEY clone, HIT *up, HIT *vp, int cmin, int cmax, int 
     nc1best,
     nz1, 
     maxDna = arrayMax (longDna) ;
-  BOOL isComposite = FALSE ;
+
   unsigned int oligo,  mask ;
   char *cp ;
 #ifdef USEASS
@@ -5577,7 +5577,7 @@ static BOOL locateNewExon (KEY clone, HIT *up, HIT *vp, int cmin, int cmax, int 
                 keySet (c1OldKs, c1 - cmin + zmax - z1) = c1 ;
                 c1 = c3 - nn + 1 ; z1 = zmin + pos ;
                 c2 = c1 + nz1 + 10 ; z2 = z1 + nz1 ;
-		isComposite = keyFindTag (up->est, _Composite) ;
+		isComposite |= keyFindTag (up->est, _Composite) ;
 		maxError = isComposite ? -2 :  errmin ;
                 err = aceDnaTrackErrors (cDNA, z1 , &z2, longDna, c1 , &c2, 0, err, 2, maxError, TRUE, 0, FALSE) ;
                 if (0)
@@ -5674,7 +5674,7 @@ static BOOL locateNewExon (KEY clone, HIT *up, HIT *vp, int cmin, int cmax, int 
                 
                 c1 = c3 - pos ; z1 = zmax - nz1 ;
                 c2 = c1 + nz1 + 10 ; z2 = zmax ;
-		isComposite = keyFindTag (vp->est, _Composite) ;
+		isComposite |= keyFindTag (vp->est, _Composite) ;
 		maxError = isComposite ? -2 :  errmin ;
                 err = aceDnaTrackErrors (cDNA, z1 , &z2, longDna, c1 , &c2, 0, err, 2, maxError, TRUE, 0, FALSE) ;
                 nc1 = c2 - c1 ;
@@ -6903,11 +6903,17 @@ static void cleanGeneHits (KEY cosmid, Array geneHits, KEYSET trackingClones, BO
 
   cDNASwapA (geneHits) ;
 
+  if (0 && upGene)  /* on n'a pas le bug */
+    { 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
   if (1) /* remove micro introns */
     {
       oldHits = geneHits ; /* no copy needed */
       arraySort (oldHits, cDNAOrderByA1) ; /* respect reads */
-      for (j2 = 0 ; j2 < arrayMax (oldHits) ; j2++)
+      for (j2 = 1 ; j2 < arrayMax (oldHits) - 1 ; j2++)
         { 
           gh2 = arrayp (oldHits, j2, HIT) ;
           if (gh2->zone == 9999)
@@ -6934,7 +6940,7 @@ static void cleanGeneHits (KEY cosmid, Array geneHits, KEYSET trackingClones, BO
 	      continue ;
 	    }
 	  /* else more accurate undebuged possibility:  compare and upgrade previous */
-          for (j1 = 0 ; j1 <  arrayMax (oldHits) ; j1++)
+          for (j1 = 0 ; j1 <  j2 ; j1++)
             { 
               gh1 = arrayp (geneHits, j1, HIT) ;
               
@@ -6979,6 +6985,14 @@ static void cleanGeneHits (KEY cosmid, Array geneHits, KEYSET trackingClones, BO
             }
         }
     }
+
+  if (0 && upGene)  /* on A le bug */
+    { 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
+
   for (j0 = 0 ; j0 < 2 ; j0++)   /* first one round to match 3p and 5p of one clone 
                                   * second round to remove micro introns
                                   */
@@ -6992,6 +7006,12 @@ static void cleanGeneHits (KEY cosmid, Array geneHits, KEYSET trackingClones, BO
           gh2 = arrayp (oldHits, j2, HIT) ;
           if (gh2->zone == 9999)
             continue ;
+
+	  if (0 && j2>=0 && upGene)  /* on A le bug already at j0=j2=0 */
+	    { 
+	      arrayDestroy (geneHits) ;
+	      invokeDebugger () ;
+	    }
 
             /* we work with coordinates in the orientation of the gene and flags with their natural meaning */
 
@@ -7241,11 +7261,21 @@ static void cleanGeneHits (KEY cosmid, Array geneHits, KEYSET trackingClones, BO
           *ghnew = *gh2  ;
           continue ;
         nextj2:  /* do not register this gh2 */
+	  if (0 && upGene)  /* on A le bug le bug et j2 = 2 */
+	    { 
+	      arrayDestroy (geneHits) ;
+	      invokeDebugger () ;
+	    }
           continue ;  
         }  /* end j2 loop */
       arrayMax(geneHits) = newj ;
       arrayDestroy (oldHits) ;
     }  /* end j0 loop */
+      if (0 && upGene)  /* on A le bug */
+	{ 
+	  arrayDestroy (geneHits) ;
+	  invokeDebugger () ;
+	}
   if (arrayMax(geneHits))
     {
       if (upGene) 
@@ -8219,8 +8249,21 @@ static Array  getGeneHits (KEY cosmid, Array hits, Array clipTops, Array clipEnd
 /*********************************************************************/
 typedef struct { KEY gene, type ; 
                 int a1, a2, x1, x2, exonNb, iGap ; 
-                BOOL isExon, isIntron, isGap, isOrfGap, isFirstExon, isLastExon ; } SPL ;
+  BOOL isExon, isIntron, isGap, isOrfGap, isFirstExon, isLastExon, isBack ; } SPL ;
 /* a1 a2 are in genomic, x1 x2 in mrna in construction */
+
+/*********************************************************************/
+
+static int splOrder (const void *va, const void *vb)
+{
+  const SPL *up = (const SPL *)va, *vp = (const SPL *)vb ;
+
+  if (up->a1 != vp->a1)
+    return up->a1 - vp->a1 ;
+  else if (up->a2 != vp->a2)
+    return up->a2 - vp->a2 ;      
+  return 0 ;
+} /* splOrder */
 
 /********************************************************************************/
 /* clean up all data associated to the gene */
@@ -8321,7 +8364,7 @@ static BOOL teamInitialJump (KEY cosmid, Array introns, Array oldHits, Array new
             {
               aa = up->a2 ; xx = up->x2 ;
               cq = arrp (dna, aa - 1, char) ;
-              while (cp < cpMax && complementBase[((int)*cp) & 255] & *cq) { cp++ ; cq-- ; aa-- ; xx++ ; }
+              while (cp < cpMax && complementBase(*cp & 255) & *cq) { cp++ ; cq-- ; aa-- ; xx++ ; }
             }
           if (aa < vp->a2) /* so i was perfect up and including vp->a2 */
             {
@@ -8343,7 +8386,7 @@ static BOOL teamInitialJump (KEY cosmid, Array introns, Array oldHits, Array new
                 else
                   { 
                     if (cp > cpMax) { iend = 10 ;  break ; }
-                    if (complementBase[((int)*cp) & 255] & *cq) { cp++ ; cq-- ; }
+                    if (complementBase(*cp & 255) & *cq) { cp++ ; cq-- ; }
                     else break ;
                   }
               if (i + iend > 6)
@@ -8449,7 +8492,7 @@ static int teamFinalJump (KEY cosmid, Array introns, Array oldHits, Array newHit
             {
               aa = up->a1 ; xx = up->x1 ;
               cq = arrp (dna, aa - 1, char) ;
-              while (xx > 0 && complementBase[((int)*cp) & 255] & *cq) { cp-- ; cq++ ; aa++ ; xx-- ; }
+              while (xx > 0 && complementBase(*cp & 255) & *cq) { cp-- ; cq++ ; aa++ ; xx-- ; }
             }
           if (aa > vp->a1) /* so i was perfect up and including vp->a1 */
             {
@@ -8471,7 +8514,7 @@ static int teamFinalJump (KEY cosmid, Array introns, Array oldHits, Array newHit
                 else
                   {
                     if (cp < cpMin) { iend = 10 ; break ; }
-                    if (complementBase[((int)*cp) & 255] & *cq) { cp-- ; cq++ ; }
+                    if (complementBase(*cp & 255) & *cq) { cp-- ; cq++ ; }
                     else break ;
                   }
               if (i + iend > 6)
@@ -9602,7 +9645,7 @@ void showCHits(Array hits, char *cName)
       else
         lexword2key (cName, &clone, _VcDNA_clone) ;
     }
-  printf("\n") ; /* beauase under debugger this will purge stdout buffer */
+  printf("\n") ; /* because under debugger this will purge stdout buffer */
   if (arrayExists(hits)) 
     for (j = 0  ; j < arrayMax(hits) ; j++)
       {
@@ -10285,6 +10328,7 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
                                int isAlign, int type, int z1, int z2, char *nom, int direction,
                                int searchRepeats)
 {
+  static int pass = 0 ;
   int n1 = 0, n2 = 0, nDoRepeats = 0, nDoRepeats0 = 0, rNnewgenes = 0 ;
   KEY cosmidMap = 0 ; int cosmidC1 = 0, cosmidC2 = 0 ; /* IntMap of the cosmid */
   Array 
@@ -10301,8 +10345,8 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   static int nDone = 0 ;
   Array rHitsAll = 0, usedZones = 0, usedQualities = 0 ;
 
+  pass++ ;
   if (type == 9999) goto abort ; /* cleanup */
-
   if (maxIntronSize == -1)
     maxIntronSize = getMaxIntronSize () ;
 
@@ -10350,7 +10394,12 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
     default:
       break ;
     }
-
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
   if (1)   /* get the cosmid global coordinates */
     {
       KEY key = 0, target = link ? link : cosmid ;
@@ -10369,6 +10418,12 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   if (!dna || arrayMax(dna) < 50) { direction = 0 ; goto abort ; }
   dnaR = dnaCopy (dna) ;
   reverseComplement (dnaR) ;
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
 
   if (type == 3 || !clipEnds) 
     {
@@ -10429,11 +10484,24 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
         messout ("Created an associator for %d cDNA, %d oligos, %s\n", n1, n2, timeShowNow()) ;
     }
   if (!ass && !assR && ! assDifficult && ! assDifficultR) { direction = 0 ; goto abort ; }
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
 
  ladirection:
   chrono ("getHitsLaDirection") ;
   hits  = arrayReCreate (hits, 4096,HIT) ;
   /* printf ("\n#%3d:: %s\t%s\t%s\n", direction, name(cosmid),  name(cosmid1),  name(cosmid2)) ; */
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
   if (direction * direction != 1)
     {
       getCosmidHits (cosmid, hits, ass, 0, dna, FALSE, clipEnds, OLIGO_LENGTH, estMaps, estMap1, estMap2, cosmidMap, cosmidC1, cosmidC2, direction) ;
@@ -10455,6 +10523,12 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
       dropOutOfZonePreMappedHits (hits, estMaps, estMap1, estMap2, cosmidMap, cosmidC1, cosmidC2, direction) ;
     }
 
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
   cDNAFilterDirectionalHits (direction, hits, FALSE) ;
   dropOutOfZonePreMappedHits (hits, estMaps, estMap1, estMap2, cosmidMap, cosmidC1, cosmidC2, direction) ;
   if (!arrayMax(hits))
@@ -10463,6 +10537,14 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   arrayCompress (hits) ;
   getcDNA_clonesAndClips (hits, cDNA_clones, clipTops, clipEnds) ;
   cDNAFilterPreviousLink (direction, previousCosmid, previousLink, hits) ;
+
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
 
   if (!arrayMax(hits))
     goto abort ;
@@ -10485,6 +10567,13 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   mergeOverlappingHits  (hits) ;
   cDNAFilterDirectionalHits (direction, hits, FALSE) ;
   dropBadHits (dna, dnaR, hits, 6) ;  /* drop low entropy hits, s < 30 bp */
+
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
 
   dropOvernumerousHits(hits, 50000) ;
   countErrors (cosmid, hits, dna, dnaR, 0, FALSE) ;
@@ -10513,6 +10602,13 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   mergeOverlappingHits  (hits) ; /* the new may overlap or mixup with the old in rare cases, so we must redo selectPath */ 
   countErrors (cosmid, hits, dna, dnaR, 0, FALSE) ; 
 
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
   chronoReturn() ;
   chrono ("cPathSelectBestPath") ;
 
@@ -10536,6 +10632,13 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   dropHugeIntrons (hits, dna, dnaR, 0, TRUE) ;  /* drop introns large  and large and not gt_ag */
 
   chronoReturn() ;
+
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
 
   chrono ("dropBadHits") ;
 
@@ -10566,6 +10669,13 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   if (!arrayMax(hits))
     goto abort ;
 
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
   { /* force error recount */
     int ii = arrayMax(hits) ;
     HIT *up ;	
@@ -10575,6 +10685,13 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
   countErrors (cosmid, hits, dna, dnaR, 0, FALSE) ;
   chronoReturn() ;
   chrono ("constructGenes") ;
+
+  if (0) /* here we DO NOT have the bug */
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
 
   if (isAlign == 0) /* cdna case */
     {
@@ -10586,6 +10703,12 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
       geneHits = getGeneHits (cosmid, hits, clipTops, clipEnds, walls, trackingClones, dna, dnaR) ;
       addGhostHits (arrayMax(dna), geneHits, walls) ;
       countErrors (cosmid, geneHits, dna, dnaR, 0, FALSE) ;
+      if (0)  /* PAS de bug */
+	{ 
+	  arrayDestroy(genes) ; 
+	  arrayDestroy (geneHits) ;
+	  invokeDebugger () ;
+	}
       if (nDoRepeats)
         {
           if (! usedQualities)
@@ -10593,8 +10716,26 @@ static KEYSET alignEst2Cosmid (KEY cosmid, KEYSET estSet, KEYSET currentGenes,
           cDNAFilterUsedQualities (geneHits, usedQualities) ;
         }
       plainGeneHits = arrayCopy (geneHits) ; 
+      if (0)  /* on A pas le bug */
+	{ 
+	  arrayDestroy(genes) ; 
+	  arrayDestroy (geneHits) ;
+	  invokeDebugger () ;
+	}
       cleanGeneHits (cosmid, geneHits, trackingClones, FALSE) ;
+      if (0)  /* ??? on ?? le bug */
+	{ 
+	  arrayDestroy(genes) ; 
+	  arrayDestroy (geneHits) ;
+	  invokeDebugger () ;
+	}
       cleanGeneHits (cosmid, geneHits, trackingClones, TRUE) ;
+      if (0)  /* on A le bug */
+	{ 
+	  arrayDestroy (geneHits) ;
+	  invokeDebugger () ;
+	}
+
       {
         int j2 ;
         HIT *gh2 ;
@@ -10641,6 +10782,13 @@ abort:
 
   /* destroy what is strand specific */
 
+  if (0)  /* here we have the bug */
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
   if (allSpl)
     {
       int i ;
@@ -10663,6 +10811,13 @@ abort:
       arrayDestroy (sets) ;
     }
 
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
   if (newgenes) 
     {
       int i, j ;
@@ -10677,7 +10832,14 @@ abort:
       keySetSort (currentGenes) ;
       keySetCompress (currentGenes) ;
     }
-  
+
+    if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
+
   if ((usedZones || nDoRepeats > 0) && plainGeneHits && arrayMax (plainGeneHits))
     {
       int i, j, ok =  1 ;
@@ -10714,11 +10876,25 @@ abort:
             }
         }
     }
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
   if (usedZones)
     arraySort (usedZones, cDNAOrderEstByA1) ;
+
+  if (0)
+    { 
+      arrayDestroy(genes) ; 
+      arrayDestroy (geneHits) ;
+      invokeDebugger () ;
+    }
   cDNAFilterUsedZonesC1 (0, 0, 0, 0, 0) ; /* clean up the static since usedZones array changed */
-  arrayDestroy (genes) ;
+
   arrayDestroy (geneHits) ;
+  arrayDestroy (genes) ;
   arrayDestroy (plainGeneHits) ;
   { /* keep for second turn only those reads that have a first round gene */
     HIT *u1p, *u2p ;
@@ -10791,7 +10967,7 @@ abort:
 
 static KEYSET getReads (KEY gene)
 {
-  KEYSET kClones = queryKey (gene,"{ Follow cDNA_clone } $| {Follow Ignored_clone } ; { IS *} $| {>fuse_to_clone} ; >Read ; ! discarded && Is_read") ;
+  KEYSET kClones = queryKey (gene,"Follow read ; Follow from_gene ; { Follow cDNA_clone } $| {Follow Ignored_clone } ; Follow read ; { IS *} $| {>fuse_to_clone} ; ! discarded && Is_read") ;
 
   if (keySetMax(kClones) > 300)
     printf ("Gene %s %u reads", name(gene), keySetMax(kClones)) ; 
@@ -10892,7 +11068,7 @@ static KEYSET alignGene2WalledCosmid (KEY cosmid, KEYSET genes, KEYSET reads,
     }
 
   oldr = keySetCopy (reads) ;
-
+  BOOL composite = TRUE ;
   if (z1 > z2) { int dummy = z1 ; z1 = z2 ; z2 = dummy ; }
   if (z1 < 1) z1 = 1 ;
   if (z2 > dnaMax)
@@ -10902,7 +11078,8 @@ static KEYSET alignGene2WalledCosmid (KEY cosmid, KEYSET genes, KEYSET reads,
     {
       if (!doLimit) { myz1 = 0 ; myz2 = dnaMax ; }
       else { myz1 = z1 ; myz2 = z2 ; }
-      
+      if (pass == 0 && composite)
+	continue ;
       oldz1 = myz1 ;
       if (walls)                                 /* forbiden, because it duplicates reads */
         /* hence the walls will still cut the genes but a read can still be aligned just once to the cosmid */
@@ -10949,6 +11126,7 @@ static KEYSET alignGene2WalledCosmid (KEY cosmid, KEYSET genes, KEYSET reads,
   keySetDestroy (oldr2) ;
   keySetDestroy (oldr3) ;
   keySetDestroy (oldr4) ;
+
   return genes ;
 } /*alignGene2WalledCosmid */
 
@@ -11018,7 +11196,7 @@ static int cDNAFuseGeneKeySet (KEYSET tgs)
       else
 	{
 	  parts = query (ks2, ">Genomic_sequence ; {!parts} SETOR {>parts}") ;
-	  if (keySetMax (parts) > 2) /* i cannot fuse 3 subsections */
+	  if (keySetMax (parts) > 5) /* m2024_04_11, was : i cannot fuse 3 subsections */
 	    ks3 = queryKey (tg, ">Genomic_sequence ; >Transcribed_gene") ;
 	  else  /* ok i can fuse everybody */
 	    ks3 = keySetCopy (ks2) ;
@@ -11228,7 +11406,9 @@ static KEYSET cDNARealignGenePart (KEY cosmid,
 
   if (genes && debug && keySetMax(genes))
     printf ("Pass 1 %s\n", name(keySet(genes,0))) ;
-  
+  BOOL composite = TRUE ;
+  if (composite)
+    goto done ;
   newr = genes ?
     query (genes,"{ Follow cDNA_clone } $| {Follow Ignored_clone ; IS keepIgnoringThatJunk } ; FOLLOW Read IS_read") :
     keySetCreate () ;
@@ -11264,8 +11444,7 @@ static KEYSET cDNARealignGenePart (KEY cosmid,
       error = keySetMINUS (oldr, newr) ; keySetDestroy (oldr) ; keySetDestroy (newr) ;
       oldr = error ; error = 0 ; 
     }
-  keySetDestroy (oldr) ;
-  
+ done:
   /* look for dead mrna */
   
   keySetDestroy (oldr) ;
@@ -11657,6 +11836,239 @@ static Array cDNARealignGetConnectedParts (KEY gene, BOOL splitCloud)
 }  /* cDNARealignGetConnectedParts */
 
 /*********************************************************************/
+/* 2023_12_01 :  splitClup == 4: splitOnGeneId
+ */
+
+static Array cDNARealignGetGeneIdParts (KEY gene)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  const char *errors = 0 ;
+  int nId = 0, nM = 0, nGCP = 0 ;
+  AC_DB db = ac_open_db (0, &errors) ; /* local database, cannot fail */
+  AC_OBJ Gene = ac_get_obj (db, className (gene), name (gene), h) ;
+  AC_TABLE ids = 0, tbl = 0 ;
+  Array aa = 0, aaM, aaIds ;
+  KEY typeMax = 0 ;
+  const char *ccp ;
+  GCP *gcp ;
+  SPL *up ;
+  int tg1, tg2 ;
+  ccp = "select tg,id from tg in @, g in tg->gene, pg in g->genefinder, id  in pg->GeneId " ;
+  ids = ac_obj_bql_table (Gene, ccp, 0, &errors, h) ; 
+  if (! ids || ids->rows < 2)
+    goto done ;
+   
+  aa = arrayHandleCreate (ids->rows, GCP, 0) ; 
+  aaIds = arrayHandleCreate (ids->rows, SPL, h) ; 
+
+  /* get the genome coordinate of each geneid */
+  ccp = "select id,chrom,a1,a2, tg1, tg2 from tg in @, g in tg->gene, pg in g->genefinder, id in pg->GeneId, chrom in pg->intmap, a1 in chrom[1], a2 in chrom[2], tchrom in tg->intmap, tg1 in tchrom[1], tg2 in tchrom[2]" ;
+  tbl = ac_obj_bql_table (Gene, ccp, 0, &errors, h) ; 
+  for (int ir = 0 ; ir < tbl->rows ; ir++)
+    {
+      int a1 = 0, a2 = 0 ;
+      KEY id = ac_table_key (tbl, ir, 0, 0) ;
+      for (int jr = ir ; jr < tbl->rows ; jr++)
+	{
+	  int b1, b2 ;
+	  KEY id2 = ac_table_key (tbl, jr, 0, 0) ;
+	  if (id2 != id)
+	    break ;
+	  b1 = ac_table_int (tbl, jr, 2, 0) ;
+	  b2 = ac_table_int (tbl, jr, 3, 0) ;
+	  if (b1 > b2) 
+	    { int b0 = b1 ; b1 = b2 ; b2 = b0 ; }
+	  tg1 = ac_table_int (tbl, jr, 4, 0) ;
+	  tg2 = ac_table_int (tbl, jr, 5, 0) ;
+	  if (tg1 > tg2) 
+	    { int tg0 = tg1 ; tg1 = tg2 ; tg2 = tg0 ;}
+
+	  if (a1 == 0)
+	    { a1 = b1 ; a2 = b2 ; continue ; }
+	  if (a1 > b1) a1 = b1 ;
+	  if (a2 < b2) a2 = b2 ;
+	}
+      up = arrayp (aaIds, nId++, SPL) ;
+      up->gene = id ; up->a1 = a1 ; up->a2 = a2 ;
+    }
+  /* merge overlapping Ids and extend them to the end of the genes */
+  if (nId > 1)
+    {
+      BOOL ok = TRUE ;
+      arraySort (aaIds, splOrder) ;
+      while (ok)   /* merge the geneid that overlap by half size */
+	{
+	  ok = FALSE ;
+	  for (int ii = 0 ; ! ok && ii < nId && ii < sizeof(KEY) ; ii++)
+	    {
+	      SPL *up = arrp (aaIds, ii, SPL) ;
+	      if (up->gene == 0)
+		continue ;
+	      for (int jj = ii + 1 ; !ok && jj < nId ; jj++)
+		{
+		  SPL *vp = arrp (aaIds, jj, SPL) ;
+		  if (vp->gene == 0)
+		    continue ;
+		  if (up->a2 > (vp->a1 + vp->a2)/2) /* fuse */
+		    { 
+		      if (up->a2 < vp->a2) 
+			up->a2 = vp->a2 ;
+		      vp->gene = 0 ;
+		      ok = TRUE ;
+		    }
+		  if ((up->a1 + up->a2)/2 > vp->a1) /* fuse */
+		    { 
+		      if (up->a2 < vp->a2) 
+			up->a2 = vp->a2 ;
+		      vp->gene = 0 ;
+		      ok = TRUE ;
+		    }
+		}
+	    }
+	}
+      ok = TRUE ;
+      while (ok)   /* shorten geneid that overlap a little */
+	{
+	  ok = FALSE ;
+	  for (int ii = 0 ; ! ok && ii < nId && ii < sizeof(KEY) ; ii++)
+	    {
+	      SPL *up = arrp (aaIds, ii, SPL) ;
+	      if (up->gene == 0)
+		continue ;
+	      for (int jj = ii + 1 ; !ok && jj < nId ; jj++)
+		{
+		  SPL *vp = arrp (aaIds, jj, SPL) ;
+		  if (vp->gene == 0)
+		    continue ;
+		  if (up->a2 > vp->a1)
+		    { 
+		      int x = vp->a1 ;
+		      vp->a1 = up->a2 ;
+		      up->a2 = x ;
+		      ok = TRUE ;
+		    }
+		}
+	    }
+	}
+      arraySort (aaIds, splOrder) ;
+      if (1)
+	{
+	  int jj = 0 ;
+	  SPL *up = arrp (aaIds, 0, SPL) ;
+	  SPL *vp = arrp (aaIds, 0, SPL) ;
+	  for (int ii = 0 ; ii < arrayMax (aaIds) ; ii++, up++)
+	    {
+	      if (up->gene)
+		{
+		  if (jj < ii) {*vp = *up ; }
+		  vp++ ; jj++ ;
+		}
+	    }
+	  nId = arrayMax (aaIds) = jj ;
+	}
+    }
+  if (nId < 2)
+    goto done ;
+  else
+    {  /* expand the first and last geneid to the end of the gene */
+      SPL *up = arrp (aaIds, 0, SPL) ;
+      if (up->a1 > tg1) up->a1 = tg1 ;
+      up = arrp (aaIds, nId - 1, SPL) ;
+      if (up->a2 < tg2) up->a2 = tg2 ;
+    }
+  /* get the genome coordinate of each mrna */
+  ccp = "select m, chrom, a1,a2 from tg in @, m in tg->mrna, chrom in m->intmap, a1 in chrom[1], a2 in chrom[2]" ;
+  tbl = ac_obj_bql_table (Gene, ccp, 0, &errors, h) ; 
+  aaM = arrayHandleCreate (1+tbl->rows, SPL, h) ; 
+  for (int ir = 0 ; ir < tbl->rows ; ir++)
+    {
+      int a1 = 0, a2 = 0 ;
+      KEY id = ac_table_key (tbl, ir, 0, 0) ;
+      BOOL isBack = FALSE ;
+      for (int jr = ir ; jr < tbl->rows ; jr++)
+	{
+	  int b1, b2 ;
+	  KEY id2 = ac_table_key (tbl, jr, 0, 0) ;
+	  if (id2 != id)
+	    break ;
+	  b1 = ac_table_int (tbl, jr, 2, 0) ;
+	  b2 = ac_table_int (tbl, jr, 3, 0) ;
+	  if (b1 > b2) { int b0 = b1 ; b1 = b2 ; b2 = b0 ; isBack = TRUE ; }
+	    {
+	      if (a1 == 0)
+		{ a1 = b1 ; a2 = b2 ; continue ; }
+	      if (a1 > b1) a1 = b1 ;
+	      if (a2 < b2) a2 = b2 ;
+	    }
+	}
+      up = arrayp (aaM, nM++, SPL) ;
+      up->isBack = isBack ;
+      up->gene = id ; up->a1 = a1 ; up->a2 = a2 ;
+      /* check if mrna intersects the NM */
+      for (int ii = 0 ; ii < nId && ii < sizeof(KEY) ; ii++)
+	{
+	  SPL *vp = arrp (aaIds, ii, SPL) ;
+	  if (up->a1 < vp->a2 - 50 && up->a2 > vp->a1 + 50)
+	    up->type |= (1<<ii) ;
+	  if (up->type > typeMax)
+	    typeMax = up->type ;
+	}
+    }
+
+  /* now we create the GCP with all mrna of a given type */
+  for (KEY type = 0 ; type <= typeMax ; type++)
+    {
+      for (int ii = 0 ; ii < nM ; ii++)
+	{
+	  up = arrayp (aaM, ii, SPL) ;
+	  if (up->type == type)
+	    {
+	      AC_OBJ Mrna = ac_get_obj (db, className (up->gene), name (up->gene), h) ;
+	      AC_TABLE clones = ac_obj_bql_table (Mrna, ">cdna_clone", 0, &errors, 0) ; 
+	      
+	      if (clones)
+		{
+		  gcp = arrayp (aa, type, GCP) ;
+		  gcp->isReversed = up->isBack ;
+		  if (! gcp->clones)
+		    gcp->clones = keySetCreate () ;
+		  for (int i = 0 ; i < clones->rows ; i++)
+		    keySet (gcp->clones, keySetMax(gcp->clones)) = ac_table_key (clones, i, 0, 0) ;
+		}
+	      ac_free (Mrna) ;
+	      ac_free (clones) ;
+	    }
+	}
+    }
+
+  /* compress the GCP */
+  nGCP = arrayMax (aa) ;
+  if (nGCP > 0)
+    {
+      int jj = 0 ;
+      GCP *up = arrp (aa, 0, GCP) ; 
+      GCP *vp = arrp (aa, 0, GCP) ; 
+      for (int ii = 0 ; ii < arrayMax (aa) ; up++, ii++)
+	{
+	  if (up->clones)
+	    {
+	      if (ii > jj)
+		vp->clones = up->clones ;
+	      keySetSort (vp->clones) ;
+	      keySetCompress (vp->clones) ;
+	      jj++ ; vp++ ;
+	    }
+	}
+      nGCP = arrayMax (aa) = jj ;
+    }
+ 
+ done:
+  ac_free (db) ;
+  ac_free (h) ;
+  return aa ;
+}  /* cDNARealignGetGeneIdParts */
+
+/*********************************************************************/
 /* cut the clones of this genes in subsets corresponding to 
  * connected groups of mRNAs: sharing at least a clone or a boundary
  * 2007_02_10 or touching if no intron, or touching by 1/3 if introns
@@ -11696,7 +12108,15 @@ static KEYSET cDNARealignCutPart (KEY cosmid, KEY gene,
       GCP *gcp ;
       int ii ;
       
-      aa = cDNARealignGetConnectedParts (gene, splitCloud) ;
+      if (splitCloud == 4)
+	{
+	  aa = cDNARealignGetGeneIdParts (gene) ;
+	  if (! aa || arrayMax (aa) < 2)
+	    goto done ;
+	}
+      else
+	aa = cDNARealignGetConnectedParts (gene, splitCloud) ;
+
       if (! keyFindTag (gene, _Assembled_from) ||
           arrayMax(aa)
           )
@@ -11731,7 +12151,7 @@ static KEYSET cDNARealignCutPart (KEY cosmid, KEY gene,
               }
         }
       else
-        gene = 0 ; /* avoid desctruction */
+        gene = 0 ; /* avoid destruction */
       arrayDestroy (aa) ;
     }
   else if (0)
@@ -11761,14 +12181,17 @@ static KEYSET cDNARealignCutPart (KEY cosmid, KEY gene,
   if (genes)
     {
       int i ;
-
+      
       for (i = 0 ; i < keySetMax(genes) ; i++)
         {
           if (gene == keySet(genes, i)) 
             { gene = 0 ; break ; }
         }
-      mrnaAnalyseNeighbours (genes) ;
-      mrnaSplitDoubleGenes (genes) ;
+      if (! isComposite)
+	{
+	  mrnaAnalyseNeighbours (genes) ;
+	  mrnaSplitDoubleGenes (genes) ;
+	}
     }
   if (gene)
     {
@@ -11776,8 +12199,9 @@ static KEYSET cDNARealignCutPart (KEY cosmid, KEY gene,
       if ((Gene = bsUpdate(gene)))
         bsKill (Gene) ;
     }
+
+ done:  
   OLIGO_LENGTH = old ;
-  
   recursionLevel-- ;
   return genes ;
 } /* cDNARealignGeneCutPart */
@@ -11789,6 +12213,7 @@ static KEYSET cDNARealignCutPart (KEY cosmid, KEY gene,
  *
  * searchRepeats = 1 => align recursivelly from bottom of cosmid up
  * searchRepeats = 2 => rubber, repeat with increased inron cost
+ *  splitCloud == 4 => splitGeneId
  */
 KEY cDNARealignGene (KEY gene, int z1, int z2, int direction,
                      BOOL doFuse, int doLimit, int  searchRepeats, int splitCloud)
@@ -11906,6 +12331,44 @@ KEY cDNARealignGene (KEY gene, int z1, int z2, int direction,
       }
     keySetDestroy (reads) ;
   }
+  {
+    KEYSET reads = getReads (gene) ;
+    KEYSET greens2 = 0, greens = keySetCreate () ;
+    OBJ Gene ;
+    BOOL fix = FALSE ;
+    
+    for (int i = 0 ; i < keySetMax (reads) ; i++)
+      {
+	KEY green = keySet (reads, i) ;
+	const char *nam = name (green) ;
+
+	if (! strncmp (nam, "XG_", 3) || ! strncmp (nam, "XG_", 3))
+	  {
+	    fix |= mrnaDesignCutOnePreMrna (gene, green, greens) ;
+	  }
+	else
+	  keySet (greens, keySetMax (greens)) = green ; 
+      }
+    keySetSort (greens) ;
+    greens2 = query (greens, ">cDNA_clone") ;
+    if (fix && (Gene = bsUpdate (gene)))
+      {
+	KEY tag = _bsRight ;
+	bsFindTag (Gene, _cDNA_clone) ;
+	bsRemove (Gene) ;
+	bsAddTag (Gene, _cDNA_clone) ;
+	for (int i = 0 ; i < keySetMax (greens) ; i++)
+	  {
+	    KEY green = keySet (greens, i) ;
+	    bsAddKey (Gene, tag, green) ;
+	    tag = _bsDown ;
+	  }
+	bsSave (Gene) ;
+      }
+    keySetDestroy (greens) ;
+    keySetDestroy (greens2) ;
+    keySetDestroy (reads) ;
+  }
   if (!doLimit && ! searchRepeats)
     {
       doLimit = cDNAlimitRepeatedGene (cosmid, gene, a1, a2, &z1, &z2) ;
@@ -11954,7 +12417,17 @@ KEY cDNARealignGene (KEY gene, int z1, int z2, int direction,
           if (newGenes)
             cDNARealignGeneKeySet (newGenes, FALSE, 2, 0, mySplitCloud) ;
         }
-      else  /* (splitCloud ==  0, 1) AND !searchRepeats */
+       else if (splitCloud == 4) /* split geneId recalculation, then split */
+        {
+          mySplitCloud = 0 ; /* force recalculation if several mrna-sets  OR if !read */
+          newGenes = cDNARealignCutPart (cosmid, gene, z1, z2
+                                         , direction, doLimit
+                                         , 0, 4) ;  
+          mySplitCloud = 1 ; /* recalculate if several mrna-sets */
+          if (newGenes)
+            cDNARealignGeneKeySet (newGenes, FALSE, 2, 0, mySplitCloud) ;
+        }
+       else if (! isComposite)  /* (splitCloud ==  0, 1) AND !searchRepeats */
         {
           newGenes = cDNARealignCutPart (cosmid, gene, z1, z2
                                          , direction, doLimit
@@ -11996,6 +12469,7 @@ static void cDNARealignGeneKeySet (KEYSET ks, BOOL doFuse, int locally, int sear
         continue ;
       searchGene = 0 ;
       cDNARealignGene (keySet(ksa, i), 0, 0, 0, doFuse, locally, searchRepeats, splitCloud) ;
+      messalloccheck() ;
       if (! ++k%30)
         { alignEst2Cosmid (0, 0, 0, 0, 9999, 0, 0, 0, 0, 0) ; }
       if (k == 200) /* check time every 200 genes */
@@ -12454,8 +12928,8 @@ static void alignEst2CosmidChain (KEYSET ks, int type, KEYSET estKs, BOOL doCont
   KEYSET genes = 0 ;
   Array linkPos = arrayCreate (24, HIT) ;
   char *searchCosmid = 0 ; /* 5F60 t22_Hs22_11677_31_6  0" ; usually 0, set to "ZK637" to start looping on that cosmid */
-  int ncosmid = 0 ;  /* if searchCosmid != 0, use this counter */
-  int ncosmidMax = 2 ; /* if searchCosmid != 0, start there, stop after ncosmidMax */
+  int ncosmid = 0 ;  /* 1 was 0,  if searchCosmid != 0, use this counter */
+  int ncosmidMax = 2 ; /* 3 was 2, if searchCosmid != 0, start there, stop after ncosmidMax */
   if (!ks || !keySetMax(ks))
     return ;
 
@@ -12473,19 +12947,20 @@ static void alignEst2CosmidChain (KEYSET ks, int type, KEYSET estKs, BOOL doCont
       keySetKill (ks) ;
       keySetDestroy (ks) ;
     }
-
   while (kp++, ii--) 
     {
-
       if (0 &&  ng > 200)   /* for debugging */
         break ;
       getSeqDna ( KEYMAKE (_VCalcul, 12345)) ;    /* cleanup */
       cosmid1 = *kp ;
+
       if (type == 21)
         alignChain (cosmid1, linkPos) ;
       while (cosmid1 && ncosmid < ncosmidMax)
         {
           cosmid2 = keyGetKey (cosmid1, _Overlap_right) ;
+	  if (ncosmid % 10 == 9)
+	    sessionDoSave (TRUE) ;	    
           switch (type)
             {
             case 21:
@@ -12613,7 +13088,7 @@ static void alignAllEst2Cosmids (int type, KEYSET estKs)
         printf("// Aligning all est on all descendants of %s\n",stackText(s,0)) ;
       else if (type == 2)
         printf("// Aligning active set of %u est on all descendants of %s\n"
-               , keySetMax (estKs), stackText(s,0)) ;
+                , keySetMax (estKs), stackText(s,0)) ;
       else if (type == 2001)
         printf("// Just aligning all est on all descendants of %s\n",stackText(s,0)) ;
       else if (type == 2002)
@@ -13896,13 +14371,13 @@ static KEYSET assignOncecDNAKeySet (KEYSET originalKeySet)
           if ((Est = bsCreate (est)))
             {
               BOOL reverse = bsFindTag (Est, _Reverse) ;
-              if (bsGetArray(Est, _From_gene, aa, 6))  /* gene, nmatch, nerr */
-                for (i = 0 ; i < arrayMax(aa) ; i += 6)
+              if (bsGetArray(Est, _From_gene, aa, 9))  /* gene, nmatch, nerr */
+                for (i = 0 ; i < arrayMax(aa) ; i += 9)
                   {
                     hh = arrayp(hits, arrayMax(hits), HIT) ;
                     u = arrp (aa, i, BSunit) ;
                     hh->gene = u[0].k ;  hh->est = est ; 
-                    hh->x2 = u[1].i ; /* len to be aligned = nb of bp in the est between clips */
+                    hh->x2 = u[8].i ; /* len to be aligned = nb of bp in the est between clips */
                     hh->a1 = u[3].i ;  /* nb of bp aligned */
                     if (hh->a1 > hh->x2) hh->a1 = hh->x2 ; /* this occurs if many indels */
                     hh->nerr = u[4].i ;  /* nb of errors */
@@ -13918,7 +14393,7 @@ static KEYSET assignOncecDNAKeySet (KEYSET originalKeySet)
                             if (bsGetArray(Est, _Other, aa2, 5))  /* gene, nmatch, nerr */
                               for (j = 0 ; j < arrayMax(aa2) ; j += 5)
                                 { 
-                                  u2 = arrp (aa2, i, BSunit) ;
+                                  u2 = arrp (aa2, j, BSunit) ;
                                   if (u2[4].k == cDNA)
                                     hh->nerr +=3 ; 
                                 }
@@ -13928,7 +14403,7 @@ static KEYSET assignOncecDNAKeySet (KEYSET originalKeySet)
                     hh->reverse = reverse ;  /* strand */
                     if (reverse)
                       {
-                        hh->ex2 = u[2].i ; /* offset = nb of bp between cliptop and first aligne dbase */
+                        hh->ex2 = u[6].i ; /* offset = nb of bp between cliptop and first aligne dbase */
                         
                         hh->clipTop = u[5].i ; /* quality */
                         hh->clipEnd = 10000 ;
@@ -14306,6 +14781,7 @@ static KEYSET assignOncecDNAKeySet (KEYSET originalKeySet)
   ii = keySetMax (genes) ;
   if (1) while (ii--)
     {
+      if (0 && ii != 234) continue ;
       gene = keySet (genes, ii) ;
       if (gene)
         {
@@ -15364,6 +15840,7 @@ static void cDNADuplicateCloneInfo (KEYSET ks, int *n0p, int *n1p, int *n2p)
 /*********************************************************************/
 /*********************************************************************/
 
+
 void fMapcDNADoSelect (KEY k, KEYSET ks, KEYSET taceKs)
 {
   KEY key ;
@@ -15735,7 +16212,7 @@ void fMapcDNADoSelect (KEY k, KEYSET ks, KEYSET taceKs)
             if (!strcasecmp (cp, "-clean_killed_mRNA"))
               doClean_killed_mRNA = 1 ;
             if (!strcasecmp (cp, "-split_cloud"))
-              { doSplitCloud = 1 ; locally = 2 ; doFuse = FALSE ; }
+              { doSplitCloud = 2 ; locally = 2 ; doFuse = FALSE ; }
             if (!strcasecmp (cp, "-repeats"))
               searchRepeats = 1 ;
             if (!strcasecmp (cp, "-rubber"))
@@ -15803,6 +16280,16 @@ void fMapcDNADoSelect (KEY k, KEYSET ks, KEYSET taceKs)
           }
         keySetDestroy (genes) ;
       }
+    case 76: /* split in the active set of TG all XG_ exons on Xends_ signals */
+      if (!keySetExists(taceKs))
+	{ messout ("no active transcribed_gene set, sorry") ; break ; }
+      mrnaDesignCutAllPreMrna (taceKs) ;
+      break ;      
+      
+    case 77: /* kill premrna echo on other strand */
+      mrnaDesignCleanEcho () ;
+      break ;      
+      
     case 80: 
        if (!keySetExists(taceKs))
          { messout ("no active sequence set, sorry") ; break ; }
@@ -16108,7 +16595,7 @@ static Array cDNAGetHitDna (KEY est, Array dna, Array dnaR, Array hits, int *fro
           cp = arrp (dna, hh->a1 - 1, char) ;
           array (new, j2 + i, char) = 0 ; /* open hh */
           cq = arrp(new, j2, char) ; j2 += i ;
-          while (i--) *cq++ = complementBase [(int)(*cp--)] ;
+          while (i--) *cq++ = complementBase(*cp--) ;
         }
     }
   if (!j2) arrayDestroy (new) ;

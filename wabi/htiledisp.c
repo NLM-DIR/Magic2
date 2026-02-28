@@ -45,8 +45,6 @@ static AC_DB ac_db = 0 ;
 #define slxFormatNint 162
 #define slxFormatNfloat SOLEXAMAX2
 
-static int solexaStep = 10 ;
-
 typedef struct HtileStruct *Htile ;
 
 typedef struct TmapStruct {
@@ -58,7 +56,6 @@ typedef struct TmapStruct {
   float mag, leftMargin, offset, dragTopMargin ;
   int graphWidth, graphHeight ;
   int a1, a2, min, max ;
-
   float lnWidth ;
   COLOUROPT bb [SOLEXAMAX] ;
 
@@ -105,6 +102,7 @@ typedef struct HtileStruct {
   BOOL isSolexaClosed[SOLEXAMAX] ;
   BOOL isSmoothed[NSMAX] ;
   BOOL isSolexaSmoothed[SOLEXAMAX] ;
+  int solexaStep ;  /* agnostic, will be set by first acces to a wiggle */
   int mxShowNs ;
   int tmFilter, exonicFilter, smoothing, ratio, ends ;
   int filter99, doMask, isMasked ;
@@ -1410,7 +1408,7 @@ static BOOL htileSmoothing (Htile look)
   SEG *seg, *seg1 ;
   double w, sigma = width ;
   double sigma2 = 2 * sigma * sigma ;
-  
+  int solexaStep = look->solexaStep  ; 
   switch (look->smoothing)
     {
     case 1:
@@ -1652,6 +1650,7 @@ static BOOL htileSolexaSmoothing (Htile look)
   SLX *slx, *slx1 ;
   double w, sigma = width ;
   double sigma2 = 2 * sigma * sigma ;
+  int solexaStep = look->solexaStep  ; 
 
   mask = 0 ;
   if (look->doMask && ! look->isMasked)
@@ -2184,7 +2183,8 @@ static BOOL htileConvert (Htile look, BOOL force, ACEOUT ao)
     {
       look->intMap = ac_table_key (tbl, 0, 0, 0) ; 
       a1 = ac_table_int (tbl, 0, 1, 0) ; 
-      a2 = ac_table_int (tbl, 0, 2, 0) ; 
+      a2 = ac_table_int (tbl, 0, 2, 0) ;
+      look->from += a1 ;
     }
 
   if (a1 > a2) { int a0 = a1 ; a1 = a2 ; a2 = a0 ; }
@@ -2406,7 +2406,7 @@ typedef struct HTILEBPstruct { KEY mrna ; int bumpy ;} HTILEBP ;
 static void htileDrawMusicalScale (Htile look, float offset)
 {
   float oldw, s, x, y, zoom ;
-  int i, j, j0, ss[] = { 1, 2, 5 } ;
+  int j, j0, ss[] = { 1, 2, 5 } ;
 #ifdef BOU_DEF
   int *ep, erics[] = {-20, 8, 36, 64, 92, 120, 0} ;
 #endif
@@ -2416,12 +2416,12 @@ static void htileDrawMusicalScale (Htile look, float offset)
   s = 0 ;
   zoom = look->zoom ;
 #ifdef BOU_DEF
-  if (look->index) zoom = look->zoom * .005 ; /* so that 100 gives 10char size when ratio zoom == 20 */
+  if (look->index) zoom = look->zoom * .005 ; /* so that 100 gives 10 char size when ratio zoom == 20 */
 #endif
-  for (i = 1, j0 = -1 ; s == 0 && i < 1000000000 ; i*= 10)
+  for (x = 1, j0 = -1 ; s == 0 && x < 1e30 ; x*= 10)
     for (j = 0 ;  s == 0 && j < 3 ; j++)
       {
-	s = i * ss[j]/1000.0 ;
+	s = x * ss[j]/1000.0 ;
 	if (s * zoom < ds) s = 0 ;
 	else j0 = j ;
       }
@@ -2461,7 +2461,12 @@ static void htileDrawMusicalScale (Htile look, float offset)
   graphColor (BLACK) ;
   y = offset - zoom * s ; 
   if (y > 0) 
-    graphText (messprintf ("%g", s), 1, y) ; 
+    {
+      int box = graphBoxStart () ;
+      graphText (messprintf (" %g ", s), 1, y) ;
+      graphBoxEnd () ;
+      graphBoxDraw (box, BLACK, WHITE) ;
+    }
   if (! look->hideMusic)
     graphLine (3, y, look->map->graphWidth -1, y) ;
   if (!look->index)
@@ -2469,8 +2474,8 @@ static void htileDrawMusicalScale (Htile look, float offset)
       y = offset + zoom * s ; 
       if (! look->hideMusic && y < look->map->graphHeight)
 	{
-	  graphText (messprintf ("%g", -s), 1, y) ; 
 	  graphLine (3, y, look->map->graphWidth -1, y) ;
+	  graphText (messprintf ("%g", - s), 1, y) ;
 	}
     }
   oldw = graphLinewidth (.3) ;
@@ -2695,16 +2700,19 @@ static int htileWiggleConvert (Htile look, PNX *pnx, int ns, Array wpArray)
   Array slxs2 = 0 ;
   WIGGLEPOINT *wp ;
   SLX *slx ;
+  int solexaStep = look->solexaStep  ; 
   int step = solexaStep ; /* resolution of this experiment */
 
   /* in old method we parse at actual positions, so the tads have random positions
-   * in new method we systematically create a tag every 10bp
+   * in new method we systematically create a tag every solexastep
    */
   if (!look->map->solexa)
     look->map->solexa = arrayHandleCreate (100000, SLX, look->h) ;
   slxs2 = look->map->solexa ;
    
   /* parse the data in a new array */
+  nn =  (look->map->a2 - look->map->a1 )/step + 1 ;
+  slx = arrayp (slxs2, nn - 1, SLX) ; /* expand */
   nn = nn2 = 0 ;
   for (ii = 0, wp = arrp (wpArray, 0, WIGGLEPOINT) ; ii < arrayMax (wpArray); wp++, ii++)
     {
@@ -2714,6 +2722,7 @@ static int htileWiggleConvert (Htile look, PNX *pnx, int ns, Array wpArray)
 	{
   	  nn++ ;
 	  a1 = (wp->x - look->a1 + step/2 + 1) / step ;
+	  if (a1 > nn2) nn2 = a1 ;
 	  if (a1 >= 1)
 	    {
 	      slx = arrayp (slxs2, a1 - 1, SLX) ;
@@ -2721,6 +2730,8 @@ static int htileWiggleConvert (Htile look, PNX *pnx, int ns, Array wpArray)
 	    }
 	}
     }
+  arrayMax (slxs2) = nn2 ;
+  nn2 = 0 ;
   /* add in the missing coordinates */
 
   if (nn)
@@ -2741,103 +2752,74 @@ static int htileWiggleConvert (Htile look, PNX *pnx, int ns, Array wpArray)
 } /* htileWiggleConvert */
 
 /************************************************************/
+/* the endRatio
+ * ATTENTION  synchronize with w1/wigglelib.c:sxWiggleEndRatio1
+ */
 
 static void htileSolexaEndRatios (Htile look, PNX *pnx0, int ns, int NF)
 {
   PNX *pnx ;
-  Array w1 = 0, w2 = 0, w3 = 0, w4 = 0 ;
+  int NA = -999 ;
   unsigned int flag1 = 0, flag2 = 0, flag3 = 0, flag4 = 0 ;
   int i, ns1, ns2, ns3, ns4 ;
   
+  ns1 = ns2 = ns3 = ns4 = NA ;
   if ((pnx0->flag &  PGG_endRatioLF) ==  PGG_endRatioLF)
-    { flag1 = PGG_ELF ; flag2 = PGG_ERF ;  flag3 = PGG_ELR ; flag4 = PGG_ERR ;}
+    {  flag1 = PGG_ELF ; flag2 = PGG_ERF ;  flag3 = PGG_ELR ; flag4 = PGG_ERR ;}
   if ((pnx0->flag &  PGG_endRatioRF) ==  PGG_endRatioRF)
-    { flag1 = PGG_ERF ; flag2 = PGG_ELF ;  flag3 = PGG_ERR ; flag4 = PGG_ELR ; }
+    {  flag1 = PGG_ERF ; flag2 = PGG_ELF ;  flag3 = PGG_ERR ; flag4 = PGG_ELR ; }
   if ((pnx0->flag &  PGG_endRatioLR) ==  PGG_endRatioLR)
-    { flag1 = PGG_ELR ; flag2 = PGG_ERR ; flag3 = PGG_ELF ; flag4 = PGG_ERF ; }
+    {  flag1 = PGG_ELR ; flag2 = PGG_ERR ; flag3 = PGG_ELF ; flag4 = PGG_ERF ; }
   if ((pnx0->flag &  PGG_endRatioRR) ==  PGG_endRatioRR)
-    { flag1 = PGG_ERR ; flag2 = PGG_ELR ; flag3 = PGG_ERF ; flag4 = PGG_ELF ; }
+    {  flag1 = PGG_ERR ; flag2 = PGG_ELR ; flag3 = PGG_ERF ; flag4 = PGG_ELF ; }
 
   for (i = 0, pnx = pnx0 ; i < NF && ns -i >= 0 ; pnx--, i++)
-    if ((pnx->flag & flag1) == flag1) { w1 = pnx->signal ; ns1 = ns - i ; break ; }
+    if ((pnx->flag & flag1) == flag1) { pnx0->signal = pnx->signal ; ns1 = ns - i ; break ; }
   for (i = 0, pnx = pnx0 ; i < NF && ns -i >= 0 ; pnx--, i++)
-    if ((pnx->flag & flag2) == flag2) { w2 = pnx->signal ; ns2 = ns - i ; break ; }
+    if ((pnx->flag & flag2) == flag2) { ns2 = ns - i ; break ; }
   for (i = 0, pnx = pnx0 ; i < NF && ns -i >= 0 ; pnx--, i++)
-    if ((pnx->flag & flag3) == flag3) { w3 = pnx->signal ; ns3 = ns - i ; break ; }
+    if ((pnx->flag & flag3) == flag3) { ns3 = ns - i ; break ; }
   for (i = 0, pnx = pnx0 ; i < NF && ns -i >= 0 ; pnx--, i++)
-    if ((pnx->flag & flag4) == flag4) { w4 = pnx->signal ; ns4 = ns - i ; break ; }
+    if ((pnx->flag & flag4) == flag4) { ns4 = ns - i ; break ; }
 
-  if (w1 && w2 && w3 && w4)
+  if (ns1 != NA && ns2 != NA && look->map->solexa)
     {
       unsigned int iMax =  arrayMax (look->map->solexa) ;
-      SLX *slx, *slx1, *slx2 ;
-      int ii, NN = 5 ; 
-      float uu[NN], median = 0 ;
-      memset (uu, 0, sizeof (uu)) ;
+      SLX *slx, *slx1 ;
 
-      for (ii = 3, slx = arrayp (look->map->solexa, ii, SLX), slx1 = slx - 1, slx2 = slx + 1 ; ii < iMax - 1 ; ii++, slx++, slx1++, slx2++)
+      /* ATTENTION synchronize with sxWiggleEndRatioOne */
+      for (int ii = 6 ; ii < iMax - 6 ; ii++)
 	{
-	  float x, y, z, t, u ;
-	  x = slx1->signal[ns1] + 2 * slx->signal[ns1] + slx2->signal[ns1] ;
-	  y = slx1->signal[ns2] + 2 * slx->signal[ns2] + slx2->signal[ns2] ;
-	  /* substract leak from other strand */
-	  z = slx1->signal[ns3] + 2 * slx->signal[ns3] + slx2->signal[ns3] ;
-	  t = slx1->signal[ns4] + 2 * slx->signal[ns4] + slx2->signal[ns4] ;
+	  float x = 0, y = 0, z=0, t=0, u=0 ;
+	  int damper = 10 ;
+	  float seuil = .80 ;
+	  float zoom = 40 ;
+	  int nn = 1 ; /* was 5, so 2n+1 = 110 bases */
 
-	  x = x - .04 * z ; if (x < 0) x = 0 ; x /= 4 ; 
-	  y = y - .04 * t ; if (y < 0) y = 0 ; y /= 4 ;
-	  /* old code damper = 5 ; u =  damper * (x + damper) / (y + damper) - damper ;  */
-	  u = x / (100 * y + x + 20) ; /* 2017_08_01 */
+	  slx = arrayp (look->map->solexa, ii, SLX) ;
 
-	  if (u < 0) u = 0 ;
-	  slx->signal[ns] = 100000 * u * u ;
-	  
-	  /* take the median of the last 3 points */
-	  if (0) /* rolling median */
+	  for (int j = -nn ; j <= nn ; j++)
 	    {
-	      float x, old, new ;
-	      int i, j, jj = ii % NN ;
-	      new =  slx->signal[ns] ;
-	      old = uu[jj] ;
-	      uu[jj] = new ;
-	      if (old != new) 
-		{
-		  /* delete old */
-		  if (ii >= NN)
-		    for (i = 0 ; i < NN ; i++)
-		      {
-			x = uu[i] ;
-			if (x == old)
-			  {
-			    for (j = i ; j < NN - 1 ; j++)
-			      uu[j] = uu[j+1] ;
-			    break ;
-			  }
-		      }
-		  /* insert */
-		  if (new >= uu[NN-2])
-		    uu[NN-1] = new ;
-		  else
-		    for (i = 0 ; i < NN - 1 ; i++)
-		      {
-			x = uu[i] ;
-			if (x > new)
-			  {
-			    for (j = NN - 1 ; j > i ; j--)
-			      uu[j] = uu[j-1] ;
-			    uu[j] = new ;
-			    break ;
-			  }
-		      }
-		  if (ii >= NN)
-		    median  = uu[NN/2] ;
-		}
-	      if (1 && ii > (NN-1)/2) (slx - (NN-1)/2)->signal[ns] = median ;
+	      slx1 = arrayp (look->map->solexa, ii+j, SLX) ;
+	      x += slx1->signal[ns1] ;
+	      y += slx1->signal[ns2] ;
+	      if (ns3 != NA) z += slx1->signal[ns3] ; 
+	      if (ns4 != NA) t += slx1->signal[ns4] ; 
 	    }
+	  /* do not use the other strand values (s,t) this creates ends echos rather than damping them */
+	  x /= 2 * nn + 1 ; y /= 2 * nn + 1 ;
+	  u =  (x + damper) / (x + y + 2 * damper) - seuil ;
+	  if (u < 0) u = 0 ;
+	  slx->signal[ns] = zoom * u * x ;
 	}
-      look->isClosed[ns] = look->isSolexaClosed[ns] = 2 ;
-      pnx0->signal = w1 ;
     }
+  if (ns1 != NA)   look->isClosed[ns1] = look->isSolexaClosed[ns1] = 2 ;  
+  if (ns2 != NA)   look->isClosed[ns2] = look->isSolexaClosed[ns2] = 2 ;  
+  if (ns3 != NA)   look->isClosed[ns3] = look->isSolexaClosed[ns3] = 2 ;  
+  if (ns4 != NA)   look->isClosed[ns4] = look->isSolexaClosed[ns4] = 2 ;  
+  look->isClosed[ns] = look->isSolexaClosed[ns] = 0 ;  
+  /*   pnx0->signal = w1 ; */
+
 } /* htileSolexaEndRatios */
 
 /************************************************************/
@@ -2879,7 +2861,7 @@ static void htileSolexaConvert (Htile look, BOOL force, ACEOUT ao)
 	      wp->x = x ; wp->y = y ;
 	    }
 	  if (aa && arrayMax (aa))
-	    htileWiggleConvert (look, 0 /* was manip, shoukd be a pnx */, ns, aa) ;
+	    htileWiggleConvert (look, 0 /* was manip, should be a pnx */, ns, aa) ;
 	  ir += jr - 1 ;
 	}
     }
@@ -2899,24 +2881,44 @@ static void htileSolexaConvert (Htile look, BOOL force, ACEOUT ao)
 
 	    for (j = 0 ; j < NF ; j++)
 	      if ((pnx->flag & PGG_endRatios) == 0 && (pnx->flag & flag[j])  ==  flag[j])
-		{		  
-		  fNam = hprintf (h, "TABIX/%s/%s.%s.tabix.gz"
-				  , pnx->p
-				  , name(look->intMap)
-				  , suffix[j]
-				  ) ;
-		  if (! filCheckName(fNam, 0, "r") && !strncmp (name(look->intMap), "c_", 2))
+		{
+		  BOOL ok = FALSE ;
+		  if (! ok)
+		    {
+		      fNam = hprintf (h, "TABIX/%s/R.%s.%s.BF.gz"
+				      , pnx->p
+				      , name(look->intMap)
+				      , suffix[j]
+				      ) ;
+		      if (filCheckName(fNam, 0, "r"))
+			ok = TRUE ;
+		    }
+		  if (! ok)
 		    {
 		      dn = 2 ;
-		      fNam = hprintf (h, "TABIX/%s/%s.%s.tabix.gz"
+		      fNam = hprintf (h, "TABIX/%s/R.%s.%s.BF.gz"
 				      , pnx->p
 				      , name(look->intMap) + dn
 				      , suffix[j]
 				      ) ;
+		      if (filCheckName(fNam, 0, "r"))
+			ok = TRUE ;
 		    }
-		  if (1 && filCheckName(fNam, 0, "r"))
+		  if (! ok)
 		    {
-		      Array aa = sxGetWiggleZone (0, fNam, "TABIX", solexaStep, name(look->intMap), look->a1, look->a2, h) ;
+		      fNam = hprintf (h, "TABIX/%s/%s/R.chrom.%s.BF.gz"
+				      , pnx->p
+				      , name(look->intMap)
+				      , suffix[j]
+				      ) ;
+		      if (filCheckName(fNam, 0, "r"))
+			ok = TRUE ;
+		    }
+		      
+
+		  if (ok)
+		    {
+		      Array aa = sxGetWiggleZone (0, fNam, "BF", &(look->solexaStep), name(look->intMap), look->a1, look->a2, h) ;
 		      if (aa && arrayMax (aa))
 			htileWiggleConvert (look, pnx, ns, aa) ;
 		    }
@@ -2985,7 +2987,7 @@ static void htileDrawSolexa (Htile look, float offset, float probeOffset, ACEOUT
       olds = 0 ;
       for (iSlx = 1, slx = arrp (look->map->solexa, 1, SLX); iSlx < arrayMax(look->map->solexa) ; iSlx++, slx++)
 	{
-	  x = TMAP2GRAPH (look->map, slx->a1 + solexaStep) ;
+	  x = TMAP2GRAPH (look->map, slx->a1 + look->solexaStep) ;
 	  if (x < 0 || x > look->map-> graphWidth)
 	    continue ;
 	  if (look->doMask && (slx->flag & MASK_FILTER)) continue ;
@@ -4413,7 +4415,7 @@ static void htileGenomeAction (void *v)
 	 tt->open = ! tt->open ;
     }
   look->map->mapDraw () ;
-} /*  htileFilterProbes */
+} /*  htileGenomeAction */
 
 static void htileDrawGenomeButtons (Htile look, float *offsetp)
 {
@@ -4532,6 +4534,7 @@ static void htileDrawScale (Htile look, float offset)
       else
 	graphLine (u3, y1, u3, y2) ;
     }
+
   sc3 = v1 + i0*sc1 ;
   u3 = TMAP2GRAPH (look->map, sc3 - look->map->a1 + 1) ;
   sc4 = 10*sc1 + look->map->a1 ; ;
@@ -4610,10 +4613,10 @@ static void htileDrawDna (Htile look, float offset)
 	  {
 	    x = look->map->graphWidth/2.0 + (i - a0) * dx - .5 ;
 	    ai = i - a1 ;
-	    if (ai >= 0 && ai < ln)
+	    if (ai >= 3 && ai < ln)
 	      {
 		buf[0] = dna[ai] ;
-		if (x > 2 && x < look->map->graphWidth - 2)
+		if (x > 20 && x < look->map->graphWidth - 2)
 		  {
 		    int col = 0 ;
 		    for (j = 0 ; j < 32 ; j++)
@@ -4668,7 +4671,7 @@ static void htileDrawGenes (Htile look, float offset, BOOL isUp)
       if (a2 < g1 || a1 > g2)
 	continue ;
       	
-      for (pass = 0 ; pass < 4 ; pass++) /* first the genes with a geneid */
+      for (pass = 0 ; pass < 5 ; pass++) /* first the genes with a geneid */
 	{
 	  switch (pass)
 	    {
@@ -4686,10 +4689,17 @@ static void htileDrawGenes (Htile look, float offset, BOOL isUp)
 	      break ;
 	    case 3:
 	      {
-		AC_KEYSET kpg = ac_objquery_keyset (tile, ">Genes;>Genefinder;>Source;>subsequence;Is_predicted_gene;NOT Method=\"Sasha*\" AND NOT Method=\"Vega*\"",h) ;
+		AC_KEYSET kpg = ac_objquery_keyset (tile, ">Genes;{>Transcribed_gene;>Matching_genefinder_gene} SETOR{>Genefinder};>Source;>subsequence;Is_predicted_gene;NOT Method=\"Sasha*\" AND NOT Method=\"Vega*\"",h) ;
 		tgs = ac_keyset_table (kpg, 0, -1, 1, h) ;
 	      }
 	      y1 = offset + (isUp ? -5 : 5) ; y2 = y1 + .6 ;   /* Defines thickness of the gene. Was set to .6 originally*/
+	      break ;
+	    case 4: 
+	      {
+		AC_KEYSET kpg = ac_objquery_keyset (tile, ">Subsequence ; Is_predicted_gene",h) ;
+		tgs = ac_keyset_table (kpg, 0, -1, 1, h) ;
+	      }
+	      y1 = offset + (isUp ? -2 : 2) ; y2 = y1 + .6 ;   /* Defines thickness of the gene. Was set to .6 originally*/
 	      break ;
 	    }
 	  for (ir = 0 ; tgs && ir < tgs->rows ; ir++)
@@ -4728,6 +4738,7 @@ static void htileDrawGenes (Htile look, float offset, BOOL isUp)
 		    col = GREEN ;
 		  break ;
 		case 3:
+		case 4:
 		  if (! keyFindTag (tg, _Source_exons))
 		    continue ;
 		  col = GRAY ;
@@ -4813,6 +4824,7 @@ static void htileDrawGenes (Htile look, float offset, BOOL isUp)
 		      graphRectangle (v1, y1, v2, y2) ;
 		      break ;
 		    case 3:
+		    case 4:
 		      oldv2 = 0 ;
 		      
 		      spls = ac_tag_table (Tg, "Source_exons", h1) ;
@@ -6200,7 +6212,17 @@ static void htileDraw (void)
       int a2 = ac_table_int (tbl, 0, 2, 0) ;
       int a0, centre ;
 
-      if (!strcasecmp (ac_class (Gene), "Gene") || !strcasecmp (ac_class (Gene), "PBS"))
+      if (! Gene)
+	{
+	  int da = 3000 ;  /* initial zone-widht of the wiggle */
+	  centre = look->from + look->map->min - look->map->a1 ;
+	  look->map->mag = (3.0 * look->map->graphWidth) / (7.0 * da) ;
+	  /* center the center */
+	  a0 = TGRAPH2MAP(look->map, look->map->graphWidth/2.0) ;
+	  look->map->offset += centre - a0 ;
+	  a0 = TGRAPH2MAP(look->map, look->map->graphWidth/2.0) ;
+	}
+      else if (!strcasecmp (ac_class (Gene), "Gene") || !strcasecmp (ac_class (Gene), "PBS"))
 	{
 	  if (a1 > a2) { int a3 = a1 ; a1 = a2 ; a2 = a3 ; }
 	  if (a1 && a2 && a2 > look->map->a1 && a1 < look->map->a2)
@@ -6340,7 +6362,7 @@ static void htileDraw (void)
   if (look->showRZones)
     htileDrawRZone (look, offset) ;
 #endif
-  htileDrawMusicalScale (look, offset) ;
+  if (0)   htileDrawMusicalScale (look, offset) ;
 #ifdef BOU_DEF
   if (look->showMask)
     htileDrawMask (look, offset) ;
@@ -6352,6 +6374,7 @@ static void htileDraw (void)
   if (look->showGenes && ! look->hideHeader)
     graphLine (xx, y0, xx, look->map->graphHeight) ;
   graphColor (BLACK) ;
+  if (1)   htileDrawMusicalScale (look, offset) ;
   graphRedraw () ;
   graphRegister (KEYBOARD, tmapKbd) ;
 }
@@ -6379,9 +6402,9 @@ static BOOL solexaAllInit (Htile look)
       KEY col ;
       unsigned int flag[14] =  { PGG_ELF, PGG_ERF, PGG_ELR, PGG_ERR, PGG_nuf, PGG_nur, PGG_ppf, PGG_ppr, PGG_uf, PGG_ur, PGG_endRatioLF, PGG_endRatioRF, PGG_endRatioLR, PGG_endRatioRR  } ;
       const char *suffix[14] = {".LF", ".RF", ".LR", ".RR", "nu+", "nu-", "pp+", "pp-", "+", "-", ".eLF", ".eRF", ".eLR", ".eRR" } ;
-      const int colors[14] = { BROWN, GREEN, MAGENTA, CYAN, PALEORANGE, YELLOW, BLACK, GRAY, ORANGE, DARKBLUE, GREEN4, DARKCYAN , RED4, BLUE4  } ;
+      const int colors[14] = { BROWN, GREEN, MAGENTA, CYAN, PALEORANGE, YELLOW, BLACK, GRAY, ORANGE, DARKBLUE, PALEGREEN, PALEVIOLET, PALEMAGENTA, PALECYAN  } ;
       aa = look->solexaAll = arrayHandleCreate (128, PNX, look->h) ;
-      iter = ac_dbquery_iter (look->db, "find run w_colour", h) ;
+      iter = ac_dbquery_iter (look->db, "find run w_colour || wiggle", h) ;
       ir = -1 ;
       while (ac_free (Run), ir++, Run = ac_next_obj (iter))
 	{
@@ -6457,7 +6480,7 @@ BOOL htileDisplay (KEY key, KEY from, BOOL isOldGraph)
       graphActivate (oldlook->map->graph)
       )
     { 
-      oldlook->from = from ;
+      oldlook->from = from + oldlook->map->a1 ;
       tmapResize () ;
       return TRUE ;
     }
@@ -6470,7 +6493,7 @@ BOOL htileDisplay (KEY key, KEY from, BOOL isOldGraph)
       firstPass = FALSE ;
       look0->smoothing = 0 ;
       look0->ratio = 0 ;
-      look0->showDot = 3 ;
+      look0->showDot = 3 ;  /* 0: line , 1: line, 2: bar, 3: stack */
       look0->showExtrema = FALSE ;
       look0->rejectAmbiguous = 0 ;
       look0->romainSmoothing = 0 ;
@@ -6479,11 +6502,12 @@ BOOL htileDisplay (KEY key, KEY from, BOOL isOldGraph)
       else if (from && class (from) == 0)
 	{ look0->gaussWidth = 10 ;  look0->zoom = 5/32.0  ; }
       else if (class (key) == _VSequence)
-	{ look0->gaussWidth = 1000 ;  look0->zoom = 5 ; }
+	{ look0->gaussWidth = 1000 ;  look0->zoom = 5/32.0 ; }
       else if (class (key) == _VmRNA)
 	{ look0->gaussWidth = 20 ;  look0->zoom = 5 ; }
       else
 	{ look0->gaussWidth = 100000 ; look0->zoom = 40 ; }
+      look0->zoom = 5/256.0 ; 
       if (isGifDisplay)
 	{ 
 	  look0->showRZones = FALSE ; 
@@ -6503,7 +6527,7 @@ BOOL htileDisplay (KEY key, KEY from, BOOL isOldGraph)
       look0->showRZones = FALSE ;
       look0->showGenes = TRUE ;
       look0->showCaptureProbes = TRUE ;
-      look0->showGeneSignal = TRUE ;
+      look0->showGeneSignal = TRUE ; 
       {
 	int i ;
 	switch (look0->ratio)
@@ -6540,6 +6564,7 @@ BOOL htileDisplay (KEY key, KEY from, BOOL isOldGraph)
 
   memset (look->geneSearchBuf, 0, 301) ;
   look->map = tmapCreate (look, look->h, htileDraw) ;
+  look->map->lnWidth = .3 ;
 
   if (!htileConvert (look, FALSE, 0) || ! (isOldGraph ||  displayCreate (DtTiling)))
     { 

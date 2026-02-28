@@ -317,11 +317,11 @@ static int gffDumpMrna (AC_OBJ mrna, BOOL isQual, int otherVeryGoodProduct, int 
 	  printf("\n") ;
 	}
 	      
-      if (product_id && ! isQual && tag == EXON && x2 >= p1 && x1 <= p2) /* CDS */
+      if (product_id && ! isQual && (tag == EXON || tag == GAP) && x2 >= p1 && x1 <= p2) /* CDS */
 	{
-	  int p22 = stop ? p2 - 3 : p2 ;
-	  c1 = x1 < p1 ? p1 : x1 ; c1 = a1 + c1 - x1 ;
-	  c2 = x2 < p22 ? x2 : p22 ; c2 = a1 + c2 - x1 ;
+	  int p22 = stop ? p2  : p2 ; /* include the stop */
+	  c1 = a1 < p1 ? p1 : a1 ; 
+	  c2 = a2 < p22 ? a2 : p22 ; 
 	  if (c1 <= c2)
 	    {
 	      ok |= 2 ;
@@ -340,7 +340,7 @@ static int gffDumpMrna (AC_OBJ mrna, BOOL isQual, int otherVeryGoodProduct, int 
 	      printf("\n") ;
 	    }
 	}
-      if (!otherVeryGoodProduct && ! isQual && (tag == ORFGAP || tag == EXON)) /* exon */
+      if (!otherVeryGoodProduct && ! isQual && (tag == ORFGAP || tag == EXON || tag == GAP)) /* exon */
 	{
 	  c1 = a1 ;
 	  c2 = a2 ;

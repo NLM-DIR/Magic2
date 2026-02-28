@@ -36,10 +36,6 @@
  */
 
 /* %W% %G% */
-/*
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
 
 #define CHRONO
 
@@ -448,13 +444,13 @@ static Array diamEvaluate (DIAM *diam, int ctgMax, Array contig, BitSet mask, Ar
 static int diamSplitOrder (const void *a, const void *b)
 {
   BitSet bba = ((DIAMWORD *)a)->bb, bbb = ((DIAMWORD *)b)->bb ;
-  int i, nn = arrayMax(bba) ;
+  unsigned long int i, nn = bigArrayMax(bba) ;
   unsigned int *ia, *ib ;
 
   if (nn)
     {
-      ia = arrp (bba, 0, unsigned int) ;
-      ib = arrp (bbb, 0, unsigned int) ;
+      ia = bigArrp (bba, 0, unsigned int) ;
+      ib = bigArrp (bbb, 0, unsigned int) ;
       for (i = 0 ; i < nn ; ia++, ib++, i++)
 	{
 	  if (*ia < *ib) return -1 ;
@@ -468,24 +464,24 @@ static int diamSplitOrder (const void *a, const void *b)
 /* because of breaking i now have diams containing one another, clean them out */
 static Array diamCompress (Array oldDiams, DIAM *diam)
 {
-  int nn ;
   Array diams = arrayCreate (arrayMax(oldDiams) , DIAMWORD) ;
   BitSet bba, bbb ;
-  int ii, jj, kk, i, isIn,isOk ;
+  int ii, jj, kk, isIn,isOk ;
   DIAMWORD *dmw, *dmw2 ;
   unsigned int *ia, *ib ;
  
   for (ii = kk = 0 ; ii < arrayMax(oldDiams) ; ii++)
     {
+      unsigned long int i, nn ;
       dmw = arrp (oldDiams, ii, DIAMWORD) ;
       bba = dmw->bb ;
-      nn = arrayMax(bba) ;
+      nn = bigArrayMax(bba) ;
       for (isIn = 0, jj = ii + 1 ; !isIn && jj < arrayMax(oldDiams) ; jj++)
 	{
 	  dmw2 = arrp (oldDiams, jj, DIAMWORD) ;
 	  bbb= dmw2->bb ;
-	  ia = arrp (bba, 0, unsigned int) ;
-	  ib = arrp (bbb, 0, unsigned int) ;
+	  ia = bigArrp (bba, 0, unsigned int) ;
+	  ib = bigArrp (bbb, 0, unsigned int) ;
 	  for (i = 0, isOk = 1 ; isOk &&  i < nn ; ia++, ib++, i++)
 	    {
 	      if (*ia & (~(*ib))) /* one bit of a is not set in b */

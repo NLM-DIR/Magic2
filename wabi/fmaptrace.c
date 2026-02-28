@@ -1759,7 +1759,7 @@ static void showVirtualDna(LOOK look, float x,
   ep = arrp(a, 0, A_ERR)  - 1 ;
   i = arrayMax(a) ;
   while (ep++, i--)
-    { c = dnaDecodeChar[upSequence ? (int)complementBase[(int)ep->baseShort] : (int)ep->baseShort] ;
+    { c = dnaDecodeChar[upSequence ? (int)complementBase(ep->baseShort) : (int)ep->baseShort] ;
       ddx = 0 ;
       switch(ep->type)
 	{

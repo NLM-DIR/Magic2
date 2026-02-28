@@ -24,10 +24,6 @@
  */
 
 /* %W% %G% */
-/* debugging flags -> slower code 
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
 #define MAXWORD 100
 
 #ifndef ACEMBLY

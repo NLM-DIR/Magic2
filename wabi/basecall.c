@@ -15,12 +15,6 @@
  */
 
 /* @(#)basecall.c	1.15 5/23/97 */
-
-
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-
-
 #include "acedb.h"
 #include "acembly.h"
 #include "basecall.h"
@@ -1852,7 +1846,7 @@ static void cleanErr (Array err, Array dnaLong, Array dnaShort, BOOL isUp)
 		  i = j = 0 ;
 		  cc = *cl ; while (*cl++ == cc) i++ ;
 		  if (sens == -1)
-		    { cc = complementBase[(int)cc] ;
+		    { cc = complementBase(cc) ;
 		      while (*cs-- == cc) j++ ;
 		    }
 		  else
@@ -1878,7 +1872,7 @@ static void cleanErr (Array err, Array dnaLong, Array dnaShort, BOOL isUp)
 		  i  = j = 0 ;
 		  cc = *cl ; while (*cl++ == cc) i++ ;
 		  if (sens == -1)
-		    { cc = complementBase[(int)cc] ;
+		    { cc = complementBase(cc) ;
 		      while (*cs-- == cc) j++ ;
 		    }
 		  else
@@ -1907,7 +1901,7 @@ static void cleanErr (Array err, Array dnaLong, Array dnaShort, BOOL isUp)
 		  i = j = 0 ;
 		  cc = *cl ; while (*cl++ == cc) i++ ;
 		  if (sens == -1)
-		    { cc = complementBase[(int)cc] ;
+		    { cc = complementBase(cc) ;
 		      while (*cs-- == cc) j++ ;
 		    }
 		  else

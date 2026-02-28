@@ -31,12 +31,6 @@
  */
 
 /* $Id: trace.c,v 1.29 2017/10/02 19:49:25 mieg Exp $ */
-
-
-#define ARRAY_CHECK  
-#define MALLOC_CHECK
-
-
 #include "acedb.h"
 #include "acembly.h"
 #include "freeout.h"
@@ -725,7 +719,7 @@ static void baseDoEdit (LOOK look, LANE *lane, KEY key,
     case 'n': *base &= ~BC_TAG ; *base = BC_LOW | BC_HAND | N_ ; break ;
     case 'W': 
       {
-	char mycBase = lane->upSequence ? complementBase[(int)(*cBase)] : *cBase ;
+	char mycBase = lane->upSequence ? complementBase(*cBase) : *cBase ;
 	char snpBase = (*base | mycBase)  & 0xf ; /* accept wobble */
 	*base = BC_LOW | BC_HAND | snpBase ; 
 	break ;
@@ -1584,10 +1578,14 @@ static void traceSelect(LOOK look, int box)
 {
   HINT *hh ;
   
-  if (box < arrayMax(look->hints) &&
-      arrp(look->hints,box, HINT))
-    { hintAccept (look, arrp(look->hints,box, HINT)) ;
-      return ;
+  if (box < arrayMax(look->hints))
+    {
+      hh = arrp(look->hints,box, HINT) ;
+      if (hh)
+	{
+	  hintAccept (look, arrp(look->hints,box, HINT)) ;
+	  return ;
+	}
     }
 
   if (box < arrayMax(look->baseBoxes) &&
@@ -2395,7 +2393,7 @@ static void traceDnaLane (LOOK look, MAP map, LANE *lane, float *offset, int min
       y = MAP2GRAPH(map, *basePos) ;
       hh->y = y ;
       c = *base & 0x0f ;
-      *buf = dnaDecodeChar[(int)(compl ? complementBase[(int)c] : c)] ;
+      *buf = dnaDecodeChar[(int)(compl ? complementBase(c) : c)] ;
       if (*base & BC_LOW) 
 	*buf = ace_lower (*buf) ;
       else
@@ -2706,7 +2704,7 @@ static BOOL jackPotHint (LOOK look, MAP map, LANE *lane, float *offset,
       y = MAP2GRAPH(map, bp) ;
       if (y < look->topMargin || y > look->graphHeight) continue ;
       done = TRUE ;
-      cc = !lane->upSequence ? *cq : complementBase [(int)(*cq)] ;
+      cc = !lane->upSequence ? *cq : complementBase(*cq) ;
       c = dnaDecodeChar[(int)(*cp)] ;
       c = ace_lower(c) ;
       box = graphBoxStart () ;
@@ -2831,9 +2829,9 @@ static int jackPotSearch (LOOK look, MAP map, LANE *lane,
 	     }
 	   else
 	     {
-	       if ( !(*cp & complementBase[(int)(*cq)]))
+	       if ( !(*cp & complementBase(*cq)))
 		 break ;
-	       if (*cp !=  complementBase[(int)(*cq)])
+	       if (*cp !=  complementBase(*cq))
 		 { n++ ; isQ++ ; }
 	       if (isQ > 1) break ;
 	       if (sens == 1) { cp-- ; cq++ ; }
@@ -2852,7 +2850,7 @@ static int jackPotSearch (LOOK look, MAP map, LANE *lane,
 		 if (!lane->upSequence)
 		   { if (*cp++ != *cq++)  n2++ ;}
 		 else
-		   { if (*cp-- !=  complementBase[(int)(*cq++)])  n2++ ;}
+		   { if (*cp-- !=  complementBase(*cq++))  n2++ ;}
 	       }
 	   }
 	 else
@@ -2863,7 +2861,7 @@ static int jackPotSearch (LOOK look, MAP map, LANE *lane,
 		 if (!lane->upSequence)
 		   { if (*cp-- != *cq--)  n2++ ;}
 		 else
-		   { if (*cp++ !=  complementBase[(int)(*cq--)])  n2++ ;}
+		   { if (*cp++ !=  complementBase(*cq--))  n2++ ;}
 	       }
 	   }
 	 
@@ -4306,7 +4304,7 @@ static void traceEdLaneBases (LOOK look, LANE *lane, float *offset,
   i = arrayMax(a) ; nerr = 0 ;
   while (ep++, i--)
     { c = dnaDecodeChar[upSequence ? 
-			complementBase[(int)ep->baseShort] : (int)ep->baseShort] ;
+			complementBase(ep->baseShort) : (int)ep->baseShort] ;
       if (c == 'w') c = 'X' ;
       ddx = 0 ; ddy = 0 ;
       switch(ep->type)

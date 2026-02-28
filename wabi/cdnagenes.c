@@ -17,10 +17,6 @@
  */
 
 /* %W% %G% */
-/*
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
 #define CHRONO
 
 

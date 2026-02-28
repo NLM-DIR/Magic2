@@ -16,11 +16,6 @@
  */
 
 /* %W% %G% */
-/*
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
-
 #include "acedb.h"
 #include "bs.h"
 #include "graph.h"

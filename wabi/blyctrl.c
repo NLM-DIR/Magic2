@@ -17,12 +17,6 @@
  */
 
 /* @(#)blyctrl.c	1.2 5/23/97 */
-
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-
-
-
 #include "acedb.h"
 #include "graph.h"
 #include "mytime.h"

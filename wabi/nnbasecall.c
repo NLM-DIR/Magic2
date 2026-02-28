@@ -262,7 +262,7 @@ void nnLaneDoTrain (FILE *fil, Array dna, LANE *lane)
 	    break ;
 	  cc = arr(dna, ep->iLong, char) & 0x0F ;
 	  if (lane->upSequence)
-	    cc = complementBase [(int)cc] ;
+	    cc = complementBase(cc) ;
 	  nnBaseTrain (fil, lane, ep->iShort, cc) ;
 	  break ;
 	default:

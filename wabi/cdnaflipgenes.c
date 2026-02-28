@@ -867,7 +867,7 @@ int cDnaExportGeneboxPrimers (KEYSET ks0)
               for (i = 0 ; i < SIZE ; i++)
                 arr (p1, i, char) = dnaDecodeChar [(int)arr (dna, a1 + i - 1, char)] ;
               for (i = 0 ; i < SIZE ; i++)
-                arr (p2, i, char) = dnaDecodeChar [(int)complementBase [(int)arr (dna, a2 - i - 1, char)]] ;
+                arr (p2, i, char) = dnaDecodeChar [(int)complementBase(arr (dna, a2 - i - 1, char))] ;
               
               freeOutf ("Primer gbx_%s_f\nForward\nMotif %s\nGene %s\n\n", name(gene), arrp(p1, 0, char), name(gene)) ;
               freeOutf ("Primer gbx_%s_r\nReverse\nMotif %s\nGene %s\n\n", name(gene), arrp(p2, 0, char), name(gene)) ;
@@ -895,7 +895,7 @@ int cDnaExportGeneboxPrimers (KEYSET ks0)
               for (i = 0 ; i < SIZE ; i++)
                 arr (p1, i, char) = dnaDecodeChar [(int)arr (dna, a1 + i - 1, char)] ;
               for (i = 0 ; i < SIZE ; i++)
-                arr (p2, i, char) = dnaDecodeChar [(int)complementBase [(int)arr (dna, a2 - i - 1, char)]] ;
+                arr (p2, i, char) = dnaDecodeChar [(int)complementBase(arr (dna, a2 - i - 1, char))] ;
 
               if (isUp) { Array p3 = p1 ; p1 = p2 ; p2 = p3 ; }
               freeOutf ("Primer gbx_%s_f\nForward\nMotif %s\nGene %s\n\n", name(gene), arrp(p1, 0, char), name(gene)) ;

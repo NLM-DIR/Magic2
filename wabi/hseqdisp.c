@@ -2865,7 +2865,7 @@ static void hseqDraw (void)
   }
   graphText ("3'", xx, yy) ;  xx += 3 ;
   ccp = name(look->intMap) ;
-  if (strstr(ccp, "CHROMOSOME_")) ccp += strlen ("CHROMOSOME_") ;
+  if (0 && strstr(ccp, "CHROMOSOME_")) ccp += strlen ("CHROMOSOME_") ;
   
   {
     char buf1[64], buf2[64] ;

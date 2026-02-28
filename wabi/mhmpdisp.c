@@ -14,12 +14,6 @@
  * Created: July 15 2002 (mieg)
  *-------------------------------------------------------------------
  */
-
-/*
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
-
 #include "acedb.h"
 #include "bump.h"
 
@@ -795,7 +789,7 @@ static void mhmDrawMaps (MHM look)
       y = look->topMargin + look->yMag * (jj++) ;
       mm->y = y ;
       cp = name(mm->map) ;
-      if (!strncasecmp(cp, "CHROMOSOME_", strlen ( "CHROMOSOME_")))
+      if (0 && !strncasecmp(cp, "CHROMOSOME_", strlen ( "CHROMOSOME_")))
 	cp += strlen ( "CHROMOSOME_") ;
       graphText (cp, 1, y - .5) ;
       graphLine (x0, y, x0 + look->xMag * mm->len, y) ;

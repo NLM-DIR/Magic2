@@ -1158,7 +1158,7 @@ void trackContig (LOOK look, int z1, int z2, BOOL whole)
 	      cp1 = cp + sens * ( jp->dcp - 1) ; cq1 = cq + jp->dcq ;
 	      while (cp1 += sens, i--)
 		{ cc1 = (*cp1 & 0x0F) ;
-		  if (sens == -1) cc1 = complementBase[(int)(cc1)] ;
+		  if (sens == -1) cc1 = complementBase((cc1)) ;
 		  if (cc1 != (*cq1++ & 0x0F))
 		    goto nextjp1 ;
 		}
@@ -1166,7 +1166,7 @@ void trackContig (LOOK look, int z1, int z2, BOOL whole)
 	      cp1 = cp + sens * (jp->dcp - 1) ; cq1 = cq + jp->dcq ;
 	      while (cp1 += sens, i--)
 		{ cc1 = (*cp1 & 0x0F) ;
-		  if (sens == -1) cc1 = complementBase[(int)(cc1)] ;
+		  if (sens == -1) cc1 = complementBase((cc1)) ;
 		  if (cc1 != (*cq1++ & 0x0F))
 		    if (++n >= jp->ok)
 		      goto nextjp1 ;
@@ -1208,7 +1208,7 @@ void trackContig (LOOK look, int z1, int z2, BOOL whole)
 	  rr->jp = 0 ;
 	  cp = rr->cp ;
 	  cc1 = *cp & 0x0f ; if (cc1 == N_) { cc1 = 0 ; nr -= 7000 ; }  /* N_ counts like 1/3 */
-	  if (rr->up) cc1 = complementBase[(int)cc1] ;
+	  if (rr->up) cc1 = complementBase(cc1) ;
 	  nn[(int)cc1] += nr ; /* this favors good quality i hope */
 	  nrtot += nr ;
 	  if (cc1 & ccq)  /* see the N_ */
@@ -1228,7 +1228,7 @@ void trackContig (LOOK look, int z1, int z2, BOOL whole)
 	      cp1 = cp + sens * ( jp->dcp - 1) ; cq1 = cq + jp->dcq ;
 	      while (cp1 += sens, i--)
 		{ cc2 = (*cp1 & 0x0F) ;
-		  if (sens == -1) cc2 = complementBase[(int)(cc2)] ;
+		  if (sens == -1) cc2 = complementBase(cc2) ;
 		    if (cc2 != (*cq1++ & 0x0F))
 		      goto nextjp ;
 		}
@@ -1236,7 +1236,7 @@ void trackContig (LOOK look, int z1, int z2, BOOL whole)
 	      cp1 = cp + sens * (jp->dcp - 1) ; cq1 = cq + jp->dcq ;
 	      while (cp1 += sens, i--)
 		{ cc2 = (*cp1 & 0x0F) ;
-		  if (sens == -1) cc2 = complementBase[(int)(cc2)] ;
+		  if (sens == -1) cc2 = complementBase(cc2) ;
 		  if (cc2 != (*cq1++ & 0x0F))
 		    if (++n > jp->ok)
 		      goto nextjp ;
@@ -2494,7 +2494,7 @@ BOOL baseCallTrackBout (Array dna1, Array dna2, int *x1p, int *x2p, int *sensp)
       cq = arrp (dna2, j, char) ;
       
       while (i++ < max1 && j--)
-	{ c = *cp++ & complementBase [*cq-- & 0x0f] ;
+	{ c = *cp++ & complementBase(*cq-- & 0x0f) ;
 	  if (c == N_) continue ;
 	  else if (c) p++ ;
 	  else 
@@ -2515,7 +2515,7 @@ BOOL baseCallTrackBout (Array dna1, Array dna2, int *x1p, int *x2p, int *sensp)
       cq = arrp (dna2, j, char) ;
       
       while (i++ < max1 && j--)
-	{ c = *cp++ & complementBase [*cq-- & 0x0f] ;
+	{ c = *cp++ & complementBase (*cq-- & 0x0f) ;
 	  if (c == N_) continue ;
 	  else if (c) p++ ;
 	  else 
@@ -3193,7 +3193,7 @@ static int abiFixUnzip (Array dna, int a2, BOOL isDown, BOOL zip)
 	}
 
     }
-      return nA ;
+  return nA ;
 }  /* abiFixUnzip */
 
 /*********************************************************************/
@@ -3368,7 +3368,7 @@ static int abiFixHasPolyASignal (AAA *ap, Array gDna)
       if (-ap->a2 + MXLN > arrayMax (gDna))
 	return 0 ;
       for (i = 0, cp = arrp (gDna, -ap->a2 + MXLN, unsigned char) ; i < MXLN ; cp--, i++)
-	buf [i] = complementBase[(int)*cp] ;
+	buf [i] = complementBase(*cp) ;
     }
   buf[MXLN] = 0 ;
 
@@ -3600,11 +3600,10 @@ static BOOL abiFixLabelGatherPolyA (KEY mrna, Array gDna, Array aa5,  Array aa3,
   /* gather the contributing 5p ESTs */
   jj = arrayMax (aa5) ;
   arrayMax (units) = 0 ;
-  bsGetArray (Mrna, _Constructed_from, units, 5) ;
   if (bsGetArray (Mrna, _Constructed_from, units, 5))
     for (ii = 0 ; ii < arrayMax (units) ; ii+= 5)
       {
-	int e1, e2, x1, x2, v1 = 1, x, isSl = 0 ;
+	int e1, e2, x1, x2, v1 = 1, x, isSl = 0, n ;
 	BOOL top = FALSE ;
 	OBJ Est ;
 	KEY clone, sl ;
@@ -3627,6 +3626,12 @@ static BOOL abiFixLabelGatherPolyA (KEY mrna, Array gDna, Array aa5,  Array aa3,
 	     )
 	    )
 	  top = TRUE ;
+	if (bsFindTag (Est, _Forward) &&
+	    bsFindTag (Est, _Composite) &&
+	    bsGetData (Est, _Composite, _Int, &n) &&
+	    bsFindTag (Est, _Real_5prime)
+	    )
+	  { top = TRUE ; isSl = 1 ; nSl+= n; }
 	if (bsFindTag (Est, _Forward) &&
 	    bsGetKey (Est, _Transpliced_to, &sl) &&
 	    bsGetData (Est, _bsRight, _Int, &x) &&
@@ -3666,8 +3671,8 @@ static BOOL abiFixLabelGatherPolyA (KEY mrna, Array gDna, Array aa5,  Array aa3,
   if (1)
     for (ii = 0 ; ii < arrayMax (units) ; ii+= 5)
       {
-	int e1, e2, de2, x2, pA = 0, v1 = 1, tail = 0 ;
-	BOOL isMrna, iPriming, polyAPriming ;
+	int e1, e2, de2 = 0, x2, pA = 0, v1 = 1, tail = 0, n = 1 ;
+	BOOL isMrna, iPriming, polyAPriming, isComposite = FALSE ;
 	OBJ Est ;
 	KEY clone ;
 
@@ -3679,17 +3684,25 @@ static BOOL abiFixLabelGatherPolyA (KEY mrna, Array gDna, Array aa5,  Array aa3,
 	if (x2 < m1) /* we are only interested in the terminal exon, downstream of the best/good CDS */
 	  continue ;
 	est = uu[2].k ; 
+	isComposite = keyFindTag (est, _Composite) ;
 	if (keyFindTag (est, _Is_AM)) 
 	  continue ;
 	Est = bsCreate (est) ;
 	bsGetKey (Est, _cDNA_clone, &clone) ;
+	bsGetData (Est, _Composite, _Int, &n) ;
 
 	if (!strncmp(name(clone),"yk",2) && !strncmp(name(est),"GB",2))
 	  { bsDestroy (Est); continue ; }
+	/*
+	*/
 	iPriming = keyFindTag (clone, _Internal_priming) ;
 	polyAPriming = keyFindTag (clone, _Primed_on_polyA) ;
 	if (bsFindTag (Est, _PolyA_after_base))
 	  {
+	    if (bsFindTag (Est, _Reverse) &&
+		bsFindTag (Est, _Composite)
+		)
+	      bsGetData (Est, _Composite, _Int, &n) ;
 	    if (bsGetData (Est, _PolyA_after_base, _Int, &pA) &&
 		(
 		 (e1 < e2 && e2 > pA - 5 && e2 < pA + 5) || /* fully aligned */
@@ -3712,35 +3725,50 @@ static BOOL abiFixLabelGatherPolyA (KEY mrna, Array gDna, Array aa5,  Array aa3,
 		  }
 	      }
 	  }
-	isMrna = bsFindTag (Est, _Ref_mRNA) &&
-	  e2 > m1 + 10 &&
-	  !bsFindTag (Est, _Ref_seq) &&
-	  !bsFindTag (Est, _Is_partial) ;
-	if (0 && isMrna && bsFindTag (Est, _Complete_CDS))
-	  tail = 2 ;
-	de2 = 0 ;
-	if (e1 > e2)
+
+	if (! isComposite)
 	  {
-	    v1 = 1 ;
-	    if (pA > 0) v1 = pA ;
-	    else
-	      bsGetData (Est, _Vector_clipping, _Int, &v1) ;
-	    if (e2 > v1)  
-	      de2 = e2 - v1 ; /* number of unaligned bases */
-	  }
-	else if (isMrna) 
-	  {
-	    int dummy, v2 ;
-	    v2 = 9999999 ;
-	    if (pA > 0) v2 = pA ;
-	    else
-	      if (bsGetData (Est, _Vector_clipping, _Int, &dummy))
-		bsGetData (Est, _bsRight, _Int, &v2) ;
-	    if (e2 < v2)  
-	      de2 = v2 - e2 ; /* number of unaligned bases */
+	    isMrna = bsFindTag (Est, _Ref_mRNA) &&
+	      e2 > m1 + 10 &&
+	      !bsFindTag (Est, _Ref_seq) &&
+	      !bsFindTag (Est, _Is_partial) ;
+	    if (0 && isMrna && bsFindTag (Est, _Complete_CDS))
+	      tail = 2 ;
+	    de2 = 0 ;
+	    if (e1 > e2)
+	      {
+		v1 = 1 ;
+		if (pA > 0) v1 = pA ;
+		else
+		  bsGetData (Est, _Vector_clipping, _Int, &v1) ;
+		if (e2 > v1)  
+		  de2 = e2 - v1 ; /* number of unaligned bases */
+	      }
+	    else if (isMrna) 
+	      {
+		int dummy, v2 ;
+		v2 = 9999999 ;
+		if (pA > 0) v2 = pA ;
+		else
+		  if (bsGetData (Est, _Vector_clipping, _Int, &dummy))
+		    bsGetData (Est, _bsRight, _Int, &v2) ;
+		if (e2 < v2)  
+		  de2 = v2 - e2 ; /* number of unaligned bases */
+	      }
 	  }
 	bsDestroy (Est) ;
 
+	if (iPriming)
+	  continue ;
+	if (iPriming || de2 > (polyAPriming ? 12 : 6))
+	  continue ;
+	if (iPriming || de2 > (polyAPriming ? 12 : 6) || (e1 < e2))
+	  continue ;
+	if (iPriming || de2 > (polyAPriming ? 12 : 6) || (e1 < e2 && !tail && !isMrna))
+	  continue ;
+	if (iPriming || de2 > (polyAPriming ? 12 : 6) || (e1 < e2 && !tail && !isMrna) 
+	    || (e1 > e2 && !tail && !polyAPriming))
+	  continue ;
 	if (iPriming || de2 > (polyAPriming ? 12 : 6) || (e1 < e2 && !tail && !isMrna) 
 	    || (e1 > e2 && !tail && !polyAPriming))
 	  continue ;
@@ -3768,7 +3796,10 @@ static BOOL abiFixLabelGatherPolyA (KEY mrna, Array gDna, Array aa5,  Array aa3,
 	ap->iPriming = iPriming ;
 	ap->polyAPriming = polyAPriming ;
 	if (keySetInsert (clones3, clone)) /* only if new, since may be in a variant */
-	  ap->nClones3 = 1 ;
+	  {
+	    ap->nClones3 = n ;
+	    ap->mClones03 = n ;
+	  }
       }
 
   /* gather valid3p from the Feature AAA stored on the cosmid */
@@ -3877,7 +3908,7 @@ static BOOL abiFixLabelGatherPolyA (KEY mrna, Array gDna, Array aa5,  Array aa3,
   if (arrayMax(aa3))
     {
       BOOL sortNeeded = FALSE ;
-      BOOL doZip = TRUE ;
+      BOOL doZip = FALSE ; /* 2024_09_24 was TRUE */ ;
 
       for (ii = arrayMax (aa3) - 1, ap = arrp (aa3,ii, AAA) ; ii >= 0 ; ii--, ap--)
 	{
@@ -4163,7 +4194,7 @@ static void abiFixLabelClusterPolyA (Array aa5, Array aa3, Array gDna, BOOL isDo
       cluster = FALSE ;
       sortNeeded = FALSE ;
 
-      if (1) 	  /* cluster polyA at same position */
+      if (arrayMax (aa3) > 1)   /* cluster polyA at same position */
 	{
 	  sortNeeded = FALSE ;
 	  for (ii = arrayMax (aa3) - 1, ap = arrp (aa3,ii, AAA) ; ii >= 0 ; ii--, ap--)
@@ -4192,15 +4223,16 @@ static void abiFixLabelClusterPolyA (Array aa5, Array aa3, Array gDna, BOOL isDo
        * Type 3 == yuji 3p clones, ap->nClones3 > 0 && ap->nAclones == 0
        */
 
-      if (1)  /* cluster on type 1 (polyA seen) positions the clusters witout polyA if they are within 25 bp */
+      if (arrayMax (aa3) > 1)  /* cluster on type 1 (polyA seen) positions the clusters witout polyA if they are within 25 bp */
 	{
 	  sortNeeded = FALSE ;
 	  for (ii = arrayMax (aa3) - 1, ap = arrp (aa3,ii, AAA) ; ii >= 0 ; ii--, ap--)
 	    if (ap->est && (ap->nAClones ||  (nRound > 1 && ap->mClones3)) && ap->aRich <= 0)
 	      {
 		a22 = ap->a22 ; 
-		for (jj = ii - 1, ap1 = arrp (aa3,jj, AAA) ; jj >= 0 ; jj--, ap1--) 
+		for (jj = ii - 1 ; jj >= 0 ; jj--)
 		  {
+		    ap1 = arrp (aa3,jj, AAA) ;
 		    if (! ap1->est) continue ;
 		    if (ap1->nAClones || ap1->a22 < a22 - 25) break ;
 		    if (ap1->aRich <= 0)
@@ -4213,8 +4245,9 @@ static void abiFixLabelClusterPolyA (Array aa5, Array aa3, Array gDna, BOOL isDo
 			  }
 		      }
 		  }
-		for (jj = ii + 1, ap1 = arrp (aa3,jj, AAA) ; jj < arrayMax (aa3) ; jj++, ap1++) 
+		for (jj = ii + 1 ; jj < arrayMax (aa3) ; jj++)
 		  {
+		    ap1 = arrp (aa3,jj, AAA) ;
 		    if (! ap1->est) continue ;
 		    if (ap1->nAClones || ap1->a22 > a22 + 12) break ;
 		    if (ap1->aRich <= 0)
@@ -4232,7 +4265,7 @@ static void abiFixLabelClusterPolyA (Array aa5, Array aa3, Array gDna, BOOL isDo
 	    arraySort (aa3, aaaTgOrder) ; /* sort again since we shifted */
 	}
       
-      if (1)  /* cluster several type 1 or 2 if they are within 12 bp on the most 3p represented position */ 
+      if (arrayMax (aa3) > 1)  /* cluster several type 1 or 2 if they are within 12 bp on the most 3p represented position */ 
 	{
 	  sortNeeded = FALSE ;
 	  for (ii = arrayMax (aa3) - 1, ap = arrp (aa3,ii, AAA) ; ii >= 0 ; ii--, ap--)
@@ -4256,11 +4289,10 @@ static void abiFixLabelClusterPolyA (Array aa5, Array aa3, Array gDna, BOOL isDo
 	    arraySort (aa3, aaaTgOrder) ; /* sort again since we shifted */
 	}
 
-
-      if (nRound > 1) /* cluster type 3 on second iteration if not well supported */ 
+      if (arrayMax (aa3) > 1 && nRound > 1) /* cluster type 3 on second iteration if not well supported */ 
 	{
 	  sortNeeded = FALSE ;
-	  for (ii = arrayMax (aa3) - 1, ap = arrp (aa3,ii, AAA) ; ii >= 0 ; ii--, ap--)
+	  for (ii = arrayMax (aa3) - 1, ap = arrp (aa3,ii, AAA) ; ii >= 1 ; ii--, ap--)
 	    if (ap->est && ap->aRich <= 0)
 	      {
 		a22 = ap->a22 ;
@@ -4284,7 +4316,7 @@ static void abiFixLabelClusterPolyA (Array aa5, Array aa3, Array gDna, BOOL isDo
 	    arraySort (aa3, aaaTgOrder) ; /* sort again since we shifted */
 	}
       
-      if (cluster)
+      if (arrayMax (aa3) > 1 && cluster)
 	{
 	  /* relocalize clusters on their best representative support */    
 	  int a20, n, bestA20, bestN, oldGroup = -1 ;
@@ -4331,8 +4363,8 @@ static void abiFixLabelClusterPolyA (Array aa5, Array aa3, Array gDna, BOOL isDo
 
 static int abiFixLabelReportPolyA (KEY mrna, Array aa5, Array aa3, DICT *dict)
 {
-  int ii, ii2, jj, n1 = 0, a0 = 0, a1, a2, m1, m2, nClones3, mrnaLength = 0 ;
-  AAA *ap, *ap1, *ap2 ;
+  int ii, jj, n1 = 0, a0 = 0, a1, a2, m1, m2, nClones3, mrnaLength = 0 ;
+  AAA *ap, *ap1 ;
   KEYSET ks = 0 ;
   BOOL hasOpenProduct5 = FALSE ;
   BOOL hasOpenProduct3 = FALSE ;
@@ -4429,7 +4461,7 @@ static int abiFixLabelReportPolyA (KEY mrna, Array aa5, Array aa3, DICT *dict)
       }
     if (! hasOpenProduct3 && arrayMax(aa3))
       {
-	int pass, xTags, nTags, xU ;
+	int pass, xTags, nTags ;
 	/* locate last position */
 	nTags = 0 ;
 	for (ii = arrayMax (aa3) - 1, ap = arrp (aa3,ii, AAA) ; ii >= 0 ; ii--, ap--)
@@ -4442,163 +4474,84 @@ static int abiFixLabelReportPolyA (KEY mrna, Array aa5, Array aa3, DICT *dict)
 	  for (ii = 0, ap = arrp (aa3, 0, AAA) ; ii < arrayMax (aa3) ; ii++, ap++)
 	    if (ap->est && /* a cluster point */
 		ap->aRich <= 0 &&
-		(ap->signal || isWorm) &&
+		(ap->signal || isWorm || ap->mClones03 > 10) &&
 		(ap->nClones3 >= (ap->polyAPriming ? 1 : 3) || ap->tail || ap->mClones3 > (UTR_showAll ? 1 : 3))
 		)
 	      { /* report if represented in this mrna, or if matching the end of the mrna */
 		/* count the supporting reads */
 		BOOL atEnd = FALSE ;
 		
-		for (x = xU = xTags = 0, ii2 = 0, ap2 = arrp (aa3, 0, AAA) ; ii2 < arrayMax (aa3) ; ii2++, ap2++)
-		  {
-		    int d = ap2->a20 - ap->a22 ;
-		    if (d > -26 && d < 26) 
-		      {
-			atEnd = TRUE ;
-			if (ap2->est0 && ap2->group == ap->group)
-			  {
-			    if (ap2->mrna == mrna ||
-				1 )  /* transfer the clone support in shorter mrnas */
-			      {  
-				if (*name(ap2->est0) == 'U') 
-				  xU++ ; 
-				else  
-				  x++ ;
-			      }
-			  }
-			if (ap2->mrna == mrna && ap2->method && ap2->group == ap->group)
-			  xTags += ap2->mClones03 ;  
-		      }
-		  }
-		
+		xTags = ap->nClones3 ;  
 		if (pass == 0) 
 		  {
-		    nTags +=  x + xTags ;
+		    nTags +=  xTags ;
 		    continue ;
 		  }
-		if (1 && !x && !xU && xTags < nTags/20)
+		if (xTags < nTags/20)
 		  continue ;
-		if (!x && !xU && xTags == 1 && nTags > 10)
+		if (xTags == 1 && nTags > 10)
 		  continue ;
-		nClones3 = x + xU + xTags ;
+		nClones3 = xTags ;
 		if (!nClones3)
 		  continue ;
-		if  (!(ap->nClones3 >= (ap->polyAPriming ? 1 : 3)) && ! ap->tail && ap->mClones3 < 2 && !atEnd)
+		if  (!(ap->nClones3 >= (ap->polyAPriming ? 1 : 3)) && ! ap->tail && ap->nClones3 < 2 && !atEnd)
 		  continue ; 
 		x = ap->a22 - a0 + 1 ;
 		/* reject flags stolen far downstream if we alrerady have one */
 		if (x - mrnaLength > 10 && n1) 
 		  continue ;
-		/* reject flags stolen far downstream even if the do not yet have a flag */
+		/* reject flags stolen far downstream even if we do not yet have a flag */
 		if (x - mrnaLength > 50) 
 		  continue ;
 		if (x < 0 || m2 + ap->a22 - a2 < 0) 
 		  continue ;
-		bsAddData (Mrna, _Valid3p, _Int, &x) ;
-		x = m2 + ap->a22 - a2 ;
-		bsAddData (Mrna, _bsRight, _Int, &x) ;
-		
-		bsAddData (Mrna, _bsRight, _Int, &nClones3) ;
-		
-		if (ap->signal && *ap->buffer)
-		  {
-		    if (1)
+		if (1)
+		  { /* check we are inside the last exon */
+		    BOOL ok = FALSE ;
+		    if (bsGetArray (Mrna, _Splicing, units, 5))
 		      {
-			bsAddData (Mrna, _bsRight, _Text, ap->buffer) ;
-		      }
-		    else
-		      {
-			if (ap->signal == 1)
-			  bsAddData (Mrna, _bsRight, _Text, "AATAAA") ;
-			else
-			  bsAddData (Mrna, _bsRight, _Text, "Variant") ;
-		      }
-		    
-		    x = ap->aSignal  ;
-		    bsAddData (Mrna, _bsRight, _Int, &x) ;
-		  }
-		else
-		  {
-		    bsAddData (Mrna, _bsRight, _Text, "No_signal") ;
-		    x = 0 ;
-		    bsAddData (Mrna, _bsRight, _Int, &x) ;
-		  }
-		if (isWorm)
-		  {
-		    KEY stage = 0 ;
-		    BSMARK mark = 0 ;
-		    mark = bsMark (Mrna, mark) ;
-		    
-		    /* export all supporting reads */
-		    for (ii2 = 0, ap2 = arrp (aa3, 0, AAA) ; ii2 < arrayMax (aa3) ; ii2++, ap2++)
-		      if ((ap2->mrna || ap2->mrna == mrna) && ap2->est0 && ap2->group == ap->group)
-			{
-			  bsAddKey (Mrna, _bsRight, ap2->est0) ;
-			  x = ap2->a20 - ap->a22 ;
-			  bsAddData (Mrna, _bsRight, _Int, &x) ;
+			for (int i = arrayMax (units) - 5 ; !ok && i >= 0 && i < arrayMax (units) ; i += 5)
 			  {
-			    KEYSET ksStage = queryKey (ap2->est0,">cdna_clone; >Library stage") ;
-
-			    stage = 0 ;
-			    if (keySetMax(ksStage))
+			    uu = arrp (units, i, BSunit) ; 
+			    if (uu[4].i == _Exon &&
+				uu[0].i <= x &&
+				uu[1].i >= x)
+			      ok = TRUE ;
+			  }
+		      }
+		    if (ok)
+		      {
+			bsAddData (Mrna, _Valid3p, _Int, &x) ;
+			x = m2 + ap->a22 - a2 ;
+			bsAddData (Mrna, _bsRight, _Int, &x) ;
+			
+			bsAddData (Mrna, _bsRight, _Int, &nClones3) ;
+			
+			if (ap->signal && *ap->buffer)
+			  {
+			    if (1)
 			      {
-				stage = keyGetKey (keySet (ksStage,0), str2tag("Stage")) ;
+				bsAddData (Mrna, _bsRight, _Text, ap->buffer) ;
 			      }
-			    keySetDestroy (ksStage) ;
-
-			  }
-			  if (stage || ap2->aRich == -1 || ap2->tail == 2)
-			    {
-			      bsAddData (Mrna, _bsRight, _Text,
-					 messprintf("%s%s%s"
-						    , ap2->tail == 2 ? "PolyA " : ""
-						    , ap2->aRich == -1 ? "A-rich " : ""
-						    , stage ? name(stage) : ""
-						    )
-					 ) ;
-			    }
-			  /* WAS before adding 'stage'			  
-			     if (ap2->aRich == -1)
-			     {
-			     if (ap2->tail == 2)
-			     bsAddData (Mrna, _bsRight, _Text, "PolyA A-rich") ;
-			     else
-			     bsAddData (Mrna, _bsRight, _Text, "A-rich") ;
-			     }
-			     else
-			     {
-			     if (ap2->tail == 2)
-			     bsAddData (Mrna, _bsRight, _Text, "PolyA") ;
-			     }
-			  */
-			  bsGoto (Mrna, mark) ;
-			}
-		    /* export all supporting AAA features found in the cosmid */
-		    for (ii2 = 0, ap2 = arrp (aa3, 0, AAA) ; ii2 < arrayMax (aa3) ; ii2++, ap2++)
-		      {
-			int d = ap2->a20 - ap->a22 ;
-			if (ap2->mrna == mrna && ap2->method && ap2->group == ap->group &&
-			    d > -26 && d < 26)
-			  {
-			    KEY fakeEst = 0 ;
+			    else
+			      {
+				if (ap->signal == 1)
+				  bsAddData (Mrna, _bsRight, _Text, "AATAAA") ;
+				else
+				  bsAddData (Mrna, _bsRight, _Text, "Variant") ;
+			      }
 			    
-			    lexaddkey (dictName (dict, ap2->method), &fakeEst, _VSequence) ;
-			    bsAddKey (Mrna, _bsRight, fakeEst) ;
-			    x = ap2->a20 - ap->a22 ;
+			    x = ap->aSignal  ;
 			    bsAddData (Mrna, _bsRight, _Int, &x) ;
-			    bsAddData (Mrna, _bsRight, _Text
-				       , messprintf("%d tag%s%s"
-						    , ap2->mClones03
-						    , ap2->mClones03 > 1 ? "s" : "" 
-						    , ap2->aRich ? "_A-rich" : ""
-						    )
-				       ) ;
-			    bsGoto (Mrna, mark) ;
+			  }
+			else
+			  {
+			    bsAddData (Mrna, _bsRight, _Text, "No_signal") ;
+			    x = 0 ;
+			    bsAddData (Mrna, _bsRight, _Int, &x) ;
 			  }
 		      }
-		    bsMarkFree (mark) ;
 		  }
-		
 		n1++ ;
 	      }
       }

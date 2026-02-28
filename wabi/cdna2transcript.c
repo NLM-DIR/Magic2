@@ -16,11 +16,9 @@
  */
 
 /* %W% %G% */
-/*
-#define ARRAY_CHECK
-#define MALLOC_CHECK
-*/
-#define CHRONO
+/* #define ARRAY_CHECK */
+/* #define MALLOC_CHECK */
+/* #define CHRONO */
 
 
 #include "acedb.h"
