@@ -681,6 +681,15 @@ AC_ITER ac_keyset_iter (AC_KEYSET aks, int fillhint, AC_HANDLE handle)
 } /* ac_keyset_iter */
 
 /********************************************************************/
+/* Causes the datase to save its state to disk
+ * useful in very long client codes to ensure that the work so far cannot be lost
+ */
+void ac_db_commit (AC_DB db)
+{
+  sessionClose (TRUE) ;
+} /* ac_db_commit */
+
+/********************************************************************/
 /* refresh, is declared by compatibility with acclient */
 void ac_db_refresh (AC_DB db) {} ; /* this function is not needed in acinside
 				      since bsCreate() always get the current object
@@ -734,30 +743,16 @@ BOOL ac_iter_rewind (AC_ITER iter)
 /* object related functions */
 
 /********************************************************************/
-
-KEY ac_get_key (AC_DB db, const char *class, const char *nam)
+#include <sysclass.h>
+KEY ac_get_key (AC_DB db, const char *classe, const char *nam)
 {
-  char buf[4000] ;
-  KEYSET ks = 0 ;
-  KEY key = 0 ;
-
+  KEY cl = 0, key = 0 ;
+  
   if (!db || db->magic != MAGIC_BASE + MAGIC_AC_DB)
-    messcrash ("ac_get_obj received a null or invalid db handle") ;
-  if (strlen(nam) < 3000)
-    {
-      sprintf (buf, "Find %s IS \"%s\"", class, nam) ;
-      ks = query (0, buf) ;
-    }
-  else /* never use messprintf in this library */
-    {
-      char *cp = messalloc (30 + strlen(class) + strlen(nam)) ;
-      sprintf (cp, "Find %s IS \"%s\"", class, nam) ;
-      ks = query (0, cp) ;
-      messfree (cp) ;
-    }
-  if (keySetMax (ks))
-    key =  keySet (ks, 0) ;
-  keySetDestroy (ks) ;
+    messcrash ("ac_get_key received a null or invalid db handle") ;
+    
+  if (lexword2key(classe, &cl, _VMainClasses))
+    lexword2key (nam, &key, KEYKEY(cl)) ;
 
   return key ;  
 } /* ac_get_key */

@@ -1005,7 +1005,16 @@ parse_table (struct parsing *p, AC_TABLE table, AC_OBJ obj)
 
 /********************************************************************
 *********************************************************************
-*********************************************************************
+********************************************************************/
+/* Causes the datase to save its state to disk
+ * useful in very long client codes to ensure that the work so far cannot be lost
+ */
+void ac_db_commit (AC_DB db)
+{
+  return ; /* not the job of the client code */
+} /* ac_db_commit */
+
+/*********************************************************************
 **
 ** Here is a section of code that deals with the object cache.  It
 ** is not very elaborate, but it gets us most of the speedup of a

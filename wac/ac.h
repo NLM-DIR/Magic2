@@ -216,6 +216,11 @@ AC_DB ac_open_db (const char *database, const char **error) ;
  * it is implemented as a macro so that __db itself is reset to zero
  */
 
+void ac_db_commit (AC_DB db) ;
+/* Causes the datase to save its state to disk
+ * useful in very long client codes to ensure that the work so far cannot be lost
+ */
+
 void ac_db_refresh (AC_DB db) ;
 /* Calling ac_db_refresh ensures that all objects in the client cache
  * are now considered invalid

@@ -625,7 +625,7 @@ const char *ac_table_class (AC_TABLE tbl, int row, int col, const char *deflt)
  *    if cols == 0, all columns are exported in their natural order
  *    else the list must end on 0.
  *    In addition, empty columns are systematically hidden.
- * -colorControlColumn: if 0, defaults to the first displayed column
+ * -colorControlColumn: ignored, defaults to the first displayed column
  *   The background color alternates between withe and pale blue when the
  *   content of this column changes.
  *   Note that colorControlColumn may be hidden (not listed in cols[])
@@ -636,6 +636,9 @@ const char *ac_table_class (AC_TABLE tbl, int row, int col, const char *deflt)
  *   *more is printed in each colun of the last line
  *
  * the rows must be sorted as wished before this function is called
+ *
+ * In html5, the table is downloadable and the rows may be reordered
+ * on the client side thanks to a server provided javascript.
  */
 int ac_table_display (vTXT blkp 
 		      , AC_TABLE t, const char **titles
@@ -647,7 +650,7 @@ int ac_table_display (vTXT blkp
   struct ac_table_internal *ti = (struct ac_table_internal *) t ;
   int ii, i1, jj, jjj, nLine = 0 ;
   const char *ccp ;
-  char previous[80] ;
+  char previous[256] ;
   int mycols [t->cols + 1] ;
   BOOL markUp = blkp->markUp ;
   char bufvoid[1] = {'v'} ;
@@ -659,7 +662,8 @@ int ac_table_display (vTXT blkp
   char bufK[2] = {'K', 0} ;
   char buftag[1] = {'g'} ;
   char beginline[1] ={'>'};
-
+  static int tableId = 0 ;
+  
   if (beauty == 'J') beauty = 'j' ;
   if (!cols)
     {
@@ -684,7 +688,11 @@ int ac_table_display (vTXT blkp
     }
   
   if (markUp)
-    vtxtPrint (blkp, "\n<table width=\"98%%\" border=2>\n") ;
+    {
+      tableId++ ;
+      vtxtPrintf (blkp, "\n<br>\n<button onclick=\"exportToCSV(\'table%d\', \'table%d.csv\')\">Download this table</button>\t\t<i><font color=\"#007f7f\">Click on the headers to reorder the lines</font></i>", tableId, tableId) ;
+      vtxtPrintf (blkp, "\n<table id=\"table%d\" width=\"98%%\" border=3>\n", tableId) ;
+    }
   
   if (maxLine <= 0)
     maxLine = t->rows ;
@@ -705,8 +713,9 @@ int ac_table_display (vTXT blkp
   /* export the titles */
   if (titles)
     {
+      int jCol = 0 ;
       if (markUp)
-	vtxtPrint (blkp, "<tr VALIGN=TOP bgcolor=\"#d5d5ff\">\n") ;
+	vtxtPrint (blkp, "<thead>\n  <tr VALIGN=TOP bgcolor=\"#afafff\">\n") ;
       else
 	vtxtPrint (blkp, "#") ;
       for (jjj = 0 ; mycols[jjj] >= 0 ; jjj++)
@@ -718,17 +727,17 @@ int ac_table_display (vTXT blkp
 	  if (!ccp) 
 	    ccp = markUp ? "&nbsp;" : "" ;
 	  if (markUp)
-	    vtxtPrintf (blkp, "  <td>%s</td>\n", ccp) ;
+	    vtxtPrintf (blkp, "    <th onclick=\"sortTable(\'table%d\',%d)\" data-order=\"asc\">%s</th>\n", tableId, jCol++, ccp) ;
 	  else
 	    vtxtPrintf (blkp, "%s%s", jjj ? "\t" : "", ccp) ;
 	}
-      if (markUp)
-	vtxtPrint (blkp, "</tr>") ;
       vtxtPrint (blkp, "\n") ; nLine++ ;
     }
-  
+  if (markUp)
+    vtxtPrint (blkp, "  </tr>\n</thead>\n\n<tbody>\n") ;
+
   /* export the table */
-  if (!colorControlColumn)
+  if (1 || !colorControlColumn)
     colorControlColumn = mycols[0] ;
   else
     colorControlColumn-- ;
@@ -737,21 +746,22 @@ int ac_table_display (vTXT blkp
       beginline[0] = '>' ;
     }
   if (beginLine < 0) beginLine = 0 ;
-  for (ii = i1 = beginLine ; ii < t->rows && ii < maxLine + beginLine ; ii++)
+  previous[0] = 0 ;
+  for (ii = beginLine, i1 = 0 ; ii < t->rows && ii < maxLine + beginLine ; ii++)
     {
       /* alternate colors when the item in first column changes */
-      jj = colorControlColumn ;
+      jj = colorControlColumn ; 
       ccp = ac_table_printable (t, ii, jj, "") ;
-      if (ii && strncmp (ccp, previous, 80))
+      if (ii && strncmp (ccp, previous, 255))
 	i1++ ;
-      strncpy (previous, ccp, 80) ;
+      strncpy (previous, ccp, 255) ;
      
       if (markUp)
 	{
 	  if (i1 & 0x1)
-	    vtxtPrint (blkp,"  <tr VALIGN=TOP bgcolor=\"#efefff\">\n") ; 
+	    vtxtPrint (blkp,"  <tr VALIGN=TOP data-parity=\"even\">\n") ; 
 	  else
-	    vtxtPrint (blkp, "  <tr VALIGN=TOP bgcolor=white>\n") ;
+	    vtxtPrint (blkp, "  <tr VALIGN=TOP data-parity=\"odd\">\n") ;
 	}
       for (jjj = 0 ; mycols[jjj] >= 0 ; jjj++)
 	{
@@ -902,7 +912,7 @@ int ac_table_display (vTXT blkp
 	    {
 	      if (!ccp)
 		ccp = "&nbsp;" ;
-	      vtxtPrintf (blkp,"  <td>%s</td>", ccp) ;
+	      vtxtPrintf (blkp,"    <td>%s</td>\n", ccp) ;
 	    }
 	  else if (beauty == 'h')
 	    {
@@ -970,7 +980,7 @@ int ac_table_display (vTXT blkp
   else
     {
       if (markUp)   
-	vtxtPrint (blkp, "</table>\n") ;
+	vtxtPrint (blkp, "</tbody>\n</table>\n") ;
       vtxtBreak (blkp) ;
     }
   return nLine ;
