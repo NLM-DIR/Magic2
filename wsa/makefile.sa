@@ -1,0 +1,144 @@
+#  %W% %G%
+#################################################################
+############### acedb: R.Durbin and J.Thierry-Mieg ##############
+############### wext/makefile.ext  Feb 1998        ##############
+#################################################################
+#
+# ATTENTION:
+#   Define in this file machine independant directives
+#   to compile external codes linked against acelib
+#
+#   The makefile is decomposed into 2 parts
+#     makefile: which selects the machine and creates ./bin.*
+#     then copies the present file into ../bin.*
+#     and the present file which gives details on the linking
+#  
+#   Machine specific choices, like linker and compiler
+#     are specified in ../wmake/*_DEF
+#
+#   Object modules and exe are created in ../bin.*
+#     to keep the present directory clean and allow
+#     multiple architectures
+#
+#################################################################
+# Before running the make command
+# setenv ACEDB_MACHINE to indicate one of the predefined
+# Machine dependant option files, or write your own.
+# These files are called  $(ACEDB_SRC)/wmake/$(ACEDB_MACHINE)_DEF
+#
+# See the explanation at the top of ../wmake/truemake
+#################################################################
+
+# LINK_ACC is the set of object files needed if you use
+# the client version of the new Ace C library
+LINK_ACC=libacedna.a libaccl.a  libfree.a  libtsfree.a libtcpfn.a $(LINK_ACC_RPC)
+LINK_LIGHT=libacedna.a libfree.a  libtsfree.a 
+
+# LINK_ACS is the set of object files needed if you use
+# the standalone acinside version of the new Ace C library
+LINK_ACS=libace.a libfree.a libtsfree.a
+
+# LINK_DRMAA is the Sun Grid Engine API libraru
+LINK_DRMAA= -L$(SGE_ROOT)/lib/lx24-amd64 -Wl,-rpath,$(SGE_ROOT)/lib/lx24-amd64  -ldrmaa 
+
+SRAINC = -I../wsra
+SRALIBS = -L$(shell find ../wsra -name "ngs-sdk.*" -type d)/lib64 -lncbi-ngs-c++-static -lncbi-ngs-static -lncbi-vdb-static -lngs-c++-static
+
+.KEEP_STATE: 
+
+
+# suppress auto SCCS extraction
+.SCCS_GET:
+
+#define defaults  overridable in $(ACEDB_MACHINE)_DEF
+RANLIB_NEEDED = true	
+AR_OPTIONS = rlu
+
+LINKER = cc 
+COMPILER = cc
+TEST = test
+
+#################################################################
+# include your choice from a machine dependant file
+# do not edit the present makefile for this purpos
+# this simplifies multiple architecture maintainance
+
+include deffile
+
+# Note that you can keep different DEF files for the same machine
+# setting  various compiler  options
+
+###########################################################
+##  Compiler and library options
+## CC, LIBS, NAME are defined in $(ACEDB_MACHINE)_DEF
+##
+ 
+IDIR = -I. -I.. -I../wh -I../wsa -I/netopt/sge/include 
+
+# Do not use -I/usr/include
+# it prevents gcc from picking up its own includes
+# (cc goes to /usr/include anyway)
+
+## to undefine any rubbish
+CCFLAGS =
+GCFLAGS =
+
+## Different platforms use CC or COMPILE.c
+#  (USEROPTS - see comments at top of file)
+#
+CC =        $(COMPILER) $(USEROPTS) $(IDIR) -DAC_TEST -D$(NAME) -D_FILE_OFFSET_BITS=64 -c
+COMPILE.c = $(COMPILER) $(USEROPTS) $(IDIR) -DAC_TEST -D$(NAME) -D_FILE_OFFSET_BITS=64 -c
+
+
+#################################################################
+#################################################################
+# Add here your definitions
+#################################################################
+#################################################################
+
+SA_OBJS = sa.main.o sa.config.o sa.targetIndex.o \
+	sa.sequenceParser.o sa.seeds.o sa.sort.o sa.align.o \
+	sa.introns.o sa.wiggle.o sa.gff.o \
+	sa.stats.o sa.sam.o sa.tabular.o \
+	sa.utils.o sa.tests.o
+
+# sa.uringSequenceParser.o
+
+SA_SOURCES =  $(SA_OBJS:.o=.c)
+
+$(SA_SOURCES)  :
+	$(TEST) -L $@ || ln -s ../wsa/$@ . 
+
+sa.gpusort.cu:
+	$(TEST) -L $@ || ln -s ../wsa/$@
+
+
+CCCL_INCLUDES=
+# if Nvidia Thrust library is not installed, clone https://github.com/NVIDIA/cccl.git,
+# uncomment the lines below and set CCCL to the path to the cloned repository
+#CCCL =
+#CCCL_INCLUDES = -I$(CCCL)/thrust -I$(CCCL)/libcudacxx/include -I$(CCCL)/cub
+
+sa.gpusort.o: sa.gpusort.cu
+	nvcc -c $(CCCL_INCLUDES) -I ../wsa --std=c++17 -o $@ $<
+
+GPU_OBJS=
+ifneq (,$(findstring GPU,${ACEDB_MACHINE}))
+    GPU_OBJS = sa.gpusort.o
+endif
+
+
+# "all" should always be the first target so that it is the default make action.
+all: sortalign
+
+libsraread.a:
+	$(MAKE) -C ../wsra
+	ln -s ../wsra/libsraread.a .
+sortalign: $(SA_OBJS) libsraread.a $(GPU_OBJS)
+	$(LINKER) -o $@  $(GPU_OBJS) $(SA_OBJS) $(LINK_ACS) $(SRAINC) $(LIBS) libsraread.a $(SRALIBS)  libfree.a libtsfree.a libchannels.a libwego.a -lpthread  -ldl -lz -lbz2 -llzma 
+# -lhts for bam
+###########################################################
+########### end of     acedb makefile.sa  ################
+###########################################################
+ 
+
