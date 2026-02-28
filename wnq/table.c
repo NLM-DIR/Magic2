@@ -1944,7 +1944,7 @@ TABLE *tableHandleGet (KEY tKey, AC_HANDLE h)
     for (i = 0 ; i < ncol ; i++)
       { uu = arrp (aa, ncol*(1+max) + i*maxBitArray , TABLETYPE) ;
 	bitUnSet(t->emptyBits[i], max-1) ; /* make room */
-	vv = arrp(t->emptyBits[i], 0, TABLETYPE)  ; 
+	vv = bigArrp(t->emptyBits[i], 0, TABLETYPE)  ; 
 	memcpy (vv, uu, maxBitArray*sizeof(TABLETYPE)) ;
       }
   else
