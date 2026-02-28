@@ -84,12 +84,7 @@ UT_MAKE_GETCOMPILEDATEROUTINE()
 int main (int argc, char **argv)
      /* main function for xaceclient */
 {
-  char x ;
-  extern char *stackorigin;	/* from arraysub */
   extern VoidRoutine messcrashroutine;
-
-  stackorigin = &x ;
-
   messErrorInit(argv[0]);   /* Record program name for crash messages */
 
   bannerWrite (bannerMainStrings ("xaceclient", TRUE, FALSE)) ;

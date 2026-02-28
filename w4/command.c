@@ -158,9 +158,9 @@ static CHOIX choixMenu [] =
 { 1,  'H', "Chrono {start | stop | show} built in profiler of chrono aware routines"},
 { 5,  300, "Test : test subroutine, may vary"},
 /* { 1,  450, "S  [-a | -j | -J | -C] [-o outfile]  : AQL: Acedb Query Language [silent | ace | java | Java | C  style] <aql query>"}, */
-{ 1,  451, "Select [-o outfile] [-s] [-h | -a | -j | -J | -C]  [-b begin] [-c count] [-title] [-q] <query>: Acedb Query Language\n  For the syntac see:  ftp://ftp.ncbi.nlm.nih.gov/repository/acedb/ACeDB_NCBI/acedb.query_language.pdf\n\tif the query ends with a ;  (silent mode) do not export, but modify the active list\n\toutfile: name of the output file, relative to $ACEDB\n\t ahjJC: different output formats adapted to different acedb clients\n-b 3 -c 12: data exploration tool, export 12 lines, starting approximately at line 3, the edges depend on the size of the objects\n-title export a title line prefixed with #\n-q old acedb syntax Find ...\n-v verbose (for debugging purpose)\n\tsize of the objects, useful only to explore the datacount: ext[output] [silent] {format:human,ace,java,Java,C style.\n"}, 
+{ 1,  451, "Select [-o outfile] [-s] [-h | -a | -j | -J | -C]  [-b begin] [-c count] [-title] [-q] <query>: Acedb Query Language\n\tif the query ends with a ;  (silent mode) do not export, but modify the active list\n\toutfile: name of the output file, relative to $ACEDB\n\t ahjJC: different output formats adapted to different acedb clients\n\t-b 3 -c 12: data exploration tool, export 12 lines, starting approximately at line 3, the edges depend on the size of the objects\n\t-title export a title line prefixed with #\n\t-q old acedb syntax Find ...\n\t-v verbose (for debugging purpose)\n\tsize of the objects, useful only to explore the datacount: ext[output] [silent] {format:human,ace,java,Java,C style.\n"}, 
 { 1,  452, "AQL : alias of Select, same parameters\n"},
-{ 1,  453, "BQL : alias of Select, same parameters\n"},
+{ 1,  453, "BQL : Example:\t\tSelect a,p,j from a in ?Author, p in a->Paper, j in p->Journal where j == \"Nature\"\n\tThe full syntax is presented in wbql/bql.pdf\n\tThe operators are:\n\t\t ; TITLE order_by\n\t\tfrom select , where\n\t\tin := = \n\t\t|| OR ^^ XOR &&  AND ! NOT\n\t\tlike =~ ~ == != >= <= > < >~ <~\n\t\tISA\n\t\tmodulo + - * / ^\n\t\tDNA PEPTIDE PEP CODING DATEDIFF \n\t\tCOUNT MIN MAX SUM AVERAGE STDDEV\n\t\t.class .name .timestamp\n\t\t>> -> # => \n\t\t@ OBJECT\n\t\t() {} [] \n"},
 { 1,  454, "S : alias of Select, same parameters\n"},
 { 1,  'F', "New Class Format : i.e New Plate ya\\%dx.y creates ya8x.y if ya7x.y exists"},
 { 1,  'N', "Count : number of objects in active keyset"},
@@ -661,9 +661,11 @@ static BOOL cWebImage (KEY tg, int style, char *view, char *params)
 	     
 	     " seqcolumns -off TRANSCRIBEDGENE ;"
 	     " seqcolumns -off -TRANSCRIBEDGENE ;"
-	     " seqcolumns -off \"-SPLICED_cDNA\" ;"
-	     " seqcolumns -off \"SPLICED_cDNA\" ;"
-	     " seqcolumns -off \"SPLICED_cDNA_DECORATE\" ;"
+	     " seqcolumns -off -SPLICED_cDNA ;"
+	     " seqcolumns -off -EXON_SUPPORT ;"
+	     " seqcolumns -off EXON_SUPPORT ;"
+	     " seqcolumns -off SPLICED_cDNA ;"
+	     " seqcolumns -off SPLICED_cDNA_DECORATE ;"
 	     
 	     " seqcolumns -on \"Genes\" ;"
 	     " seqcolumns -on \"-Genes\" ;"
@@ -2082,7 +2084,7 @@ KEY aceCommandDoExecute (AceCommand look, int level,
 	  if (look->outfile)
 	    look->outLevel = freeOutSetFile (look->outfile) ;
 
-	  if (look->beginTable &&ace_lower(spread->style) == 'x')
+	  if (look->beginTable && ace_lower(spread->style) == 'x')
 	    {
 	      freeOut ("<html>\n<body bgcolor=white>\n<h2>") ;
 	      if (*spread->titleBuffer) freeOutf ("<h2>\n%s\n</h2>", spread->titleBuffer) ;

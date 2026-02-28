@@ -137,7 +137,7 @@ ALIGNMENT *alignGet (KEY key)
 	      {
 		if (isReverse)
 		  for (i = --start ; i >= end-1 ; --i)
-		    array(b,arrayMax(b),char) = complementBase[(int)arr(a,i,char)] ;
+		    array(b,arrayMax(b),char) = complementBase(arr(a,i,char)) ;
 		else
 		  for (i = --start ; i < end ; ++i)
 		    array(b,arrayMax(b),char) = arr(a,i,char) ;

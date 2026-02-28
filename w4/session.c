@@ -249,8 +249,9 @@ VoidRoutine sessionChangeRegister (VoidRoutine func)
 
 #ifndef ACEDB5
 #ifdef ACEDB4
-void swapSuperBlock(BLOCKP bp)	/* used also by disknew.c */
-{ bp->h.disk = swapDISK(bp->h.disk);
+void swapSuperBlock(BLOCK *bp)	/* used also by disknew.c */
+{
+  bp->h.disk = swapDISK(bp->h.disk);
   bp->h.nextdisk = swapDISK(bp->h.nextdisk);
   bp->h.session = swapInt(bp->h.session);
   bp->h.key = swapKEY(bp->h.key);
@@ -279,6 +280,7 @@ static void sessionSetPath (const char *ace_path)
   else
     filAddDir ("/usr/local/acedb") ;
 #endif
+  filAddDir (".") ;
 #endif /* MACINTOSH */
 } /* sessionSetPath */
 
@@ -635,10 +637,11 @@ static void sessionInit2 (const char* ace_path)
 
   /* init these freeXXX first, they belong to the utilities-library,
      do all the acedb specific inits after that */
+  sessionSetPath (ace_path) ;
   freeinit () ;
   freeOutInit () ;  
 
-  sessionSetPath (ace_path) ;
+
   
   /* prompt the system to check whether the file
      exists. If the database directory ace_path (just set above)

@@ -3088,7 +3088,7 @@ unsigned char  queryIsA(OBJ obj, KEY key, Array a, BitSet bb)
     }
   if (!oldObj && obj) /* locally created */
     bsDestroy (obj) ;
-  m1 = arrayMax(bb) ? arr (bb, 0, unsigned int) : 0 ;
+  m1 = bigArrayMax(bb) ? bigArr (bb, 0, unsigned int) : 0 ;
   mask = (unsigned char) (m1 & 0xff) ; /* extract lowest byte */
   return mask ;  
 }

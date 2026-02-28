@@ -53,8 +53,6 @@ extern int isInteractive ;	/* in freesubs */
 
 #ifndef GIFACESERVER					    /* flag set in truemake to build gifservercontrol.o */
 
-extern char *stackorigin ;				    /* from arraysub */
-
 extern void (*gifEntry)(KEYSET, int,BOOL) ;		    /* entry point in command.c */
 
 #endif   /* !GIFACESERVER */
@@ -78,7 +76,6 @@ UT_MAKE_GETCOMPILEDATEROUTINE()
 
 int main (int argc, char **argv)
 {
-  char x ;
   int level ;
 
   messErrorInit(argv[0]) ;			  /* Record program name for crash messages. */
@@ -86,8 +83,6 @@ int main (int argc, char **argv)
   setbuf (stdout, NULL) ;
   setbuf (stderr, NULL) ;
   
-  stackorigin = &x ;
-
   gifEntry = gifControl ;
 
   bannerWrite (bannerMainStrings ("giface", FALSE, FALSE)) ;

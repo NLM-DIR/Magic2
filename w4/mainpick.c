@@ -56,6 +56,7 @@
 
 #include "query.h"
 #include "querydisp.h"
+#include "bqldisp.h"
 
 #include "session.h"
 #include "sessiondisp.h"
@@ -928,6 +929,7 @@ static void queryButtonFreeAction(KEY key, int box)
     case 0: break ;
     case 'h': helpOn ("Query") ; break ;
     case 'q': queryCreate() ; break ;
+    case 'B': bqldCreate() ; break ;
     case 'b': qbeCreate() ; break ;
     case 'u': qbuildCreate() ; break ;
     case 's': spreadDispCreate(FALSE) ; break ;
@@ -941,6 +943,7 @@ static FREEOPT queryButtonFreeMenu[] =
   {'h', "Help on Query"},
   {0, ""},
   { 'q',      "Query"},   
+  { 'B', "BQL Table Query"},
 #if !defined(MACINTOSH)
   { 'b',        "Query by Examples"},  
 #else  /* always keep same number of lines */

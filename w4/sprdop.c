@@ -1875,8 +1875,9 @@ static void spreadTable2Tableau (SPREAD spread, TABLE *tt)
       a = array (spread->tableau, nn, Array) = arrayCreate (maxCol, SPCELL) ;
       array (a,maxCol - 1,SPCELL).empty = FALSE ; /* make room */
       for (j = 0 ; j < maxCol; j++)
-	{ 
-	  c = arrp (spread->colonnes,j1 = arr (pos2col,j, int) ,COL) ;
+	{
+	  j1 = arr (pos2col,j, int)  ;
+	  c = arrp (spread->colonnes,j1,COL) ;
 	  if (c->hidden || tabEmpty (tt,nn,j1))
 	    {
 	      array (a,j1,SPCELL).empty = TRUE ;
@@ -2063,8 +2064,9 @@ static void spreadAscii (SPREAD spread,
       else
 	freeOut ("# ") ;
       for (j = iCol = x = 0 ; j < maxCol; j++)
-	{ 
-	  c = arrp (spread->colonnes,j1 = arr (pos2col,j, int) ,COL) ;
+	{
+	  j1 = arr (pos2col,j, int) ;
+	  c = arrp (spread->colonnes,j1,COL) ;
 	  if (noHide || !c->hidden)
 	    { 
 	      if (style == 'x') 
@@ -2113,7 +2115,8 @@ static void spreadAscii (SPREAD spread,
       u = 0 ;
       for (j = iCol = 0 ; j < maxCol; j++)
 	{
-	  c = arrp (spread->colonnes, j1 = arr (pos2col,j, int) ,COL) ;
+	  j1 = arr (pos2col,j, int)  ;
+	  c = arrp (spread->colonnes, j1 ,COL) ;
 	  if (noHide || !c->hidden)
 	    {
 	      newUk = (arr (lineArray, j1,SPCELL).u).k ;
@@ -2131,7 +2134,8 @@ static void spreadAscii (SPREAD spread,
 
   for (j = iCol = 0 ; j < maxCol; j++)
     {
-      c = arrp (spread->colonnes, j1 = arr (pos2col,j, int) ,COL) ;
+      j1 = arr (pos2col,j, int) ;
+      c = arrp (spread->colonnes, j1 ,COL) ;
       oldType = c->type ;
       if (c->showType == SHOW_MULTI)
 	c->type = 't' ;
@@ -2507,7 +2511,9 @@ static void spreadDoDumpFormat (SPREAD spread)
   if (maxCol)
     freeOut ("Format ") ;
   for (j = 0 ; j < maxCol; j++)
-    { c = arrp (spread->colonnes,j1 = arr (pos2col,j, int) ,COL) ;
+    {
+      j1 = arr (pos2col,j, int) ;
+      c = arrp (spread->colonnes,j1,COL) ;
     if (!c->hidden)
       switch (c->type)
 	{
@@ -2706,8 +2712,9 @@ TABLE *spreadToTable (SPREAD spread, AC_HANDLE h)
 	  oldLineArray = lineArray ;	
 
 	  for (j = 0, j2 = 0 ; j < maxCol; j++)
-	    { 
-	      c = arrp (spread->colonnes,j1 = arr (pos2col,j, int) ,COL) ;
+	    {
+	      j1 = arr (pos2col,j, int) ;
+	      c = arrp (spread->colonnes,j1 ,COL) ;
 	      if (!c->hidden)
 		{
 		  su = arrp (lineArray, j1,SPCELL) ;

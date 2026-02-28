@@ -33,11 +33,7 @@
 #include "model.h"
 #include "version.h"
 
-
-extern char *stackorigin;				    /* from arraysub */
 extern VoidRoutine messcrashroutine;
-
-
 
 /************************************************************/
 
@@ -98,10 +94,6 @@ UT_MAKE_GETCOMPILEDATEROUTINE()
 int main (int argc, char **argv)
      /* main function used for xace and xacembly */
 {
-  char x ;
-
-  stackorigin = &x ;
-
   messErrorInit(argv[0]);   /* Record program name for crash messages */
 
 #ifdef ACEMBLY
@@ -110,13 +102,15 @@ int main (int argc, char **argv)
   bannerWrite (bannerMainStrings ("xace", TRUE, FALSE)) ;
 #endif
 
-  freeinit () ;			/* must come before graphInit */
-  freespecial ("\n\t\"/%\\@") ;	/* No subshells ($ removed) */
 
 
   /* Initialise the graphics package and its interface for acedb */
-  acedbAppGraphInit(&argc, argv) ;
 
+
+  freeinit () ;			/* must come before graphInit */
+  freespecial ("\n\t\"/%\\@") ;	/* No subshells ($ removed) */
+  acedbAppGraphInit(&argc, argv) ;
+  aceInit (argc>1 ? argv[1]: 0) ;
   pickGetArgs (&argc, argv) ;   /* allow pick to extract starting class and template - srk */
 
   if (0)
@@ -126,7 +120,6 @@ int main (int argc, char **argv)
       exit (0) ;
     }
 
-  aceInit (argc>1 ? argv[1]: 0) ;
 
   messcrashroutine = xaceCrashRoutine;	/* instead of
 					   defaultAceCrashRoutine,
