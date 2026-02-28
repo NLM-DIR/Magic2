@@ -153,6 +153,8 @@ WJO = wjo     # Jo's comparative mapping display tools
 
 true = 1
 false = 0
+AR = ar                 # default overridable in $(ACEDB_MACHINE)_DEF
+RANLIB = ranlib         # default overridable in $(ACEDB_MACHINE)_DEF
 RANLIB_NEEDED = true	# default overridable in $(ACEDB_MACHINE)_DEF
 AR_OPTIONS = rlu	# default overridable in $(ACEDB_MACHINE)_DEF
 
@@ -204,7 +206,7 @@ FREE_OBJS = freesubs.o  freeout.o messubs.o \
 TS_FREE_OBJS = acein.o aceout.o utils.o vtxt.o strsubs.o msort.o vcgi.o cgi.o \
 	dict.o heap.o liste.o keyset.o memsubs.o bump.o \
 	randsubs.o timesubs.o channel.o \
-	arraysub.o bigarraysub.o matrix.o matrix_slice.o dnacode.o sambam.o topology.o wigglelib.o
+	arraysub.o bigarraysub.o matrix.o matrix_slice.o polynome.o dnacode.o sambam.o topology.o wigglelib.o
 
 GRAPH_OBJS = graphcon.o graphsub.o graphps.o graphswf.o graphsvg.o graphselect.o \
 	graphascii.o graphprint.o filquery.o graphgd.o graphcolour.o graphramp.o \
@@ -648,38 +650,38 @@ testprog.c:
 ################## libraries #########################
 
 libfree.a : $(FREE_OBJS)
-	ar $(AR_OPTIONS) libfree.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libfree.a; fi
+	$(AR) $(AR_OPTIONS) libfree.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libfree.a; fi
 
 libtsfree.a : $(TS_FREE_OBJS)
-	ar $(AR_OPTIONS) libtsfree.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libtsfree.a; fi
+	$(AR) $(AR_OPTIONS) libtsfree.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libtsfree.a; fi
 
 libacedna.a : $(ACEDNA_OBJS)
-	ar $(AR_OPTIONS) libacedna.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libacedna.a; fi
+	$(AR) $(AR_OPTIONS) libacedna.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libacedna.a; fi
 
 libfree_clean : 
 	rm -f $(FREE_OBJS) libfree.a
 
 libgraph.a : $(GRAPH_OBJS) $(GIF_OBJS) $(Xt_OBJS)
-	ar $(AR_OPTIONS) libgraph.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libgraph.a; fi
+	$(AR) $(AR_OPTIONS) libgraph.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libgraph.a; fi
 
 libgraph_clean : 
 	rm -f $(GRAPH_OBJS) $(GIF_OBJS)  $(Xt_OBJS) libgraph.a
 
 libgif.a : $(GRAPH_OBJS) $(GIF_OBJS) gifsubs.o 
-	ar $(AR_OPTIONS) libgif.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libgif.a; fi
+	$(AR) $(AR_OPTIONS) libgif.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libgif.a; fi
 
 libvsim.a : $(WVSIM_OBJS)
-	ar $(AR_OPTIONS) libvsim.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libvsim.a; fi
+	$(AR) $(AR_OPTIONS) libvsim.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libvsim.a; fi
 
 libchannels.a :  $(CHANNEL_OBJS)
-	ar $(AR_OPTIONS) libchannels.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libchannels.a; fi
+	$(AR) $(AR_OPTIONS) libchannels.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libchannels.a; fi
 		
 ########### MD5 encryption libraries ################
 
@@ -687,8 +689,8 @@ libchannels.a :  $(CHANNEL_OBJS)
 $(LIBMD5_OBJ): $(LIBMD5_HDR)
 
 libmd5.a : $(LIBMD5_OBJ)
-	ar $(AR_OPTIONS) $@ $?
-	if ( $(RANLIB_NEEDED) ) then ranlib $@ ; fi
+	$(AR) $(AR_OPTIONS) $@ $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) $@ ; fi
 
 # MD5 test programs
 $(LIBMD5_TEST_OBJ) : $(LIBMD5_HDR) $(LIBMD5_TEST_HDR)
@@ -716,8 +718,8 @@ LIBACE_OBJS = $(GENERIC_ACE_OBJS) $(GENERIC_ACE_NONGRAPH_OBJS) aceversion.o \
 	pseudoword.o
 
 libace.a :  $(LIBACE_OBJS) $(ACEDNA_OBJS)
-	ar $(AR_OPTIONS) libace.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libace.a; fi
+	$(AR) $(AR_OPTIONS) libace.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libace.a; fi
 
 libace_clean : 
 	rm -f $(LIBACE_OBJS) libace.a
@@ -726,8 +728,8 @@ LIBACE_5_OBJS = $(GENERIC_ACE_5_OBJS) $(GENERIC_ACE_NONGRAPH_OBJS) aceversion.ng
 	pseudoword.o
 
 libace5.a :  $(LIBACE_5_OBJS)
-	ar $(AR_OPTIONS) libace5.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libace5.a; fi
+	$(AR) $(AR_OPTIONS) libace5.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libace5.a; fi
 
 libace5_clean : 
 	rm -f $(LIBACE_5_OBJS) libace5.a
@@ -742,13 +744,13 @@ LIBXACE_OBJS = $(GENERIC_ACE_OBJS) $(GENERIC_ACE_GRAPH_OBJS) aceversion.o
 LIBGIFACE_OBJS = $(GENERIC_ACE_OBJS) $(GENERIC_GIFACE_GRAPH_OBJS) aceversion.o
 
 libxace.a :  $(LIBXACE_OBJS)
-	ar $(AR_OPTIONS) libxace.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libxace.a; fi
+	$(AR) $(AR_OPTIONS) libxace.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libxace.a; fi
 
   
 libgiface.a :  $(LIBGIFACE_OBJS)
-	ar $(AR_OPTIONS) libgiface.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libgiface.a; fi
+	$(AR) $(AR_OPTIONS) libgiface.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libgiface.a; fi
 
 libxace_clean : 
 	rm -f $(LIBXACE_OBJS) libxace.a
@@ -1064,8 +1066,8 @@ connect_socket.c daemon.c listen_socket.c  tcp_transactions.c get_url.c:
 TCPFN_OBJS=connect_socket.o daemon.o listen_socket.o tcp_transactions.o get_url.o
 
 libtcpfn.a: $(TCPFN_OBJS)
-	ar $(AR_OPTIONS) libtcpfn.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libtcpfn.a; fi
+	$(AR) $(AR_OPTIONS) libtcpfn.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libtcpfn.a; fi
 
 ####################################################
 ############# utilities by VAHAN ###################
@@ -1358,8 +1360,8 @@ ckantorcount: kantorcount.o $(LINK_ACS)
 # New AceC interface
 #   Mark Sienkiewicz, Jean Thierry-Mieg, august 2003
 #libacecl.a : aceclientlib.o rpcace_clnt.o rpcace_xdr.o
-#	ar $(AR_OPTIONS) libacecl.a $?
-#	if ( $(RANLIB_NEEDED) ) then ranlib libacecl.a; fi
+#	$(AR) $(AR_OPTIONS) libacecl.a $?
+#	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libacecl.a; fi
 
 acclient.o:	acclient.c ../wac/acclient_acetcp.c ../wac/acclient_rpc.c \
 	../wac/acclient_socket.c 
@@ -1367,16 +1369,16 @@ acclient.o:	acclient.c ../wac/acclient_acetcp.c ../wac/acclient_rpc.c \
 #LIBACCL_RPC_SUPPORT= aceclientlib.o rpcace_clnt.o rpcace_xdr.o
 LIBACCL_SOCKET_SUPPORT=md5c.o
 libaccl.a: acclient.o actable.o $(LIBACCL_SOCKET_SUPPORT) #$(LIBACCL_RPC_SUPPORT)
-	ar $(AR_OPTIONS) libaccl.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libaccl.a; fi
+	$(AR) $(AR_OPTIONS) libaccl.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libaccl.a; fi
 
 libacs.a: acinside.o actable.o  
-	ar $(AR_OPTIONS) libacs.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libacs.a; fi
+	$(AR) $(AR_OPTIONS) libacs.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libacs.a; fi
 
 libwego.a: wego.o 
-	ar $(AR_OPTIONS) libwego.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libwego.a; fi
+	$(AR) $(AR_OPTIONS) libwego.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libwego.a; fi
 
 wego_test: wego_test.o  libwego.a
 	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS)  libwego.a -lpthread
@@ -1514,8 +1516,8 @@ av.cgi: aceviewmain.o $(LINK_ACC)
 	$(LINKER)  -o av.cgi aceviewmain.o dict.o  $(LINK_ACC) $(LIBS)
 
 libaceview.a: aceviewlib.o 
-	ar $(AR_OPTIONS) libaceview.a $?
-	if ( $(RANLIB_NEEDED) ) then ranlib libaceview.a; fi
+	$(AR) $(AR_OPTIONS) libaceview.a $?
+	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libaceview.a; fi
 
 ###########################################################
 #
@@ -1546,7 +1548,7 @@ aceview: av.cgi blast.cgi pfam.cgi zone.cgi genehunt.cgi libaceview.a
 #	$(TEST) -L $@ || ln -s ../wregexp/$@ . 
 #
 #mylibregexp.a: $(WREGEXP_OBJS)
-#	ar cr mylibregexp.a $(WREGEXP_OBJS)
+#	$(AR) cr mylibregexp.a $(WREGEXP_OBJS)
 
 ###########################################################
 ########### end of the acedb truemake file ################

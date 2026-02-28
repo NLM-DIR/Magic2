@@ -17,7 +17,7 @@
 
 NAME = OPTERON
 COMPILER = gcc -g -Wall -fno-strict-aliasing -I/usr/X11/include  -DACEDB4
-LINKER = gcc
+LINKER = g++ -g
 #CPP = /usr/local/gcc-3.4.1/bin/cpp
 
 LIBS = -lm

@@ -16,7 +16,8 @@
 #################################################################
 
 NAME = OPTERON
-COMPILER = icc -Ofast -O2 -restrict -qopt-report=5 -xhost  -Wall -I/usr/X11/include  -D RESTRICT -DACEDB4
+# -xhost # with this option the binary may not run on other CPU
+COMPILER = icc -Ofast -O2 -restrict -qopt-report=5   -Wall -I/usr/X11/include  -D RESTRICT -DACEDB4 -fno-omit-frame-pointer
 LINKER = icc
 
 LIBS = -lm

@@ -18,7 +18,7 @@
 
 NAME = OPTERON
 COMPILER = gcc -g -O4 -fno-strict-aliasing -DACEDB4
-LINKER = gcc -L.
+LINKER = g++ -L.
 LIBS = -lm
 
 # adapt these lines if the X11 libs are not in /usr/X11/lib
