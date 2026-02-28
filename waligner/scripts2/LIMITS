@@ -1,0 +1,608 @@
+#!/bin/tcsh -f
+
+##############################################################
+## Mandatory parameter
+##############################################################
+## 1: Type of experiment
+## The type of experiment, DNA or RNA is defined in the file
+## LIMITS in the project directory created by by the command
+## MAGIC init [DNA | RNA]
+## This parameter must never be modified.
+## the choice is RNA or DNA
+if (! $?MOLECULE_TYPE) setenv MOLECULE_TYPE "RNA"
+
+##############################################################
+## 2: Species
+## The species is chosen by creating a local link called TARGET
+## to the TARGET.species directory distributed with the program
+## The species is specified inside the file TARGET/LIMITS
+##
+## 2b: Eucaryote/Procaryote [Default EUCARYOTE]
+## also specifeid inside TARGET/LIMITS
+## Procaryotes do not have introns
+## so there is no need to align on the spliced mRNAs
+
+##############################################################
+## 3: Parallel submission
+## Please edit the file scripts/submit
+## to match your local architecture
+## At NCBI we use the SUN Grid Engine (SGE) system
+
+##############################################################
+## 4: Name of an existing writable local tmp disk space 
+## with at least 50 Gb of free space
+## Files allocated on this disc are removed immediately
+## at the end of each step of the pipeline and not shared
+## among processes 
+## This directory is used in particular by the unix 'sort' 
+## It is is better if these disks are local to the computing node
+## Please indicate a directory adequate on your platform
+## either here or in your ~/.MAGICrc file
+
+setenv TMPDIR /tmp
+if (-d /export/home/TMP) setenv TMPDIR /export/home/TMP
+if (-e ~/.MAGICrc) source ~/.MAGICrc
+setenv projectDir tmp
+
+##############################################################
+## In addition the program will allocate large permanent space
+## in the subdirectory tmp created of the MAGIC project directory
+## This space will expand to about 1 Terabytes to process 100 Gbases
+## and must be accessible from each computing nodes
+##
+## The reason we create all results under the tmp directory
+## is to convey the idea that all these files can be reconstructed
+## by the program if you remove them. In particular,
+## at NCBI, we do not back up the tmp directories
+##############################################################
+##############################################################
+
+##############################################################
+##############################################################
+## Optional parameters
+## Usually you do not need to modify anything below this line
+
+## However, we suggest that you read the explanations carefully
+## but edit these values only if you really feel it is needed
+##
+## The best method to change these defaults in a project specific
+## way is to keep the present file as distributed and to redefine
+## the parameters you wish to change in the LIMITS file in the 
+## project directory
+##############################################################
+## Two distinct aligners are available clipalign and magicblast
+## In your project directory , at the end of the file LIMITS
+##  set USEMAGICBLAST to zero or one accordingly before aligning
+##  do not change it later
+## The default behaviour defined here selects clipalign
+setenv USEMAGICBLAST 0
+
+##############################################################
+## Thresholds used in the alignments
+
+# Minimal alignment length considered by the system 
+setenv minAli 24
+# You may want to reduce this number, say all the way down to 18, 
+# if you work on micro RNAs but you may end up with lots
+# of false positive hits
+# Notice that there no reason to reduce it if you work on
+# a small genome (say yeast), because reads of 50 bases
+# should still match. 
+# Notice also that this is the minimal length of the alignemnt
+# but the minimal exact stretch is controlled by a different
+# parameter, the seedLength, which is set at 16 and should
+# probably not be modified.  
+
+##############################################################
+## Thresholds used in exon discovery
+
+setenv minExonCover 30
+##############################################################
+## Thresholds used in counting support of introns annotatted in Etargets transcripts
+
+setenv minIntronOverlap 8
+##############################################################
+## Thresholds used in SNV detection
+
+## In a DNA study (Exome/Genome) The SNV will be analysed only 
+## in the zones of the genome where the coverage in the run
+## is at least $minCoveron
+## The value 10 seems adequate to get reasonably reliable
+## estimates of the frequency, recalling that the sampling
+## error when counting N objects is around square-root of N
+## In very shallow sequencing projects, you may consider 5
+
+setenv minCoveron 10
+
+## In RNA-seq, the SNPs are collected in all transcripts,
+## but not in the genome alignments, to avoid problems
+## with introns boundaries.
+
+## In these regions (coverons or transcripts), SNV candidates will be 
+## selected if they are observed at least minSnpCount times in a given 
+## Run at a position region covered  at least minSnpCover times
+## and relative prevalence at least minSnpFrequency
+## 4,10,20 seem to be good thresholds for the ILM HiSeq in 2011
+
+setenv minSnpCount 4
+setenv minSnpCover 20
+setenv minSnpFrequency 18
+
+setenv snpDropMultiplicity 0
+
+##############################################################
+## Size of the fastc sequence files to be aligned
+
+# On an 8Gb hardware, we split the sequence files in chunks of 250Mb or 5M sequences
+# Then most programs will use around 4Gb of RAM, and should never exceed 8Gb
+# If you only have 4Gb of RAM, you may need to chose a smaller value, say 150Mb
+# but we are not sure since it depends on the exact nature of the dataset
+
+setenv splitMb 200
+setenv splitMs 7000000
+
+##############################################################
+## Targets on which the reads are aligned
+## DNAtargets and RNAtargets are redefined in TARGET/LIMITS
+## and their fasta files are given in TARGET/Targets
+
+setenv targets " "
+setenv DNAtargets " " 
+setenv RNAtargets " "
+setenv Etargets " "
+
+## The other targets can be microarray results or data from
+## any other programs provided by the user as index .ace files in 
+## a user provided directory called OTHER_PIPELIMES
+## and 'other_targets' they should be redefined in LIMITS
+
+setenv other_targets  " "
+
+# default strategy can be redefined in LIMITS
+# allowed values are Exome RNA_seq
+setenv Strategy Exome
+setenv Strategy RNA_seq
+
+# The species, reference genome and the list of chomosomes must be defined in TARGET/LIMITS
+setenv species " "
+setenv species_kantor " "
+setenv chromSetAll " "
+setenv Reference_genome " "
+setenv UCSCgenomeRelease " "
+
+##############################################################
+## Wiggle coverage plots
+## the wiggle represent the genome coverage by runs and groups
+## automatically remapping to the genome the reads best aligned on spliced transcripts
+## separating the strands after automatically inverting the strand of the
+## stranded reads. i.e. in illumina read 1 is usually antistranded and flipped
+## and read2 is stranded. But the need to flip is not decided a priori
+## but measured automatically by the program with a threshold at 60%
+## to avoid a random behaviour when the stranding is 50% +- epsilon
+
+## The resolution of the wiggle is one point every 10 bases
+## which is sufficient because one never maps a read shorter than 20 bases
+## On a virus or bacteria target, you could reset it to one
+## in  your ./LIMITS file or in TARGET/LIMITS if you have very fast disks
+## Never do that on human, mouse or any giga-base genome, the hardwares
+## would be overwhelmed.
+
+setenv wiggle_step 10
+
+##############################################################
+## Captures 
+## the capture files hould be declared in TARGET/GENES and
+## the CAPTURES variable should be edited in TARGET/LIMITS 
+## or preferably in ./LIMITS
+
+unsetenv CAPTURES ""
+
+##############################################################
+##############################################################
+## Additional parameters that should not be modified
+
+## The idea is to explain the choices made in the program
+## but these values should only be modified in collaboration
+## with the code developpers.
+## If you think you would want to edit them
+## please email mieg@ncbi.nlm.nih.gov
+
+# seedLength: seed the alignments on exact words, taken every 5bp
+# we recommend 16 for RNA-seq, 18 can be used for recent high quality ILM data sets
+# values under 14 would very much slow the code but may be needed when aligning
+# low quality data with lots of errors or when aligning against the reference genome
+# of a different species, say human cDNAs against mouse genome
+setenv seedLength 16
+
+# discard any read with Shanon entropy below, 16 is probably a good choice in all cases
+# the entropy is { S = -sum (over all dimers) n Log_16 (n/N), with N = sum (n) }
+setenv minEntropy 16
+setenv minLength  $minAli
+
+# discard recursively terminal Ns not followed by at least $clipN significant letters
+setenv clipN 2
+
+# discard low fastQ quality letters, we recommend to use zero, since the fastQ quality 2
+# is actually better than fastQ quality 4 
+# Anyway, the program later introduce a posteriori qualities in SNV discovery
+setenv minFastqQuality 0
+
+# overhangLength is used to discover intron, it is the number of exact base mapping
+# accross the intron onto the next exon. This number should not be edited.
+setenv overhangLength 8
+
+# bonuStrand is used in stranded protocols to attribute the cDNA to the corect strand 
+setenv bonusStrand 16
+
+# do not consider reads mapping at more than 10 genomic sites or 10 genes 
+# (alternative transcripts of the same genes count as a single hit)
+# increasing this limit may slow the code significantly
+setenv maxHit 10
+
+# The max intron lengthin bp  depends on the species, it is reset in the Target LIMITS file
+# 100k is a reasonable choice for vertebrates
+setenv intronMaxLength 100000
+setenv intronMinLength 30
+
+# If RecoverId==1 the original read identifiers are recovered in tmp/ALIa
+# this operation is very costly and only useful in exceptional situations
+setenv RecoverId 0
+
+# All reads are mapped on $targets, this list is reset in TARGET/LIMITS depending on which
+# transcriptome annotations are available, RNAtargets is reset in TARGET/LIMITS
+setenv DNAtargets "DNASpikeIn SpikeIn genome"
+setenv RNAtargets " "
+setenv Ttargets " "
+
+
+# The best alignments are store in tmp/$COUNTDIR, normally set to tmp/COUNT
+# by redirecting in your_project/LIMITS, it is possible to run a recursion
+# after modifying the target transcriptome without losing the previous results
+setenv MAGIC_COUNT_DIR COUNT
+
+# Analyze the expression of gene groups defined in TARGET/GENES
+# by ressetting to zero in ./LIMITS, you discard gene-groups expression tables
+# this makes sense in capture experiments where only some genes of the groups are captured
+setenv MAGIC_GENE_GROUP 1
+
+## RNA-editing 
+setenv MAGIC_A2G 0
+# In RNA_seq aligned against the transcripts, 
+# i.e. when we do not search for introns and will search for SNPs
+# uncommenting 
+#     setenv MAGIC_A2G 1
+# will  allow for the special RNA_editing search
+# This option is automatically disabled in Solid and in DNA studies
+
+## Wiggle precision, in bacteria one may consider out_set 1
+## but it makes the file much larger without a lot of benefit
+## since the ali are always at least 10bp long
+setenv out_step 10
+
+## VIRUS_PROJECT, align on a single or a small collection of viruses treated as a genomic target
+## Useful in speclial sample collections, used for corona virus pandemic in 2020 
+setenv VIRUS_PROJECT 0
+
+## SAM/BAM analysis may be reset in specialized scripts
+setenv MAGIC_SAM 0
+setenv USE_MAGIC_BLAST 0
+
+## Eucaryote/Procaryote
+## setenv to 0 in TARGET LIMITS if there are no introns
+setenv NO_INTRON 0
+###########################################################
+## The rest of the files deals with adaptors per platform
+## Define here the different adaptors for each platform
+###########################################################
+
+# LIF vectors
+setenv exitAdaptorSOLiD  gttagacatatctccgtcgtagggatccc,gttagacatatctccgtcgtagggat,gttagacatatctccgtcgt,gtgccatgcgctaactt
+
+if (0) then 
+  #Tardigrade
+    gagatcggaagagcggttcagcagga ABI traces tardigrade
+      TGGAATTCTCGGGTGCCAAG GAACTCCAGTCAC       NNNNNN      ATCTCGTATGCCGTCTTCTGCTTGAAAAAAAA deja connu
+      GATCGGAAGAGCACACGTCT GAACTCCAGTCAC       GATCAG      ATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAAAGGG     tardigrade           srr13696363                                                                     GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATTAAAAAA   deja connu
+
+   # project 003_ and 004_   same since we give the reverse complement of the entry adaptor
+        entry_adaptor cccGTACTCTGCGTTGATACCACTGCTT
+        adaptor1 cccGTACTCTGCGTTGATACCACTGCTT
+   # project 002  exit adaptor1  (end of read 1)
+        adaptor1 agatcggaagagcggttcagcaggaatgc
+        adaptor2 agatcggaagagcgtcgtgtagggaaaga
+        entry_adaptor agatcggaagagcgtcgtgtagggaaaga
+
+
+fasta: adaptor in the forward LIF is
+tcgccttggccgtacagcag/bar code 10 letters == reverse complement du bar code declare /aga(ga peu lisible)nnnnnnn, exemple
+tcgccttggccgtacagcagGTCGCAACCTagag
+CGCCTTGGCCGTACAGCAGC/CTCTTACAC se traduit en code couleur par 
+ ttagacatatctccgtcgt/agggatccc
+ read2                        gatcaccgactgcccataGAGAGGaaagcggaggcg
+CGCCTTGGCCGTACAGCAGCCTCTTACAC se traduit en code couleur par ttagacatatctccgtcgtagggatccc
+ read2                        gatcaccgactgcccataTATATTaaagcggaggcg
+        se  traduit en couler Ggtgccatgcgctaactt
+ read2                        gatcaccgactgcccataGAGAGGaaagcggaggcg
+ read2                        gatcaccgactgcccataGAGAGGaaagcggaggcg
+ read2                        gatcaccgactgcccataGAGAGGaaagcggaggcg
+ read2                        gatcaccgactgcccataGAGAGGaaagcggaggcg
+ read2                        gatcaccgactgcccataGAGAGGaaagcggaggcg
+
+DATA/Main_Study/LIF_NWU.2012_04_05/SEQC_LIF_NWU_B_1_L05_
+
+endif
+
+# in FABIO, we read, with an extremely linear distribution
+# FABIO   CGCCTTGGCCGTACAGCAGCCTCTTACAC
+# LIF_S   CGCCTTGGCCGTACAGCAGCCTCTTA
+# LIF:    CGCCTTGGCCGTACAGCAGCCTCTTACAC se traduit en code couleur par ttagacatatctccgtcgtagggatccc
+   
+###########################################################
+# Ultima exit adaptor NASA experiment at Mason lab 2023_09
+setenv exitAdaptorUlima   CGCACCATACTCGCCAGCGTGCGCGCCGACCTTACCCCAGGCGGCCTTGACGTTGGTCTTGTCGGCAGGAGACAGCACCATGGTGGGTTCTCTCTGAGTCT
+ setenv exitAdaptorNanoporeDirect ACAAGTTTGTAACATCGTCGTGAGTAGTGAACCGTAAGCAAAAAAAAAAT
+#setenv exitAdaptorNanoporeDirect ACAAGTTTGT---ATCGTCGTGAGTAGTGAACCGTAAGCAAAAAAAAAAT
+
+###########################################################
+# LIF/PGM vectors (personal genome machine, derived from Ion_torrent)
+# read on sample sent by Bob 2012_02_28
+setenv exitAdaptorPGM  ATCACCGACTGCCCATCTGAGACTGCCAAGG
+# gttgttggtttatgctcatccatcaccgactgcccatctgagactgcccaagg example with an insertion
+
+                                                  
+###########################################################
+# Roche vectors
+setenv exitAdaptorRoche_454   CAAGGCACACAGGGGATAGG,CTGAGACTGCCAAGGCACACAGGGGATAGG,CTGAGCGGGCTGGCAAGGCGCATAG,CTGATGGCGCGAGGGAGGCGATACG,AGTATGGGTGTGGTCGGCGTCTCTCAAGGCACACAGGGGATAGG
+
+# entree AGTATGAGTGTAGTC (bases 15 a 1 du read lues sur le brin complementaire dans le profil)
+# le read contient en fait 1-15:  GACTACACTCATACT, c'est cette sequence qu'il faut mettre dans run->adaptor1
+# sortie AGTATGGGTGTGGTCGGCGTCTCTCAAGGCACACAGGGGATAGG
+
+# In IBC we saw the exit adaptor AGGGGATAGG
+# fabio roche
+# entry:  GTTTCTCGTTCAACTTTCTTGTACAAAGTGGGA
+# Titanium Leming
+# entry : AAGCAGTGGTATCAACGCAGAGTAC(at just in one run)(GGGGG variable number none in 20% cases)
+
+# from doc uni directional sequencing LIBL kit clonal amplification
+# //www  forum, document april 2009
+# entry: CCATCTCATCCCTGCGTGTCTCCGACTCAG(bar code)
+# exit : (anti bar code) CTGAGACTGCCAAGGCACACAGGGGATAGG
+# from doc double directional sequencing
+# //www.igsb.org/uploads/pdf/TCB-09013_AmpliconFusionPrimerDesignGuidelines.pdf
+# entry: CGTATCGCCTCCCTCGCGCCATCAG (otional multiplex codebar)(template)
+# exit vector : (template)(optional anti multiplexing)CTGAGCGGGCTGGCAAGGCGCATAG
+## but we can also sequence in reverse and get the complement of the vectors
+# entry3: CTATGCGCCTTGCCAGCCCGCTCAG (multiplexing code bar) (template)
+# exit :  (anti nid) CTGATGGCGCGAGGGAGGCGATACG
+
+# from 2007
+# //454.com/downloads/protocols/5_AmpliconSequencing
+# entry: GCCTCCCTCGCGCCATCAG (followed by a fusion primer 
+# exit vector : CTGAGCGGGCTGGCAAGGC
+## but we can also sequence in reverse and get the complement of the vectors
+# entry3: CTATGCGCCTTGCCAGCCCGCTCAG (multiplexing code bar) (template)
+# exit :  (anti nid) CTGATGGCGCGAGGGAGGCGATACG
+
+# 14 multiplexing from Roche, technical bulletin aug 2009,
+# mid1  ACGAGTGCGT
+# mid2  ACGCTCGACA
+# mid3  AGACGCACTC
+# mid4  AGCACTGTAG
+# mid5  ATCAGACACG
+# mid6  ATATCGCGAG
+# mid7  CGTGTCTCTA
+# mid8  CTCGCGTGTC
+# mid9  TAGTATCAGC
+# mid10 TCTCTATGCG
+# mid11 TGATACGTCT
+# mid12 TACTGAGCTA
+# mid13 CATAGTAGTG
+# mid14 CGAGAGATAC
+
+# 2014, projct ABRF by Chris Mason
+# all 16 runs have an entry barcode of 15 bases
+# we hard left clip 15 bases in all these runs in the fastc files
+# gactactatacgagt
+# gactactacgtctct
+# gactacacgacgact
+# gactacacgtagtat
+
+# foreach lane (`cat MetaDB/LaneList`)
+#   dna2dna -I fastc -O fastc -leftClipAt 16 -i Fastc/$lane.fastc.gz | gzip >  Fastc/$lane.fastc.gz_8 
+#   mv Fastc/$lane.fastc.gz Fastc/$lane.including_15bp_prefix.gz
+#   mv Fastc/$lane.fastc.gz_8 Fastc/$lane.fastc.gz
+# end
+
+# 2014, projct ABRF by Chris Mason, we see 4 different exit adaptors
+# 9 bar-code letters 
+# agtcgtggt
+# atactaggt or atcctaggt both weak
+# agagacgga
+# actcgtaga
+# followed by a common motif
+# gtg gtc ggc gtc tct caa ggc aca cag ggg ata ggg g
+# gtggtcggcgtctctcaaggcacacaggggatagggg
+
+# we add that to out previous list
+
+setenv exitAdaptorRoche_454   CAAGGCACACAGGGGATAGG,CTGAGACTGCCAAGGCACACAGGGGATAGG,CTGAGCGGGCTGGCAAGGCGCATAG,CTGATGGCGCGAGGGAGGCGATACG,agtcgtggtgtggtcggcgtctctcaaggcacacaggggatagggg,atactaggtgtggtcggcgtctctcaaggcacacaggggatagggg,atcctaggtgtggtcggcgtctctcaaggcacacaggggatagggg,agagacggagtggtcggcgtctctcaaggcacacaggggatagggg,actcgtagagtggtcggcgtctctcaaggcacacaggggatagggg
+
+###########################################################
+# Helicos vectors
+setenv exitAdaptorHelicos AGGGCAGAGGATGGATGCAAGGATAAGT,AGGTTTGGTCCTAGCCTTTGTATTAGCT,AGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT
+
+# Helicos seen in Rhs325
+# AGGGCAGAGGATGGATGCAAGGATAAGT
+# AGGTTTGGTCCTAGCCTTTGTATTAGCT
+# In helicos, it is possible to sequence a 'dry plate' i.e. an artefactual poly(AGCT)
+
+setenv exitAdaptorPacBio GTACTCTGCGTTGATACCACTGCTT
+###########################################################
+# ILM vectors
+# These sequences can be read in any experiment, but Illumina says they must be accompanied
+# be the statement 
+#             "Oligonucleotide sequences copyright 2007-2011 Illumina, Inc. All rights reserved."
+
+## the sequence seen as a prefered ligation is
+## CnnRRATCCASC
+## CTTAAAATCCA
+# in a script i had exit linker illumina CTGTAGGCACCATCAAT   to be clipped at the 3' end of the solexa reads ???
+
+# The A in position 1 is incorporated a fraction of the time
+# we list the version with the A first, so preferable the program clips the longer vector
+#       
+setenv exitAdaptorIllumina GATCGGAAGAGCACACGTCTGAACTCCAGTCAC,aGATCGGAAGAGCTCGTATGCCGTCTtctgcttg,GATCGGAAGAGCTCGTATGCCGTCTtctgcttg,aGATCGGAAGAGCACACGTCTGAACTCCAGTCAC,AGATCGGAAGAGCGtcgtgtAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT,GATCGGAAGAGCGtcgtgtAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT,AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT,ATCTCGTATGCCGTCTTCTGCTTGAAAAAA,CGCTCTTCCGATCT,gagatcggaagagcgtcgtgtagggaaaga,tagatcggaagagcgtcgtgtagggaaaga,cagatcggaagagcgtcgtgtagggaaaga,aagatcggaagagcgtcgtgtagggaaaga,agatcggaagagcgtcgtgtagggaaaga,TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACNNNNNNATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATTAAAAAAAAAAAAAAAAAAAAAAAA,GATCnGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATTAAAAAAAAAAAAAAAAAAAAAAAA
+
+# JGI joint genome institute Coli Rec30 short RNA
+# sortie de read 1: rec30: NNNNNN is a bar code
+# TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACNNNNNNATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 
+# sortie de read 2: rec30
+# GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+
+# sortie de read 2: rec27 28
+#   aGATCGGAAGGccccccccccccccccccccc
+# cccagatcggaaggcg
+
+
+
+if (0) then
+# The same exitAdaptorIllumina presented in a column, easier to read
+aGATCGGAAGAGCTCGTATGCCGTCTtctgcttg,
+ GATCGGAAGAGCTCGTATGCCGTCTtctgcttg,
+aGATCGGAAGAGCACACGTCTGAACTCCAGTCAC,
+ GATCGGAAGAGCACACGTCTGAACTCCAGTCAC,
+AGATCGGAAGAGCGtcgtgtAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT,
+ GATCGGAAGAGCGtcgtgtAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT,
+AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT,
+ ATCTCGTATGCCGTCTTCTGCTTGAAAAAA
+
+
+rhs2130 F   GATCGGAAGAGCACACGTCTGAACTCCAGTCACACAGTGATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        R   GAAcCGGAAgAC
+
+
+rhs2130 F   GATCGGAAGAGCACACGTCTGAACTCCAGTCACACAGTGATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+            gatcggaagagcacacgtctgaactccagtcacGATCAG  atctcgtatgccgtcttctgcttgaaaaaaaa
+                             tctgaactccagtcac  TAGCTTatctcgtatgccgtcttctgcttgaaaaaaaaaaaaaaaa
+
+rhs2150     gatcggaagagcacacgtctgaactccagtcacGATCAG  atctcgtatgccgtcttctgcttgaaaaaaaa
+            caagcagaagacggcatacgagggcagaagggggatgtgggggggaggcgggttgtttaaaaaaaaaaaaaaaaaaaaaa
+
+rhs2160     gatcggaagagcacacgtctgaactccagtcacAGTCAACAatctcgtatgccgtcttctgcttgaaaaaaaaaaa
+            gaaccggaaaggggcgggggggggaaaagggggggantcggggggggcccgnttctttaaaaaaaaaaaaaaaaaaaa
+
+rhs2850     tctgaactccagtcactagcttatctcgtatgccgtcttctgcttgaaaaaaaaaaaaaaaa
+                             tctgaactccagtcacTAGCTT  atctcgtatgccgtcttctgcttgaaaaaaaaaaaaaaaa
+  missing aGATCGGAAGAGCACACG at the beginning they removed it from their adaptor
+
+in maggie before ali
+            nnnnnCCCTTTCCCTACACGACGCTCTTCCGATCTn
+      gatcggaagagctcgtatgccgtcttctgcttgaaa
+endif
+
+setenv inPhaseEntryAdaptor "$exitAdaptorIllumina"
+   
+
+# true seq universal adaptor (in 5') so we read its complement as the exit of the reverse read
+# but we may have seen it in forward direction in Sugano's cap experiments (double ligation artefact)
+# AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT
+# genomic 5' PCR primer (the first one is the same sequence as above)
+# aatgatacggcgaccaccgagatctacactctttccctacacgacgctcttccgatct
+#                         caagcagaagacggcatacgagctcttccgatct
+# genomic dna sequencing primer (same sequence again)
+#                          ACACTCTTTCCCTACACGACGCTCTTCCGATCT
+# genomic dna adaptor (the P is seen as A in the experiments)
+# P-gatcggaagagctcgtatgccgtcttctgcttg
+#                          acactctttccctacacgacgctcttccgatct  == complement( caag... 4 lines above)
+
+# exit adaptor seen in Brian Oliver droso data and in Rhs485
+# AGATCGGAAGAGCGgttcagcAGG  in reads/1 (adaptor paired end oligo)
+# AGATCGGAAGAGCGtcgtgtAGGgaaagagtgt  in reads/2  (complement of PCR primer 1)
+
+# paired end DNA oligonucleotides sequences
+# PE adaptors 
+#  P-GATCGGAAGAGCGgttcagcAGGAATGCCGAG
+#     ACACTCTTTCCCTACACGACGCTCTTCCGATCT
+# paired end PCR primer 1, reverse complemented (seen as the exit adaptor of the second reads)
+#      GATCGGAAGAGCGtcgtgtAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT
+# Paired end PCR primer 2, reverse complemented)
+#      AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGACCGATCTCGTATGCCGTCTTCTGCTTG
+# TruSeq adaptor with bar code used in 3'
+#   read:xxxxxxx (A for ligation)  gatcggaagagcacacgtctgaactccagtcac  --BARCODE-- atctcgtatgccgtcttctgcttg
+#   "[Illumina] A single A nucleotide is added to the 3' end of the blunt fragment to prevent them from ligating to
+#   one another during the adaptor ligation reaction. A corresponding single T nucleotide on the 3' end
+#   of the adaptor provides the complementary overhang for ligating the adaptor to the fragment."
+#   This explains why we see the A between the read and the adaptor, but we see empty adaptor-adaptor libraries
+#   without the A starting directly as GATCGG...
+ 
+# with the following bar codes
+# 1  ATCACG
+# 2  CGATGT
+# 3  TTAGGC
+# 4  TGACCA
+# 5  ACAGTG
+# 6  GCCAAT
+# 7  CAGATC
+# 8  ACTTGA
+# 9  GATCAG
+# 10 TAGCTT
+# 11 GGCTAC
+# 12 CTTGTA
+# 13 AGTCAA
+# 14 AGTTCC
+# 15 ATGTCA
+# 16 CCGTCC
+# 17
+# 18 GTCCGC
+# 19 GTGAAA
+# 20 GTGGCC
+# 21 GTTTCG
+# 22 CGTACG
+# 23 GAGTGG
+# 24
+# 25 ACTGAT
+# 26
+# 27 ATTCCT
+
+# 
+################   2021: Leming small RNA trueseq small rna lib prep kit
+# read 1 exit vector tggaattctcgggtgccaagg 
+# read 2 exit vector GATCGTCGGACTGTAGAACTCTGAAC  
+# equivalently the read 1 5'vector is the complement of the read 2 vector i.e. gttcagagttctacagtccgacgatc     
+# pcrprimer=aatgatacggcgaccaccgagatctacacgttcagagttctacagtccga 
+# pcerprimer with barcode  caagcagaagacggcatacgagatNNNNNNgtgactggagttccttggcacccgagaattcca K
+# gary mixed 100mers exit adaptor
+#  ATCTCGTATGCCGTCTTCTGCTTGAAAAAA
+# adaptor in warren
+#  GATCGGAAGAGCTCGTATGCCGTCT 
+# in illumina pure ERCC Rhs434 we see 218k of this sequence, but this is TrueSeq adaptor with the barcode 5 
+#  gatcggaagagcacacgtctgaactccagtcacACAGTGatctcgtatgc
+# in ILM there is an entry adaptor starting with GAT seen because ali rate drops for GAT prefix
+
+# In Rhs450 we find around 800k TrueSeq adaptor with the barcode 
+#  gatcggaagagcacacgtctgaactccagtcacTGACCAatctcgtatgccgtcttctgcttgaaaaaaaaaaaaaaaaaaaa
+# in the unaligned suffix we frequently detect the same sequence but with an a in front (see above)
+# Agatcggaagagcacacgtctgaactccagtcac
+
+# exome Ghs521-528/1 puis 2
+# agatcggaagagcggttcagcaggaatacc
+# agatcggaagagcgtcgtctggggaaagag
+# OFFICIAL illumina adaptor
+#  GATCGGAAGAGCACACGTCTGAACTCCAGTCAC
+ # ILM Sugano_primer
+# AATGATACGGCGACCACCGAG..ATCTACACTCTTTCCCTA (given by Yutaka until GAG)
+# AATGATACcGCGACCACCttG..Aa  (read from the profile)
+
+## the codedefine the different adaptor for each platform
+# sugano cap  5'_AATGATACGGCGACCACC-------  is a PCR entry primer for Sugano experiment
+# sugano exit            complement of CAAGCAGAAGACGGCATACGA----' == tcgtatgccgtcttctgcttg found in 5,239,664 tags
+#   this is an exact subsequence of the exit adaptor for ILM
+#setenv exitAdaptorRaw "tcgtatgccgtcttctgcttg -leftClipOn AATGATACGGCGACCACC"
+#setenv exitAdaptorRaw ATmTCGTATGCCGTCTTCTGCTTGAAAAAA,ttagacatatctccgtcgtagggatccc,tcgtatgccgtcttctgcttg
+
+###########################################################
+###########################################################
+

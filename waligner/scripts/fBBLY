@@ -1,0 +1,92 @@
+#!/bin/tcsh -f
+#$ -S /bin/tcsh
+#$ -P unified
+#$ -j y
+#$ -m e
+#$ -v SGE_SUMMARY="stderr"
+#$ -v SGE_NOMAIL
+
+#### ATTENTION i define BLYJOBNAME in BLY and also in BBLY 
+#if (! $?BLYJOBNAME) setenv  BLYJOBNAME '-J Test_1'
+if (! $?BLYJOBNAME) setenv  BLYJOBNAME ' '
+####
+setenv SGE 1
+if (! $?SGE) then
+  echo SGE not set
+  exit 0
+endif
+
+if (! -e $ici/Species) then
+  echo 'missing file ici/Species'
+  exit 1
+endif
+
+source $ici/Species
+
+setenv phaseset "$1"
+setenv chromSet "$2"
+
+if ("$1" == "") goto usage
+
+if ("$chromSet" == all) setenv allChrom
+if ("$chromSet" == all) setenv chromSet "$chromSetAll"
+
+if ("$chromSet" == A) setenv chromSet "$chromSetA"
+if ("$chromSet" == B) setenv chromSet "$chromSetB"
+if ("$chromSet" == C) setenv chromSet "$chromSetC"
+if ("$chromSet" == D) setenv chromSet "$chromSetD"
+if ("$chromSet" == E) setenv chromSet "$chromSetE"
+if ("$chromSet" == F) setenv chromSet "$chromSetF"
+
+if ("$1" == "9bb")  setenv chromSet '1 2 3 4 5 6 7 8 9 X Y'
+if ("$1" == "10bb")  setenv chromSet '1 2 3 4 5 6 7 8 9 X Y'
+
+if ("$2" == "Y" && ("$1" == "q2d" || "$1" == "q2f" ))  setenv chromSet '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64'
+
+echo "$chromSet"
+
+#setenv ici `pwd`
+if (! -d tmp) mkdir tmp
+if (! -d tmp/LOGS) mkdir tmp/LOGS
+if (! -d $ici/bbly) mkdir $ici/bbly 
+echo $ici
+
+setenv synchro 0
+if ($3 == "wait" || $4 == "wait") setenv synchro  1 
+if ($3 == "nowait" || $4 == "nowait") setenv synchro  2 
+echo synchro=$synchro
+
+if ($synchro == 0) then
+  echo missing wait/nowait mandatory parameter
+  goto usage
+endif
+
+if ($synchro == 1)   qusage 1
+
+if ("$1" == "zero") then
+  date
+  echo 'no jobs left on the farm, we are synchronised'
+  exit 0
+endif
+
+# -R "rusage[mem=800] && select[linux]"
+  setenv linux linux64
+
+set phase1=`echo "$1" | gawk '{print $1}'`
+foreach  chrom ($chromSet)
+  echo -n $chrom
+  scripts/submit tmp/LOGS/$phase1.$chrom.$$ "scripts/fBLY '$1' '$chrom'"
+  sleep 1
+end
+
+exit 0
+
+usage:
+echo 'fBBLY phase chromset [RS] "wait | nowait"'
+echo 'fBBLY zero all wait' to simply synchronise the next job
+
+
+exit 1
+
+
+
