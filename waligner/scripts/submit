@@ -3,6 +3,8 @@
 set out_err="$1"
 set pgm="$2"
 set farm_requested="$3"
+set nWait=0
+# echo "submit called queue=$queue"
 # exit 0
 ##############################################
 ## Please select how you want to submit the job
@@ -49,38 +51,60 @@ endif
 
 set NCORE=8  # number of jobs to run in parallel in MULTICORE case
 set mem_free="16G"
-set mem_requested="16G"
+set m_mem_free="16G"
+set h_vmem="16G"
 set request_multicore=""
 if ($farm_requested == "32G") then
   set farm_requested=""
   set mem_free="32G"
-  set mem_requested="32G"
+  set m_mem_free="32G"
+  set h_vmem="32G"
 else if ($farm_requested == "64G") then
   set farm_requested=""
   set mem_free="64G"
-  set mem_requested="64G"
+  set m_mem_free="64G"
+  set h_vmem="64G"
 else if ($farm_requested == "128G") then
   set farm_requested=""
   set mem_free="128G"
-  set mem_requested="128G"
+  set m_mem_free="128G"
+  set h_vmem="128G"
 else if ($farm_requested == "32G4T") then
   set farm_requested=""
   set mem_free="8G"
-  set mem_requested="32G"
+  set m_mem_free="8G"
+  set h_vmem="32G"
   set request_multicore="-pe multicore 4  -R y"
+else if ($farm_requested == "64G8T") then
+  set farm_requested=""
+  set mem_free="8G"
+  set m_mem_free="8G"
+  set h_vmem="64G"
+  set request_multicore="-pe multicore 8  -R y"
 else if ($farm_requested == "1G") then
   set farm_requested=""
   set mem_free="1G"
-  set mem_requested="1G"
+  set h_vmem="1G"
+  set m_mem_free="1G"
 else if ($farm_requested == "BLASTP") then
   set farm_requested=""
-  set mem_requested="128G"
+  set h_vmem="32G"
   set mem_free="32G"
+  set m_mem_free="32G"
   set farm=UGE4
+  # set request_multicore="-pe multicore 4  -R y"
+else if ($farm_requested == "BIGBLASTP") then
+  set farm_requested=""
+  set h_vmem="153G"
+  set mem_free="130G"
+  set m_mem_free="34G"
+  set farm=UGE4
+  set request_multicore="-pe multicore 4  -R y"
 else if ($farm_requested == "UGE4") then
   set farm_requested=""
-  set mem_requested="32G"
-  set mem_free="8G"
+  set h_vmem="32G"
+  set mem_free="32G"
+  set m_mem_free="8G"
   set farm=UGE4
 else
   if ($farm_requested != "") set farm=$3
@@ -170,7 +194,8 @@ count_jobs:
   if ("$out_err" == wait || "$pgm" == wait || "$out_err" == wait5 || "$pgm" == wait5) then
     if ($n > 0) then 
        sleep 2 # 2 seconds for example, may be 1 sec is ok  
-       if ("$out_err" == wait5 || "$pgm" == wait5) sleep 298  # complete to 5 minutes
+       if ($nWait == 1 && ("$out_err" == wait5 || "$pgm" == wait5)) sleep 298  # complete to 5 minutes
+       set nWait=1
        goto count_jobs
     endif
   else
@@ -203,7 +228,6 @@ if ($farm == UGE || $farm == UGE4) then
   unsetenv DYLD_LIBRARY_PATH
   set reserve_unit=G
 endif
-
 if ($farm == SGE || $farm == UGE || $farm == UGE4) then
 
   setenv SGE_SUMMARY stderr
@@ -212,10 +236,15 @@ if ($farm == SGE || $farm == UGE || $farm == UGE4) then
   if ("$out_err" == run || "$pgm" == run) exit 0
 
   if ("$out_err" == wait || "$pgm" == wait || "$out_err" == wait5 || "$pgm" == wait5) then
-    if ("$out_err" == wait5 || "$pgm" == wait5) then
-      $scripts/qusage 5
+    if ($nWait == 1) then
+      if ("$out_err" == wait5 || "$pgm" == wait5) then
+        $scripts/qusage 5
+      else
+        $scripts/qusage 1
+      endif
     else
       $scripts/qusage 1
+      set nWait=1
     endif
   else
     if (! $?queue) set queue=unified
@@ -224,16 +253,18 @@ if ($farm == SGE || $farm == UGE || $farm == UGE4) then
     if (0 && $queue == test) set xx=',express=TRUE'
 
     set isBlastp=""
-    if ("$pgm" =~ "*blastp*") set isBlastp="-l blastp_frosty"
+    if ("$pgm" =~ "*bZZZlastp*") set isBlastp="-l blastp_frosty"
     echo "SGE submit: pgm=###$pgm###    stdout/err=###$out_err.out/err### queue=###$queue### isBlasp=###$isBlastp###"
 
     if ($queue == profiling) then
-      set numero=`qsub -V -b y -j n -N $MAGIC -P unified $isBlastp  $request_multicore -l  h_rt=86400,h_vmem=64G,mem_free=32G,m_mem_free=32G,cputype="*E5-2650*",m_core=16,mem_total=125G   -o $out_err.out -e $out_err.err "./bin/time -p $pgm"`
+      set numero=`qsub -V -b y -j n -N $MAGIC -P unified $isBlastp  $request_multicore -l h_rt=86400,h_vmem=64G,mem_free=32G,m_mem_free=32G,cputype="*E5-2650*",m_core=16,mem_total=125G   -o $out_err.out -e $out_err.err "./bin/time -p $pgm"`
     else
       # which qsub : /netmnt/gridengine/current/bin/lx-amd64/qsub
 # new syntax as of 2018 on UGE_ncbi qsub -l m_mem_free=4G,h_rt=14400,h_vmem=10G <other options> <job>
-      echo qsub -V -b y -j n -N $MAGIC -P  $queue  $isBlastp  $request_multicore -l h_rt=86400,h_vmem=$mem_requested,mem_free=$mem_free,m_mem_free=$mem_requested$xx,cputype='\!*EPYC*'  -o $out_err.out -e $out_err.err \"./bin/time -p $pgm\"
-           qsub -V -b y -j n -N $MAGIC -P  $queue  $isBlastp  $request_multicore -l h_rt=86400,h_vmem=$mem_requested,mem_free=$mem_free,m_mem_free=$mem_requested$xx,cputype='\!*EPYC*'  -o $out_err.out -e $out_err.err "./bin/time -p $pgm"
+
+      echo "qsub -V -b y -j n -N $MAGIC -P  $queue  $isBlastp  $request_multicore -l h_rt=86400,h_vmem=$h_vmem,mem_free=$mem_free,m_mem_free=$m_mem_free$xx,cputype="'\!*EPYC*'"  -o $out_err.out -e $out_err.err ./bin/time -p $pgm"
+
+            qsub -V -b y -j n -N $MAGIC -P  $queue  $isBlastp  $request_multicore -l h_rt=86400,h_vmem=$h_vmem,mem_free=$mem_free,m_mem_free=$m_mem_free$xx,cputype='\!*EPYC*'  -o $out_err.out -e $out_err.err "./bin/time -p $pgm"
     endif
 
 # multithreaded tasks
@@ -458,13 +489,13 @@ if ($farm == PARASOL) then
   else  if ("$out_err" == run || "$pgm" == run) then
     parasol make tmp/Parasol/job.list 
   else
-    if (! -d $CaliRootDir/tmp/Parasol) mkdir $CaliRootDir/tmp/Parasol
-    set toto=$CaliRootDir/tmp/Parasol/job.$$
+    if (! -d $MagicRootDir/tmp/Parasol) mkdir $MagicRootDir/tmp/Parasol
+    set toto=$MagicRootDir/tmp/Parasol/job.$$
     echo '#!/bin/csh -e' > $toto
     echo -n "cd  " >> $toto
     pwd >> $toto
     echo "(./bin/time -p $pgm > $out_err.out) >& $out_err.err " >>   $toto
-    echo "csh $toto" >> $CaliRootDir/tmp/Parasol/job.list
+    echo "csh $toto" >> $MagicRootDir/tmp/Parasol/job.list
   endif
 
   exit 0

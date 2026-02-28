@@ -292,3 +292,20 @@ foreach gg (_105 _109 .T2T-CHM13v2)
   end
 end
 
+###### comaprative table with Binshengs 2023_10_17
+
+query find run Ali && SEQC2_title && IS RNA_Total_A_1	
+select   t,s,r,srr, ns,nr, gs, gr1, ms, m1,m5,mode,median,av,m95,m99 from r in @, t in r->sorting_title, srr in r->SEQC2_SRR,  a in r->ali, s in r->SEQC2_title, nr in a->accepted[3], ns in s[1], gr in nr[2], gs in ns[2], m1 in a->Length_distribution_1_5_50_95_99_mode_av,m5 in m1[1],mode in m1[5],median in m1[2],av in m1[6],m95 in m1[3],m99 in m1[4], gr1=gr/1000000, ms in gs[3]
+
+
+query find run Ali && SEQC2_title && IS Nanopore.titration_AGLR2_A-F3
+query find run Ali && SEQC2_title && ! paired_end
+select -o toto.r2s.txt t,s,r,srr, ns,nr, gs, gr1, ms, m1,m5,mode,median,av,m95,m99 from r in @, t in r->sorting_title, srr in r->SEQC2_SRR,  a in r->ali, s in r->SEQC2_title, nr in a->accepted[3], ns in s[1], gr in nr[2], gs in ns[2], m1 in a->Length_distribution_1_5_50_95_99_mode_av,m5 in m1[1],mode in m1[5],median in m1[2],av in m1[6],m95 in m1[3],m99 in m1[4], gr1=gr/1000000, ms in gs[3]
+
+query find run Ali && SEQC2_title && paired_end
+select -o toto.r2s.txt2 t,s,r,srr, ns,nr, gs, gr1, ms, m1,m5,mode,median,av,m95,m99 from r in @, t in r->sorting_title, srr in r->SEQC2_SRR,  a in r->ali, s in r->SEQC2_title, nr in a->accepted[3], ns in s[1], gr in nr[2], gs in ns[2], m1 in a->Fragment_length_1, m5 in a->Fragment_length_5, m95 in a->Fragment_length_95, m99 in a->Fragment_length_99, mode in a->Fragment_length_mode, median in a->Fragment_length_median, av in a->Fragment_length_average, gr1=gr/1000000, ms in gs[3]
+
+echo "# Sorting title\tSRR id\tMagic\tSRR\tReads in SRR\tReads in Magic\tGb in SRR\tGb in Magic\tMedian in SRR\t1%\t5%\tMode\tMedian\tAverage\t95%\t99%" > RESULTS/Binsheng2Magic.txt
+cat toto.r2s.txt2 >> RESULTS/Binsheng2Magic.txt                                                         
+cat toto.r2s.txt >> RESULTS/Binsheng2Magic.txt                            
+

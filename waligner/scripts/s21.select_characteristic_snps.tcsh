@@ -10,13 +10,13 @@ set Strategy=$3
   cat tmp/SNP_DB/$zone/$MAGIC.snp_list_with_allele_frequency_per_sample.txt | gawk -F '\t' '{if ($24  > .050 * n && $26 > 1 && $28 + $29 + $30 > 1 && ($31 >= 5 && $31 < 95)) print;}' n=$nRuns > tmp/SNP_DB/$zone/$MAGIC.characteristic_snp.txt
 
 if ($Strategy == RNA_seq) then
-  cat tmp/SNP_DB/$zone/$MAGIC.characteristic_snp.txt | gawk -F '\t' '/^#/{next;}/A:G/{next;}/a:g/{next;}{p=$5;if(index(p,":Sub:")==0)next;print $5;}' > tmp/SNP_DB/$zone/$MAGIC.characteristic_substitutions.list
+  cat tmp/SNP_DB/$zone/$MAGIC.characteristic_snp.txt | gawk -F '\t' '/^#/{next;}/A:G/{next;}/a:g/{next;}{p=$5;if(index(p,":Sub:")==0)next;print $5;}' > tmp/SNP_DB/$zone/$MAGIC.characteristic.list
   
-  cat tmp/SNP_DB/$zone/$MAGIC.characteristic_substitutions.list ZZZZZ tmp/SNPH/$zone/$MAGIC.snp.sorted | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){ok[$1]=1;next;}}{z=$1 ":" $2 ":" $3;if(ok[z]==1)print;}'  | gzip >  tmp/SNP_DB/$zone/$MAGIC.characteristic_substitutions.snp.gz
+  cat tmp/SNP_DB/$zone/$MAGIC.characteristic.list ZZZZZ tmp/SNPH/$zone/$MAGIC.snp.sorted | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){ok[$1]=1;next;}}{z=$1 ":" $2 ":" $3;if(ok[z]==1)print;}'  | gzip >  tmp/SNP_DB/$zone/$MAGIC.characteristic.snp.gz
 else
-  cat tmp/SNP_DB/$zone/$MAGIC.characteristic_snp.txt | gawk -F '\t' '/^#/{next;}{print  $5 ;}' > tmp/SNP_DB/$zone/$MAGIC.characteristic_substitutions.list
+  cat tmp/SNP_DB/$zone/$MAGIC.characteristic_snp.txt | gawk -F '\t' '/^#/{next;}{print  $5 ;}' > tmp/SNP_DB/$zone/$MAGIC.characteristic.list
   
-  cat tmp/SNP_DB/$zone/$MAGIC.characteristic_substitutions.list ZZZZZ tmp/SNPH/$zone/$MAGIC.snp.sorted | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){ok[$1]=1;next;}}{z=$1 ":" $2 ":" $3;if(ok[z]==1)print;}' | gzip >  tmp/SNP_DB/$zone/$MAGIC.characteristic_substitutions.snp.gz
+  cat tmp/SNP_DB/$zone/$MAGIC.characteristic.list ZZZZZ tmp/SNPH/$zone/$MAGIC.snp.sorted | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){ok[$1]=1;next;}}{z=$1 ":" $2 ":" $3;if(ok[z]==1)print;}' | gzip >  tmp/SNP_DB/$zone/$MAGIC.characteristic.snp.gz
 
 endif
 

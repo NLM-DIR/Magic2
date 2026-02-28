@@ -26,8 +26,8 @@ echo ZZZZZ | gzip > $mytmp/ZZZZZ.gz
 	set qual2=""
 
         if (-e tmp/SNP_BRS/$run/Quality_profile.txt) then
-          set n=`wc tmp/SNP_BRS/$run/Quality_profile.txt | gawk '{print $1}'`
-          if ($n > 10) then
+          set n=`wc tmp/SNP_BRS/$run/Quality_profile.txt | gawk '{print 0+$1}'`
+          if ($n > -10) then
 	    set qual2=" --runQuality tmp/SNP_BRS/$run/Quality_profile.txt"
           else
             if ($justMito == 0) then
@@ -48,9 +48,9 @@ set dropMultiplicity=""
 if ($?snpDropMultiplicity == 1) set dropMultiplicity="-dropMultiplicity"
 
 if ($justMito == 1) goto laba
-if ($Strategy == RNA_seq) goto phaseRNA
+if ($NO_INTRON == 0 && $Strategy == RNA_seq) goto phaseRNA
 
-  if (! -e tmp/SNP_ZONE/_allG && ($Strategy == Exome || $Strategy == Genome)) then
+  if (! -e tmp/SNP_ZONE/_allG ) then
     set strategyOk=1
     if (-d tmp/SNP_ZONERUN/$run) \rm  -rf tmp/SNP_ZONERUN/$run 
     if (! -d  tmp/SNP_ZONERUN/$run) mkdir tmp/SNP_ZONERUN/$run 
@@ -105,6 +105,7 @@ endif
 
 if (-e tmp/SNP_ZONE/_allG) then
   set ff1=zoneG.
+  mkdir $mytmp/$run
   foreach lane (`cat Fastc/$run/LaneList`)
     mkdir $mytmp/$lane
     echo "bin/snp -minAliPerCent 90 --ventilate --run $run -o $mytmp/$lane/zoneG -i tmp/COUNT/$lane.hits.gz  --select tmp/SNP_ZONE/_allG $dropMultiplicity"
@@ -124,19 +125,16 @@ goto laba
 
 phaseRNA:
 
+set target=$geneSNPTarget
+source scripts/target2target_class.txt  
+
 if (-e tmp/SNP_$ZONE/_allr && ! -e $mytmp/$run/all_zoner) then
-
-  set target=$geneSNPTarget
-  source scripts/target2target_class.txt  
-
   cat tmp/SNP_$ZONE/zoner.*.txt | sort -k 1,1 -k 2,2n > $mytmp/$run/all_zoner
 endif
 
 if (-e $mytmp/$run/all_zoner) then
 
   set ff1=zoner.
-  set target=$geneSNPTarget
-  source scripts/target2target_class.txt  
   foreach lane (`cat Fastc/$run/LaneList`)
     if (-e  $mytmp/$lane/zoner.1.hits.u.gz) continue 
     mkdir $mytmp/$lane
@@ -152,7 +150,7 @@ echo -n "snp accumulate: ventilation done "
 date
 echo "start count"
 
-if ($Strategy == RNA_seq) then
+if ($NO_INTRON == 0 && $Strategy == RNA_seq) then
   if (-e tmp/SNP_$ZONE/_allr) then
     set ff1=zoner.
     cat tmp/SNP_ZONE/ZoneList > $mytmp/$run/ZoneList
@@ -177,8 +175,8 @@ echo "hello from zone $zone strategy=$Strategy"
   if ($justMito == 1 && $zone != mito && $zone != SpikeIn) continue
 #  if (($zone == mito || $zone == rrna || $zone == SpikeIn) && ! -d tmp/PHITS_$zone) continue
   if ($zone == mito || $zone == rrna || $zone == SpikeIn) set target=$zone
-  if ($zone =~ zoneG.* && $Strategy != Exome && $Strategy != Genome) continue
-  if ($zone =~ zoneg.* && $Strategy != Exome && $Strategy != Genome) continue
+  if ($zone =~ zoneG.* && $Strategy != Exome && $Strategy != Genome && $NO_INTRON == 0) continue
+  if ($zone =~ zoneg.* && $Strategy != Exome && $Strategy != Genome  && $NO_INTRON == 0) continue
   if ($zone =~ zoneG.*) set target=genome
   if ($zone =~ zoneg.*) set target=genome
   if ($zone =~ zoner.* && $Strategy != RNA_seq) continue
@@ -280,7 +278,7 @@ cleanup:
 echo "clean up: $mytmp"
 
 ls -ls  $mytmp/$run/*/*.gz
-mv $mytmp/$run/*  $mytmp/$run/*.out  $mytmp/$run/*.err tmp/SNP_BRS/$run
+mv $mytmp/$run/s1.*  $mytmp/$run/*.gz tmp/SNP_BRS/$run
 ls -ls  tmp/SNP_BRS/$run/*.gz
 
 \rm -rf $mytmp

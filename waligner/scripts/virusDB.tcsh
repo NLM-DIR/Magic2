@@ -17,7 +17,7 @@ endif
 pushd VirusDB
 set ff=/home/mieg/AW/Viruses_microbes_DATA/ChrisMason_MissingVirusesApr2020/New_Virus_list_556_virus_HandEditedDanielle_April2020.txt
 cat $ff | gawk -F '\t' '{for(i=1;i<=NF;i++)print $i;}' | gawk -F ',' '{for(i=1;i<=NF;i++)print $i;}' | gawk  '/^N[CR]/{print}/^KP/{print}' | gawk '{split($1,aa,".");print aa[1];}' | sort -u > ~/AW/Danou.list
-# marche pas: on obtient des melagnes
+# marche pas: on obtient des melanges
 #  gawk '{printf("seqfetch -t 5 -dn -s %s > %s.fasta1\n", $1,$1);}' > _m ; source _m > titi ; cat titi | dna2dna -I fasta -o titi2 >$ /dev/null
 # web NCBI all-ressource; cherchez ncbi/sites/batchentrez (choose file Danou.list, db=nucleotide; puis retrieve => download fasta at full-GB)
  cat /home/mieg/AW/Viruses_microbes_DATA/ChrisMason_MissingVirusesApr2020/Danou_list.fasta | gawk '/^>/{s=substr($1,2);t=substr($0,length($1)+1); printf("Sequence %s\nTitle \"%s\"\n\n",s, t) ;}' > titi.ace
@@ -87,12 +87,11 @@ gzip virus_manual_selection.2020_04_14.fasta
 
 cd ~/CRN_Mason/VirusDB
 pushd  /home/mieg/AW/Viruses_microbes_DATA/ChrisMason_missingImportantBacteria/
-
-foreach ff ( `ls *.fna.gz` )
-? set s=`echo $ff | gawk -F _GCF '{print $1}'`
-  zcat $ff | gawk '/^>/{a=substr($1,2);t=substr($0,length(s)+2);printf("Sequence %s\nTitle %s\nSubsequence %s\nBacteria\n\nSequence %s\nTitle \"%s\"\n\n",s,s,a,a,t);}' s=$s >> /tmp/tutu
-end
-zcat *.gz > /tmp/tutu1.fasta
+  foreach ff ( `ls *.fna.gz` )
+    set s=`echo $ff | gawk -F _GCF '{print $1}'`
+    zcat $ff | gawk '/^>/{a=substr($1,2);t=substr($0,length(s)+2);printf("Sequence %s\nTitle %s\nSubsequence %s\nBacteria\n\nSequence %s\nTitle \"%s\"\n\n",s,s,a,a,t);}' s=$s >> /tmp/tutu
+  end
+  zcat *.gz > /tmp/tutu1.fasta
 popd
 
 

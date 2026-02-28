@@ -86,9 +86,10 @@ if (! -e tmp/GeneFusion/t3.$MAGIC.a) then
   foreach run (`cat MetaDB/$MAGIC/RunsList`)
     set ff=tmp/GeneFusion/$run/t1.gene_fusion.$target.txt.gz
     if (! -e $ff) continue
-    zcat $ff  | grep BCAS4__BCAS3 >> tmp/GeneFusion/t3.$MAGIC.a
+#   zcat $ff  | grep BCAS4__BCAS3 >> tmp/GeneFusion/t3.$MAGIC.a
+    zcat $ff  >> tmp/GeneFusion/t3.$MAGIC.a
   end
-  cat tmp/GeneFusion/t3.$MAGIC.a | gawk -F '\t' '/^#/{next;}{f=$3;nn[f]+=$2+$3;next;}END{for(f in nn) if(nn[f]>=min)printf("%s\t%d\n",f,nn[f]);}' min=$minFusion | sort -k 2nr > tmp/GeneFusion/t3.$MAGIC.b
+  cat tmp/GeneFusion/t3.$MAGIC.a | gawk -F '\t' '/^#/{next;}{f=$3;nnDS[f]+=$20;nnS[f]+=$21;nnG1[f]+=$22;nnG2[f]+=$23;next;}END{for(f in nnS) if(nnS[f]>=min)printf("%s\t%d\t%d\t%d\t%d\n",f,nnDS[f],nnS[f],nnG1[f],nnG2[f]);}' min=$minFusion | sort -k 2nr > tmp/GeneFusion/t3.$MAGIC.b
 endif
 
 

@@ -45,7 +45,7 @@ date
     if ($collect == count) set out=tmp/SNP/$run/$MAGIC.$zone.$uu
 
     set select8kb=""
-    set target=av
+    set target=`echo $Etargets av | gawk '{print $1;}'`
     if ($collect == detect && -e tmp/METADATA/$target.selected8kbTranscriptList.txt) then
       set select8kb="-selected8kbList  tmp/METADATA/$target.selected8kbTranscriptList.txt"
     endif

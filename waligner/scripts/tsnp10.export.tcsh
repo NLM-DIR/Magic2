@@ -1,8 +1,9 @@
 #!/bin/tcsh -f
 # export the snps/tsnps using snpsummary
 
-foreach zone (`cat tmp/SNP_ZONE/ZoneList `)
-  if (-e tmp/TSNP_DB/$zone/mainClone.ace) continue
+set zone=$1
+
+if (! -e tmp/TSNP_DB/$zone/mainClone.ace) then
   cat <<EOF > tmp/TSNP_DB/$zone/mainClone.ace
 Clone R
 Main_clone
@@ -17,15 +18,19 @@ y
     save
     quit
 EOF
-end
+endif
 
 
 
-foreach zone (`cat tmp/SNP_ZONE/ZoneList `)
-  bin/snpsummary -db tmp/TSNP_DB/$zone -o RESULTS/SNV/DanLi.$zone -snpType 3 
-end
+if (-d DanLi) then
+    bin/snpsummary -db tmp/TSNP_DB/$zone -o RESULTS/SNV/DanLi.$zone --snpType 3 
+endif
 
-foreach zone (`cat tmp/SNP_ZONE/ZoneList `)
-  bin/snpsummary -db tmp/TSNP_DB/$zone -o RESULTS/SNV/BRS.$zone -snpType 0 -minSnpFrequency 20 -minSnpCover 20
-end
+  bin/snpsummary -db tmp/TSNP_DB/$zone -p $MAGIC -o RESULTS/SNV/$MAGIC.$zone.min$minSnpFrequency.counts --snpType 1 --minSnpFrequency $minSnpFrequency -e IGR
+  bin/snpsummary -db tmp/TSNP_DB/$zone -p $MAGIC -o RESULTS/SNV/$MAGIC.$zone.min$minSnpFrequency.frequency --snpType 1 --minSnpFrequency $minSnpFrequency -e Igr
+  bin/snpsummary -db tmp/TSNP_DB/$zone -p $MAGIC -o RESULTS/SNV/$MAGIC.$zone.min80.counts --snpType 1 --minSnpFrequency 80 # --minSnpCover $minSnpCover -e IGR
+  bin/snpsummary -db tmp/TSNP_DB/$zone -p $MAGIC -o RESULTS/SNV/$MAGIC.$zone.min80.frequency --snpType 1 --minSnpFrequency 80 # --minSnpCover $minSnpCover -e Igr
 
+    touch tmp/TSNP_DB/$zone/$MAGIC.tsnp10.done
+
+exit 0

@@ -83,6 +83,7 @@ date
 
 set keepName=""
 if ($MAGIC == PacBio) set keepName="-keepName"
+set keepName="-keepName"
 phase1:
 
 if ($4 == "") then
@@ -94,18 +95,18 @@ set run=$1
 set format=$2
 set files=$3
 set outDir=$4"/"$run 
+set isLong=$5
 set UMI=0
-if ($?5) set UMI=`echo $5 | gawk '{if(substr($1,1,3)=="UMI")n=substr($1,4);print n+0;}'`
+if ($?6) set UMI=`echo $5 | gawk '{if(substr($1,1,3)=="UMI")n=substr($1,4);print n+0;}'`
 echo "UMI=$UMI"
 
 set filesQ=`echo $files| sed -e 's/_____/     /g'`
 set prefix="f2"
 set nFiles=`echo $files | gawk '{n=split($1,aa,"_____");if(aa[n]=="")n-=1;print n}'`
  
-# split the sequences usinga reasonable number of letters
+# split the sequences using a reasonable number of letters
 set prefixLength=`limit | gawk '/^descriptors/{n=$2;}END{n=n+0;if(n<64)n=64;x=4;for(i=1;i<=4 && x<n;i++)x=4*x;print i-1;}'`
 if ($prefixLength < 3) set prefixLength=3
-
 
 # treat the Solid formats exactly as if they were fasta/fastq since we wish to stay in color space
 
@@ -126,12 +127,21 @@ set tmp=$outDir/tmp
 # set tmp=$TMPDIR/aceview.makeFastc.$run.$$
 if (! -d $tmp) mkdir $tmp
 
+# just split long reads
+if ($isLong == long) then
+  goto phase3
+endif
+
+
+
 if (! -e $tmp/c1.raw.done) then 
   echo " Splitting the original files : $files by prefix in directory $tmp/raw"
   if (! -d  $tmp/cumul) mkdir $tmp/cumul
 
   if ( -e $outDir/first_line.ace) \rm Fastc/first_line.ace
 
+  set zcatPass=1
+lao:
   foreach nn (1 2 3 4 5)
     if ($nn <= $nFiles) then
       set file = `echo $files | gawk '{split($1,aa,"_____");print aa[nn]}' nn=$nn`
@@ -170,6 +180,13 @@ if (! -e $tmp/c1.raw.done) then
     set nf1 = `cat $tmp/cumul/f1 | wc | gawk '{print $1;}'`
     set nf2 = `cat $tmp/cumul/f2 | wc | gawk '{print $1;}'`
 
+    if ($zcatPass == 1 && $nf1 > 0 && $nf2 > 0 && $nf1 != $nf2) then
+      echo "TRY AGAIN in makeFastc Number of reads in f1 files not similar to number in f2 files : $nf1 :: $nf2   in $files"
+      set zcatPass=2
+      sleep 300
+      goto lao
+    endif
+
     if ($nf1 > 0 && $nf2 > 0 && $nf1 != $nf2) then
       echo "FATAL ERROR in makeFastc Number of reads in f1 files not equal to number in f2 files : $nf1 :: $nf2   in $files"
       exit 1
@@ -199,6 +216,9 @@ phase2:
 
 echo "phase2 prepare the tc files"
 
+set uu="-u"
+if ($format == raw) set uu=""
+
 if ($isSolid > 0) set SS=T
 if (! -d $tmp/tc) mkdir $tmp/tc
 if (! -e $tmp/c2.tc.done) then 
@@ -209,15 +229,15 @@ if (! -e $tmp/c2.tc.done) then
 
           if ($prefixLength == 3) then
             if (!  -e  $tmp/tc/$a$t$g.tc) then
-              echo "cat $tmp/raw/ff.*$a$t$g.raw | sort |  bin/dna2dna  $keepName  -I raw -UMI $UMI -O tc -o $tmp/tc/$a$t$g"
-                    cat $tmp/raw/ff.*$a$t$g.raw | sort |  bin/dna2dna  $keepName -I raw -UMI $UMI  -O tc -o $tmp/tc/$a$t$g
+              echo "cat $tmp/raw/ff.*$a$t$g.raw | sort $uu |  bin/dna2dna  $keepName  -I raw -UMI $UMI -O tc -o $tmp/tc/$a$t$g"
+                    cat $tmp/raw/ff.*$a$t$g.raw | sort $uu |  bin/dna2dna  $keepName -I raw -UMI $UMI  -O tc -o $tmp/tc/$a$t$g
             endif
           else
   
             foreach c (A T G C)
               if (! -e  $tmp/tc/$a$t$g$c.tc) then
-                echo "cat $tmp/raw/ff.*$a$t$g$c.raw | sort |  bin/dna2dna  $keepName -I raw -UMI $UMI  -O tc -o $tmp/tc/$a$t$g$c"
-                      cat $tmp/raw/ff.*$a$t$g$c.raw | sort |  bin/dna2dna  $keepName -I raw -UMI $UMI  -O tc -o $tmp/tc/$a$t$g$c
+                echo "cat $tmp/raw/ff.*$a$t$g$c.raw | sort $uu |  bin/dna2dna  $keepName -I raw -UMI $UMI  -O tc -o $tmp/tc/$a$t$g$c"
+                      cat $tmp/raw/ff.*$a$t$g$c.raw | sort $uu |  bin/dna2dna  $keepName -I raw -UMI $UMI  -O tc -o $tmp/tc/$a$t$g$c
               endif
             end
 
@@ -241,9 +261,13 @@ if (! -d $tmp/fastc) mkdir $tmp/fastc
 if (! -d $tmp/fastc/$run) mkdir $tmp/fastc/$run
 if (! -e $tmp/c3.fastc.done) then 
 
+if ($isLong == long && $format == fasta) then
+  echo "gunzip -c $filesQ | bin/dna2dna $keepName -I tc -O fastc -split $splitMs -splitMb $splitMb -gzo -o $tmp/fastc/$run/f2"
+        gunzip -c $filesQ | bin/dna2dna $keepName -I fasta -O fastc -split $splitMs -splitMb $splitMb -gzo -o $tmp/fastc/$run/f2
+else
   echo "cat $tmp/tc/*.tc | bin/dna2dna $keepName -I tc -O fastc -split $splitMs -splitMb $splitMb -gzo -o $tmp/fastc/$run/f2"
         cat $tmp/tc/*.tc | bin/dna2dna $keepName -I tc -O fastc -split $splitMs -splitMb $splitMb -gzo -o $tmp/fastc/$run/f2
-
+endif
 
   if ($isSolid == 1) then
     mv  $tmp/fastc  $tmp/ccfa

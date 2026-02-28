@@ -176,7 +176,7 @@ endif
 
 #######  collate the partials
 
- cat tmp/COUNT/$run/*.partial.p3p5 | gawk '{p5 += $2; p5b += $3; if ($5=="3p"){p3 +=$6;p3b+=$7;}else{p3+=$5;p3b+=$6;}}END{printf("\nAli %s\nPartial_5p %d %d\nPartial_3p %d %d\n\n",run,p5,p5b,p3,p3b);}' run=$run  >> toto.ace
+ cat tmp/COUNT/$run/*.partial.p3p5 | gawk '{p5 += $2; p5b += $3; if ($5=="3p"){p3 +=$6;p3b+=$7;}else{p3+=$5;p3b+=$6;}}END{printf("\nAli %s\nPartial_5p %d %d\nPartial_3p %d %d\n\n",run,p5,p5b,p3,p3b);}' run=$run  >> $toto.ace
 
 #######  finalize
 

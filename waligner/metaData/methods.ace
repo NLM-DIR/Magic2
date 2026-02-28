@@ -168,6 +168,15 @@ BlastN
 Blixem_X	
 Blixem_N	
 
+Method : "Encode"
+Colour	 MIDBLUE
+Show_up_strand	
+Cluster	
+Right_priority	 1.8
+Web_right_priority	 9
+Show_text	
+EMBL_feature	 "CDS"
+
 Method "curated"
 Colour	 MIDBLUE
 Show_up_strand	
@@ -199,6 +208,12 @@ Blixem_N
 Method "EST_nematode"
 Remark	 "GFF method for nematode EST sequences (not Caenorhabdita)"
 
+Method "EXON_SUPPORT"
+Colour	 DARKGRAY
+Show_up_strand	
+Width	 2
+Right_priority	 3.35
+
 Method "Fasta"
 Colour	 LIGHTBLUE
 Score_by_width	
@@ -208,6 +223,15 @@ Right_priority	 5.2
 Method "FMAP_Sequences_and_ends"
 
 Method "Genefinder"
+Colour	 MIDBLUE
+Show_up_strand	
+Bumpable	
+Right_priority	 1.8
+Web_right_priority	 9
+Show_text	
+EMBL_feature	 "CDS"
+
+Method "RefSeq"
 Colour	 MIDBLUE
 Show_up_strand	
 Bumpable	
@@ -340,6 +364,12 @@ Score_by_width
 Score_bounds	 50 100
 Percent	
 Right_priority	 5.45
+
+Method "magic"
+Colour	 GREEN
+Show_up_strand	
+Bumpable	
+Right_priority	 1.7
 
 Method "Mass_spec2_higher"
 Colour	 GREEN5
@@ -643,6 +673,12 @@ Show_up_strand
 Bumpable	
 Right_priority	 1.7
 Show_text	
+
+Method "RvY"
+Colour	 RED
+Show_up_strand	
+Bumpable	
+Right_priority	 1.6
 
 Method "Sage"
 Colour	 RED

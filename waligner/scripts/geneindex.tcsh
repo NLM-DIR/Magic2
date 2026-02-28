@@ -534,7 +534,7 @@ foreach target ($Etargets )
     if ($GM == GENE && -e tmp/GENERUNS/$runs/$runs.$target.$uu.geneSupport.ace.gz) continue
 #echo "BB $run tmp/GENERUNS/$runs/$runs.$target.$GM.$uu.$gm.Support.ace.gz"
     if (-e tmp/GENERUNS/$runs/$runs.$target.$GM.$uu."$gm"Support.ace.gz) then
-      ls -ls tmp/GENERUNS/$runs/$runs.$target.$GM.$uu."$gm"Support.ace.gz
+      # ls -ls tmp/GENERUNS/$runs/$runs.$target.$GM.$uu."$gm"Support.ace.gz
       continue
     endif
 #echo "CC $run"
@@ -730,7 +730,6 @@ end
   echo "... $phase $target"
   foreach run (`cat MetaDB/$MAGIC/RunsList`)
     if (-e tmp/INTRONRUNS/$run/$run.$uu.intronSupport.ace.gz && -e  tmp/INTRONRUNS/$run/known_introns.$target.ace) continue
-    
     if (! -d tmp/INTRONRUNS/$run) source scripts/mkDir INTRONRUNS $run
     set ok=1
     echo "... $phase $target ok=1"
@@ -1000,7 +999,7 @@ if (1) then
    if (1 && $MAGIC == CL1) set CAPT=A1R3
    if ($MAGIC == CL2) set CAPT=A1
    if ($MAGIC == CL3) set CAPT=A1
-   if ($phase == ii4) set CAPT=A1
+   if ($phase == ii4zzzz) set CAPT=A1
    if (0) then
      set CAPT=A1A2I3R1R2   # A2R2 ... see TARGET/GENES/$capture.av.gene_list  
      set CAPT=A1A2I2I3R1R2   # A2R2 ... see TARGET/GENES/$capture.av.gene_list  
@@ -1019,9 +1018,16 @@ if (1) then
 
 echo LALALA0==================---
   if ($?chrom) then
-    if ($phase == ii4 && ! -e tmp/INTRON_DB/$chrom/d5.$MAGIC.de_uno$CAPT.ace) then
-      echo "Missing file tmp/INTRON_DB/$chrom/d5.$MAGIC.de_uno$CAPT.ace"
-      goto phaseLoop
+    if ($phase == ii4) then
+      bin/tace tmp/INTRON_DB/$chrom <<EOF
+        find run
+	edit -D project
+        pparse MetaDB/$MAGIC/runs.ace
+	save
+        query find intron de_duo
+	bql -o  tmp/INTRON_DB/$chrom/ii4.de_duo.txt select ii,r,n from ii in @, r in ii->de_duo where r->project == "$MAGIC", n in r[1]
+EOF
+      cat tmp/INTRON_DB/$chrom/ii4.de_duo.txt | gawk -F '\t' '{if($1 != ii){printf("\nIntron %s\n", $1);ii=$1;}printf ("Run_U %s 0 %d seqs %d tags %d kb\n", $2,$3,$3,$3);}' >  tmp/INTRON_DB/$chrom/ii4.index.ace
     endif
   endif
 
@@ -1040,7 +1046,7 @@ echo LALALA0==================+++
   if ($phase == ii4 && -e MetaDB/$MAGIC/ali.ace) cat MetaDB/$MAGIC/ali.ace | gawk '/^Ali /{print}/h_Ali/{print}/^Candidate_introns any/{print}/^$/{print}' >>  tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace
 echo LALALA1====================++99
   if ($phase == ii4 && -e tmp/METADATA/$MAGIC.av.captured_genes.ace) cat tmp/METADATA/$MAGIC.av.captured_genes.ace >> tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace
-  if ($phase == ii4) cat tmp/INTRON_DB/$chrom/d5.$MAGIC.info$CAPT.ace >> tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace
+  if ($phase == ii4 && -e tmp/INTRON_DB/$chrom/d5.$MAGIC.info$CAPT.ace) cat tmp/INTRON_DB/$chrom/d5.$MAGIC.info$CAPT.ace >> tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace
 
 echo LALALA1====================
 
@@ -1237,14 +1243,25 @@ if ($ok == 0) continue
          endif
      end
    endif
-
+   
+   set deepTsf=""
+   if ($phase == g4sp && ! -e tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace) then
+     set deepTsf="-deepTsf"
+     foreach run (`cat MetaDB/$MAGIC/RunsList `)
+       foreach WG (WIGGLERUN WIGGLEGROUP)
+         if (! -d tmp/$WG/$run) continue
+         set tt=tmp/$WG/$run/$target.noCapture.tsf
+         if (-e $tt) cat $tt >> tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace
+       end
+     end
+   endif
    if ($phase == g4sp && ! -e tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace) then 
-     if (-e tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace) \rm tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace
+     if (-e                   tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace) \rm tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace
              # if case 2 exist do not retry by using the OTHER_RUNS symbolic link below
      foreach run (`cat MetaDB/$MAGIC/RunsList `)
          set long=`cat MetaDB/$MAGIC/RunNanoporeList  MetaDB/$MAGIC/RunPacBioList |gawk '{if($1==run)ok=1;}END{print ok+0;}' run=$run`
          if ($long == 1) then
-           ls -ls tmp/SPONGE/$run/$target.mrna.v4.3.$uu.ns.1
+           # ls -ls tmp/SPONGE/$run/$target.mrna.v4.3.$uu.ns.1
            set myGM=gene
            if ($GM == GENESPX) set myGM=mrna
            set n=`ls  tmp/SPONGE/$run/$target.$myGM.v4.*.$uu.[fr].1 | gawk '{n++;}END{print n+0;}'`
@@ -1283,9 +1300,6 @@ if ($ok == 0) continue
      end
    endif
 
-   if ($phase == ii4 && ! -e  tmp/INTRON_DB/$chrom/d5.$MAGIC.de_uno$CAPT.ace) then 
-     goto phaseLoop
-   endif
 
 # -seaLevel $seaLevel $seaWall -removeLimit $removeLimit
 set out=junkyard
@@ -1327,24 +1341,11 @@ if ($phase == g4 || $phase == g4sp || $phase == gsnp4 ||  $phase == ma4  || $pha
   set targetSNP=$targetBeau
   set selectSNP=""
   if ($phase == snp4) then
-    if (! -e tmp/SNP_DB/$MAGIC.characteristic_substitutions.snp.gz) then
-      echo "missing file tmp/SNP_DB/$MAGIC.characteristic_substitutions.snp.gz, please =run please run phase s21"
+    if (! -e tmp/GENEINDEX/$MAGIC.characteristic_snps.tsf.gz) then
+      echo "missing file tmp/GENEINDEX/$MAGIC.characteristic_snps.tsf.gz, please =run please run phase SNV"
       exit 1
-    endif 
-    if (0 && ! -e tmp/SNP_DB/$MAGIC.snp.sorted.homozygous.gz) then
-      echo "missing file tmp/SNP_DB/$MAGIC.snp.sorted.homozygous.gz, please =run please run phase s21"
-      exit 1
-    endif 
-    if (0 && -d tmp/SNPH && ! -e tmp/SNPH/$MAGIC.s14.snp.differential) then
-      cat  tmp/SNPH/*/$MAGIC.snp.sorted.differential >> tmp/SNPH/$MAGIC.s14.snp.differential
-      touch  tmp/SNPH/$MAGIC.s14.snp.filtered
-      set n=`cat tmp/SNPH/$MAGIC.s14.snp.differential | wc -l`
-      if ($n < 10) \rm tmp/SNPH/$MAGIC.s14.snp.differential
     endif
-    if (-e tmp/SNPH/$MAGIC.s14.snp.differential) set myace=tmp/SNPH/$MAGIC.s14.snp.differential
-    set myace=tmp/SNP_DB/$MAGIC.snp.sorted.homozygous.gz
-    set myace=tmp/SNP_DB/$MAGIC.characteristic_substitutions.snp.gz
-   if (0 && -e tmp/SNPH/$MAGIC.s14.snp.differential.2016_02) set myace=tmp/SNPH/$MAGIC.s14.snp.differential.2016_02
+    set myace=tmp/GENEINDEX/$MAGIC.characteristic_snps.tsf.gz
     set targetSNP=$target.$SNPCHROM
     if ($SNPCHROM == "" ) set targetSNP=$target
     set mNam=""
@@ -1368,12 +1369,13 @@ if ($phase == g4 || $phase == g4sp || $phase == gsnp4 ||  $phase == ma4  || $pha
     echo "FATAL ERROR: Phase $phase cannot access the expression data $myace"
     exit 1
   endif
-ls -ls $myace
+# ls -ls $myace
    \rm  tmp/GENEINDEX/Results/$MAGIC$mNam.$targetSNP.$GM.$uu.*
 
      set out=$MAGIC$mNam.$targetSNP.$GM$CAPT.$uu
      set dg=deepGene
      if ($phase == snp4) set dg=deepSNP
+
 echo "geneindex.tcsh8: phase=$phase GM=$GM target=$target out=$out MAGIC=$MAGIC"
 
      set testtest=""
@@ -1394,11 +1396,11 @@ endif
          # we cannot do this here, it must be done in phase g2a: collect hits per gene in pgm bestali
          set splitM="-split_mRNAs TARGET/GENES/$species.$target.split_mrnas.txt"
        endif
-       set params="-$dg $myace -$uu $mask $chromAlias -runList MetaDB/$MAGIC/GroupsRunsListSorted -runAce tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace  -o  tmp/GENEINDEX/Results/$out -gzo  -pA $method $selectSNP  $shA $sg $capt $refG  $tgcl $GeneGroup $correl $compare  $rjm  -htmlSpecies $species $splitM  -export aitvz "
+       set params="-$dg $myace -$uu $mask $chromAlias -runList MetaDB/$MAGIC/GroupsRunsListSorted -runAce tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace $deepTsf -o  tmp/GENEINDEX/Results/$out -gzo  -pA $method $selectSNP  $shA $sg $capt $refG  $tgcl $GeneGroup $correl $compare  $rjm  -htmlSpecies $species $splitM  -export aitvz "
      endif
 
      if (1) then
-         echo "bin/geneindex $params"
+         echo "AAAA bin/geneindex $params"
                bin/geneindex $params
         if (! -e tmp/GENEINDEX/Results/$out.done) then
           echo "FATAL ERROR inside bin/geneindex : failed to create  tmp/GENEINDEX/Results/$out.done"
@@ -1418,7 +1420,7 @@ endif
 
 ####
 
-if ($phase == m4 || $phase == m4H || $phase == klst4) then
+if ($phase == m4 || $phase == m4H || $phase == klst4 || $phase == ii4) then
 
   set  tgcl="-target_class $target_class"    
   set GM=MRNA
@@ -1444,11 +1446,12 @@ if ($phase == m4 || $phase == m4H || $phase == klst4) then
     endif
   endif
 
-echo "... $phase $target myace=$myace"
-ls -ls tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace
-  set myace=JUNK1209983485
-  if ($phase != ii4 && -e   tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace) set myace=tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace
 
+# ls -ls tmp/GENEINDEX/$MAGIC.$target.$GM.$uu.ace
+  set myace=JUNK1209983485
+  if ($phase == ii4 && -e tmp/INTRON_DB/$chrom/ii4.index.ace) set myace=tmp/INTRON_DB/$chrom/ii4.index.ace
+
+echo "... $phase $target myace=$myace"
 # gene_group
 
 set GeneGroup=""
@@ -1461,6 +1464,7 @@ echo "... $phase $target $myace MAGIC=$MAGIC GeneGroup=$GeneGroup"
      set out=$MAGIC$mNam.$targetBeau.$GM$CAPT.$uu
      \rm tmp/GENEINDEX/Results/$out.*
      \rm RESULTS/Expression/AceFiles/$out.*
+     touch tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace 
      echo "bin/geneindex -deepTranscript $myace -$uu $mask $chromAlias -runList MetaDB/$MAGIC/GroupsRunsListSorted -runAce tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace  -o tmp/GENEINDEX/Results/$out -gzo -pA $method $isMRNAH $tgcl  $shA $sg $capt  $refG $rjm $GeneGroup -htmlSpecies $species   -export aitvz  $correl $compare" 
            bin/geneindex -deepTranscript $myace -$uu $mask $chromAlias -runList MetaDB/$MAGIC/GroupsRunsListSorted -runAce tmp/GENEINDEX/$MAGIC.$target.$GM.info.ace  -o tmp/GENEINDEX/Results/$out -gzo -pA $method $isMRNAH $tgcl  $shA $sg $capt  $refG $rjm  $GeneGroup -htmlSpecies $species   -export aitvz  $correl $compare
      if (! -e tmp/GENEINDEX/Results/$out.done) then
@@ -1573,7 +1577,7 @@ echo -n "##\t" > $toto
 cat  $toto1.*.DEG_FDR_selection.txt | head -1 | cut -f 2 | gawk '{printf("%s\t",$1);}' >> $toto
 echo " file=$toto" >> $toto
 echo >> $toto
-echo "# Compare\tGenes overexpressed in\trelative to\tNumber of runs in first group\tNumber of runs in second group\tMagic DEG score threshold (0 to 200)\tNumber of DEGs before noise substraction\t% FDR" >> $toto
+echo "# Compare\tGenes overexpressed in\trelative to\tNumber of runs in first group\tNumber of runs in second group\tMagic DEG score threshold (0 to 200)\tNumber of DEGs after noise substraction\t% FDR" >> $toto
 
 echo "cat   $toto1.*.DEG_FDR_selection.txt "
 cat   $toto1.*.DEG_FDR_selection.txt | gawk -F '\t' '{if ($6 == "Selected threshold")print}' | sort | cut -f 1,2,3,4,5,7,9,11 >> $toto
@@ -1601,7 +1605,7 @@ mv RESULTS/Expression/unique/$target/ZFAND6.expressio.MRNAH.txt RESULTS/Expressi
 endif
 
 
-  if (-e RESULTS/Expression/AceFiles/$out.withIndex.ace.gz && $uu == u && ($phase == g4 || $phase == m4H)) then 
+  if (-e RESULTS/Expression/AceFiles/$out.withIndex.ace.gz && $uu == u && ($phase == g4 || $phase == m4H || $phase == g4sp)) then 
        echo "pparse RESULTS/Expression/AceFiles/$out.withIndex.ace.gz" | bin/tacembly MetaDB -no_prompt
   endif
 
@@ -1628,13 +1632,6 @@ endif
 
 end 
 
-if (0 && $phase == ii4) then
-  echo "Report introns using  scripts/d5.intronDB.tcsh cumul $MAGIC in  GeneIndexDB/$MAGIC.intron_confirmation.ace"
-  if (0 && ! -e GeneIndexDB/SMAGIC.intron_confirmation.ace) then
-    scripts/d5.intronDB.tcsh cumul $MAGIC
-  endif
-  goto phaseLoop
-endif
 
 
 goto phaseLoop
@@ -3508,8 +3505,8 @@ popd
 cat tmp/GENEINDEX/DD.EBI.GENE.u.ace | gawk '{gsub(/\"/,"",$2);}/^Gene/{g=$2;ok=0;if(g=="FBgn0002938")ok=1;next;}/^Run_U/{r=$2;if(ok==1)z1[r]=$4;next;}/^Anti/{r=$2;if(ok==1)z2[r]=$4;next;}END{for(r in z2);if(z2[r]>0)printf("%s\t%d\t%d\n",r,z1[r],z2[r]);}'
 
 ## counting SNPs in 2 runs
-gunzip -c tmp/SNP_DB/Who.characteristic_substitutions.snp.gz | grep Rhs4005 > toto80                                  
-gunzip -c tmp/SNP_DB/Who.characteristic_substitutions.snp.gz | grep F2_MCS-015 >> toto80                                  
+gunzip -c tmp/SNP_DB/Who.characteristic.snp.gz | grep Rhs4005 > toto80                                  
+gunzip -c tmp/SNP_DB/Who.characteristic.snp.gz | grep F2_MCS-015 >> toto80                                  
 
 
 cat toto81 | gawk -F '\t' '/A>G/{next;}{k++;if(k%1)next;}/>/{x=$8;if($7<.4)x=0;if($7>1.8)x=100;if($9<10)next;if(x<=4)x=0;else if(x>=98)x=200;else x=100;}{if($6 != old6)f2++;old6=$6;}{s=$1 $2 $3;ss[s]++;z[s,f2]=1+x/100;}END{for(s in ss) {x = 0+z[s,1] ; y = 0+z[s,2] ; if(x*y==0 || x*y == 100 || x == 20 || y == 20 )continue;uu[x-1,y-1]++ ; X += x ; X2 += x*x ; Y += y ; Y2 += y * y ; XY += x*y ;N++; if(x*y==60 || x*y==9)print s,x,y; }printf("%d\t%d\t%d\n%d\t%d\t%d\n%d\t%d\t%d\n\n",uu[0,0],uu[0,1],uu[0,2],uu[1,0],uu[1,1],uu[1,2],uu[2,0],uu[2,1],uu[2,2]);x = X2/N - X*X/(N*N);y=Y2/N - Y*Y/(N*N);w=XY/N - X*Y/(N*N);printf("\nCorrel %.2f\n",100*w/sqrt(x*y));print X,Y,X2,Y2,x,y,w;}' | tail -20

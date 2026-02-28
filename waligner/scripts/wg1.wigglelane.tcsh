@@ -15,8 +15,11 @@ endif
 
 set param="-O BV $out_step"
 set stranded=""
-if ($s == strand) set stranded="-strand"
-if ($s == antistrand) set stranded="-antistrand"
+if ($NO_INTRON == 2) then
+  set stranded=""
+  if ($s == strand) set stranded="-strand"
+  if ($s == antistrand) set stranded="-antistrand"
+endif
 
 echo "$run strand=$stranded $param"
 
@@ -25,12 +28,12 @@ set ici=`pwd`
 set mytmp=$TMPDIR/aceview.wigglerun.$$
 # set mytmp=$TMPDIR/aceview.wigglerun.11702
 # set mytmp=tmp/WIGTMP
-# goto laba
 
 echo  $mytmp
 mkdir $mytmp
 mkdir $mytmp/$run
 mkdir $mytmp/$lane
+if (! -d tmp/WIGGLELANE/$run) mkdir  tmp/WIGGLELANE/$run
 if (! -d tmp/WIGGLELANE/$lane) mkdir  tmp/WIGGLELANE/$lane
 
 cp bin/wiggle $mytmp
@@ -39,7 +42,7 @@ cp scripts/target2target_class.txt $mytmp
 set remapon=""
 echo $Strategy
 echo RNAtargets="$RNAtargets"
-  if ($Strategy == RNA_seq && "$RNAtargets" != "") then
+  if ($Strategy == RNA_seq && $NO_INTRON != 2 && "$RNAtargets" != "") then
 echo hello1a
     if (-e tmp/METADATA/mrnaRemap.gz) then
       set remapon="  -mapon  tmp/METADATA/mrnaRemap.gz "
@@ -50,7 +53,9 @@ echo hello1a
     endif
   endif
 
-#  goto laba
+# goto laba 2024
+# goto laba 
+
 echo -n "splitting the hits file per chromosomes "
 date
 echo $mytmp/$run 
@@ -64,6 +69,11 @@ echo $mytmp/$run
 
 set isIlm=`cat  MetaDB/$MAGIC/runs.ace | gawk '/^Run /{gsub(/\"/,"",$2);ok=0;if($2==run)ok=1;}/^Illumina/{if(ok==1)okk=1;}END{print 0+okk;}' run=$run`
 set isNanopore=`cat  MetaDB/$MAGIC/runs.ace | gawk '/^Run /{gsub(/\"/,"",$2);ok=0;if($2==run)ok=1;}/anopore/{if(ok==1)okk=1;}/PacBio/{if(ok==1)okk=1;}END{print 0+okk;}' run=$run`
+
+# BAD: no partial blocks the export of the read-ends  2024-03-12
+# set noPartial=`cat  MetaDB/$MAGIC/runs.ace | gawk '/^Run /{gsub(/\"/,"",$2);ok=0;if($2==run)ok=1;}/Entry_adaptor/{if(ok==1)okk=1;}END{print 0+okk;}' run=$run`
+set noPartial=""
+
 if ($isIlm == 1) then
   set maxWigErr=3
   set maxWigErrRate=3
@@ -74,7 +84,7 @@ endif
 
 
 
-
+ # u nu pp   2024
  foreach uu (u nu pp)
    if (-e tmp/WIGGLERUN/$run/wg2a.$uu.done) continue
    set filter="" 
@@ -82,7 +92,7 @@ endif
    if ($uu == nu) set filter="-non_unique"
    if ($uu == pp) set filter="-partial"
    if ($isNanopore == 1 && $uu == pp) continue
-   if ($isNanopore == 1) set filter="$filter -noPartial"
+   if ($isNanopore == 1 || $noPartial == 1) set filter="$filter -noPartial"
   ## split recursivelly the hits so we scan once the big file and split it per chromosome or per target
   ## ATTENTION do nor -gzo: there would be to many gzip pipes generated on the computer
     # if we set -minErrRate 7, we obtain in addition a second set of K7 wiggle using only error rich reads
@@ -93,13 +103,13 @@ endif
 echo -n "splitting done tralala"
 date
 
+#exit 0
 laba:
 # RefSeq takes at lest 14Gb of memory
 # $chromSetAll
-
-foreach chrom ($DNAtargets $chromSetAll)
+# setenv chromSetAll CHROMOSOME_III
+foreach chrom ($chromSetAll)
   cd $ici
-# if ($chrom != 3) continue
   set tag="null"
   setenv target $chrom
   foreach chrom2 ($chromSetAll)
@@ -133,6 +143,7 @@ if ($Strategy == RNA_seq) set frs="f r ELF ELR ERF ERR"
     # if ($map == remapped && $target != genome) continue 
     if ($map == remapped && $Strategy != RNA_seq) continue 
     echo "### $target $map $chrom"
+    # (u nu pp 2024)
     foreach uu (u nu pp)
       if (-e tmp/WIGGLERUN/$run/wg2a.$uu.done) continue
       set frs="f r"
@@ -171,7 +182,7 @@ if ($Strategy == RNA_seq) set frs="f r ELF ELR ERF ERR"
                set x2=`echo $fff | gawk -F _ '{print $2}'`
                set x3=`echo $fff | gawk -F _ '{print $3}'`
                if (-e $mytmp/$lane/$x1.$map.$chrom.$uu.BV || -e $mytmp/$lane/$x2.$map.$chrom.$uu.BV || -e $mytmp/$lane/K.$map.$chrom.$uu.$x3.BV) then
-                  echo "cat $mytmp/$lane/$x1.$map.$chrom.$uu.BV  $mytmp/$lane/$x2.$map.$chrom.$uu.BV  |  $mytmp/wiggle -I BV -O BV $out_step -gzo -o $mytmp/$lane/K.$map.$chrom.$uu.$x3"
+                  echo "cat $mytmp/$lane/$x1.$map.$chrom.$uu.BV  $mytmp/$lane/$x2.$map.$chrom.$uu.BV  |  $mytmp/wiggle -I BV -O BV $out_step -gzo -o $mytmp/$lane/KK.$map.$chrom.$uu.$x3"
                         cat $mytmp/$lane/$x1.$map.$chrom.$uu.BV  $mytmp/$lane/$x2.$map.$chrom.$uu.BV  |  $mytmp/wiggle -I BV -O BV $out_step -gzo -o $mytmp/$lane/KK.$map.$chrom.$uu.$x3
                         mv  $mytmp/$lane/KK.$map.$chrom.$uu.$x3.BV.gz  $mytmp/$lane/K.$map.$chrom.$uu.$x3.BV.gz 
                 endif

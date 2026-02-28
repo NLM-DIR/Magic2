@@ -1,13 +1,12 @@
 #!bin/tcsh -f
-
 # Create in a lazy way all needed metadafiles
 # in order to minimize the number of files needed in TARGET
 
 if (! -d tmp/METADATA) mkdir tmp/METADATA
 if (-e tmp/METADATA/metadata.ok) \rm tmp/METADATA/metadata.ok
 
-if (! -e tmp/METADATA/v2017_05_11) \rm  tmp/METADATA/*
-touch  tmp/METADATA/v2017_05_11
+if (! -e tmp/METADATA/v2024_10_10) \rm  tmp/METADATA/*
+touch  tmp/METADATA/v2024_10_10
 
 echo "=== check the TARGET data"
 
@@ -124,35 +123,48 @@ foreach target ($allRNAtargets)
     if (-e TARGET/GTF/$species.$target.gtf.gz) then
       echo " bin/dna2dna -gtf TARGET/GTF/$species.$target.gtf.gz  -gtfRemap $target_class  -o tmp/METADATA/gtf.$target "
             (bin/dna2dna -gtf TARGET/GTF/$species.$target.gtf.gz  -gtfRemap $target_class  -o tmp/METADATA/gtf.$target ) >& tmp/METADATA/gtf.$target.err
+      \rm tmp/METADATA/gtf.$target.*gz
+      gzip  -f tmp/METADATA/gtf.$target.*
     else if (-e TARGET/GTF/$species.$target.gff.Bacteria.gz) then
       (bin/dna2dna -gff3 TARGET/GTF/$species.$target.gff.Bacteria.gz  -gtfRemap $target_class  -o tmp/METADATA/gtf.$target ) >& tmp/METADATA/gtf.$target.err
-    else if (-e TARGET/GTF/$species.$target.gff.gz) then
+      \rm tmp/METADATA/gtf.$target.*gz
+      gzip  -f tmp/METADATA/gtf.$target.*
+    else if (0 && -e TARGET/GTF/$species.$target.gff.gz) then
       (bin/dna2dna -gff3 TARGET/GTF/$species.$target.gff.gz  -gtfRemap $target_class  -o tmp/METADATA/gtf.$target ) >& tmp/METADATA/gtf.$target.err
+      \rm tmp/METADATA/gtf.$target.*gz
+      gzip  -f tmp/METADATA/gtf.$target.*
+      # remove the parasite .fasta file that should not have been created 
+      if (-e  tmp/METADATA/gtf.$target.fasta.gz) \rm  tmp/METADATA/gtf.$target.fasta.gz 
+
       if (! -e TARGET/Targets/$species.$target.fasta.gz && -e  TARGET/Targets/$species.genome.fasta.gz) then
-        bin/dna2dna -gff3  TARGET/GTF/$species.$target.gff.gz -gtfGenome TARGET/Targets/$species.genome.fasta.gz -o TARGET/Targets/tutuy1
-        bin/dna2dna -gff3  TARGET/GTF/$species.$target.gff.gz -gtfGenome TARGET/Targets/$species.mito.fasta.gz -o TARGET/Targets/tutuy2
-        if (-e TARGET/Targets/$species.chloro.fasta.gz) then
-          bin/dna2dna -gff3  TARGET/GTF/$species.$target.gff.gz -gtfGenome TARGET/Targets/$species.chloro.fasta.gz -o TARGET/Targets/tutuy3
-        endif
-        cat TARGET/Targets/tutuy[123].fasta >  TARGET/Targets/tutuy.unsorted
-        dna2dna -i  TARGET/Targets/tutuy.unsorted -O raw -keepName  | gawk -F '\t' '{u2=$2;gsub(" ","_",u2);split(u2,aa,"|") ;split(aa[1],bb,"_");printf("%s\t%s\t%s\t%s\t",aa[3],aa[5],bb[1],bb[2]);print;}' | sort -Vf -k 1,1 -k 2,2n -k 3,3 -k 4,4n > toto
-        echo ZZZZZ > ZZZZZ
-        cat toto ZZZZZ toto  | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){if ($2 != gid[$1])ngid[$1]++;gid[$1]=$2;next;}}{g=$1;if(ngid[$1]>1)g=$1 "." $2; split($6,aa,"|");printf("%s\t%s\n",$5,$6);}' > toto2
-        cat toto2 | dna2dna -I raw -O fasta -keepName -maxLineLn 60 >  TARGET/Targets/tutuy.sorted
-        mv  TARGET/Targets/tutuy.sorted TARGET/Targets/$species.$target.fasta 
-	gzip  TARGET/Targets/$species.$target.fasta 
-        \rm TARGET/Targets/tutuy*
+        # we need to order the mrna file, this can only done inside acedb
+        mkdir tmp/Sort.$target
+        pushd tmp/Sort.$target
+          mkdir database
+          ln -s ../../metaData/wspec.aceview_web_site wspec
+          tace  . <<EOF
+y
+            parse ../../TARGET/Targets/$species.genome.fasta.gz
+            parse ../../TARGET/Targets/$species.mito.fasta.gz
+            parse ../../TARGET/Targets/$species.chloro.fasta.gz
+            parse ../METADATA/gtf.$target.transcripts.ace.gz
+            query find sequence Gene_model
+            select -o mrnas.txt g,m,d from g in @, m in g->gene_model, d in DNA(m)
+            save
+            quit
+EOF
+          cat  mrnas.txt | gawk -F '\t' '{gsub(/^X__/,"",$1);printf(">%s|Gene|%s\n%s\n",$2,$1,$3);}' | gzip  > $species.$target.fasta.gz
+          mv $species.$target.fasta.gz ../../TARGET/Targets
+        popd
+        #\rm -rf tmp.Sort.$target
       endif
     endif
-    # ATTENTION -gzo crashes on mouse (although it works on rat), we must gzip as a postpocessing, probbaly the files are too large
-    gzip  -f tmp/METADATA/gtf.$target.*
+    # ATTENTION -gzo crashes on mouse (although it works on rat), we must gzip as a postpocessing, probaly the files are too large
     if (-e  tmp/METADATA/gtf.$target.r.sponge.gz) then
       gunzip -c tmp/METADATA/gtf.$target.f.sponge.gz | gawk -F '\t' '{if($1==old)printf("Intron %s__%d_%d\n%s\nSupports %s\n\n",$3,a2+1,$4-1,target,$1);old=$1;a2=$5;}' target=$target > tmp/METADATA/gtf.$target.f.intron.ace
       gunzip -c tmp/METADATA/gtf.$target.r.sponge.gz | gawk -F '\t' '{if($1==old)printf("Intron %s__%d_%d\n%s\nSupports %s\n\n",$3,a2-1,$4+1,target,$1);old=$1;a2=$5;}' target=$target > tmp/METADATA/gtf.$target.r.intron.ace
     endif
 
-    # remove the parasite .fasta file that should not have been created 
-    if (-e  tmp/METADATA/gtf.$target.fasta.gz) \rm  tmp/METADATA/gtf.$target.fasta.gz 
 
 
     gunzip -c  tmp/METADATA/gtf.$target.mrnaRemap.gz | gawk -F '\t' '{m=$2;c[m]=$5;a1=$6;a2=$7;if(a1>a2){a0=a1;a1=a2;a2=a0;isUp[m]=1;}if(m1[m]+0==0){m1[m]=a1;m2[m]=a2;}if(a1<m1[m])m1[m]=a1;if(a2>m2[m])m2[m]=a2;}END{for(m in c){printf("%s\t%s",m,c[m]);if(isUp[m]==1)printf("\t%d\t%d\n",m2[m],m1[m]);else printf("\t%d\t%d\n",m1[m],m2[m]);}}' | sort >  tmp/METADATA/gtf.$target.mrna2intMap.txt 
@@ -160,13 +172,16 @@ foreach target ($allRNAtargets)
 
 # reject geneboxes longer than geneBoxMaxLn
 set geneBoxMaxLn=1000000
-    cat tmp/METADATA/gtf.$target.gene2intMap.txt | gawk -F '\t' '{n=$4-$3;if(n<0)n=-n; if (n<nMax)printf("%s\t1\t%s\t%d\t%d\t%s\n",$1,$2,$3,$4,$1);}' nMax=$geneBoxMaxLn > tmp/METADATA/$target.ns.gene.sponge
+#    cat tmp/METADATA/gtf.$target.gene2intMap.txt | gawk -F '\t' '{a1=$3;a2=$4;if(a1>a2)next;n=a2-a1;if(n<0){n=-n;} if (n<nMax)printf("%s\t1\t%s\t%d\t%d\t%s\n",$1,$2,a1,a2,$1);}' nMax=$geneBoxMaxLn > tmp/METADATA/$target.f.gene.sponge
+#    cat tmp/METADATA/gtf.$target.gene2intMap.txt | gawk -F '\t' '{a1=$3;a2=$4;if(a1<a2)next;n=a2-a1;if(n<0){n=-n;} if (n<nMax)printf("%s\t1\t%s\t%d\t%d\t%s\n",$1,$2,a1,a2,$1);}' nMax=$geneBoxMaxLn > tmp/METADATA/$target.r.gene.sponge
+    cat tmp/METADATA/gtf.$target.gene2intMap.txt | gawk -F '\t' '{a1=$3;a2=$4;n=a2-a1;if(n<0){n=-n;} if (n<nMax)printf("%s\t1\t%s\t%d\t%d\t%s\n",$1,$2,a1,a2,$1);}' nMax=$geneBoxMaxLn > tmp/METADATA/$target.ns.gene.sponge
 
     if (-e  tmp/METADATA/gtf.$target.goodProduct.ace.gz) then
-      gunzip tmp/METADATA/gtf.$target.goodProduct.ace.gz
+      \rm  tmp/METADATA/gtf.$target.goodProduct.ace.gz
     endif
-    if (-e tmp/METADATA/gtf.$target.transcripts.ace.gz && ! -e  tmp/METADATA/gtf.$target.goodProduct.ace) then
-      gunzip -c tmp/METADATA/gtf.$target.transcripts.ace.gz | gawk '/^Sequence/{if(p1>0)printf("%s\t%d\t%d\n",m,p1,p2);m=$2;dx=1;p1=0;next;}/^Source_exons/{a1=$2;a2=$3;if($4=="CDS"){if(p1==0)p1=dx;p2=dx+a2-a1+1;}dx+=a2-a1+1;}END{if(p1>0)printf("last %s\t%d\t%d\n",m,p1,p2);}' | gawk -F '\t' '{printf ("mRNA %s\nProduct %s %d %d\n\nProduct %s\nBest_product\nGood_product\n\n", $1,$1,$2,$3,$1);}' >  tmp/METADATA/gtf.$target.goodProduct.ace
+    if (-e tmp/METADATA/gtf.$target.transcripts.ace.gz && ! -e  tmp/METADATA/gtf.$target.goodProduct.aceZZ) then
+      gunzip -c tmp/METADATA/gtf.$target.transcripts.ace.gz | gawk '/^Sequence/{if(p1>0)printf("%s\t%d\t%d\n",m,p1,p2);m=$2;dx=1;p1=0;next;}/^Source_exons/{a1=$2;a2=$3;if($4=="CDS"){if(p1==0)p1=a1;p2=a2;}}END{if(p1>0)printf("%s\t%d\t%d\n",m,p1,p2);}' | gawk -F '\t' '{printf ("mRNA %s\nProduct %s %d %d\n\nProduct %s\nBest_product\nGood_product\n\n", $1,$1,$2,$3,$1);}' >  tmp/METADATA/gtf.$target.goodProduct.ace
+ \cp tmp/METADATA/gtf.$target.goodProduct.ace  tmp/METADATA/gtf.$target.goodProduct.ace42
     endif
 
    gunzip -c   tmp/METADATA/gtf.$target.introns.gz | gawk -F '\t' '{if ($9 == "+") printf("%s\t%09d\t%09d\t+\n",$6,$7,$8);}'  | sort -u > tmp/METADATA/$target.f.introns
@@ -189,6 +204,7 @@ end
 if (1) then
 foreach target ($Etargets)
   # restrict the genebox sponge to the capture
+  if (! $?CAPTURES) continue
   foreach capture ($CAPTURES)
     if (! -e TARGET/GENES/$capture.capture.$target.gene_list) continue
     wc  TARGET/GENES/$capture.capture.$target.gene_list
@@ -231,12 +247,14 @@ if ($gtf_active == 1 || ! -e tmp/METADATA/mrnaRemap.gz) then
   echo "---- processing mrnaRemap coordinates informations"
 
   foreach target ($allRNAtargets)
+    echo ' ' > tmp/METADATA/$target.MRNA.info.ace
     if (-e tmp/METADATA/gtf.$target.gene2intMap.txt) then 
        # derived from the gtf file
        if (-e tmp/METADATA/gtf.$target.transcripts.ace.gz) then
-	 zcat tmp/METADATA/gtf.$target.transcripts.ace.gz | gawk '/^Sequence/{s=$2;next;}/^Title/{printf("Sequence %s\nTitle %s\n\n",s, substr($0,7));}' >>  tmp/METADATA/$target.MRNA.info.ace
+	 zcat tmp/METADATA/gtf.$target.transcripts.ace.gz | gawk '/^Sequence/{s=$2;next;}/^Title/{printf("Sequence %s\nTitle %s\n\n",s, substr($0,7));}/^LocusLink/{printf("Sequence %s\n",s);print;printf("\n");}' >>  tmp/METADATA/$target.MRNA.info.ace
+         echo ' ' | gzip >! tmp/METADATA/toto.gz 
 	 zcat tmp/METADATA/gtf.$target.transcripts.ace.gz | gawk '/^$/{out=1;intron=0;next;}/^Intron/{if(out==1){out=0;intron=$2;}next;}/^Gene/{if(intron!=0){printf("Intron %s\nGene %s\n\n",intron, substr($0,5));}}' | gzip >   tmp/METADATA/toto.gz 
-         zcat tmp/METADATA/gtf.$target.gene_title.ace.gz ZZZZZ.gz  tmp/METADATA/toto.gz | gawk '/^ZZZZZ/{zz=1;next;}/^$/{intron=0;gene=0;title=0;next;}/^Gene /{gene=$2;gsub(/\"/,"",gene);if(intron==1){print;if(length(g2t[gene])>0)printf("Title %s\n",g2t[gene]);}}/^Title/{title=substr($0,6);if(zz<1 && gene!=0){g2t[gene]=title;next;}}/^Intron/{printf("\n");print;intron=1;gsub(/\"/,"",$2);n=split($2,aa,"_");if(n==4)printf("IntMap %s %s %s\n",aa[1],aa[3],aa[4]);}'  > tmp/METADATA/$target.introns.info.ace
+         zcat tmp/METADATA/gtf.$target.gene_title.ace.gz ZZZZZ.gz  tmp/METADATA/toto.gz | gawk '/^ZZZZZ/{zz=1;next;}/^$/{intron=0;gene=0;title=0;next;}/^Gene /{gene=$2;gsub(/\"/,"",gene);if(intron==1){print;if(length(g2t[gene])>0)printf("Title %s\n",g2t[gene]);}}/^Title/{title=substr($0,6);if(zz<1 && gene!=0){g2t[gene]=title;next;}}/^Intron/{printf("\n");print;intron=1;gsub(/\"/,"",$2);n1=split($2,aa,"__");n2=split(aa[2],bb,"_");if(n1+n2==4)printf("IntMap %s %s %s\n",aa[1],bb[1],bb[2]);}'  > tmp/METADATA/$target.introns.info.ace
          \rm   tmp/METADATA/toto.gz 
          zcat tmp/METADATA/gtf.$target.transcripts.ace.gz | gawk '/^Sequence/{s=$2;next;}/^Title/{printf("mRNA %s\nTitle %s\n\n",s, substr($0,7));}/^Model_ofZZZ/{printf("mRNA %s\nModel_of %s\n\n",s, substr($0,10));}' >>  tmp/METADATA/$target.MRNA.info.ace
          # cat  tmp/METADATA/$target.GENE.info.ace | gawk '/Gene /{print; printf("Targeted\n\n");}' > tmp/METADATA/_x
@@ -246,6 +264,7 @@ if ($gtf_active == 1 || ! -e tmp/METADATA/mrnaRemap.gz) then
        echo ' ' >> tmp/METADATA/$target.GENE.info.ace
        cat tmp/METADATA/gtf.$target.gene2intMap.txt | gawk -F '\t' '/^#/{next;}{if(length($1)>0)printf("Gene \"%s\"\nIntMap \"%s\" %d %d\n\n",$1,$2,$3,$4);}' >>  tmp/METADATA/$target.GENE.info.ace
        cat tmp/METADATA/gtf.$target.mrna2intMap.txt | gawk -F '\t' '/^#/{next;}{if(length($1)>0)printf("mRNA \"%s\"\nIntMap \"%s\" %d %d\n\n",$1,$2,$3,$4);}' >>  tmp/METADATA/$target.MRNA.info.ace
+        cat tmp/METADATA/$target.MRNA.info.ace | gawk '/^Sequence /{s=$2;ss[s]=1;next;}/^LocusLink/{LL[s]=$2;next;}/^Title/{tt[s]=substr($0,8);next;}END{for(s in ss){printf("%s\t%s\t%s\n",s,LL[s],tt[s])}}' | sed -e 's/\"//g' > tmp/METADATA/$target.symbol.title.txt
     else
        # backwards compatibility with hand prepared files
        if (-e  TARGET/GENES/$target.gene2intmap.ace) then
@@ -304,6 +323,7 @@ foreach target ($allRNAtargets)
     endif
 end
 
+
 foreach target ($allRNAtargets)
   if ($target == introns) continue
   if ($target == rrna) continue
@@ -318,6 +338,7 @@ foreach target ($allRNAtargets)
     cat   tmp/METADATA/gtf.$target.mrna2intMap.txt ZZZZZ tmp/METADATA/$target.mrna_ln_gc_gene_geneid.txt | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){m=$1;m2map[m]=$2 ":" $3 "-" $4;next;}printf("%s\t%s",$1,m2map[$1]);for(i=2;i<=NF;i++)printf("\t%s",$i);printf("\n");}' > tmp/METADATA/$target.mrna_map_ln_gc_gene_geneid.txt
 # reformat in .ace format tmp/METADATA/av.mrna_map_ln_gc_gene_geneid.txt
   
+
     cat tmp/METADATA/$target.mrna_map_ln_gc_gene_geneid.txt |   gawk -F '\t' '/^#/{next;}{m=$1;chr=$2;ln=$3;gc=$4;g=$5;gid=$6;if(length(m)<1)next;printf("mRNA \"%s\"\nLength %d\n",m,ln);if(gc+0>0)printf("GC_percent %d\n",gc);k1=split(chr,aa,":");k2=split(aa[2],bb,"-");if(k1==2 && k2==2)printf("IntMap %s %s %s\n",aa[1],bb[1],bb[2]);if(length(g)>1)printf("Gene \"%s\"\n",g);if(length(gid)>1)printf("GeneId \"%s\"\n",gid);printf("\n");}' >  tmp/METADATA/$target.MRNA.ln.ace
 
   else
@@ -412,7 +433,7 @@ echo "---- known introns"
 foreach target ($allRNAtargets)
 
   if ($target == rrna) continue
-  if (-e TARGET/MRNAS/introns_$target.txt && ! -e tmp/METADATA/$target.f.manual_introns) then
+  if (0 && -e TARGET/MRNAS/introns_$target.txt && ! -e tmp/METADATA/$target.f.manual_introns) then
     cat TARGET/MRNAS/introns_$target.txt  | gawk -F '\t' '{if ($2<$3)  printf("%s\t%09d\t%09d\t+\n",$1,$2, $3);}' >  tmp/METADATA/$target.f.manual_introns
     cat TARGET/MRNAS/introns_$target.txt  | gawk -F '\t' '{if ($2>$3)  printf("%s\t%09d\t%09d\t-\n",$1,$2, $3);}' >  tmp/METADATA/$target.r.manual_introns
     \cp tmp/METADATA/$target.f.manual_introns tmp/METADATA/$target.f.introns
@@ -420,10 +441,18 @@ foreach target ($allRNAtargets)
   endif
 
   foreach fr (f r)
-    if (-e tmp/METADATA/$target.$fr.sponge && ! -e tmp/METADATA/$target.$fr.introns) then
+    if (0 && -e tmp/METADATA/$target.$fr.sponge && ! -e tmp/METADATA/$target.$fr.introns) then
       cat  tmp/METADATA/$target.$fr.sponge | gawk -F '\t' '{if (old==$1 && chrom==$3 && num == $2 - 1){a1=$4;dx=1;ss="+";if(b2>a1){dx=-1;ss="-";}printf("%s\t%09d\t%09d\t%s\n",chrom,b2+dx,a1-dx,ss);} old=$1;num=$2;chrom=$3;b1=$4;b2=$5;}' | sort -u > tmp/METADATA/$target.$fr.introns
     endif
   end
+  foreach fr (f r)
+    if (-e  tmp/METADATA/gtf.$target.introns.gz && ! -e tmp/METADATA/$target.$fr.introns) then
+      zcat  tmp/METADATA/gtf.$target.introns.gz | gawk -F '\t' '{chrom=$6;a1=$7;a2=$8;if (a1<a2){ss="+";if ($fr=="r")next;}else{a0=a1;a1=a2;a2=a0;ss="-";if ($fr=="f")next;}printf("%s\t%09d\t%09d\t%s\n",chrom,b2+dx,a1-dx,ss);}' fr=$fr  | sort -u > tmp/METADATA/$target.$fr.introns
+    endif
+  end
+  if (! -e tmp/METADATA/$target.fr.introns.gz) then
+      cat  tmp/METADATA/$target.[fr].introns | gzip > tmp/METADATA/$target.fr.introns.gz
+  endif
 
 end 
 
@@ -432,8 +461,8 @@ end
 ######################################################
 # supplementary information not from .fasta and not from .gtf
 
-if (-e TARGET/GENES/$species.av.split_mrnas.txt && ! -e tmp/METADATA/av.split_mrnas.gene2length.ace6) then
-  cat  TARGET/GENES/$species.av.split_mrnas.txt | gzip > tmp/METADATA/av.split_mrnas.gz
+if (-e TARGET/GENES/av.split_mrnas.gz && ! -e tmp/METADATA/av.split_mrnas.gene2length.aceZZZ) then
+  cp  TARGET/GENES/av.split_mrnas.gz  tmp/METADATA/av.split_mrnas.gz
 # find their length
   cat TARGET/GENES/av.genes2length.ace | gawk '/^Gene/{gsub(/\"/,"",$2);g=$2;}/^Length/{x=$2+0;if(x>0)printf("%s\t%d\n",g,x);}' > _tln
   echo ZZZZZ >> _tln
@@ -443,9 +472,6 @@ if (-e TARGET/GENES/$species.av.split_mrnas.txt && ! -e tmp/METADATA/av.split_mr
 endif
 
 ######################################################
-
-NoNewGTF:
-
 ######################################################
 #### analyse the telomeric motifs in the targets
 
@@ -532,6 +558,24 @@ foreach target ($allRNAtargets)
   endif
 
 end
+
+######################################################
+######################################################
+# Manipulate the known transcript ends
+
+    if (-e TARGET/GENES/Ecocyc.ace  &&  -e tmp/METADATA/Eco.knownEnds.done) then
+      foreach chrom ($chromSetAll)
+          set toto=tmp/METADATA/Eco.knownStarts.$chrom
+          cat TARGET/GENES/Ecocyc.ace | gawk '/^IntMap/{if($2 == chrom){printf("%d\t%d\n",$3,$4);}}' chrom=$chrom > $toto.a
+          cat $toto.a |  gawk '{if($1<$2)print $1; }' | sort -u | sort -k 1n > $toto.f
+          cat $toto.a |  gawk '{if($1>$2)print $1; }'  | sort -u | sort -k 1n > $toto.r
+          set toto1=tmp/METADATA/Eco.knownEnds.$chrom
+          cat $toto.a |  gawk '{if($1<$2)print $2; }' | sort -u | sort -k 1n > $toto1.f
+          cat $toto.a |  gawk '{if($1>$2)print $2;}'  | sort -u | sort -k 1n > $toto1.r
+	  \rm $toto.a
+      end
+      touch tmp/METADATA/Eco.knownEnds.done
+    endif
 
 ######################################################
 ######################################################

@@ -15,6 +15,12 @@ if (! $?MOLECULE_TYPE) setenv MOLECULE_TYPE "RNA"
 ## 2: Species
 ## The species is chosen by creating a local link called TARGET
 ## to the TARGET.species directory distributed with the program
+## The species is specified inside the file TARGET/LIMITS
+##
+## 2b: Eucaryote/Procaryote [Default EUCARYOTE]
+## also specifeid inside TARGET/LIMITS
+## Procaryotes do not have introns
+## so there is no need to align on the spliced mRNAs
 
 ##############################################################
 ## 3: Parallel submission
@@ -119,7 +125,7 @@ setenv minCoveron 10
 ## 4,10,20 seem to be good thresholds for the ILM HiSeq in 2011
 
 setenv minSnpCount 4
-setenv minSnpCover 10
+setenv minSnpCover 20
 setenv minSnpFrequency 18
 
 setenv snpDropMultiplicity 0
@@ -189,7 +195,7 @@ setenv wiggle_step 10
 ## the CAPTURES variable should be edited in TARGET/LIMITS 
 ## or preferably in ./LIMITS
 
-setenv CAPTURES ""
+unsetenv CAPTURES ""
 
 ##############################################################
 ##############################################################
@@ -281,15 +287,31 @@ setenv VIRUS_PROJECT 0
 setenv MAGIC_SAM 0
 setenv USE_MAGIC_BLAST 0
 
+## Eucaryote/Procaryote
+## setenv to 0 in TARGET LIMITS if there are no introns
+setenv NO_INTRON 0
 ###########################################################
 ## The rest of the files deals with adaptors per platform
 ## Define here the different adaptors for each platform
 ###########################################################
+
 # LIF vectors
 setenv exitAdaptorSOLiD  gttagacatatctccgtcgtagggatccc,gttagacatatctccgtcgtagggat,gttagacatatctccgtcgt,gtgccatgcgctaactt
 
 if (0) then 
- seen in suffix AGATCGGAA
+  #Tardigrade
+    gagatcggaagagcggttcagcagga ABI traces tardigrade
+      TGGAATTCTCGGGTGCCAAG GAACTCCAGTCAC       NNNNNN      ATCTCGTATGCCGTCTTCTGCTTGAAAAAAAA deja connu
+      GATCGGAAGAGCACACGTCT GAACTCCAGTCAC       GATCAG      ATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAAAGGG     tardigrade           srr13696363                                                                     GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATTAAAAAA   deja connu
+
+   # project 003_ and 004_   same since we give the reverse complement of the entry adaptor
+        entry_adaptor cccGTACTCTGCGTTGATACCACTGCTT
+        adaptor1 cccGTACTCTGCGTTGATACCACTGCTT
+   # project 002  exit adaptor1  (end of read 1)
+        adaptor1 agatcggaagagcggttcagcaggaatgc
+        adaptor2 agatcggaagagcgtcgtgtagggaaaga
+        entry_adaptor agatcggaagagcgtcgtgtagggaaaga
+
 
 fasta: adaptor in the forward LIF is
 tcgccttggccgtacagcag/bar code 10 letters == reverse complement du bar code declare /aga(ga peu lisible)nnnnnnn, exemple
@@ -315,6 +337,12 @@ endif
 # LIF_S   CGCCTTGGCCGTACAGCAGCCTCTTA
 # LIF:    CGCCTTGGCCGTACAGCAGCCTCTTACAC se traduit en code couleur par ttagacatatctccgtcgtagggatccc
    
+###########################################################
+# Ultima exit adaptor NASA experiment at Mason lab 2023_09
+setenv exitAdaptorUlima   CGCACCATACTCGCCAGCGTGCGCGCCGACCTTACCCCAGGCGGCCTTGACGTTGGTCTTGTCGGCAGGAGACAGCACCATGGTGGGTTCTCTCTGAGTCT
+ setenv exitAdaptorNanoporeDirect ACAAGTTTGTAACATCGTCGTGAGTAGTGAACCGTAAGCAAAAAAAAAAT
+#setenv exitAdaptorNanoporeDirect ACAAGTTTGT---ATCGTCGTGAGTAGTGAACCGTAAGCAAAAAAAAAAT
+
 ###########################################################
 # LIF/PGM vectors (personal genome machine, derived from Ion_torrent)
 # read on sample sent by Bob 2012_02_28
@@ -423,7 +451,7 @@ setenv exitAdaptorPacBio GTACTCTGCGTTGATACCACTGCTT
 
 # The A in position 1 is incorporated a fraction of the time
 # we list the version with the A first, so preferable the program clips the longer vector
-#                                                                                                                                  
+#       
 setenv exitAdaptorIllumina GATCGGAAGAGCACACGTCTGAACTCCAGTCAC,aGATCGGAAGAGCTCGTATGCCGTCTtctgcttg,GATCGGAAGAGCTCGTATGCCGTCTtctgcttg,aGATCGGAAGAGCACACGTCTGAACTCCAGTCAC,AGATCGGAAGAGCGtcgtgtAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT,GATCGGAAGAGCGtcgtgtAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT,AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT,ATCTCGTATGCCGTCTTCTGCTTGAAAAAA,CGCTCTTCCGATCT,gagatcggaagagcgtcgtgtagggaaaga,tagatcggaagagcgtcgtgtagggaaaga,cagatcggaagagcgtcgtgtagggaaaga,aagatcggaagagcgtcgtgtagggaaaga,agatcggaagagcgtcgtgtagggaaaga,TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACNNNNNNATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,GATCGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATTAAAAAAAAAAAAAAAAAAAAAAAA,GATCnGTCGGACTGTAGAACTCTGAACGTGTAGATCTCGGTGGTCGCCGTATCATTAAAAAAAAAAAAAAAAAAAAAAAA
 
 # JGI joint genome institute Coli Rec30 short RNA
@@ -495,7 +523,7 @@ setenv inPhaseEntryAdaptor "$exitAdaptorIllumina"
 # AGATCGGAAGAGCGtcgtgtAGGgaaagagtgt  in reads/2  (complement of PCR primer 1)
 
 # paired end DNA oligonucleotides sequences
-# PE adaptors
+# PE adaptors 
 #  P-GATCGGAAGAGCGgttcagcAGGAATGCCGAG
 #     ACACTCTTTCCCTACACGACGCTCTTCCGATCT
 # paired end PCR primer 1, reverse complemented (seen as the exit adaptor of the second reads)

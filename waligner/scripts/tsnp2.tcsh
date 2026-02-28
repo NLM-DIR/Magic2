@@ -43,8 +43,8 @@ date
   set toto=tmp/TSNP_DB/$zone/$MAGIC.tsnp2a._r
     echo ' ' > $toto.ace
   echo "read-models" > $toto
-  echo "query find variant" >> $toto
-  echo "kill"  >> $toto
+  echo "query find variant BRS_counts" >> $toto
+  echo "edit -D BRS_counts" >> $toto
   echo "pparse $toto.ace" >> $toto
   if (-e DanLi/DanLi.$zone.ace)  echo "pparse DanLi/DanLi.$zone.ace" >> $toto 
   echo "pparse MetaDB/$MAGIC/runs.ace" >> $toto
@@ -54,7 +54,7 @@ date
 
   set foundIn=Found_in_genome
   set mapIn=IntMap
-  if ($Strategy == RNA_seq)  then
+  if ($NO_INTRON == 0 && $Strategy == RNA_seq)  then
     set foundIn=Found_in_mRNA
     set mapIn=mRNA
   endif
@@ -123,6 +123,7 @@ if (-e  tmp/TSNP_DB/$zone/av.parse.done) then
      echo "pparse $toto.ace" |  bin/tacembly tmp/TSNP_DB/$zone -noprompt
      touch tmp/TSNP_DB/$zone/$MAGIC.$phase.done
   endif
+  goto done1
   exit 0
 endif
 
@@ -138,6 +139,9 @@ endif
     endif
   end
 
+  if (-e tmp/METADATA/gtf.av.goodProduct.ace) then
+    echo "pparse tmp/METADATA/gtf.av.goodProduct.ace" >> $toto
+  endif
   if (-e tmp/METADATA/$MAGIC.av.captured_genes.ace) then
     echo "pparse tmp/METADATA/$MAGIC.av.captured_genes.ace" >> $toto
   endif
@@ -154,10 +158,10 @@ endif
 date
   mv $toto.ace $toto.preace
   cat $toto.preace | gawk '/^-/{next}{print}' > $toto.ace
-
+  \rm $toto.preace
   bin/tace tmp/TSNP_DB/$zone <  $toto
 
-  if (! -e tmp/TSNP_DB/$zone/av.parse.done) then
+  if (! -e tmp/TSNP_DB/$zone/av.parse.doneZZZ) then
     tace tmp/TSNP_DB/$zone <<EOF
       find mrna
       spush
@@ -184,7 +188,6 @@ EOF
       pparse tmp/TSNP_DB/$zone/mrna.ace
       find gene toto
       query find mrna ; ! DNA ; > Variant
-      kill
       save
       quit
 EOF
@@ -198,13 +201,21 @@ EOF
   echo -n " remap and translate "
 date
 
+done1:
   set remap2g=remap2genes
-  if ($Strategy == RNA_seq) then
+  if ($NO_INTRON == 0 && $Strategy == RNA_seq) then
     set remap2g=remap2genome
-# if -o filename is not provided, tsnp directly edits the database
-    bin/tsnp --db_$remap2g  tmp/METADATA/mrnaRemap.gz  --db tmp/TSNP_DB/$zone --force 
-    bin/tsnp --db_translate --db tmp/TSNP_DB/$zone  -p $MAGIC
   endif
+# if -o filename is not provided, tsnp directly edits the database
+  echo "  bin/tsnp --db_$remap2g  tmp/METADATA/mrnaRemap.gz  --db tmp/TSNP_DB/$zone "
+          bin/tsnp --db_$remap2g  tmp/METADATA/mrnaRemap.gz  --db tmp/TSNP_DB/$zone 
+  echo "  bin/tsnp --db_translate --db tmp/TSNP_DB/$zone  -p $MAGIC"
+          bin/tsnp --db_translate --db tmp/TSNP_DB/$zone  -p $MAGIC
+
+#          bin/tsnp --db_report --db tmp/TSNP_DB/$zone  -p $MAGIC
+#    bin/tsnp --db_snp_profile --db tmp/TSNP_DB/$zone  -p $MAGIC
+#    bin/tsnp --db_group_count --db tmp/TSNP_DB/$zone  -p $MAGIC
+
 # phase may be snp2a (BRS) or tsnp2a) tricoteur
 touch tmp/TSNP_DB/$zone/$MAGIC.$phase.done
 echo -n "tsnp2a: done "

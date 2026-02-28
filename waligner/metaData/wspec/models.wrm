@@ -66,13 +66,20 @@
 		Fax Text
  	Notes ?Text
 
-?Run  Ali ?Ali XREF Run  // Contains all results calculated automatically
+?Run  Ali ?Ali XREF Run    // Contains all clipalign/MAGIC  results calculated automatically
+      Ali2 ?Ali XREF Run2  // Contains all sortalign/MAGIC2 results calculated automatically
       Project  ?Project XREF Run // Runs with projec=$CALI are considered by CALI
       tmp_directory UNIQUE Text   // sticky, inherited from project the first time the run is considered, results go to tmp.$tmp_directory
       Titles  Title UNIQUE ?Text   // The other tags in the run object are to be documented by the user
               Sorting_title UNIQUE ?Text   // many tables are sorted alphabetically by this title
               Sorting_title_2 UNIQUE ?Text   // many tables are sorted alphabetically by this title
               Other_title  UNIQUE ?Text  // for example a micro array title
+              SEQC2_id SEQC2_title UNIQUE ?Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Text Int Text // SRR name xx reads xx Gb median n
+                       SEQC2_MegaBases Float
+                       SEQC2_nReads Float
+                       SEQC2_Median_length  Int
+                       SEQC2_SRR ?SRR 
+                       SEQC2_file_names Text             
               ERROR Text   // autamatically constructed by the parse 
       S Sample UNIQUE ?Sample XREF Run @T  // Precise sample identifier, please document the sample object (see below) 
         Microarray ?Text
@@ -81,6 +88,7 @@
         T Sex Male    UNIQUE Text
               Female  UNIQUE Text
               Hermaphrodite   UNIQUE Text
+              Males_and_females
               Mixed_sex UNIQUE Text  // pooling males and females          
           Description ?Text
           Population_description ?Text
@@ -108,32 +116,44 @@
                  Nervous_and_sense_organ ?Systm  ?Text
                  Respiratory ?Systm  ?Text
                  Urogenital ?Systm  ?Text
-          Stage             Embryo UNIQUE ?Text
+          Stage             Embryo  UNIQUE ?Text
+                            Mixed_embryo UNIQUE ?Text
                             Fetal  UNIQUE ?Text
+                            Larva UNIQUE ?Text
+                            Any_larva UNIQUE ?Text // obsolete
+                            Mixed_larvae UNIQUE ?Text
+                            EE UNIQUE ?Text
+                            LE UNIQUE ?Text
                             L1 UNIQUE ?Text
                             L2 UNIQUE ?Text
                             L3 UNIQUE ?Text
                             L4 UNIQUE ?Text
+                            Molt UNIQUE ?Text
                             Dauer UNIQUE ?Text
-                            Larva UNIQUE ?Text
                             Pupa UNIQUE ?Text
-                            Adult UNIQUE  ?Text
+                            Juvenile UNIQUE ?Text
+                            Adult UNIQUE ?Text
+                            YA UNIQUE ?Text
+                            OA UNIQUE ?Text
                             Mixed_stages UNIQUE   UNIQUE ?Text
-                            Age UNIQUE Text
+                            Age  Text
                             No_stage  // non applicable, example in Cell lines samples
-          Bio Control UNIQUE  ?Text
+          CT  Control UNIQUE  ?Text
               Treatment UNIQUE  ?Text
-              Genes Gene ?Gene // XREF SRR UNIQUE ?Text
+              Healthy
+              Condition ?Text
+          Bio Genes Gene ?Gene ?Text // XREF SRR UNIQUE ?Text
                     Gene_down ?Gene // XREF SRR_down UNIQUE ?Text
                     Gene_up ?Gene // XREF SRR_up UNIQUE ?Text
                     Gene_ectopic ?Gene // XREF SRR_ectopic UNIQUE ?Text
                     Marker_gene ?Gene // XREF SRR_marker UNIQUE ?Text
                     Driver_gene ?Gene // XREF SRR_driver UNIQUE ?Text
               Genotype UNIQUE  ?Text
-              Disease UNIQUE ?Disease XREF Run ?Text
+              Disease UNIQUE ?Disease XREF Sample ?Text
               Phenotype ?Phenotype ?Phenotype UNIQUE Float UNIQUE Float
+              Strain ?Strain Text
+              Replicate UNIQUE ?text
           Biosample_attribute Text UNIQUE Text
-          Strain ?Strain Text
       Identifier     Species ?Species  @Title 
                      RunId UNIQUE ?Text  @Quoted_in  // used for the SEQC TGX project
                      First_line Text // First sequence identifier of each original data file (fasta, fastq,...)
@@ -142,6 +162,11 @@
                      SRR  ?SRR XREF Run @Title     // a run may have several SRR id, or none,    
                      SRX  ?SRX XREF Run @T     // a run may have several SRR id, or none,    
                      SRP  ?SRP XREF Run @T     // a run may have several SRP id, or none,  
+      FDA FDA_id UNIQUE ?Text
+          FDA_SRR UNIQUE Text
+          FDA_frag UNIQUE Float
+          FDA_read UNIQUE Float
+          FDA_MB UNIQUW Float
       Doublon_of ?Run XREF Doublon_of  
       Corona  OldSampleID UNIQUE ?Text
               NewSampleID UNIQUE ?Text
@@ -173,7 +198,7 @@
              Expression_histogram  // only applies to groups: for each gene, per chromosome, show all histos at once
              Coverage_8kb
 	     Shift_expression_index UNIQUE Float // add this value to all expression index (useful in captures where the norm is suboptimal)
-             Intron
+             Intron ?Project
              Transloc
              Compare_to ?Run XREF Compare_to ?Run UNIQUE ?Run  ?Run UNIQUE ?Run  // construtc a predictor using r1/r2 interpret pheno r3 r4 then r5 r6n   // obsolete Danielle
              DEG ?Experiment XREF DEG_high_run @DEG // export genes->DEG_high_low ?Exp score fold_change high low_av relative to Run                      // obsolete Danielle
@@ -209,15 +234,19 @@
              Reference ?Paper XREF Run
              SRA_title UNIQUE ?Text                     
              Date_received UNIQUE DateType  Text    
+             Collection_date UNIQUE DateType    
              Submission_date UNIQUE DateType      
-      Nucleic_Acid_Extraction RNA Unspecified_RNA UNIQUE Text
-                                  polyA  UNIQUE ?Text // good 
-                                  Nascent_RNA UNIQUE   ?Text 
-                                  Total_RNA UNIQUE Text   // -> Total_RNA remove total
-                                  Small_RNA UNIQUE Text
-                                  Cap_CAGE_RACE UNIQUE Text // modified
-                                  DGE  UNIQUE Text
-                                  RNA_modification  UNIQUE   Text  //for methylation or other analyses  
+             Release_date UNIQUE DateType    
+      Nucleic_Acid_Extraction RNA Total_RNA  UNIQUE ?Text 
+                                  polyA  UNIQUE ?Text // good
+                                  dRNA  UNIQUE ?Text // good 
+                                  scRNA UNIQUE ?Text // single cell
+                                  Small_RNA  UNIQUE ?Text
+                                  Nascent_RNA  UNIQUE  ?Text 
+                                  Cap_CAGE_RACE  UNIQUE ?Text
+                                  DGE  UNIQUE ?Text
+                                  RNA_modification   UNIQUE  ?Text  //for methylation or other analyses  
+                                  Unspecified_RNA  UNIQUE ?Text
                               Targeted    RIP_CLIP UNIQUE Text
                                           Ribosome_profiling  UNIQUE ?Text
                                           Gene_selection  UNIQUE Text
@@ -234,9 +263,10 @@
                               Nucleic_prep_author ?Author XREF Nucleic_prep_author  
       Library_preparation  Library  Text          // could include  library preparation date, amount, oligo or random primed first strand, RNA strand-labeling, UDG, DSN normalisation, ribosomal or other depletion, DNA_Spiked_in, adaptors, barcode, number of  PCR cycles, temperature, , size selection of templates, strand
                            Amount_and_type ?Text                               //  goes to Library
-                           Adaptor1      ?Text    //sequence      // should be made more automatic and documented here or in ?Ali by clipalign
-                           Adaptor2  ?Text                        // should be made more automatic and documented here or in ?Ali by clipalign
+                           Adaptor1      ?Text UNIQUE Int   //sequence      // should be made more automatic and documented here or in ?Ali by clipalign
+                           Adaptor2  ?Text UNIQUE Int                       // should be made more automatic and documented here or in ?Ali by clipalign
                            Entry_adaptor ?Text
+                           Entry_adaptor2 ?Text
                            Barcode  ?Text       //sequence and number per lane  
                            UMI UNIQUE Int UNIQUE Int // barcode lengths in read1 and read 2, the bar code are exported in lieu of traget prefix and suffix col 20 and 21
                            Jump5 UNIQUE Int UNIQUE Int   // if non zero, jump the first n bases of read 1, same for read 2 if second number > 0
@@ -245,12 +275,14 @@
       Sequencing  Machine UNIQUE Helicos UNIQUE Text   
                                  Illumina UNIQUE Text   // the machine names are used in LIMITS to get the list of previously known adaptors for that machine, 
                                  SOLiD UNIQUE Text      // please do not change the spelling
+                                 DNBSEQ UNIQUE Text
                                  Roche_454 UNIQUE Text
                                  Ion_Torrent UNIQUE Text
                                  PGM UNIQUE Text        // Lif personal genome machine, successor of ion torrent 
                                  PacBio UNIQUE Text
                                  Oxford_nanopore  UNIQUE Text
                                  Nanopore  UNIQUE Text
+                                 Ultima UNIQUE Text
                                  Capillary   UNIQUE Text
                                  Complete_genomics  UNIQUE Text
                   Flowcell_lane_index UNIQUE Text                   //   goes to Library
@@ -279,13 +311,12 @@
             FBsn  // strain i.e. oregon 
             FBtc  // tissue/cell culture
 
- 
-?Ali  Run ?Run XREF Ali @Title
+  
+?Ali  Run ?Run XREF Ali @Title   // clipalign MAGIC  results
+      Run2 ?Run XREF Ali2 @Title // sortalign MAGIC2 results
       Counts Raw_data  UNIQUE Float  UNIQUE Text   UNIQUE Float  UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
              Accepted  UNIQUE Float  UNIQUE Text   UNIQUE Float  UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
              Rejected  UNIQUE Float  UNIQUE Text   UNIQUE Float  UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
-             Entry_adaptor_clipping UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
-             Exit_adaptor_clipping UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
              Min_probe_length UNIQUE Int
              Max_probe_length UNIQUE Int	
              Length_distribution_1_5_50_95_99_mode_av UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int
@@ -316,6 +347,10 @@
                       Genes_with_index_over_12 ?Target UNIQUE Int
                       Genes_with_index_over_15 ?Target UNIQUE Int
                       Genes_with_index_over_18 ?Target UNIQUE Int
+                      Genes_with_index_over_21 ?Target UNIQUE Int
+                      Genes_with_index_over_24 ?Target UNIQUE Int
+                      Genes_with_index_over_27 ?Target UNIQUE Int
+                      Genes_with_index_over_30 ?Target UNIQUE Int
 		      Genes_expressed_in_at_least_one_run  ?Target UNIQUE Int
                       mRNA_with_index ?Target UNIQUE Int
 		      mRNA_expressed_in_at_least_one_run  ?Target  UNIQUE Int
@@ -334,11 +369,15 @@
                       Intergenic_density UNIQUE Float UNIQUE Text 
                       Known_introns ?Target UNIQUE Int UNIQUE Text UNIQUE Float UNIQUE Text 
                       Candidate_introns  ?Target UNIQUE Int UNIQUE Text UNIQUE Int UNIQUE Text UNIQUE Int UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text  UNIQUE Float UNIQUE Text UNIQUE Float
+		      Candidate_starts UNIQUE Int
+		      Candidate_ends UNIQUE Int
+		      Confirmed_starts UNIQUE Int UNIQUE Int
+		      Confirmed_ends UNIQUE Int UNIQUE Int
                       Accessible_length UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 8kb transcripts used, # 8kb candidates, #average cumulated cover
-                      Accessible_length_8k UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 8kb transcripts used, # 8kb candidates, #average cumulated cover
-                      Accessible_length_5k UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 5kb transcripts used, # 5kb candidates, #average cumulated cover
-                      Accessible_length_5k_captured UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 5kb transcripts used, # 5kb candidates, #average cumulated cover
-                      Accessible_length_8k_captured UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 5kb transcripts used, # 5kb candidates, #average cumulated cover
+                      Accessible_length_8kb UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 8kb transcripts used, # 8kb candidates, #average cumulated cover
+                      Accessible_length_5kb UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 5kb transcripts used, # 5kb candidates, #average cumulated cover
+                      Accessible_length_5kb_captured UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 5kb transcripts used, # 5kb candidates, #average cumulated cover
+                      Accessible_length_8kb_captured UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Int // length, # 8kb transcripts used, # 8kb candidates, #average cumulated cover
                       SLs Text UNIQUE Int UNIQUE Text UNIQUE Int UNIQUE Text   // SL1-12 <int> support <int> position as seen in the Run
       Sponge Wiggles Wiggle_U    UNIQUE Float UNIQUE Text  // Mb in the unique wiggle
                      Wiggle_nU   UNIQUE Float UNIQUE Text  // Mb in the non-unique wiggle
@@ -398,8 +437,8 @@
                  Clipped_length Int UNIQUE Float REPEAT
                  First_base_aligned  Int UNIQUE Float UNIQUE Float 
                  Last_base_aligned  Int UNIQUE Float UNIQUE Float 
-      Adaptors Adaptor1  UNIQUE Text  // constructed by scripts/dnawalk.findAdaptors.tcsh in pahse a0W a1W
-               Adaptor2  UNIQUE Text 
+      Adaptors Adaptor1  UNIQUE Text UNIQUE Int  // constructed by scripts/dnawalk.findAdaptors.tcsh in pahse a0W a1W
+               Adaptor2  UNIQUE Text UNIQUE Int
       Overhangs Partial_5p UNIQUE Float UNIQUE Float // prefix >= 15, >= 25
                 Partial_3p UNIQUE Float UNIQUE Float // suffix >= 15, >= 25
       ERCC_mix Text UNIQUE Float UNIQUE Float UNIQUE Text  // best fit to Mix1 or Mix2, R, R^2 correlation coefficient
@@ -435,6 +474,7 @@
                               Links_to_spike_in UNIQUE Float
                               Links_to_rRNA  UNIQUE Float
                               Links_to_mito  UNIQUE Float
+                              Circle_pairs     UNIQUE Float			      
                 Orphans Text UNIQUE Float UNIQUE Text  // type-number, count, type-title
       Errors Error_position Int UNIQUE Float UNIQUE Float UNIQUE Float UNIQUE Float
              Error_profile Text Text UNIQUE Float UNIQUE Float UNIQUE Float   // f1  a>g number Mb n/Mb             
@@ -454,7 +494,9 @@
                             P_support UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
             SNP_profile Text Text UNIQUE Float UNIQUE Float UNIQUE Float   // f1  type(a>g ++a...)  number  rejectedNumber number of supporting_accpeted_reads 
       Computer_ressource CPU  Text  UNIQUE Int  UNIQUE Text
+                         Elapsed  Text  UNIQUE Int  UNIQUE Text
                          Max_memory  Text  UNIQUE Int  UNIQUE Text
+                         Multi_threading  Text  UNIQUE Float  UNIQUE Text			 
                          Number_of_lanes UNIQUE Int
 
 ?Target  Release UNIQUE ?Text
@@ -465,6 +507,23 @@
          Number_of_introns  UNIQUE Int
          Details ?Text
          
+
+?StartEnd Title UNIQUE ?Text 
+          Project ?Project
+          Type Unique Start UNIQUE Int
+                      End
+          Site IntMap ?Map UNIQUE Int UNIQUE Int 
+               Gene ?Gene XREF  StartEnd
+               mRNA  ?mRNA XREF StartEnd UNIQUE Int // mRNA coordinate
+               Genome_strand UNIQUE Forward
+                                    Reverse
+               Method Magic
+	              Ecocyc UNIQUE Int
+               Binds Text
+               Counts Monomodal ?Project 
+                      Manual_non_monomodal
+                      eCounts   ?Run UNIQUE Int UNIQUE Int UNIQUE Int UNIQUE Float // a1 a2 maxcover avereage_cover
+                      tCounts   ?Run UNIQUE Int    // Traversing reads
 
 ?Variant  Title UNIQUE ?Text  /* takes precedence as full HGVS name */
           Id  dbSNP ?dbSNP XREF Variant @Details
@@ -695,6 +754,7 @@
          Intron ?Intron XREF Gene
          mRNA ?mRNA  XREF Gene
          Variant ?Variant XREF Gene
+	 StartEnd ?StartEnd XREF Gene
          Boxed_variant ?Variant XREF GeneBox
          NM_id ?NM_id XREF Gene
          Sample ?Sample XREF Gene
@@ -727,7 +787,9 @@
                             pg
                             RefSeq
                             magic
+                            Eco
                             FlyBase
+                            RvY
                             UCSC
                             mito
                             SpikeIn
@@ -803,6 +865,7 @@
        GeneId ?GeneId  XREF mRNA
        Transcribed_gene ?Transcribed_gene  XREF mRNA
        Product ?Product XREF mRNA UNIQUE Int  UNIQUE Int  UNIQUE Int  UNIQUE Int 
+       StartEnd ?StartEnd XREF mRNA
        Variant ?Variant XREF mRNA
        Length UNIQUE Int
        GC_percent UNIQUE Float
@@ -877,24 +940,25 @@
 
 
 ?SRR  Titles  SRP ?SRP XREF SRR  @T // SRR->SRP->Title[SRP]
+              Manual_title UNIQUE ?Text  
               Author UNIQUE ?Text          // SRR->Magic_author2
               Species ?Species  @Title 
               SRX ?SRX XREF SRR @T
               Sample ?Sample XREF SRR @T
       Reference ?Paper XREF SRR
-      Nucleic_Acid_Extraction RNA Unspecified_RNA ?Text
-                                  polyA  UNIQUE ?Text // good 
-                                  Nascent_RNA  UNIQUE ?Text 
-                                  Total Total_RNA ?Text 
-                                        Total_RNA_Ribo_depleted UNIQUE ?Text
-                                  Small_RNA ?Text
-                                  Cap  // oligo_capped_selected Sugano's protocol // obsolete
-                                  CAGE_or_5p_capture ?Text // obsolete
-                                  Cap_CAGE_RACE ?Text
-                                  DGE ?Text
-                                  RIP UNIQUE ?Text
-                                  RNA_modification   ?Text  //for methylation or other analyses  
+      Nucleic_Acid_Extraction RNA Total_RNA  UNIQUE ?Text 
+                                  polyA  UNIQUE ?Text // good
+                                  dRNA  UNIQUE ?Text // good 
+                                  scRNA UNIQUE ?Text // single cell
+                                  Small_RNA  UNIQUE ?Text
+                                  Nascent_RNA  UNIQUE  ?Text 
+                                  Cap_CAGE_RACE  UNIQUE ?Text
+                                  DGE  UNIQUE ?Text
+                                  RNA_modification   UNIQUE  ?Text  //for methylation or other analyses  
+                                  Unspecified_RNA  UNIQUE ?Text
                               Targeted    RIP_CLIP UNIQUE ?Text
+                                          RIL  UNIQUE ?Text // RNA Interacting Ligation
+                                          Ends  UNIQUE ?Text
                                           Ribosome_profiling  UNIQUE ?Text
                                           Gene_selection ?Text
                               Genome  Whole_genome    ?Text  
@@ -909,18 +973,18 @@
                               RNA_Spiked_In UNIQUE ?Text             // eg ERCC1, version or batch number, number of markers                          
                               Nucleic_prep_author ?Author
                               Normalized UNIQUE ?Text  // seem to belong to Library Danielle 
-      sraNucleic_Acid_Extraction  sraRNA sraUnspecified_RNA ?Text
-                                         sraPolyA  UNIQUE ?Text // good 
-                                         sraNascent_RNA UNIQUE   ?Text 
-                                         sraTotal sraTotal_RNA ?Text 
-                                                  sraTotal_RNA_Ribo_depleted UNIQUE ?Text
+      sraNucleic_Acid_Extraction  sraRNA sraTotal_RNA ?Text 
+                                         sraPolyA  UNIQUE ?Text // good
+                                         sradRNA  UNIQUE ?Text // good 					 
+                                         sraScRnaPolyA  UNIQUE ?Text // good 
                                          sraSmall_RNA ?Text
-                                         sraCap  // oligo_capped_selected Sugano's protocol // obsolete
-                                         sraCAGE_or_5p_capture ?Text // obsolete
+                                         sraNascent_RNA  UNIQUE ?Text 
                                          sraCap_CAGE_RACE ?Text
                                          sraDGE ?Text
-                                         sraRIP UNIQUE ?Text
                                          sraRNA_modification   ?Text  //for methylation or other analyses  
+                                         sraUnspecified_RNA ?Text
+                                         sraCAGE_or_5p_capture ?Text // obsolete
+                                         sraRIP UNIQUE ?Text
                                   sraTargeted       sraRIP_CLIP UNIQUE ?Text
                                                     sraRibosome_profiling  UNIQUE ?Text
                                                     sraGene_selection ?Text
@@ -939,14 +1003,12 @@
       Sequencing Spots  UNIQUE Int UNIQUE Text UNIQUE Text UNIQUE Text UNIQUE Int UNIQUE Text  UNIQUE Text UNIQUE Text UNIQUE Int   // <#spots> bases_in_SRA <Mb> Average_length  <n> Insert_size <n> +- <delta> spots_with_mate <n>
       Comment ?Text
       Run UNIQUE ?Run XREF SRR
-      ERROR Text   // autamatically constructed by the parse 
+      ERROR Text   // automatically constructed by the parse 
       Warning Text // Hand warning visible on the web 
       Annotated_strandedness UNIQUE Stranded UNIQUE Forward UNIQUE Text // f1 forward, f2-3 reverse
                                                     Reverse UNIQUE Text // f1 reverse, f2-3 forward
                                     nonStranded
 
-
- 
 ?SRX T Title UNIQUE ?Text
        Comment ?Text
        Construction_protocol UNIQUE ?Text
@@ -981,6 +1043,8 @@
              Title   UNIQUE ?Text
              Sex Male    UNIQUE Text
                  Female  UNIQUE Text
+                 Hermaphrodite   UNIQUE Text
+                 Males_and_females
                  Mixed_sex UNIQUE Text  // pooling males and females
              Species ?Species @Title
              Tissue ?Tissue  // XREF Biosample
@@ -1006,6 +1070,8 @@
           Magic_sample2 UNIQUE ?Text
           Sex Male    UNIQUE Text
               Female  UNIQUE Text
+              Hermaphrodite   UNIQUE Text
+              Males_and_females
               Mixed_sex UNIQUE Text  // pooling males and females          
           Description ?Text
           Population_description ?Text
@@ -1035,22 +1101,32 @@
                  Nervous_and_sense_organ ?Systm XREF Nervous_and_sense_organ  ?Text
                  Respiratory ?Systm XREF Respiratory  ?Text
                  Urogenital ?Systm XREF Urogenital ?Text
-          Stage             Embryo UNIQUE ?Text
+          Stage             Embryo  UNIQUE ?Text
+                            Mixed_embryo UNIQUE ?Text
                             Fetal  UNIQUE ?Text
+                            Larva UNIQUE ?Text
+                            Any_larva UNIQUE ?Text //Obsolete
+                            Mixed_larvae UNIQUE ?Text
+                            EE UNIQUE ?Text
+                            LE UNIQUE ?Text
                             L1 UNIQUE ?Text
                             L2 UNIQUE ?Text
                             L3 UNIQUE ?Text
                             L4 UNIQUE ?Text
+                            Molt UNIQUE ?Text
                             Dauer UNIQUE ?Text
-                            Larva UNIQUE ?Text
                             Pupa UNIQUE ?Text
                             Adult UNIQUE  ?Text
-                            Mixed_stages UNIQUE   UNIQUE ?Text
+                            YA UNIQUE ?Text
+                            OA UNIQUE ?Text
+                            Mixed_stages UNIQUE ?Text
                             Age UNIQUE Text
                             No_stage  // non applicable, example in Cell lines samples
-          Bio Control UNIQUE  ?Text
+          CT  Control UNIQUE  ?Text
               Treatment UNIQUE  ?Text
-              Genes Gene ?Gene // XREF SRR UNIQUE ?Text
+              Healthy
+              Condition ?Text
+          Bio Genes Gene ?Gene ?Text // XREF SRR UNIQUE ?Text
                     Gene_down ?Gene // XREF SRR_down UNIQUE ?Text
                     Gene_up ?Gene // XREF SRR_up UNIQUE ?Text
                     Gene_ectopic ?Gene // XREF SRR_ectopic UNIQUE ?Text
@@ -1059,13 +1135,13 @@
               Genotype UNIQUE  ?Text
               Disease UNIQUE ?Disease XREF Sample ?Text
               Phenotype ?Phenotype ?Phenotype UNIQUE Float UNIQUE Float
+              Strain ?Strain Text
+              Replicate UNIQUE ?text
           Biosample_attribute Text UNIQUE Text
           Identifier Text ?Text
-          Strain ?Strain Text
-          Healthy
-          Condition ?Text
           Submission ?Author XREF Sample
           Submission_date DateType
+          Release_date UNIQUE DateType    
           NLM    N_Stage UNIQUE Text
                  N_CellLine UNIQUE Text
                  N_CellType_Anat UNIQUE Text
@@ -1321,8 +1397,7 @@
           Sp_species    ?Sequence XREF Sp_group // used in VirusDB to group similar bacteria
           Source ?Sequence XREF Subsequence
           Subsequence ?Sequence XREF Source UNIQUE Int UNIQUE Int 
-
-
+	  
 ?Clone  Main_Clone
         Strategy MainTitle UNIQUE Text  // appears as main Window title
                  Species UNIQUE Text

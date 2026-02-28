@@ -23,7 +23,7 @@ if ($isRL == lane) then
   if (-e tmp/COUNT/$lane.hits.gz) then
     set mw=TARGET/MRNAS/mRNA2Wiggle.txt
     if (-e mRNA2Wiggle.txt) set mw=mRNA2Wiggle.txt
-    gunzip -c tmp/COUNT/$lane.hits.gz |  bin/wiggle -I BHIT -gzo -o tmp/MRNAWIGGLELANE$H/$lane -mapon $mw -multiVentilate $HH
+    gunzip -c tmp/COUNT/$lane.hits.gz |  bin/wiggle -I BHIT -gzo -o tmp/MRNAWIGGLELANE$H/$lane -mapon $mw -ventilate $HH
     touch tmp/MRNAWIGGLELANE$H/$lane.done
   endif
 endif

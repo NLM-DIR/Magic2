@@ -20,17 +20,20 @@ goto phaseLoop
 phaseStats:
 
 # prepare the frns wiggles if not available, now always done in wg2a for runs and wg2b for groups 
-set ww1=toto
-set ww2=toto
+set ww1=toto$$
+set ww2=toto$$
+set ok=0
 if (-e  tmp/WIGGLEGROUP/$run/$chrom/R.chrom.$fr.$uu.BF.gz || -e  tmp/WIGGLEGROUP/$run/$chrom/R.chrom.$fr.pp.BF.gz) then
   set ww1=tmp/WIGGLEGROUP/$run/$chrom/R.chrom.$fr.$uu.BF.gz 
   set ww2=tmp/WIGGLEGROUP/$run/$chrom/R.chrom.$fr.pp.BF.gz
+  set ok=1
 else if (-e  tmp/WIGGLERUN/$run/$chrom/R.chrom.$fr.$uu.BF.gz || -e  tmp/WIGGLERUN/$run/$chrom/R.chrom.$fr.pp.BF.gz) then
   set ww1=tmp/WIGGLERUN/$run/$chrom/R.chrom.$fr.$uu.BF.gz
   set ww2=tmp/WIGGLERUN/$run/$chrom/R.chrom.$fr.pp.BF.gz
+  set ok=1
 endif
 
-if (! -e $ww1  && ! -e $ww2) then
+if ($ok == 0) then
   echo "tmp/WIGGLERUN/$run/$chrom/R.chrom.$fr.[u|pp].BF.gz not found"
   exit 0
 endif

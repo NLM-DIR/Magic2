@@ -25,7 +25,7 @@
                   by the applications.
      -Width w -Height h -Xposition x -Yposition y : 
                   Real numbers in the following range 
-                  0 < x,w  < 1.3   ;  0 < y,h < 1.0
+                  0 < x,w  < 2.0   ;  0 < y,h < 1.0
                   They indicate the initial proportion of the sreen width and height 
                   used to display objects of that class in their preferred display type. 
 	          The full screen is normallized to 1, 1.3
@@ -43,7 +43,7 @@
   */
 
 
-_DDtMain -g TEXT_FIT -t "Acembly "  -w .51 -height .30 -X .01 -Y .01 -help acedb
+_DDtMain -g TEXT_FIT -t "Acembly "  -w .54 -height .33 -X .01 -Y .01 -help acedb
 
 _DDtTiling -g TEXT_FIT -x 0.05 -y 0.05 -w 1.1 -height .9 -help TilingArray -Menu Wiggle
 
@@ -75,13 +75,15 @@ _DDtUpdate -g TEXT_SCROLL -t "Update" -x .65 -y .04 -w 0.6 -hei 0.6 \
 _DDtLongText  -g TEXT_SCROLL -t "Text" - y 0.3 -w 0.75 -height 0.68 \
 	 -help "Long-Text"
 
-_DDtQuery   -g TEXT_SCROLL -t "Query" -w .65  -height 0.35 -help Query
+_DDtQuery   -g TEXT_SCROLL -t "Query" -w 1.88  -height 0.35 -help Query
 
 _DDtQueryBuilder   -g TEXT_SCROLL -t "Query, by Gary Aochi" -w .73  -height 0.35 -help GaryQuery
 
 _DDtQueryByExample   -g TEXT_SCROLL -t "Query by Example" -w .55  -height 0.35 -help Query_By_Example
 
 _DDtSpreadSheet   -g TEXT_FULL_SCROLL -t "Table_Maker" -w .60  -height 0.35 -help Table_Maker
+
+_DDtBqlDisp   -g TEXT_FULL_SCROLL -t "BQL table queries" -w .90  -height 0.75 -help Bql
 
 _DDtMULTIMAP   -g TEXT_FIT -t "Multi-map" -w 1.15  -height 0.65 -help Multi_Map
 

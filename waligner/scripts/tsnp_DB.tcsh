@@ -32,12 +32,6 @@ set zone=$2
   endif
   echo "read-models" > tmp/TSNP_DB/$zone/_rs3.$zone
 
- # retrofit the mRNA class name into the mRNA fasta file
-  foreach target ( mito SpikeIn $Etargets $Ttargets)
-    if (-e TARGET/Targets/$species.$target.fasta.gz && ! -e tmp/TSNP_DB/$species.$target.mrna.fasta.gz) then
-      gunzip -c TARGET/Targets/$species.$target.fasta.gz | gawk '/^>/{i=index($1,"|");if(i>0)s=substr($1,2,i-2);else s=substr($1,2);printf(">mRNA:%s\n",s);next;}{print}' | gzip >  tmp/TSNP_DB/$species.$target.mrna.fasta.gz
-    endif
-  end
    
   foreach target (mito SpikeIn $Etargets $Ttargets)
     if (-e  tmp/METADATA/$target.MRNA.info.ace) then

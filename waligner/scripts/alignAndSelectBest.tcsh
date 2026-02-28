@@ -34,9 +34,75 @@ echo "$mytmp"
 if (! $?targets) then
   setenv targets "$DNAtargets $RNAtargets"
 endif
+if ($NO_INTRON == 2) then
+  setenv targets "$DNAtargets"
+endif
 
 echo "$mytmp\ntarget=$targets"
 \cp MetaDB/$MAGIC/*  $mytmp/MetaDB/$MAGIC
+
+  set v11=""
+  set v22=""
+  set adaptor1=""
+  set adaptor2=""
+
+    set plateforme=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk 'BEGIN{m="NULL";}{if($1 == run && $2 != machine) m=$2;}END{print m;}' run=$run`
+    if ($plateforme == "Illumina" && $?exitAdaptorIllumina) then
+      set v11="$exitAdaptorIllumina"
+    endif
+    if ($plateforme == "Roche_454" && $?exitAdaptorRoche_454) then
+      set v11="$exitAdaptorRoche_454"
+    endif
+    if ($plateforme == "SOLiD" && $?exitAdaptorSOLiD) then 
+      set v11="$exitAdaptorSOLiD"
+    endif
+    if ($plateforme == "PacBio" && $?exitAdaptorPacBio) then 
+      set v11="$exitAdaptorPacBio"
+    endif
+    if ($plateforme == "PGM" && $?exitAdaptorPGM) then 
+      set v11="$exitAdaptorPGM"
+    endif
+    if ($plateforme == "Helicos" && $?exitAdaptorHelicos) then
+      set v11="$exitAdaptorHelicos"
+    endif
+
+set adaptor1=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk -F '\t' 'BEGIN{m="NULL";}{gsub(/\"/,"",$1);if($1 == run){if ($5 != "NULL") m=$5;if ($3 != "NULL") m=$3;}}END{m=substr(m,1,30);gsub(/\"/,"",m);gsub("Text:","",m);print m;}' run=$run`
+set adaptor2=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk -F '\t' 'BEGIN{m="NULL";}{gsub(/\"/,"",$1);if($1 == run){if ($6 != "NULL") m=$6;if ($4 != "NULL") m=$4;}}END{m=substr(m,1,30);gsub(/\"/,"",m);gsub("Text:","",m);print m;}' run=$run`
+
+set entryAdaptor1=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk -F '\t' 'BEGIN{m="NULL";}{gsub(/\"/,"",$1);if($1 == run){if ($7 != "NULL") m=$7;}}END{gsub(/\"/,"",m);gsub("Text:","",m);print m;}' run=$run`
+set entryAdaptor2=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk -F '\t' 'BEGIN{m="NULL";}{gsub(/\"/,"",$1);if($1 == run){if ($7 != "NULL") m=$8;}}END{gsub(/\"/,"",m);gsub("Text:","",m);print m;}' run=$run`
+
+  echo "# adaptor1=$adaptor1"
+  echo "# adaptor2=$adaptor2"
+  echo "# entryAdaptor1=$entryAdaptor1"
+  echo "# entryAdaptor2=$entryAdaptor2"
+
+set v1=""
+set v2=""
+if ("$adaptor1" != "" && "$adaptor1" != "NULL") then
+  set v1="-exitAdaptor $adaptor1"
+else
+  if ("$v11" != "" ) then
+    set v1="-exitAdaptor $v11"
+  endif
+endif
+if ("$entryAdaptor1" != "" && "$entryAdaptor1" != "NULL") then
+  set v1="$v1 -entryAdaptor $entryAdaptor1"
+endif
+if ("$entryAdaptor2" != "" && "$entryAdaptor2" != "NULL") then
+  set v1="$v1 -entryAdaptor2 $entryAdaptor2"
+endif
+
+if ("$adaptor2" != "" && "$adaptor2" != "NULL") then
+  set v2="-exitAdaptor2 $adaptor2"
+else
+  if ("$v22" != "" ) then
+    set v2="-exitAdaptor2 $v22"
+  endif
+endif
+
+echo "vectors:: $v1 $v2"
+
 
 phasea1:
  echo -n "Phase a123: $run $lane  align on $targets and select best alignment "
@@ -72,6 +138,10 @@ end
 
 foreach run2 (`cat $mytmp/MetaDB/$MAGIC/RunPacBioList`)
   if ($run == $run2) set isLong="-pacbio"
+end
+
+foreach run2 (`cat $mytmp/MetaDB/$MAGIC/RunUltimaList`)
+  if ($run == $run2) set isLong="-ultima"
 end
 
 set dna2dnaFormat=fastc
@@ -255,64 +325,11 @@ foreach target (DNASpikeIn SpikeIn mito rrna chloro transposon $RNAtargets $DNAt
   set t2g=""
   if (-e  TARGET/MRNAS/$species.$target.transcript2gene.txt.gz) set t2g="-target2gene TARGET/MRNAS/$species.$target.transcript2gene.txt.gz"
 
-  set v11=""
-  set v22=""
-
-    set plateforme=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk 'BEGIN{m="NULL";}{if($1 == run && $2 != machine) m=$2;}END{print m;}' run=$run`
-    if ($plateforme == "Illumina" && $?exitAdaptorIllumina) then
-      set v11="$exitAdaptorIllumina"
-    endif
-    if ($plateforme == "Roche_454" && $?exitAdaptorRoche_454) then
-      set v11="$exitAdaptorRoche_454"
-    endif
-    if ($plateforme == "SOLiD" && $?exitAdaptorSOLiD) then 
-      set v11="$exitAdaptorSOLiD"
-    endif
-    if ($plateforme == "PacBio" && $?exitAdaptorPacBio) then 
-      set v11="$exitAdaptorPacBio"
-    endif
-    if ($plateforme == "PGM" && $?exitAdaptorPGM) then 
-      set v11="$exitAdaptorPGM"
-    endif
-    if ($plateforme == "Helicos" && $?exitAdaptorHelicos) then
-      set v11="$exitAdaptorHelicos"
-    endif
-
 set jump5=""
 set jump5=`cat $mytmp/MetaDB/$MAGIC/runs.ace | gawk '{gsub(/\"/,"",$0);}/^Run/{ok=0;if($2 == run)ok=1;}/^Jump5/{if(ok==1){ if(0+$2>0 && 0+$2 < 6)printf(" -jump5 %d", 0+$2);if(0+$3>0 && 0+$3 < 6)printf(" -jump5_2 %d", 0+$3);}}' run=$run`
 set forceRightClip=""
 set forceRightClip=`cat $mytmp/MetaDB/$MAGIC/runs.ace | gawk '{gsub(/\"/,"",$0);}/^Run/{ok=0;if($2 == run)ok=1;}/^ForceRightClip/{if(ok==1){ if(0+$2>20)printf(" -forceRightClip %d", 0+$2);if(0+$3>0 && 0+$3 < 6)printf(" -forceRightClip_2 %d", 0+$3);}}' run=$run`
-set adaptor1=""
-set adaptor2=""
 
-set adaptor1=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk -F '\t' 'BEGIN{m="NULL";}{gsub(/\"/,"",$1);if($1 == run){if ($5 != "NULL") m=$5;if ($3 != "NULL") m=$3;}}END{gsub(/\"/,"",m);gsub("Text:","",m);print m;}' run=$run`
-set adaptor2=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk -F '\t' 'BEGIN{m="NULL";}{gsub(/\"/,"",$1);if($1 == run){if ($6 != "NULL") m=$6;if ($4 != "NULL") m=$4;}}END{gsub(/\"/,"",m);gsub("Text:","",m);print m;}' run=$run`
-
-set entryAdaptor1=`cat $mytmp/MetaDB/$MAGIC/run2machine2adaptors.txt | gawk -F '\t' 'BEGIN{m="NULL";}{gsub(/\"/,"",$1);if($1 == run){if ($7 != "NULL") m=$5;}}END{gsub(/\"/,"",m);gsub("Text:","",m);print m;}' run=$run`
-
-  echo "# adaptor1=$adaptor1"
-  echo "# adaptor2=$adaptor2"
-
-set v1=""
-set v2=""
-if ("$adaptor1" != "" && "$adaptor1" != "NULL") then
-  set v1="-exitAdaptor $adaptor1"
-else
-  if ("$v11" != "" ) then
-    set v1="-exitAdaptor $v11"
-  endif
-endif
-if ("$entryAdaptor1" != "" && "$entryAdaptor1" != "NULL") then
-  set v1="$v1 -entryAdaptor $adaptor1"
-endif
-
-if ("$adaptor2" != "" && "$adaptor2" != "NULL") then
-  set v2="-exitAdaptor2 $adaptor2"
-else
-  if ("$v22" != "" ) then
-    set v2="-exitAdaptor2 $v22"
-  endif
-endif
 
 echo "prepare previous score "
 date

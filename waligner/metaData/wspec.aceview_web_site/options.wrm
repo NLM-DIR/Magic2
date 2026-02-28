@@ -62,7 +62,7 @@
 
 
 _VSequence         -H -D FMAP
-_VMRNA             -V 
+_VMRNA             -V -D FMAP
 _VProduct          -V
 _VClone            -H -D PMAP
 _VClone_Group      -V 
@@ -83,7 +83,7 @@ _VMap -V -D GMAP
 _VSection -V -D TREE
 _VLocus  -V
 
-_VTranscribed_gene -V 
+_VTranscribed_gene -V -D FMAP
 _VMRNA    -V -D FMAP
 _VGene     -V 
 _VKantor    -V
@@ -173,6 +173,8 @@ _VAcceptor -V
 _VPBS  -V  -D DtTiling
 
 _VElement  -V
+
+_VStartEnd  -V
 
 _VExtern -V
 

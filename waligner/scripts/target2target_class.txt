@@ -11,7 +11,7 @@
 
 
 # Transcriptome starts at DT_magic and is named ?T_   
-# SYNCHRONIZE with  with bestali.c:main() c5.h_Ali.awk and other places
+# SYNCHRONIZE with  with bestali.c:main() c5.h_Ali.awk
 # aceview of different kinds
     if ($target == magic) set target_class=DT_magic
 
@@ -20,6 +20,11 @@
     if ($target == av2008) set target_class=FT_av2008
     if ($target == extra) set target_class=FT_extra
     if ($target == simul) set target_class=FT_simul
+    if ($target == RvY) set target_class=FT_RvY
+
+# E.coli, Ecocyc is the official annotation, Tjaden proposed, in 2023, 3000 new transcripts
+    if ($target == Eco) set target_class=FT_Eco
+    if ($target == Tjaden) set target_class=FT_Tjaden
 
     if ($target == cloud) set target_class=FT_cloud 
 

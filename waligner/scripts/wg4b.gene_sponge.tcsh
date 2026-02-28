@@ -1,65 +1,65 @@
 #! bin/tcsh -f
 
-## scan the wiggle files and count the non-stranded genebox support 
+## scan the wiggle files and count the genebox support 
 
-set WG=$1
-if ($WG == Cumul) goto phaseCumul
-if ($WG == Parse) goto phaseParse
+set phase=$1
 
-set target=$2
+if ($phase == Cumul) goto phaseCumul
+if ($phase == Parse) goto phaseParse
+
+set WG=$2
 set run=$3
-set capture=$4
+set target=$4
+if (! -d tmp/$WG/$run) exit 0
+    
+echo "wg4b.gene_sponge.tcsh $phase $WG $run $target"
+if ($phase == noCapture) goto phaseNoCapture 
+goto phaseCapture
 
-# (f r ns)
+#####################################################
+
+phaseNoCapture:
+
+set tt=tmp/$WG/$run/$target.$phase.tsf
+echo "# Gene\tRun\tf\tchrom\ta1\ta2\tkb" > $tt
 foreach chrom ($chromSetAll)
-  foreach fr (f r  ns)
-    if (-e   tmp/$WG/$run/$chrom/wg4b.$target.$fr.any_genebox.$capture.sponge.count) continue
-    echo "$WG $target $run $chrom"
-    set w=toto
-    if ($fr == ns) then
-      if (0 && -e tmp/$WG/$run/$chrom/R.chrom.frns.pp.BF.gz && -e tmp/$WG/$run/$chrom/R.chrom.frns.u.BF.gz) then
-        set w="tmp/$WG/$run/$chrom/R.chrom.frns.pp.BF.gz,tmp/$WG/$run/$chrom/R.chrom.frns.u.BF.gz"
-      else if (-e  tmp/$WG/$run/$chrom/R.chrom.frns.u.BF.gz) then 
-        set w="tmp/$WG/$run/$chrom/R.chrom.frns.u.BF.gz"
-      else if (-e tmp/$WG/$run/$chrom/R.chrom.frns.pp.BF.gz) then
-        set w="tmp/$WG/$run/$chrom/R.chrom.frns.pp.BF.gz"
-      endif
-    else
-      if (0 && -e tmp/$WG/$run/$chrom/R.chrom.pp.$fr.BF.gz && -e  tmp/$WG/$run/$chrom/R.chrom.u.$fr.BF.gz) then
-        set w="tmp/$WG/$run/$chrom/R.chrom.pp.$fr.BF.gz,tmp/$WG/$run/$chrom/R.chrom.u.$fr.BF.gz"
-      else if (-e tmp/$WG/$run/$chrom/R.chrom.u.$fr.BF.gz) then
-        set w="tmp/$WG/$run/$chrom/R.chrom.u.$fr.BF.gz"
-      else if (-e tmp/$WG/$run/$chrom/R.chrom.pp.$fr.BF.gz) then
-        set w="tmp/$WG/$run/$chrom/R.chrom.pp.$fr.BF.gz"
-      endif
-    endif
-    if ($w == toto) continue
-  
-    geneelements -wiggle $w -sponge 1 -spongeFile tmp/METADATA/$target.$fr.any_genebox.$capture.sponge  -sxxChromosome $chrom -run $run >  tmp/$WG/$run/$chrom/wg4b.$target.$fr.any_genebox.$capture.sponge.count
+  foreach fr (f r)
+    set w=tmp/$WG/$run/$chrom/R.chrom.u.$fr.BF.gz
+    if (! -e $w) continue
+    set spongeF=tmp/METADATA/gtf.$target.$fr.sponge.gz
+    if (! -e $spongeF) continue
+    geneelements -wiggle $w -sponge 1 -spongeFile $spongeF  -sxxChromosome $chrom -run $run | gawk -F '\t' '/^level_1/{r=$2;g=$3;c=$5;a1=$6;a2=$7;z=$11/1000.0;printf("%s\t%s\ttiif\t%s\t%d\t%d\t%.1f\n",g,r,c,a1,a2,z);}' >> $tt
   end
 end
 
+exit 0
 
-echo "\nMerge gene counts from all chromosomes "
-foreach fr (f r ns)
-  if ( -e  tmp/$WG/wg4b.$run/$target.$fr.any_genebox.$capture.sponge.count77) continue
-  echo -n '## ' > tmp/$WG/$run/wg4b.$target.$fr.any_genebox.$capture.sponge.count
-  date >>  tmp/$WG/$run/wg4b.$target.$fr.any_genebox.$capture.sponge.count
-  cat  tmp/$WG/$run/*/$target.$fr.any_genebox.$capture.sponge.count | head -4 | tail -1 >> tmp/$WG/$run/wg4b.$target.$fr.any_genebox.$capture.sponge.count
-  foreach chrom ($chromSetAll)
-    if (-e  tmp/$WG/$run/$chrom/wg4b.$target.$fr.any_genebox.$capture.sponge.count) then
-      cat   tmp/$WG/$run/$chrom/wg4b.$target.$fr.any_genebox.$capture.sponge.count | gawk '/^level_10/{next;}/^level_1/{print}' >>  tmp/$WG/$run/wg4b.$target.$fr.any_genebox.$capture.sponge.count
-    endif
+#####################################################
+
+phaseCapture:
+
+
+set tt=tmp/$WG/$run/$target.$phase.tsf
+echo "# Gene\tRun\tf\tchrom\ta1\ta2\tkb" > $tt
+foreach chrom ($chromSetAll)
+  foreach fr (f r)
+    set w=tmp/$WG/$run/$chrom/R.chrom.u.$fr.BF.gz
+    if (0 && -e tmp/$WG/$run/$chrom/R.chrom.frns.pp.BF.gz)  w="tmp/$WG/$run/$chrom/R.chrom.frns.pp.BF.gz"
+    if (! -e $w) continue
+    set spongeF=tmp/METADATA/gtf.$target.$fr.sponge.gz
+    set spongeF=tmp/METADATA/$target.$fr.any_genebox.$capture.sponge
+    if (! -e $spongeF) continue
+    geneelements -wiggle $w -sponge 1 -spongeFile $spongeF  -sxxChromosome $chrom -run $run | gawk -F '\t' '/^level_1/{r=$2;g=$3;c=$5;a1=$6;a2=$7;z=$11/1000.0;printf("%s\t%s\ttiif\t%s\t%d\t%d\t%.1f\n",g,r,c,a1,a2,z);}' >> $tt
   end
 end
-echo tmp/$WG/$run/wg4b.$target.$fr.any_genebox.$capture.sponge.count
+
 exit 0
 
 #####################################################
 ## CAPTURE draft scripts, to be moved in their own wscript when ready
 # capture wiggle stats extracted from SPONGE
            tmp/WIGGLERUN/Nanopore_ROCR3_B-F1+2/wg4b.av.ns.any_genebox.R1.sponge.count
-
+set tt=tmp/$WG/$run/$target.$phase.tsf
 phaseCumul:
 
 set target=`echo $Etargets | gawk '{print $1; last}'`

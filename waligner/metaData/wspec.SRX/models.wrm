@@ -21,6 +21,7 @@
          Compare ?Compare XREF Project
 
 ?SRR  Titles  Title UNIQUE ?Text
+              Manual_title  ?Text
               Sorting_title  UNIQUE ?Text
               SRP ?SRP XREF SRR @T
               Magic_author UNIQUE ?Text
@@ -71,7 +72,9 @@
       Quality  Cov // genes  index_10 > 4000 AND index_18 < 800 (eliminate tiny runs, small RNAs, and targetted runs)
                Recons Recons_str
       Origin Date_received UNIQUE DateType  Text    
+             Collection_date UNIQUE DateType    
              Submission_date UNIQUE DateType    
+             Release_date UNIQUE DateType    
       Taxonomy Archea      Text Text UNIQUE Float
                Bacteria    Text Text UNIQUE Float
                Eukaryota   Text Text UNIQUE Float
@@ -81,6 +84,8 @@
       Sample_builder Biosample UNIQUE ?Biosample XREF SRR @T  // Precise sample identifier, please document the sample object (see below)             
                      Sex Male    UNIQUE Text
                          Female  UNIQUE Text
+                         Hermaphrodite   UNIQUE Text 
+                         Males_and_females
                          Mixed_sex UNIQUE Text  // pooling males and females
                      Sample_name ?Text
                      Library_name ?Text
@@ -109,22 +114,32 @@
                             Respiratory   UNIQUE ?Systm XREF Respiratory    UNIQUE ?Text
                             Urogenital   UNIQUE ?Systm XREF Urogenital   UNIQUE ?Text
                      Stage  Embryo UNIQUE ?Text
-                            Any_larva UNIQUE ?Text
+                            Mixed_embryo UNIQUE ?Text
+                            Fetal  UNIQUE ?Text
+                            Larva UNIQUE ?Text 
+                            Any_larva UNIQUE ?Text //Obsolete
+                            Mixed_larvae UNIQUE ?Text
+                            EE UNIQUE ?Text
+                            LE UNIQUE ?Text
                             L1 UNIQUE ?Text
                             L2 UNIQUE ?Text
                             L3 UNIQUE ?Text
                             L4 UNIQUE ?Text
+                            Molt UNIQUE ?Text
                             Dauer UNIQUE ?Text
                             Pupa UNIQUE ?Text
                             Adult UNIQUE  ?Text
-                            Mixed_stages UNIQUE   UNIQUE ?Text
-                            Age UNIQUE Text 
+                            YA UNIQUE ?Text
+                            OA UNIQUE ?Text
+                            Mixed_stages UNIQUE ?Text
+                            Age Text 
                             No_stage  // non applicable, example in Cell lines samples
                      Bio Control UNIQUE  ?Text
+                         Replicate UNIQUE  ?Text
                          Treatment UNIQUE  ?Text
-                         Genes Gene ?Gene XREF SRR UNIQUE ?Text
-                               Gene_down ?Gene XREF SRR_down UNIQUE ?Text
-                               Gene_up ?Gene XREF SRR_up UNIQUE ?Text
+                         Genes Gene ?Gene XREF SRR  ?Text
+                               Gene_down ?Gene XREF SRR_down  ?Text
+                               Gene_up ?Gene XREF SRR_up  ?Text
                                Gene_ectopic ?Gene XREF SRR_ectopic UNIQUE ?Text
                                Marker_gene ?Gene XREF SRR_marker UNIQUE ?Text
                                Driver_gene ?Gene XREF SRR_driver UNIQUE ?Text
@@ -133,15 +148,19 @@
                          Strain ?Strain
       Author_builder Center_name ?Author
       Reference ?Paper XREF SRR
-      Nucleic_Acid_Extraction RNA Unspecified_RNA  UNIQUE ?Text
-                                  polyA  UNIQUE ?Text // good 
-                                  Nascent_RNA  UNIQUE  ?Text 
-                                  Total_RNA  UNIQUE ?Text 
+      Nucleic_Acid_Extraction RNA Total_RNA  UNIQUE ?Text 
+                                  polyA  UNIQUE ?Text // good
+                                  dRNA  UNIQUE ?Text // good 
+                                  scRNA UNIQUE ?Text // single cell
                                   Small_RNA  UNIQUE ?Text
+                                  Nascent_RNA  UNIQUE  ?Text 
                                   Cap_CAGE_RACE  UNIQUE ?Text
                                   DGE  UNIQUE ?Text
                                   RNA_modification   UNIQUE  ?Text  //for methylation or other analyses  
+                                  Unspecified_RNA  UNIQUE ?Text
                               Targeted    RIP_CLIP UNIQUE ?Text
+                                          RIL  UNIQUE ?Text // RNA Interacting Ligation
+                                          Ends  UNIQUE ?Text
                                           Ribosome_profiling  UNIQUE ?Text
                                           Gene_selection  UNIQUE ?Text
                               Genome  Whole_genome    UNIQUE  ?Text  
@@ -157,14 +176,16 @@
                               Nucleic_prep_author ?Author
                               Normalized UNIQUE ?Text  // seem to belong to Library Danielle 
       Annotation_problem ?Text
-      sraNucleic_Acid_Extraction  sraRNA sraUnspecified_RNA ?Text
-                                         sraPolyA  UNIQUE ?Text // good 
-                                         sraNascent_RNA  UNIQUE ?Text 
-                                         sraTotal_RNA ?Text 
+      sraNucleic_Acid_Extraction  sraRNA sraTotal_RNA ?Text 
+                                         sraPolyA  UNIQUE ?Text // good
+                                         sradRNA  UNIQUE ?Text // good 
+                                         sraScRnaPolyA  UNIQUE ?Text // good 
                                          sraSmall_RNA ?Text
+                                         sraNascent_RNA  UNIQUE ?Text 
                                          sraCap_CAGE_RACE ?Text
                                          sraDGE ?Text
                                          sraRNA_modification   ?Text  //for methylation or other analyses  
+                                         sraUnspecified_RNA ?Text
                                   sraTargeted       sraRIP_CLIP UNIQUE ?Text
                                                     sraRibosome_profiling  UNIQUE ?Text
                                                     sraGene_selection ?Text
@@ -188,6 +209,8 @@
       Sequencing  Machine UNIQUE Helicos UNIQUE Text   
                                  Illumina UNIQUE Text   // the machine names are used in LIMITS to get the list of previously known adaptors for that machine, 
                                  SOLiD UNIQUE Text      // please do not change the spelling
+                                 DNBSEQ UNIQUE Text
+                                 Ultima UNIQUE Text
                                  Roche_454 UNIQUE Text
                                  Ion_Torrent UNIQUE Text
                                  PGM UNIQUE Text        // Lif personal genome machine, successor of ion torrent 
@@ -218,38 +241,6 @@
       Annotated_strandedness UNIQUE Stranded UNIQUE Forward UNIQUE Text // f1 forward, f2-3 reverse
                                                     Reverse UNIQUE Text // f1 reverse, f2-3 forward
                                     nonStranded
-      ZhenXia Z_Total_reads UNIQUE Float                 // special paragraph to integrate the ZhenXia data for the Brian Oliver droso project june 2016
-              Z_mapping  Z_unmapped_reads    UNIQUE Float 
-                         Z_non_unique        UNIQUE Float 
-                         Z_unique            UNIQUE Float 
-                         Z_spliced           UNIQUE Float 
-                         Z_unspliced         UNIQUE Float 
-                         Z_sponge ?Target    UNIQUE Float // ambiguous no_feature genes intergenic
-                         Z_nh_Ali ?Target    UNIQUE Float // ERCC mRNA ncRNA pseudogenes rRNA snoRNA snRNA tRNA
-              Z_expressed_genes UNIQUE Int
-              Z_strand  UNIQUE Float // failed f r " reprt f /f+r  ignoring the failed
-	      Z_TIN UNIQUE Float  // then jump 5 columns
-              Z_correl  UNIQUE Float  // correlation of gene expression relative to groups
-              Z_annot Z_sex UNIQUE Text       // column 27
-                      Z_dev_stage UNIQUE Text // column 28
-                      Z_tissue UNIQUE Text    // column 29
-                      Z_genotype UNIQUE Text  // column 30
-                      Z_cell_type UNIQUE Text  // column 31
-                      Z_sample_type  UNIQUE Text  // column 34
-                      Z_center_name  UNIQUE Text  // column 25
-      Brian_annot     B_sex UNIQUE Text       // column 27
-                      B_dev_stage UNIQUE Text // column 28
-                      B_age_stage UNIQUE Text // column 28
-                      B_tissue UNIQUE Text    // column 29
-                      B_background_genotype UNIQUE Text  // column 30
-                      B_treatment_perturbagen UNIQUE Text
-                      B_treatment_conditions UNIQUE Text
-                      B_sample_focus UNIQUE Text
-                      B_cell_type UNIQUE Text  // column 31
-                      B_sample_type  UNIQUE Text  // column 34
-                      B_tissue_position UNIQUE Text
-                      B_FBbt UNIQUE Text
-                      B_notes_flags UNIQUE Text
       FB FBcv ?FBvoc @Title
          FBbt ?FBvoc @Title
          FBdv ?FBvoc @Title
@@ -268,8 +259,8 @@
        Construction_protocol UNIQUE ?Text
        Design UNIQUE ?Text
        Submitted_by UNIQUE ?Author
-     SRR ?SRR XREF SRX
-     SRP ?SRP XREF SRX
+     SRR ?SRR XREF SRX @Title
+     SRP ?SRP XREF SRX @Title
      Sequencing Spots  UNIQUE Int UNIQUE Text UNIQUE Text UNIQUE Text UNIQUE Int UNIQUE Text  UNIQUE Text UNIQUE Text UNIQUE Int   // <#spots> bases_in_SRA <Mb> Average_length  <n> Insert_size <n> +- <delta> spots_with_mate <n>
 
 ?SRP T Title UNIQUE ?Text
@@ -280,25 +271,30 @@
        Comment ?Text
        Identifier ?Text
        GEO ?GEO XREF SRP @Author
-     SRR ?SRR XREF SRP
-     SRX ?SRX XREF SRP
+     SRR ?SRR XREF SRP @Title
+     SRX ?SRX XREF SRP @Title
 
 ?GEO Author UNIQUE ?Author
+     T ?Text
+     SRP ?SRP XREF GEO @Title
+     Sample ?Biosample XREF GEO
+     Reference ?Paper XREF GEO 
      Comment ?Text
-     SRP ?SRP XREF GEO
-     Reference ?Paper XREF GEO
-      
+     
 ?Medline Paper  ?Paper XREF Medline_acc
          Paper_PMID // ?Paper XREF PMID NO XREF in human
          Paper_CGCID  ?Paper XREF CGCID
 
 ?Biosample SRR ?SRR XREF Biosample @Title
+           GEO ?Geo XREF Sample
            Comment ?Text
            T Magic_sample UNIQUE ?Text
              Magic_sample2 UNIQUE ?Text
              Title   UNIQUE ?Text
              Sex Male    UNIQUE Text
                  Female  UNIQUE Text
+                 Males_and_females
+                 Hermaphrodite   UNIQUE Text
              Species ?Species @Title
              Tissue ?Tissue  XREF Biosample
              Identifier ?Identifier  XREF Biosample Text UNIQUE Text

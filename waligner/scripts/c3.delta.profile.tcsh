@@ -1,7 +1,7 @@
 #!bin/tcsh -f
 set run=$1
 
-if (! -e  tmp/Profiles/$run/readsBeforeAlignment.delta.txt33) then 
+if (! -e  tmp/Profiles/$run/readsBeforeAlignment.delta.txt) then 
   echo "preparing tmp/Profiles/$run/readsBeforeAlignment.delta.txt"
   gunzip -c Fastc/$run/*.*.fastc.gz | bin/dna2dna  -I fastc -minEntropy $minEntropy  -plot 1000000 -o tmp/Profiles/$run/readsBeforeAlignment.1M 
 
@@ -15,7 +15,7 @@ if (! -e  tmp/Profiles/$run/readsBeforeAlignment.delta.txt33) then
 endif
 
 
-if (! -e  tmp/Profiles/$run/readsAfterAlignment.delta.txt33) then 
+if (0 && ! -e  tmp/Profiles/$run/readsAfterAlignment.delta.txt) then 
   echo "preparing  tmp/Profiles/$run/readsAfterAlignment.delta.txt"
   foreach lane (`cat Fastc/$run/LaneList`)
     bin/bestali -aliProfile -i tmp/COUNT/$lane.hits.gz -gzo -o tmp/COUNT/$lane 

@@ -76,13 +76,15 @@ _DDtUpdate -g TEXT_SCROLL -t "Update" -x .65 -y .04 -w 0.6 -hei 0.6 \
 _DDtLongText  -g TEXT_SCROLL -t "Text" - y 0.3 -w 0.75 -height 0.68 \
 	 -help "Long-Text"
 
-_DDtQuery   -g TEXT_SCROLL -t "Query" -w .65  -height 0.35 -help Query
+_DDtQuery   -g TEXT_SCROLL -t "Query" -w 1.88  -height 0.35 -help Query
 
 _DDtQueryBuilder   -g TEXT_SCROLL -t "Query, by Gary Aochi" -w .73  -height 0.35 -help GaryQuery
 
 _DDtQueryByExample   -g TEXT_SCROLL -t "Query by Example" -w .55  -height 0.35 -help Query_By_Example
 
-_DDtSpreadSheet   -g TEXT_FULL_SCROLL -t "Table_Maker" -w .90  -height 0.75 -help Table_Maker
+_DDtSpreadSheet   -g TEXT_FULL_SCROLL -t "Table_Maker" -w 1.05  -height 0.85 -help Table_Maker
+
+_DDtBql   -g TEXT_FULL_SCROLL -t "BQL table queries" -w .90  -height 0.75 -help Bql
 
 _DDtMULTIMAP   -g TEXT_FIT -t "Multi-map" -w 1.15  -height 0.65 -help Multi_Map
 

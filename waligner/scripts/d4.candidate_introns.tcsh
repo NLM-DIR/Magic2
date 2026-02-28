@@ -22,7 +22,7 @@ set group=$1
 if(! -e  tmp/OR/$group/d4.de_uno.txt.gz) then
   echo ' ' > tmp/OR/$group/d4.de_uno.txt.1
   set ok=0
-  foreach run (`cat MetaDB/$MAGIC/g2r MetaDB/$MAGIC/r2sublib |  gawk -F '\t' '{if($1==g)print $2;}' g=$group  | sort -u`) 
+  foreach run (`cat MetaDB/$MAGIC/g2r MetaDB/$MAGIC/r2sublib |  gawk -F '\t' '{if($1==g)print $2;}END{print g}' g=$group  | sort -u`) 
     if (-e  tmp/OR/$run/d1.$run.de_uno.txt.gz) then
       gunzip -c tmp/OR/$run/d1.$run.de_uno.txt.gz | gawk -F '\t' '/^INTRON/{a1=$5;a2=$7;if(a1<a2){a1++;a2--;}else{a1--;a2++;}z=$1 "\t" $2 "\t" $3 "\t0\t" a1 "\t" $6 "\t" a2 "\t0\t" $9"\t" $10 ; n11[z] += 0+$11 ; n12[z] += 0+$12;}END{for (z in n11)printf ("%s\t%d\t%d\n",z,n11[z],n12[z]) ;}' | gawk -F '\t' '{printf("%s\t%09d\t%09d\t%d\t%s\t%d\n",$3,$5,$7,$11,$9, $10)}' >>  tmp/OR/$group/d4.de_uno.txt.1
       set ok=1
@@ -38,7 +38,7 @@ if(! -e  tmp/OR/$group/d4.de_uno.txt.gz) then
 endif
   
 ## run case
-if (-e  tmp/OR/$group/d1.$group.de_uno.txt.gz && ! -e  tmp/OR/$group/d4.de_uno.txt.gz) then
+if (0 && -e  tmp/OR/$group/d1.$group.de_uno.txt.gz && ! -e  tmp/OR/$group/d4.de_uno.txt.gz) then
     gunzip -c tmp/OR/$group/d1.$group.de_uno.txt.gz | gawk -F '\t' '/^INTRON/{a1=$5;a2=$7;if(a1<a2){a1++;a2--;} else{a1--;a2++;} z=$1 "\t" $2 "\t" $3 "\t0\t" a1 "\t" $6 "\t" a2 "\t0\t" $9"\t" $10 ; n11[z] += 0+$11 ; n12[z] += 0+$12;}END{for (z in n11)printf ("%s\t%d\t%d\n",z,n11[z],n12[z]) ;}' | gawk -F '\t' '{printf("%s\t%09d\t%09d\t%d\t%s\t%d\n",$3,$5,$7,$11,$9, $10)}' | gzip >  tmp/OR/$group/d4.de_uno.txt.gz
 endif
 
@@ -48,7 +48,7 @@ if(! -e  tmp/OR/$group/d4.known.txt.gz) then
   echo ' ' > tmp/OR/$group/d4.known.txt.1
   set ok=0
   if ($USEMAGICBLAST == 1) set ok=1  
-  foreach run (`cat MetaDB/$MAGIC/g2r MetaDB/$MAGIC/r2sublib |  gawk -F '\t' '{if($1==g)print $2;}' g=$group  | sort -u`) 
+  foreach run (`cat MetaDB/$MAGIC/g2r MetaDB/$MAGIC/r2sublib |  gawk -F '\t' '{if($1==g)print $2;}END{print g}' g=$group  | sort -u`) 
     if (-e  tmp/INTRONRUNS/$run/$run.u.intronSupport.counts.gz) then
       gunzip -c tmp/INTRONRUNS/$run/$run.u.intronSupport.counts.gz >>  tmp/OR/$group/d4.known.txt.1
       set ok=1
@@ -82,17 +82,23 @@ if (! -e tmp/OR/SMAGIC.any.introns) then
   mv tmp/OR/$MAGIC.any.introns.1  tmp/OR/$MAGIC.any.introns
 endif
 
+# flag the de.uno introns donor acceptor as doubtfull
+if (-e  tmp/OR/$group/d4.de_uno.txt) then
+  set toto=tmp/OR/$group/d4.de_uno.txt
+  # count the donors flag non gt_ag non ct_ac
+  cat $toto ZZZZZ $toto | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{c=$1;a1=$2+0;a2=$3+0;n=$4+0;f=$5;if (zz<1){if (f=="ct_ac" || f=="gt_ag"){nn[c,a1]+=n;nn[c,a2]+=n;}next;}if (f=="ct_ac" || f=="gt_ag"){print ; next;}for (i=-2;i<=2;i++){n1=nn[c,a1+i];n2=nn[c,a2+i];if (0) print i,a1,n,n1,n2;if(n1>k*n || n2 > k*n){printf("%s\t*\n",$0);next;}}print;}' k=5 > $toto.1
+  \mv $toto.1 $toto
+endif
 
 if (-e  tmp/OR/$group/d4.de_uno.txt) then
   set minS=`cat tmp/OR/$group/d4.de_uno.txt | gawk -F '\t' '{nn+=$4; n[$4]+=$4;}END{for(k in n)printf("%d\t%d\t%s\n",k,n[k],nn);}' | sort -k 1,1nr | gawk -F '\t' '{k=$1;n+=$2;nn=$3;if(n>.99*nn){if (k > 10) k = 10 ; if (k < 3) k = 3 ; print k;exit;}}'`
   echo -n '// ' > tmp/OR/$group/d4.candidate_introns.ace
   date >>  tmp/OR/$group/d4.candidate_introns.ace
   foreach target ($Etargets)
-    cat  tmp/METADATA/$target.[fr].introns ZZZZZ tmp/OR/$group/d4.de_uno.txt | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){a1=$2+0;a2=$3+0;av[$1,a1+0,a2+0] =1 ; nAv++; next; }}{if($2+0==0)next;if(av[$1,0+$2,0+$3]==1){inAv++;n4in+=$4;}else {if($4<minS)next; if($5 == "gt_ag" || $5 == "gt_ag") { outGtAg++; outAv++;n4Out+=$4;}}nn++;}END{if(nn==0)nn=1;if(nAv==0)nAv=1;sp=inAv/nn;sn=inAv/nAv;printf("Ali %s\n-D Candidate_introns uno\n-D Candidate_introns %s\nCandidate_introns %s %d In_%s %d Not_in_%s %d  new_gt_ag %d Specificity %.2f Sensitivity %.2f Known_Support %d New_support %d New_minS %d\n\n", group, target,  target, nn, target, inAv, target, outAv, outGtAg, 100*sp, 100*sn, n4in, n4Out, minS) ;}' target=$target group=$group minS=$minS >> tmp/OR/$group/d4.candidate_introns.ace
+    cat  tmp/METADATA/$target.[fr].introns ZZZZZ tmp/OR/$group/d4.de_uno.txt | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){a1=$2+0;a2=$3+0;av[$1,a1+0,a2+0] =1 ; nAv++; next; }}{if ($7=="*")next;if($2+0==0)next;min1=factor*minS;if($5 == "gt_ag" || $5 == "gt_ag")min1=minS;if($4<min1)next;nn++;if(av[$1,0+$2,0+$3]==1){ if($5 == "gt_ag" || $5 == "gt_ag") { inGtAg++;}inAv++;n4in+=$4;}else { if($5 == "gt_ag" || $5 == "gt_ag") { outGtAg++;} outAv++;n4Out+=$4;}}END{if(nn==0)nn=1;if(nAv==0)nAv=1;sp=inAv/nn;sn=inAv/nAv;printf("Ali %s\n-D Candidate_introns uno\n-D Candidate_introns %s\n",group,target);if (0){printf("Candidate_introns %s %d:%d:%d ",target, nn,inGtAg+outGtAg,nn-inGtAg-outGtAg); printf(" In_%s %d:%d:%d ",target, inAv, inGtAg,inAv-inGtAg); printf ("Not_in_%s %d:%d:%d ", target, outAv, outGtAg, outAv - outGtAg); printf (" Specificity %.2f Sensitivity %.2f Known_Support %d New_support %d New_minS %d\n\n", 100*sp, 100*sn, n4in, n4Out, minS) ;}else printf("Candidate_introns %s %d In_%s %d Not_in_%s %d  new_gt_ag %d Specificity %.2f Sensitivity %.2f Known_Support %d New_support %d New_minS %d\n\n", target, inAv+outAv, target, inAv, target, outAv, outGtAg, 100*sp, 100*sn, n4in, n4Out, minS);}' target=$target group=$group minS=$minS factor=10 >> tmp/OR/$group/d4.candidate_introns.ace
   end
-  cat  tmp/OR/$MAGIC.any.introns ZZZZZ tmp/OR/$group/d4.de_uno.txt | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){a1=$2+0;a2=$3+0;av[$1,a1+0,a2+0] =1 ; nAv++; next; }}{if($2+0==0)next;if(av[$1,0+$2,0+$3]==1){inAv++;n4in+=$4;}else {if($4<minS)next; if($5 == "gt_ag" || $5 == "gt_ag") { outGtAg++; outAv++;n4Out+=$4;}}nn++;}END{if(nn==0)nn=1;if(nAv==0)nAv=1;sp=inAv/nn;sn=inAv/nAv;printf("Ali %s\n-D Candidate_introns uno\n-D Candidate_introns %s\nCandidate_introns %s %d In_%s %d Not_in_%s %d  new_gt_ag %d Specificity %.2f Sensitivity %.2f Known_Support %d New_support %d New_minS %d\n\n", group, target,  target, nn, target, inAv, target, outAv, outGtAg, 100*sp, 100*sn, n4in, n4Out, minS) ;}' target=Any group=$group minS=$minS >> tmp/OR/$group/d4.candidate_introns.ace
-
-  gzip tmp/OR/$group/d4.candidate_introns.ace
+  cat tmp/OR/$MAGIC.any.introns ZZZZZ tmp/OR/$group/d4.de_uno.txt | gawk -F '\t' '/^ZZZZZ/{zz++;next;}{if(zz<1){a1=$2+0;a2=$3+0;av[$1,a1+0,a2+0] =1 ; nAv++; next; }}{if ($7=="*")next;if($2+0==0)next;min1=factor*minS;if($5 == "gt_ag" || $5 == "gt_ag")min1=minS;if($4<min1)next;nn++;if(av[$1,0+$2,0+$3]==1){ if($5 == "gt_ag" || $5 == "gt_ag") { inGtAg++;}inAv++;n4in+=$4;}else { if($5 == "gt_ag" || $5 == "gt_ag") { outGtAg++;} outAv++;n4Out+=$4;}}END{if(nn==0)nn=1;if(nAv==0)nAv=1;sp=inAv/nn;sn=inAv/nAv;printf("Ali %s\n-D Candidate_introns uno\n-D Candidate_introns %s\n",group,target);if (0){printf("Candidate_introns %s %d:%d:%d ",target, nn,inGtAg+outGtAg,nn-inGtAg-outGtAg); printf(" In_%s %d:%d:%d ",target, inAv, inGtAg,inAv-inGtAg); printf ("Not_in_%s %d:%d:%d ", target, outAv, outGtAg, outAv - outGtAg); printf (" Specificity %.2f Sensitivity %.2f Known_Support %d New_support %d New_minS %d\n\n", 100*sp, 100*sn, n4in, n4Out, minS) ;}else printf("Candidate_introns %s %d In_%s %d Not_in_%s %d  new_gt_ag %d Specificity %.2f Sensitivity %.2f Known_Support %d New_support %d New_minS %d\n\n", target, inAv+outAv, target, inAv, target, outAv, outGtAg, 100*sp, 100*sn, n4in, n4Out, minS);}' target=Any group=$group minS=$minS factor=10 >> tmp/OR/$group/d4.candidate_introns.ace
+ 
 endif
 
 

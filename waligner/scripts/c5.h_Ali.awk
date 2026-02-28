@@ -12,6 +12,10 @@ BEGIN {
   t = m ;  nt++; it = nt ;t2i[t] = nt ; i2t[nt]=t ; tt2i["seqc"] = it ; i2nam[nt] = "Magic_reannotation" ; ok[it] = 1 ;
   m = "ET_av" ;
   t = m ;  nt++; it = nt ;t2i[t] = nt ; i2t[nt]=t ; tt2i["av"] = it ; i2nam[nt] = "AceView_2011" ;
+  m = "FT_Eco" ;
+  t = m ;  nt++; it = nt ;t2i[t] = nt ; i2t[nt]=t ; tt2i["av"] = it ; i2nam[nt] = "Ecocyc" ;
+  m = "FT_Tjaden" ;
+  t = m ;  nt++; it = nt ;t2i[t] = nt ; i2t[nt]=t ; tt2i["av"] = it ; i2nam[nt] = "Tjaden" ;
   m = "FT_av2008" ;
   t = m ;  nt++; it = nt ;t2i[t] = nt ; i2t[nt]=t ; tt2i["av"] = it ; i2nam[nt] = "AceView_2008" ;
   m = "FT_extra" ;

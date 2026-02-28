@@ -73,7 +73,7 @@ _DDtUpdate -g TEXT_SCROLL -t "Update" -x .65 -y .04 -w 0.6 -hei 0.6 \
 _DDtLongText  -g TEXT_SCROLL -t "Text" - y 0.3 -w 0.75 -height 0.68 \
 	 -help "Long-Text"
 
-_DDtQuery   -g TEXT_SCROLL -t "Query" -w .65  -height 0.35 -help Query
+_DDtQuery   -g TEXT_SCROLL -t "Query" -w 1.88  -height 0.35 -help Query
 
 _DDtQueryBuilder   -g TEXT_SCROLL -t "Query, by Gary Aochi" -w .73  -height 0.35 -help GaryQuery
 

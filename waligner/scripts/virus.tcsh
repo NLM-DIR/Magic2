@@ -70,7 +70,7 @@ endif
   
 ######
 
-# HACK relaign because we changed the bacteria list 2020-04-20
+# HACK realign because we changed the bacteria list 2020-04-20
 if (0) then
   foreach run (`cat MetaDB/$MAGIC/RunList `)
     if (! -d tmp/BACTERIA/$run) mkdir tmp/BACTERIA/$run
@@ -299,6 +299,10 @@ cat tmp/vir2.high.1 tmp/vir2.mid.1 tmp/vir2.low.1 > RESULTS/Microbiome/$MAGIC.vi
   cat toto |  gawk -F '\t' '{if(length($1)<2)next;}{if($1!=r){n=0;r=$1;printf("\nAli %s\n-D High_genes microbe\n-D High_genes bacteria\n",$1);}if(n>5)next;n++;printf("High_genes microbe %s %s \"%s\"\n",$2,$3,$4);}END{printf("\n");}' >> $toto4
   cat $toto2a | gawk -F '\t' '/^#Run/{for(i=2;i<=NF;i++) {r[i]=$i;if($i=="#Run")iMin=i+2;}next;}/^#/{next;}{if($6=="Transposon"){for(i=iMin;i<=NF;i++)printf("%s\t%s\t%s\t%s\n",r[i],$1,$i,$5);}}' | sort -k 1,1 -k 3,3nr > toto
   cat toto |  gawk -F '\t' '{if(length($1)<2)next;}{if($1!=r){n=0;r=$1;printf("\nAli %s\n-D High_genes transposon\n",$1);}if(n>5)next;n++;printf("High_genes transposon %s %s \"%s\"\n",$2,$3,$4);}END{printf("\n");}' >> $toto4
+
+  set toto=tmp/BACTERIA/$MAGIC.counts.ace
+  cat $toto | gawk '/^Gene/{g=$2;next;}/^Run_U/{r=$2;kb=$8;if(kb>1)printf("%s\t%s\t%s\n",r,g,kb);}'| sort -k 1,1 -k3,3nr | gawk -F '\t' '{r=$1;g=$2;kb=$3;if(r!=old)n=0;n++;if(n<5)printf("Ali %s\nHigh_genes BACTERIA %s %.3f Mb\n\n",r,g,kb/1000.0);}' >> $toto4
+
 
 # collate the counts
   foreach run (`cat MetaDB/$MAGIC/RunList `)

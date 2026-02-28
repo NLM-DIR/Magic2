@@ -1,4 +1,4 @@
-BEGIN { papers = "Reference" ; }
+BEGIN { papers = "Reference" ; TTT = "" ; samples = ""; }
 { gsub (/\"/,"\\\"",$0); }
 { gsub (/http:\//,"http:\\/",$0) ;}
 
@@ -97,6 +97,25 @@ BEGIN { papers = "Reference" ; }
     }
 }
 
+/>Title</{inExpType=1;next;}
+/>Summary</{inExpType=1;next;}
+/>Overall design</{inExpType=1;next;}
+/>Experiment type</{inExpType=1;next;}
+{ if(inExpType==1)
+    {
+	i = index($0,">") ;
+	if (i>0)
+	{
+	    z = substr($0,i+1) ;
+	    j = index(z,"<") ;
+	    if (j > 1) { TTT = TTT "T \"" substr(z,1,j-1) "\"\n" ;}
+	}
+	inExpType = 0 ;
+    }
+}
+
+/acc=GSM/{i=index($0,"acc=GSM");z=substr($0,i+4,50);j=index(z,"\"");samples=samples "Sample " substr(z,1,j-2) "\n";}
+
 /<\/tr>/{ inAuth = 0 ; inOrg = 0 ;  inCountry = 0 ; inCity = 0 ; }
 
 /pubmed_id/ {
@@ -137,5 +156,9 @@ END {
 	printf("Author \"%s.\"\n", z) ;
    if (length (papers) > 10) 
        print papers ;
+   if (length (samples) > 10) 
+       printf("%s", samples) ;
+   if (length (TTT) > 10) 
+       printf("%s", TTT) ;
     printf ("\n") ;
 }
