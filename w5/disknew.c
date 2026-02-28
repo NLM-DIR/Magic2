@@ -1280,6 +1280,8 @@ void diskblockwrite (BP bp)
 	     (unsigned long)d, (int)partition, (int)adrPartition, (unsigned long)pos);
   
 #ifdef ACEDB4
+extern void swapSuperBlock(BLOCKP bp) ;
+
   { static BLOCK copyBlock;
   if (swapData)
     { memcpy (&copyBlock, bp, sizeof (BLOCK));

@@ -304,6 +304,7 @@ BOOL lexTableRead(KEY key)
 static void lexReadTable(int t)
 { 
   char lexBuffer [4096] ;
+  memset (lexBuffer, 0, sizeof (lexBuffer)) ;
   if (lexIsRead[t])
     return ;
   lexIsRead[t] = TRUE ;
@@ -338,42 +339,63 @@ static void lexReadTable(int t)
 
 void lexRead (void)
 { 
+  BOOL debug = FALSE ;
   char lexBuffer [64] ;
-  KEY key ;
+  KEY key = 0 ;
   /* table 0 is the tags, created in lexDefineTags() and dynamically
      table 1 is created by hand
      table 2 is the session chooser
      table 3 is the Voc lexique, it MUST be reinitialised
      table 4 is the BAT chooser
   */
-
+  memset (lexBuffer, 0, sizeof (lexBuffer)) ;
+  if (debug)
+    fprintf (stderr, "lexRead1\n") ;
   if (lexword2key ("_voc3", &key, _VGlobal) && iskeyold(key))
     { lexIsRead[_VVoc] = FALSE ; 
       lexReadTable(_VVoc) ;      
     }
 
+  if (debug)
+    fprintf (stderr, "lexRead2\n") ;
   lexReadTable(_VBat) ;
 
   lexIsRead[_VDisplay] = FALSE ;
   lexIsRead[_VClass] = FALSE ;
 
 /* We now recover the correct values of the tags */
+  if (debug)
+    fprintf (stderr, "lexRead3\n") ;
   if (lexword2key ("_voc0", &key, _VVoc) && iskeyold(key))
     { lexIsRead[0] = FALSE ; /* we recover the tags of the previous session */
       lexReadTable(0) ;      
     }
+  if (debug)
+    fprintf (stderr, "lexRead4\n") ;
   lexDefineSystemTags () ; /* Redefine the system tags, which have been overwritten */
   tagInit () ;  /* finally, initialises correctly the _tag variables */
   
 /* We now recover the correct values of the classes */
+  if (debug)
+    fprintf (stderr, "lexRead5\n") ;
   sprintf (lexBuffer, "_voc%d", _VMainClasses) ;
-  if (lexword2key (lexBuffer, &key, _VVoc) &&
-      iskeyold(key))
-    { 
-      lexIsRead[_VMainClasses] = FALSE ; /* we recover the tags of the previous session */
-      lexReadTable(_VMainClasses) ; 
+  if (debug)
+    fprintf (stderr, "lexRead6 %s %d %d\n", lexBuffer, key, _VVoc) ;
+  if (lexword2key (lexBuffer, &key, _VVoc))
+    {
+      if (debug)
+	fprintf (stderr, "lexRead7\n") ;
+      if (iskeyold(key))
+	{ 
+	  if (debug)
+	    fprintf (stderr, "lexRead8\n") ;
+	  
+	  lexIsRead[_VMainClasses] = FALSE ; /* we recover the tags of the previous session */
+	  lexReadTable(_VMainClasses) ; 
+	}
     }
-
+  if (debug)
+    fprintf (stderr, "sysclassinit\n") ;
   sysClassInit () ; /* We redefine the system classes which may have been lost */
   classInit () ;  /* finally, initialises correctly the _VClass variables */
 
@@ -384,8 +406,10 @@ void lexRead (void)
       lexReadTable (_VModel) ;
     }
   /*  pickGetClassNames() ; */
+  if (debug)
+    fprintf (stderr, "sysclassoptions\n") ;
   sysClassOptions() ;
-}
+} /* lexRead */
 
 /*************************************************/
 
@@ -1716,7 +1740,7 @@ BOOL lexAlias(KEY *keyp, const char* newName, BOOL doAsk, BOOL keepOldName)
   KEY  newKey, key ;
   extern BOOL bsFuseObjects(KEY key, KEY new) ;
   BOOL isCaseSensitive = pickList[classe & 255 ].isCaseSensitive ;
-  int (*lexstrIsCasecmp)() = isCaseSensitive ?
+  int (*lexstrIsCasecmp)(const char *, const char *) = isCaseSensitive ?
     strcmp : strcasecmp ;
   AC_HANDLE h = 0 ;
 
@@ -1894,8 +1918,8 @@ BOOL lexword2key (const char *cp, KEY *key, KEY classe)
   LEXI1 *lexi ;
   char *voc, *cq ;
   BOOL isCaseSensitive ;
-  int (*lexstrIsCasecmp)() ; 
-
+  int (*lexstrIsCasecmp)(const char *, const char *) ;
+    
   chrono ("lexword2key") ;
   pickIsA(&classe, &mask) ; 
   t = classe ;
@@ -2088,7 +2112,7 @@ KEY str2tag (const char *tagname)
 }
 
 /**************************************************************/
-
+/* strnew */
 BOOL lexaddkey (const char *cp, KEY *kptr, KEY t)
 	/*
 	* cp is an object name.  t is a class number.  We find
@@ -2105,18 +2129,19 @@ BOOL lexaddkey (const char *cp, KEY *kptr, KEY t)
  LEXI1 ai;
  unsigned char mask ;
  char *cq ;
-
+ BOOL debug = FALSE ;
 /* extern BOOL READING_MODELS ;*/
 
  chrono("lexaddkey") ;
-
+ if (debug) fprintf (stderr, "lexaddkey %s\n", cp ? cp : "NULL") ;
  pickIsA(&t, &mask) ;
-
+ if (debug && cp && !strcmp (cp, "Greek"))
+   exit (0) ;
 #ifdef NEW_MODELS
  if (t == _VMainClasses && !READING_MODELS)
    {
      invokeDebugger() ;
-     return lexword2key (cp, kptr, t) ;
+     return cp ? lexword2key (cp, kptr, t) : 0 ;
    }
 #endif
 
@@ -2192,7 +2217,7 @@ BOOL lexaddkey (const char *cp, KEY *kptr, KEY t)
      return TRUE ;
    }
  
- cq = lexcleanup (cp, 0) ;
+ cq = cp ? lexcleanup (cp, 0) : 0 ;
  if (!cp || !*cp || !cq || !*cq)
    messcrash("Attempt to create a key with emtpy name in class%s",
 	     className (KEYMAKE(t,0))) ;

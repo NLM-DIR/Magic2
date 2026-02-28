@@ -78,10 +78,6 @@
       /*                    last modified  7/3/1991 by JTM.          */
       /*                                                             */
       /***************************************************************/
-/*
-  #define MALLOC_CHECK
-  #define ARRAY_CHECK
-*/
 
 #include "acedb.h"
 

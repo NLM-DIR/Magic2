@@ -407,15 +407,15 @@ static BOOL firstUnsetBit (PARTITION *p, int *ip)
 {
   BitSet bb = p->bat ;
   register unsigned int uu, *uip ;
-  register int i, ii ;
-  int first, last ;
+  register int i ; 
+  unsigned long int ii, first, last ;
 
-  if (!arrayExists (bb) || !arrayMax(bb) || bb->size != 32)
+  if (! bitSetExists (bb) || ! bigArrayMax(bb) || bb->size != 32)
     return FALSE ;
   
-  first = p->wlastpos >> 5 ; last = arrayMax(bb) ;
+  first = p->wlastpos >> 5 ; last = bigArrayMax(bb) ;
 lao:
-  uip = arrp(bb, first, unsigned int) - 1 ; ii = first - 1 ;
+  uip = bigArrp(bb, first, unsigned int) - 1 ; ii = first - 1 ;
   i = last ;
   while (uip++, ii++, i--)
     if (~(*uip)) break ;
@@ -1138,7 +1138,7 @@ static void aDiskBatCompress (Array pp, Array caption, BitSet bat, int state)
 	{
 	  u2p = bigArrp(bb, 0, unsigned int) ;
 	  i = bigArrayMax(bb) ; n1 += i ; 
-	  if (debug2) printf (" arrayMax(bb) = %lu", i) ;
+	  if (debug2) printf (" bigArrayMax(bb) = %lu", i) ;
 	  while (i--) *u1p++ = *u2p++ ;
 	}
     }
