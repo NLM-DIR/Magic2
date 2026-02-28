@@ -1018,8 +1018,8 @@ ML
 MR
 // 4 lines
 // 0 Active Objects
-acedb> MIRV
-MLRV
+acedb> MIRV*
+MLRV*
 MRVRX
 // 3 lines
 // 0 Active Objects

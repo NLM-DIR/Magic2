@@ -16,8 +16,11 @@ The syntax of the query language is defined in the latex/pdf documentation
 It is summarized here for convenience to let you copy paste the commands
 but the layout is way more readable in the pdf 
 
+please read the documentation
+   wbql/bql.pdf
 Please adress any question to 
    mieg@ncbi.nlm.nih.gov
+   jean.thierry-mieg@gmail.com
 
 =====================================================================
 =====================================================================
@@ -297,11 +300,11 @@ to specify that x is either in the segment [a,b] or in the segment ]b,a[.
 Counting
 
 A very useful constraint is counting. For example, prolific authors could be found by
-   select a in ?author where count a->paper > 300
+   select a in ?author where COUNT a->paper > 300
 One can eiter count the number of values of a tag, as shown in this example, or count the number of lines in an embeded virtual query delimited by {}. So, we would abtain the same reuslt by saying
-   select a in class author where count {select p in a->paper} > 300
+   select a in class author where COUNT {select p in a->paper} > 300
 But in the latter case, we can become very specific  and only count papers published in a given journal
-   select a in class "author" where count {select p in a->paper where p->journal == "nature"} > 50
+   select a in class "author" where COUNT {select p in a->paper where p->journal == "nature"} > 50
 
 ==================
 ==================
@@ -343,19 +346,20 @@ since it is very easy, when dates are involved, to mean something and write some
 
 To summarize, the full list of operators, in their order of precedence is
 
-    "from", "select", ",", "where"
+    "from", "select", ",", "where",
     "in" , "=" 
-    "||", "OR", "^", "XOR", "&&" , "AND", "!", "NOT"
-    "like", "=~", "~", "==", "!=", ">=", "<=", ">", "<"
-    "+", "-", "*", "/", "modulo"
+    "||", "OR", "^", "XOR", "&&" , "AND", "!", "NOT",
+    "like", "=~", "~", "==", "!=", ">=", "<=", ">", "<" 
+    "modulo", "+", "-", "*", "/" 
     "class", "@"
     "DNA", "PEPTIDE"
-    "count", "min", "max", "average", "stdev"
-    ">>", "->", "#", "=>", ":"
-    "number", "$", "var", "key"
-    "object"
+    "COUNT", "MIN", "MAX", "AVERAGE", "STDDEV",
+    .class, .name, .timestamp,
+    ">>", "->", "#", "=>", ":" 
+    "number", "$", "var", "key",
+    "OBJECT",
     "()", "{}", "[]"
-    "QUOTE", "DOUBLEQUOTE" 
+    "QUOTE", "DOUBLEQUOTE",
 
 with the restriction that the 3 kinds of parenthsis and also the quotes must be nested correctly  (["bb"]) is correct but (x[y)] is illegal.
 

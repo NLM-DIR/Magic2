@@ -13,8 +13,8 @@ typedef enum {Zero = 0
 	      , LIKE2, LIKEREGEXP, LIKE, EQ, NEQ, LEQ, SEQ, LT, ST, LLK, SLK
 	      , ISA
 	      , MODULO, PLUS, MINUS, MULT, DIVIDE, POWER
-	      , DNA, PEPTIDE, DATEDIFF
-	      , COUNT, MIN, MAX, SUM, AVERAGE, STDEV
+	      , DNA, PEPTIDE, PEP, CODING, DATEDIFF
+	      , COUNT, MIN, MAX, SUM, AVERAGE, STDDEV
 	      , CLNAM, NAM, TIMESTAMP
 	      , TTAG, TAG, HASTAG, MERGETAG
 	      , RIGHTOF   /* square brackets x[2], meaning right of */
@@ -39,8 +39,8 @@ static const char *bqlName[] = {
   , "like", "=~", "~", "==", "!=", ">=", "<=", ">", "<", ">~", "<~"
   , "ISA"
   , "modulo", "+", "-", "*", "/", "^"
-  , "DNA", "PEPTIDE", "DATEDIFF"
-  , "count", "min", "max", "sum", "average", "stdev"
+  , "DNA", "PEPTIDE", "PEP", "CODING", "DATEDIFF"
+  , "COUNT", "MIN", "MAX", "SUM", "AVERAGE", "STDDEV"
   , ".class", ".name", ".timestamp"
   , ">>", "->", "#", "=>", ":"
   , "class"  /* , ".class" */
@@ -69,10 +69,10 @@ static const int bqlSide[] = {
   /* , ISA */ , 1
   /* , "like", "=~", "~", "==", "!=", ">=", "<=", ">", "<", ">~", "<~" */ , 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10
   /* , "modulo" , "+", "-", "*", "/", "^" */ , 10 , 10, 9, 10, 10, 10
-  /* , "DNA", "PEPTIDE", "DATEDIFF" */  , 8, 8, 8
-  /* , "count", "min", "max", "sum", "average", "stdev" */ , 5, 5, 5, 5, 5
+  /* , "DNA", "PEPTIDE", "PEP", "CODING", "DATEDIFF" */  , 8, 8, 8, 8, 8
+  /* , "COUNT", "MIN", "MAX", "SUM", "AVERAGE", "STDDEV" */ , 5, 5, 5, 5, 5, 5
   /* , ".class", ".name", ".timestamp" */ , 0, 0, 0
-  /* , ">>", "->", "#", "=>", ":" */ , 8, 8, 8, 8, 8
+  /* , ">>", "->", "#", "=>", ":" (: means x[3]) */ , 8, 8, 8, 8, 8
   /* , "class"*/ , 1
   /*, "number", "$", "var", "key", "@" */ , 1, 1, 1, 1, 1
   /* , "object" */ , 1
@@ -147,6 +147,7 @@ struct bqlStruct {
   int minmaxavstd ;
   int minmaxavstdN ;
   int minmaxavstdX ;
+  int minmaxavstdX2 ;
   int tableRow ;
   int inCurly ;
   char *order_by ;
@@ -380,10 +381,26 @@ static BOOL bqlGetTypes (BQL *bql, NODE *node, BOOL *okp)
 	      for (type = 0 ; *nam ; nam++, type++)
 		if (! strcasecmp (cp, *nam) &&
 		    (strcasecmp (cp, "TITLE") || ! strcmp (cp, "TITLE")) &&
+
 		    (strcasecmp (cp, "DNA") || ! strcmp (cp, "DNA")) &&
+		    (strcasecmp (cp, "PEP") || ! strcmp (cp, "PEP")) &&
 		    (strcasecmp (cp, "PEPTIDE") || ! strcmp (cp, "PEPTIDE")) &&
-		    (strcasecmp (cp, "DATEDIFF") || ! strcmp (cp, "DATEDIFF"))
+		    (strcasecmp (cp, "CODING") || ! strcmp (cp, "CODING")) &&
+		    (strcasecmp (cp, "DATEDIFF") || ! strcmp (cp, "DATEDIFF")) &&
+
+		    (strcasecmp (cp, "OBJECT") || ! strcmp (cp, "OBJECT")) &&
+
+		    /* (strcasecmp (cp, "COUNT") || ! strcmp (cp, "COUNT")) && */
+		    (strcasecmp (cp, "MIN") || ! strcmp (cp, "MIN")) &&
+		    (strcasecmp (cp, "MAX") || ! strcmp (cp, "MAX")) &&
+		    (strcasecmp (cp, "SUM") || ! strcmp (cp, "SUM")) &&
+		    (strcasecmp (cp, "AVERAGE") || ! strcmp (cp, "AVERAGE")) &&
+		    (strcasecmp (cp, "STDDEV") || ! strcmp (cp, "STDDEV")) 
+
+
 		    )
+
+
 		  { 
 		    node->type = type ; ok = TRUE ; 
 		    if (node->type == LIKE2) node->type = LIKE ;
@@ -391,10 +408,11 @@ static BOOL bqlGetTypes (BQL *bql, NODE *node, BOOL *okp)
 		    if (node->type == OR2) node->type = OR ;
 		    if (node->type == XOR2) node->type = XOR ;
 		    if (node->type == NOT2) node->type = NOT ;
+		    if (node->type == PEP) node->type = PEPTIDE ;
 
 		    if (0)
 		      { /* 2022-03-04, remove this clause bqltest: see the example : tom where ! p->parent && p->papers
-			 * it wrongly parses   "where !a && b" into "where ! (a && b)" rateher than the correct "where (!a) && b"
+			 * it wrongly parses   "where !a && b" into "where ! (a && b)" rather than the correct "where (!a) && b"
 			 */
 			if (node->type == NOT && node->up && node->up->type == WHERE)
 			  node->type = WHERE_AVOID ;
@@ -1313,7 +1331,7 @@ static BOOL bqlCheckVariableDeclarations (BQL *bql, NODE *node, int pass)
 	{
 	  if (fromNode->right && ! bqlCheckVariableDeclarations (bql, fromNode->right, pass))
 	    {
-	      vtxtPrintf (bql->errTxt, "// ... BQL ERROR 12: Each variable in the from clause must be declared and initialised before it is used\n") ;
+	      vtxtPrintf (bql->errTxt, "// ... BQL ERROR 12: Each variable in the from clause must be declared and initialised before it is used, maybe you forgot a coma between definitions\n") ;
 	      bqlShowNode (bql, fromNode->right, 0, 0) ;
 	      return FALSE ;      
 	    }
@@ -1369,7 +1387,7 @@ static BOOL bqlCheckVariableDeclarations (BQL *bql, NODE *node, int pass)
 	  vtxtPrintf (bql->errTxt, "// ... no pattern visible to the right of \'like\' or \'=~\' string matching request.\nPossibly your regexp involves [] or other symbols as in\n      x =~ a[bc].*\nand you should quote it or double quote it as in\n      x =~ \'a[bc].*\'\n") ;
 	  return FALSE ;
 	}
-      node->br = regExpCreate (cp0, FALSE, bql->h) ;
+      node->br = regExpCreate (cp0, bql->h) ; 
       if (! node->br)
 	{
 	  vtxtPrintf (bql->errTxt, "// ... bad no pattern found to the right of a LIKEREGEXP =~ operator, expecting a Unix regular expression, found %s", cp0) ;
@@ -2024,6 +2042,7 @@ static BOOL bqlAtomizeWhere (BQL *bql, Array froms, NODE *node)
       break ;
     case DNA:
     case PEPTIDE:
+    case CODING:
     case DATEDIFF:
     case TAG:
       if (node->up)
@@ -2034,7 +2053,7 @@ static BOOL bqlAtomizeWhere (BQL *bql, Array froms, NODE *node)
 	  case MAX:
 	  case SUM:
 	  case AVERAGE:
-	  case STDEV:
+	  case STDDEV:
 	    break ;
 	  default:
 	    if (1)
@@ -2112,6 +2131,7 @@ static BOOL bqlAtomizeFrom (BQL *bql, Array froms, NODE *node)
       return ok ;
     case DNA:
     case PEPTIDE:
+    case CODING:
     case DATEDIFF:
       if (node->right && node->right->type == COMA)
 	{
@@ -2872,7 +2892,8 @@ static BOOL bqlCreatePhonyVariables  (BQL *bql, NODE *node0)
 		cz = messprintf ("select _%d from _%d in class %s where _%d %s", nsc, nsc, ccl, nsc, cq) ;
 	      else
 		{
-		  char *cw, *cs, *ct, *cfrom, *newDna = "" ;
+		  char *cfrom ;
+		  char *cw, *cs, *ct, *newDna = "" ;
 		  int k = 0;
 		  /* after the coma we want to edit ', >tag' into ', ?->tag' */
 		  if (0 && ncoma)
@@ -2892,7 +2913,7 @@ static BOOL bqlCreatePhonyVariables  (BQL *bql, NODE *node0)
 		  /* we need to edit @ into _%d */
 		  ct = cs = halloc (1 + 5 * strlen(cq), bql->h) ; /* room to add the nsc numbers after each occurence of ? */
 		  
-		  cfrom = strcasestr (cr, "from") ;
+		  cfrom = (char *) strcasestr (cr, "from") ;
 		  cr-- ;
 		  while (*++cr)
 		    switch ((int)*cr)
@@ -3023,6 +3044,8 @@ static BOOL bqlCreatePhonyVariables  (BQL *bql, NODE *node0)
 	    pushText (bql->s, messprintf ("select _DNA%d  from _%d in @, _DNA%d in DNA(_%d)", nsc, nsc, nsc, nsc)) ;
 	  else if (! strncmp (cs, "PEPTIDE", 7))
 	    pushText (bql->s, messprintf ("select _PEPTIDE%d  from _%d in @, _PEPTIDE%d in PEPTIDE(_%d)", nsc, nsc, nsc, nsc)) ;
+	  else if (! strncmp (cs, "CODING", 6))
+	    pushText (bql->s, messprintf ("select _CODING%d  from _%d in @, _CODING%d in CODING(_%d)", nsc, nsc, nsc, nsc)) ;
 	  else if (lexword2key(cs, &tag, 0))
 	    pushText (bql->s, messprintf ("select _%d  from _%d in @ where (_%d #%s || _%d ~ %s)", nsc, nsc, nsc, cs, nsc, ac_protect (lexcleanup (cs, bql->h), bql->h), cs)) ;
 	  else
@@ -4431,7 +4454,7 @@ static BOOL bqlExpandObject (BQL *bql, NODE *node, NODE *coma)
 */
 
 
-static BOOL bqlExpandPeptide (BQL *bql, NODE *node, NODE *coma)
+static BOOL bqlExpandPeptide (BQL *bql, NODE *node, NODE *coma, BOOL isCoding)
 {
   BOOL ok = FALSE, ok2 ;
   NODE *var = node->down ;
@@ -4475,7 +4498,7 @@ static BOOL bqlExpandPeptide (BQL *bql, NODE *node, NODE *coma)
     }
   if (ok && dnaVar->type == VAR && dnaVar->dclNode && dnaVar->dclNode->key)
     {
-      var->dnaD = peptideTranslate (dnaVar->dclNode->key, FALSE) ;
+      var->dnaD = peptideTranslate (dnaVar->dclNode->key, isCoding) ;
     }
   if (ok && var->dnaD)
     {
@@ -4521,7 +4544,12 @@ static BOOL bqlExpandPeptide (BQL *bql, NODE *node, NODE *coma)
 	      arrayMax (pepPiece) = d2 - d1 + 1 ; /* restore */
 	      for (i = 0, cp = arrp (pepPiece, 0, unsigned char), cq = arrp (dna, dna1 - 1, unsigned char) ;
 		   i < d2 - d1 + 1 ; cp++, cq++, i++)
-		*cp = pepDecodeChar [ (int)*cq] ;
+		{
+		  *cp = pepDecodeChar [ (int)*cq] ;
+		  if (isCoding && *cp == '*')
+		    { cp[1] = 0 ; break ;
+		    }
+		}
 	      var->pepStack = stackCreate (0) ;
 	      pushText (var->pepStack, arrp (pepPiece, 0, char)) ;
 	      arrayDestroy (pepPiece) ;
@@ -4662,7 +4690,7 @@ static BOOL bqlExpandDNA (BQL *bql, NODE *node, NODE *coma)
 		  dna = var->dnaD ;
 		  for (i = 0, cp = arrp (dnaPiece, 0, unsigned char), cq = arrp (dna, dna1 - 1, unsigned char) ;
 		       i < d2 - d1 + 1 ; cp++, cq--, i++)
-		    *cp = dnaDecodeChar [(int)complementBase[(int)*cq]] ;
+		    *cp = dnaDecodeChar [(int)complementBase(*cq)] ;
 		}
 	      var->dnaStack = stackCreate (0) ;
 	      pushText (var->dnaStack, arrp (dnaPiece, 0, char)) ;
@@ -4983,6 +5011,7 @@ static BOOL bqlExpandTag (BQL *bql, NODE *node, NODE *coma)
 	  if (var->dclNode->nCol >= 0)
 	    {
 	      var->bsMark = bsHandleMark (obj, var->bsMark, bql->h) ;  
+	      var->timeStamp = bsGetTimeStamp (obj) ;
 	      var->myBsmark = TRUE ; 
 	    }
 	  var->parent = tagVar->dclNode ;
@@ -5161,6 +5190,7 @@ static BOOL bqlExpandTag (BQL *bql, NODE *node, NODE *coma)
 			    {
 			      bql->minmaxavstdN++ ;
 			      bql->minmaxavstdX += var->z ;
+			      bql->minmaxavstdX2 += (var->z) * (var->z) ;
 			    }
 			}
 		      else if (var->uType == _LongInt)
@@ -5178,6 +5208,7 @@ static BOOL bqlExpandTag (BQL *bql, NODE *node, NODE *coma)
 				{
 				  bql->minmaxavstdN++ ;
 				  bql->minmaxavstdX += lli ;
+				  bql->minmaxavstdX2 += lli * lli ;
 				}
 			    }
 			  var->key = 0 ;
@@ -5221,6 +5252,8 @@ static BOOL bqlExpandTag (BQL *bql, NODE *node, NODE *coma)
 				bql->minmaxavstdX = zzZ ;
 			      }
 			    break ;
+			  case STDDEV:
+			    bql->minmaxavstdX2 += zzZ * zzZ ;
 			  case AVERAGE:
 			  case SUM:
 			    bql->minmaxavstdN++ ;
@@ -5855,7 +5888,10 @@ static BOOL bqlExpandIn (BQL *bql, NODE *node, NODE *coma)
 	ok = bqlExpandDNA (bql, node, coma) ;
 	break ;
       case PEPTIDE:
-	ok = bqlExpandPeptide (bql, node, coma) ;
+	ok = bqlExpandPeptide (bql, node, coma, FALSE) ;
+	break ;
+      case CODING:
+	ok = bqlExpandPeptide (bql, node, coma, TRUE) ;
 	break ;
       case DATEDIFF:
 	ok = bqlExpandDateDiff (bql, node, coma) ;
@@ -5864,6 +5900,7 @@ static BOOL bqlExpandIn (BQL *bql, NODE *node, NODE *coma)
       case MAX:
       case SUM:
       case AVERAGE:
+      case STDDEV:
 	ok = bqlExpandMinMax (bql, node, coma) ;
 	break ;
       case HASTAG:
@@ -5949,7 +5986,7 @@ static BOOL bqlExpandMinMax (BQL *bql, NODE *node, NODE *coma)
     where = 0 ;
  
   if (countTag && ! bql->minmaxavstd  &&
-      (countTag->type == MIN || countTag->type == MAX || countTag->type == SUM || countTag->type == AVERAGE)
+      (countTag->type == MIN || countTag->type == MAX || countTag->type == SUM || countTag->type == AVERAGE || countTag->type == STDDEV)
       && var && var->type == VAR)
     {
       var->isNumber = TRUE ;
@@ -5958,6 +5995,7 @@ static BOOL bqlExpandMinMax (BQL *bql, NODE *node, NODE *coma)
       bql->minmaxavstd = countTag->type ;
       bql->minmaxavstdN = 0 ;
       bql->minmaxavstdX = 0;
+      bql->minmaxavstdX2 = 0;
       if ( countTag->right)
 	{
 	  countTag->down = var ;
@@ -5977,6 +6015,9 @@ static BOOL bqlExpandMinMax (BQL *bql, NODE *node, NODE *coma)
 	case AVERAGE:
 	  var->z = bql->minmaxavstdN ? bql->minmaxavstdX/bql->minmaxavstdN : 0 ;
 	  break ;
+	case STDDEV:
+	  var->z = bql->minmaxavstdN ? bql->minmaxavstdX2/bql->minmaxavstdN - (bql->minmaxavstdX/bql->minmaxavstdN)*(bql->minmaxavstdX/bql->minmaxavstdN) : 0 ;
+	  break  ;
 	default:
 	  var->z = 0 ;
 	  break ;
@@ -5985,6 +6026,7 @@ static BOOL bqlExpandMinMax (BQL *bql, NODE *node, NODE *coma)
       bql->minmaxavstd = 0 ;
       bql->minmaxavstdN = 0 ;
       bql->minmaxavstdX = 0;
+            bql->minmaxavstdX2 = 0;
       ok = TRUE ;
     }
 
@@ -6517,6 +6559,9 @@ BOOL bqlParse (BQL *bql, const char *query, BOOL acedbQuery)
     while ((cq = strstr (cq, "->PEPTIDE")))
       cq[2] = 'p' ;  /* prevent recognizing tag PEPTIDE as function PEPTIDE */
     cp = cq = stackText (bql->s, bql->node->mark) ;
+    while ((cq = strstr (cq, "->CODING")))
+      cq[2] = 'c' ;  /* prevent recognizing tag CODING as function CODING */
+    cp = cq = stackText (bql->s, bql->node->mark) ;
     while ((cq = strstr (cq, "->DATEDIFF")))
       cq[9] = 'f' ;  /* prevent recognizing tag DATEDIFF as function DATEDIFF */
     cp = cq = stackText (bql->s, bql->node->mark) ;
@@ -6525,6 +6570,9 @@ BOOL bqlParse (BQL *bql, const char *query, BOOL acedbQuery)
     cp = cq = stackText (bql->s, bql->node->mark) ;
     while ((cq = strstr (cq, "#PEPTIDE")))
       cq[1] = 'p' ;  /* prevent recognizing tag PEPTIDE as function PEPTIDE */
+    cp = cq = stackText (bql->s, bql->node->mark) ;
+    while ((cq = strstr (cq, "#CODING")))
+      cq[1] = 'c' ;  /* prevent recognizing tag CODING as function CODNG */
     cp = cq = stackText (bql->s, bql->node->mark) ;
     while ((cq = strstr (cq, "#DATEDIFF")))
       cq[8] = 'f' ;  /* prevent recognizing tag DATEDIFF as function DATEDIFF */
@@ -6735,7 +6783,7 @@ static BOOL bqlParseAcedbQuery (BQL *bql, const char *query)
   BOOL debug = bql->debug ;
   BOOL ok = FALSE ;
   vTXT txt = vtxtHandleCreate (bql->h) ;
-  char nam[12] ;
+  char nam[32] ;
   int nQ = 0 ;
   char cc, *cp, *cq, *cr ;
   cp = strnew (query, bql->h) ;
