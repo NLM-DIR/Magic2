@@ -1,0 +1,40 @@
+
+#################################################################
+############### acedb: R.Durbin and J.Thierry-Mieg ##############
+############### ported to Linux by Ken Letovski    ##############
+############### wmake/LINUX_DEF    Feb-2-1993      ##############
+#################################################################
+
+#################################################################
+########## Machine dependant compiler modification ##############
+###########    for LINUX with Nvidia GPU, running LINUX #########
+#################################################################
+########### This file is included by wmake/truemake #############
+######  Edit this file to adapt the ACeDB to a new machine ######
+#####   following the explanations given in wmake/truemake  #####
+#################################################################
+
+NAME = LINUX
+COMPILER = gcc -g -O4 -fno-strict-aliasing -DACEDB4 -DUSEGPU
+LINKER = nvcc
+
+LIBS = -lm
+Xt_LIBS = -L/usr/X11R6/lib /usr/X11R6/lib/libX11.so.6 \
+			   /usr/X11R6/lib/libXaw.so.6 \
+			   /usr/X11R6/lib/libXt.so.6 \
+			   /usr/X11R6/lib/libXmu.so.6 \
+			   /usr/X11R6/lib/libXext.so.6
+
+#################################################################
+###################### Lex Libraries ############################
+#################################################################
+# The acedb dependency on LEX/YACC/BISON
+# has been removed
+#################################################################
+
+#RPCGEN_FLAGS = -b -I -K -1
+RPCGEN_FLAGS = -Y /usr/local/gcc-3.4.1/bin/ -b -I -K -1
+
+#################################################################
+#################################################################
+
