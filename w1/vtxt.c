@@ -45,7 +45,7 @@
 f1 (vTXT v1)
 {
   vTXT v2 = vtxtCreate () ;
-  if (ptr = f2 (s2,..)) // return 0 or stackText (s2, 0)
+  if (ptr = f2 (s2,..)) // return 0 or bigStackText (s2, 0)
     {
       vtxtPrintf (v1, "Title\n") ;
       vtxtPrint (v1, ptr) ; // unformated, so we do not interpret % and \ a second time
@@ -62,8 +62,8 @@ static void vtxtFinalise (void *v)
 
   if (blkp)
     {
-      if (stackExists (blkp->s))
-	stackDestroy (blkp->s) ;
+      if (bigStackExists (blkp->s))
+	bigStackDestroy (blkp->s) ;
     }
   return ;
 }
@@ -74,7 +74,7 @@ vTXT vtxtHandleCreate (AC_HANDLE h)
 {
   vTXT blkp = (vTXT) halloc (sizeof (struct vTXT_struct), h) ;
   
-  blkp->s = stackHandleCreate (1024, h) ;
+  blkp->s = bigStackHandleCreate (1024, h) ;
   if (! h) blockSetFinalise (blkp, vtxtFinalise) ;
   
   return blkp ;
@@ -91,22 +91,22 @@ vTXT vtxtCreate (void)
 
 BOOL vtxtClear (vTXT s)
 {
-  stackClear (s->s) ;
-  return  stackExists(s->s)  ? TRUE : FALSE ;
+  bigStackClear (s->s) ;
+  return  bigStackExists(s->s)  ? TRUE : FALSE ;
 } /* vtxtPtr */
 
 /*********************************************************************/
 
 char *vtxtPtr (vTXT s)
 {
-  return stackExists(s->s) && stackMark (s->s)? stackText (s->s, 0) : 0 ;
+  return bigStackExists(s->s) && bigStackMark (s->s)? bigStackText (s->s, 0) : 0 ;
 } /* vtxtPtr */
 
 /*********************************************************************/
 
-int vtxtLen (vTXT s)
+long int vtxtLen (vTXT s)
 {
-  return stackExists(s->s) ? stackMark (s->s) : 0 ;
+  return bigStackExists(s->s) ? bigStackMark (s->s) : 0 ;
 } /* vtxtLen */
 
 /*********************************************************************/
@@ -119,15 +119,15 @@ BOOL vtxtMarkup (vTXT s)
 
 /*********************************************************************/
 /* Writable position, to be used in vtxtAt */
-int vtxtMark (vTXT s)
+long int vtxtMark (vTXT s)
 {
-  int nn = stackMark (s->s) ;
+  long int nn = bigStackMark (s->s) ;
   return nn ;
 } /* vtxtMark */
 
 /*********************************************************************/
 /* the content strating at pos*/
-char *vtxtAt (vTXT s, int pos) 
+char *vtxtAt (vTXT s, long int pos) 
 {
   char *ptr = vtxtPtr (s) ;
   return (ptr && vtxtLen (s) > pos) ? ptr + pos : 0 ;
@@ -292,27 +292,27 @@ void vtxtCleanHtml (vTXT vtxt)
 /*********************************************************************/
 /* Unformatted print, appends to what is already there */
 
-int vtxtPrint (vTXT s, const char *txt)
+long int vtxtPrint (vTXT s, const char *txt)
 {
-  int nn, len ;
+  long int nn, len ;
   char *cp ;
   
-  nn = stackMark (s->s) ;
+  nn = bigStackMark (s->s) ;
   if (txt && (len = strlen (txt)))
     {
       /* programmer's note
        * this function differs from catText or catBinary
-       * if the stack is empty and we vtxtPrint (s,"aa")
+       * if the bigStack is empty and we vtxtPrint (s,"aa")
        * as a result we have aa0  (zero terminated)
        * and s->ptr, used for the next vtxtPrint or vtxtPrintf
        * points on that zero
        * whereas in catBinary, we point on the 4th char, after the zero
        * but the next catBinary or catText will move back one char
        * so the 2 types of calls should not be mixed
-       * although a VTXT is implemented as a Stack
+       * although a VTXT is implemented as a BigStack
        */
-      stackExtend (s->s, len + 1) ;
-      cp = stackText (s->s, nn) ;
+      bigStackExtend (s->s, len + 1) ;
+      cp = bigStackText (s->s, nn) ;
       
       memcpy (cp, txt, len) ;
       *(cp + len) = 0 ;
@@ -384,9 +384,9 @@ void vtxtPercent (vTXT s, float z)
 
 /*********************************************************************/
 /* General formatted printf, appends to what is already there */
-int vtxtPrintf (vTXT s, const char * format, ...)
+long int vtxtPrintf (vTXT s, const char * format, ...)
 {
-  int nn, len ;
+  long int nn, len ;
   char *cp ;
   
   va_list ap;
@@ -394,9 +394,9 @@ int vtxtPrintf (vTXT s, const char * format, ...)
   len = utPrintfSizeOfArgList (format, ap) ;
   va_end (ap) ;
 
-  stackExtend (s->s, len + 1) ;
-  nn = stackMark (s->s) ;
-  cp = stackText (s->s, nn) ;
+  bigStackExtend (s->s, len + 1) ;
+  nn = bigStackMark (s->s) ;
+  cp = bigStackText (s->s, nn) ;
 
   va_start(ap, format);
   len = vsprintf(cp, format, ap) ;
@@ -421,7 +421,7 @@ char *vtxtPrintWrapped (vTXT s, char *text, int lineLength)
       *cq = cc ;
       cp = cq ;
     }
-  return stackText (s->s, 0) ;
+  return bigStackText (s->s, 0) ;
 }
 
 /******************************************************************************/
@@ -1058,7 +1058,7 @@ vTXT vtxtTokenSort (vTXT txt0, char *splitOn, AC_HANDLE h0)
       char buf[nn+1] ;
       strncpy (buf, cp, nn) ; buf[nn] = 0 ;
       vTXT txt = vtxtHandleCreate (h0) ;
-      char *cq, *cr ;
+      char *cq ; /* , *cr ; */
       while (cp)
 	{
 	  for (i = k = 0, cq = cp ; *cq ; i++, cq++)

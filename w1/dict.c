@@ -328,6 +328,9 @@ BOOL dictFind (_DICT *dict, const char *s, int *ip)
 
   if (!dict || !s || !*s)
     return FALSE ;
+  int len = strlen (s) ;
+  if (len >  0x00ffffff << 3)    /* 134M */
+    messcrash ("You cannot enter in a dict a word longer than 130 Million characters, sorry") ;
 
   dict->newPos = 0 ; /* will become first reusable spot */
   h = dictHash (s, dict->dim, FALSE) ;

@@ -34,9 +34,6 @@
  */
 
 #define VERSION "1.1"
-/*
- #define ARRAY_CHECK 
-*/
 #include "ac.h"
 #include "acedna.h"
 
@@ -48,7 +45,7 @@
  ** full Cigar spec as of 2019
  * M  match or mismatch
  * I insertion to the reference
- * D deletion from the reference
+ * D deletion from the reference (at least in magicBlast, del > 12 bases  should be removed from the error count NM:i:1234)
  * N skipped region from the reference (intron)
  * S soft clipping (move in read)
  * H hard clipping (not reported in the read-dna)
@@ -56,7 +53,7 @@
  * = sequence match
  * sequence mismatch
  */
-static int samDoParseCigar (char *cigar, Array cigarettes, int a1, int *a2p, int *x1p, int *x2p, int *alip, int *clipp) 
+static int samDoParseCigar (char *cigar, Array cigarettes, int a1, int *a2p, int *x1p, int *x2p, int *alip, int *insp, int *delp, int *bigDelp, int *clipp) 
 {
   int ii = 0, x1 = 1, x2 = 0 ;
   int a2 = a1, ali = 0, clip1 = 0, clip2 = 0, hClip = 0 ;
@@ -106,11 +103,14 @@ static int samDoParseCigar (char *cigar, Array cigarettes, int a1, int *a2p, int
 	case 'I':
 	  a2 = a1 - 1 ; /* so a1 will not change */
 	  x2 = x1 + dx - 1 ;
+	  if (insp) *insp += dx ;
 	  score -= 4 * (dx > 3 ? 3 : dx) ;
 	  break ;
 	case 'D':
 	  x2 = x1 - 1 ; /* so x1 will not change */
 	  a2 = a1 + dx - 1 ;
+	  if (delp) *delp += (dx < 12 ? dx : 0) ;
+	  if (bigDelp) *bigDelp += (dx >= 12 ? dx : 0) ;
 	  score -= 4 * (dx > 3 ? 3 : dx) ;
 	  break ;
 	case 'N': /* gt_ag intron */
@@ -147,7 +147,7 @@ static int samDoParseCigar (char *cigar, Array cigarettes, int a1, int *a2p, int
 
 /****************/
 
-BOOL samParseCigar (char *cigar, Array cigarettes, int a1, int *a2p, int *x1p, int *x2p, int *alip) 
+BOOL samParseCigar (char *cigar, Array cigarettes, int a1, int *a2p, int *x1p, int *x2p, int *alip, int *insp, int *delp, int *bigDelp) 
 {
   int clip = 0 ;
 
@@ -155,16 +155,16 @@ BOOL samParseCigar (char *cigar, Array cigarettes, int a1, int *a2p, int *x1p, i
     messcrash ("dnaParseCigar passed a null cigarettes array") ;
   if (cigarettes->size != sizeof (SAMCIGAR))
     messcrash ("dnaParseCigar passed a cigarettes array which is not of type SAMCIGAR") ;
-  return samDoParseCigar (cigar, cigarettes, a1, a2p, x1p, x2p, alip, &clip)  ;
+  return samDoParseCigar (cigar, cigarettes, a1, a2p, x1p, x2p, alip, insp, delp, bigDelp, &clip)  ;
 } /*  samParseCigar */
 
 /****************/
 
 int samScoreCigar (const char *readName, char *cigar, Array cigarettes, int a1, int ln)
 {
-  int score, x1 = 1, x2 = 0, a2 = 0, ali = 0, clip = 0 ;
+  int score, x1 = 1, x2 = 0, a2 = 0, ali = 0, clip = 0, ins = 0, del = 0, bigDel = 0 ;
   
-  score = samDoParseCigar (cigar, cigarettes, a1, &a2, &x1, &x2, &ali, &clip) ;
+  score = samDoParseCigar (cigar, cigarettes, a1, &a2, &x1, &x2, &ali, &ins, &del, &bigDel, &clip) ;
   
   if (ln != clip + x2 - x1 + 1)
     score = -1 ;
@@ -175,8 +175,8 @@ int samScoreCigar (const char *readName, char *cigar, Array cigarettes, int a1, 
 
 BOOL samCheckCigar (const char *readName, char *cigar, Array cigarettes, int a1, int ln)
 {
-  int x1 = 1, x2 = 0, a2 = 0, ali = 0, clip = 0 ;
-  samDoParseCigar (cigar, cigarettes, a1, &a2, &x1, &x2, &ali, &clip) ;
+  int x1 = 1, x2 = 0, a2 = 0, ali = 0, clip = 0, ins = 0, del = 0, bigDel = 0 ;
+  samDoParseCigar (cigar, cigarettes, a1, &a2, &x1, &x2, &ali, &ins, &del, &bigDel, &clip) ;
   
   if (ln != clip + x2 - x1 + 1)
     {
@@ -241,7 +241,7 @@ static BOOL samParseLine (ACEIN ai, SAMHIT *up, DICT *dict, int target_class, in
  
   aceInStep (ai, '\t') ; aceInInt (ai, &(up2->a1)) ;
   aceInStep (ai, '\t') ;  cigar = aceInWord (ai) ;  /* quality, discard */
-  samParseCigar (cigar, cigarettes, up2->a1, &(up2->a2), &(up->x1), &(up->x2), 0) ;
+  samParseCigar (cigar, cigarettes, up2->a1, &(up2->a2), &(up->x1), &(up->x2), 0, 0, 0) ;
 
   up->target_class = target_class ;
   aceInStep (ai, '\t') ;  aceInWord (ai) ; /* drop */

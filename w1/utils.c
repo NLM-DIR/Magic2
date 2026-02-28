@@ -231,7 +231,7 @@ char *getUserHomeDir (const char *user_name, AC_HANDLE h)
 
 /*****************************/
 
-BOOL getCmdLineOption (int *argcp, const char **argv,
+BOOL getCmdLineText (AC_HANDLE h, int *argcp, const char **argv,
 		       const char *arg_name, const char **arg_val)
      /* call with (&argc, argv, "-option", &string)
       *   for options with value (e.g. -display <name>)
@@ -257,7 +257,7 @@ BOOL getCmdLineOption (int *argcp, const char **argv,
 	      if ((*argcp - i) < 2)
 		return  FALSE ;
 
-	      *arg_val = strnew(argv[i+1], 0);
+	      *arg_val = strnew(argv[i+1], h);
 	      num = 2;
 	    }
 	  else
@@ -276,6 +276,11 @@ BOOL getCmdLineOption (int *argcp, const char **argv,
   return isFound;
 } /* getCmdLineOption */
 
+BOOL getCmdLineOption (int *argcp, const char **argv,
+		       const char *arg_name, const char **arg_val)
+{
+  return getCmdLineText (0, argcp, argv, arg_name, arg_val) ;
+}
 /* same as above but returns a BOOL */
 BOOL getCmdLineBool (int *argcp, const char **argv,
 		     const char *arg_name)
@@ -299,6 +304,23 @@ BOOL getCmdLineInt (int *argcp, const char **argv,
     }
   return FALSE ;
 } /* getCmdLineInt */
+
+BOOL getCmdLineLong (int *argcp, const char **argv,
+		     const char *arg_name, long int *val)
+{
+  const char *ccp ;
+  if (getCmdLineOption (argcp, argv, arg_name, &ccp))
+    {
+      long int x = 0 ;  
+      if (sscanf (ccp, "%ld", &x) == 1)
+	{
+	  *val = x ;
+	  messfree (ccp) ;
+	  return TRUE ;
+	}
+    }
+  return FALSE ;
+} /* getCmdLineLong */
 
 /* same as above but returns a float */
 BOOL getCmdLineFloat (int *argcp, const char **argv,
@@ -998,19 +1020,27 @@ BOOL utStr2LongInt(char *num_str, long int *num_out)
 #endif
 
 /************************************************************/
-/* case-insensitive version of strstr 
- * problem this impolite function has a disgusting side effect
- * it alters its parameter
-*/
-#if 0
-char *strcasestr(char *str1, char *str2)
-{
-  g_strup(str1);
-  g_strup(str2);
 
-  return strstr(str1, str2);
+char *strcasestr (const char *str1, const char *str2)
+{
+  char *s1 = strnew (str1, 0) ;
+  char *s2 = strnew (str2, 0) ;
+
+  bufferToUpper (s1) ;
+  bufferToUpper (s2) ;
+
+  const char *cp = strstr(s1, s2) ;
+  if (cp)
+    {
+      int n = cp - s1 ;
+      cp = str1 + n ;
+    }
+  ac_free (s1) ;
+  ac_free (s2) ;
+  return (char *) cp ; 
 }
-#endif
+
+
 /*************************************************************************/
 /*************************************************************************/
 
@@ -1160,13 +1190,51 @@ int arrstrcmp(const void *s1, const void *s2)
 /* lexRename relies on the fact that lexstrcmp must fail      */
 /* if the length differ                                       */
 /**************************************************************/
+
+static BOOL lexPureNumber (const char *a, long int *x)
+{
+  int i, k, n = strlen (a) ;
+  long int u = 0 ;
+  const char *p = a ;
+  switch ((int)*p)
+    {
+    case '+' : p++ ; n-- ; break ;
+    case '-' : p++ ; n-- ; break ;
+    }
+  for (i = 0 ; i < n ; p++, i++)
+    {
+      k = (*p) - '0' ;
+      if (k>=0 && k <=9)
+	u = 10 * u + k ;
+      else
+	return FALSE ;
+      if (u < 0)
+	return FALSE ;
+    }
+  if (*a == '-')
+    u = -u ;
+  *x = u ;
+  return TRUE ;
+} /* lesPureNumber */
+
+/**********/
+
 int lexstrcmp(const char *a, const char *b)
 { 
   register char c,d ;
   register const char *p,*q ;
   register int  nbza, nbzb ; /* nb de zeros en tete */
   register int  nbzReturn = 0 ;
-
+  long x ,y ;
+  
+  if (lexPureNumber (a, &x) && lexPureNumber (b, &y) )
+    { /* mieg added 20250302 :    -7 should sort before +2 */
+      if (a < b) return -1 ;
+      if (a > b) return 1 ;
+      if  (strlen(a) > strlen(b)) return -1 ;
+      if  (strlen(a) < strlen(b)) return 1 ;
+      return 0 ;
+    }
   while (*a)
     {                /* Bond007< Bond07 < Bond7 < Bond68 */
       if (isdigit((int)*a) && isdigit((int)*b))
@@ -1947,7 +2015,6 @@ static void  testWilcoxon (void)
 
 struct regExpStruct {
   int magic ;
-  BOOL getPos ;
   regex_t *regex;
   const char *pattern ;
 } ;
@@ -1967,7 +2034,7 @@ static void regExpFinalise (void *vp)
 
 /*******************************************************************/
 /* 0: bad bql, !NULL: use in regExpFind, then call regExpDoFree */
-RegExp regExpCreate (const char *pattern, BOOL getPos, AC_HANDLE h)
+RegExp regExpCreate (const char *pattern, AC_HANDLE h)
 {
   int nn ;
   RegExp br ;
@@ -1982,13 +2049,12 @@ RegExp regExpCreate (const char *pattern, BOOL getPos, AC_HANDLE h)
     {
       br->magic = 623562 ;
       br->regex = halloc (sizeof (regex_t), h) ;
-      br->getPos = getPos ;
       br->pattern = strnew (pattern, 0) ;
 
       blockSetFinalise (br, regExpFinalise) ;
           
       /* man regcomp for details */
-      if (getPos)
+      if (0)
 	nn = regcomp (br->regex, pattern, REG_EXTENDED | REG_ICASE) ;
       else
 	nn = regcomp (br->regex, pattern, REG_EXTENDED | REG_ICASE | REG_NOSUB ) ;
@@ -2014,14 +2080,12 @@ int regExpFind (RegExp br, const char *data)
       regmatch_t pmatch ;
       int nn = 0 ;
 
-      if (br->getPos)
-	nn = regexec (br->regex, data, 1, &pmatch, 0) ;
-      
+      nn = regexec (br->regex, data, 1, &pmatch, 0) ;
       if (nn) 
 	ok = 0 ; /* pattern not found */
       else  /* match found */ 
 	{ 	     
-	  if (br->getPos)
+	  if (1)
 	    ok = 1 + pmatch.rm_so ;
 	  else
 	    ok = 1 ;
@@ -2032,13 +2096,13 @@ int regExpFind (RegExp br, const char *data)
 
 /*******************************************************************/
 
-int regExpMatch (const char *data, const char *pattern, BOOL getPos)
+int regExpMatch (const char *data, const char *pattern)
 {
   int ok = 0 ;
   
   if (pattern && data && *pattern && *data)
     {
-      RegExp br = regExpCreate (pattern, getPos, 0) ;
+      RegExp br = regExpCreate (pattern, 0) ;
       if (br)
 	{
 	  ok = regExpFind (br, data) ; /* 0: not found, >0 position */
@@ -2052,6 +2116,33 @@ int regExpMatch (const char *data, const char *pattern, BOOL getPos)
 
   return ok ;
 } /* regExpMatch  */
+
+/*************************************************************************************/
+/*  Check if executable exists in PATH */
+BOOL isExecutableInPath (const char *name)
+{
+  const char *path = getenv("PATH") ;
+  if (!path)
+    return FALSE ;
+  char *path_copy = strdup(path) ;
+  if (path_copy)
+    {
+      char *dir = strtok(path_copy, ":") ;
+      while (dir)
+	{
+	  char full_path[1024] ;
+	  snprintf (full_path, sizeof(full_path), "%s/%s", dir, name) ;
+	  if (access(full_path, X_OK) == 0)
+	    {
+	      free (path_copy) ;
+	      return TRUE ;
+	    }
+	  dir = strtok (NULL, ":") ;
+	}
+      free (path_copy) ;
+    }
+  return FALSE ;
+} /* isExecutableInPath */
 
 /*******************************************************************/
 /************************* end of file ****************************/

@@ -406,9 +406,12 @@ void uMessCrash (char *format, ...)
   else
     rc = sprintf(prefix, FULL_CRASH_PREFIX_FORMAT,
 		 messGetErrorProgram(), timeShowNow (), messGetErrorFile(), messGetErrorLine()) ;
-  if (rc < 0) messcrash("sprintf failed") ;
-  
-  
+  if (rc < 0) 
+    {
+      fprintf (stderr, "sprintf failed inside w1/messubs.c:uMessCrash") ;
+      abort() ;
+    }
+    
   /* Format the message string.                                              */
   {
     ACFORMAT (prefix) ;

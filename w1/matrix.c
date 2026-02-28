@@ -355,6 +355,21 @@ MX mxAdd (MX a, MX b, MX c, AC_HANDLE h)
 
 /**********************************************************************/
 
+MX mxMultiSum (AC_HANDLE h, MX *mms)
+{
+  int ii ;
+  MX m = mms[0] ;
+
+  if (! m)
+    return 0 ;
+  for (ii = 1 ; mms[ii] ; ii++)
+    m = mxAdd (m, m, mms[ii], h) ;
+
+  return m ;
+} /* mxMultiSum */
+
+/**********************************************************************/
+
 MX mxSubstract (MX b, MX c, AC_HANDLE h)
 {
   MX a = 0 ;
@@ -847,6 +862,21 @@ MX mxMatMult (MX b, MX c, AC_HANDLE h)
 
   return mxContract (0, b, c, 1, 0, h) ;
 } /* mxMatMult */
+
+/**********************************************************************/
+
+MX mxMatMultiProduct (AC_HANDLE h, MX *mms)
+{
+  int ii ;
+  MX m = mms[0] ;
+
+  if (! m)
+    return 0 ;
+  for (ii = 1 ; mms[ii] ; ii++)
+    m = mxMatMult(m, mms[ii], h) ;
+
+  return m ;
+} /* mxMatMultiProduct */
 
 /**********************************************************************/
 /* mxMatListMult
@@ -3221,6 +3251,142 @@ BOOL mxTest (void)
 } /* mxTest */
 
 /**********************************************************************/
+/**********************************************************************/
+
+/***********************************************************************************************************************************************/
+/*********************************************************** Display utilitie ******************************************************************/
+/***********************************************************************************************************************************************/
+
+static double  nicePrintFraction (const char *prefix, double x, const char *suffix);
+
+float complex nicePrint (const char *prefix, float complex z)
+{
+  double a = creal (z) ;
+  double b = cimag (z) ;
+  if (b == 0)
+    a = nicePrintFraction (prefix, a, "") ;
+  else if (a == 0)
+    b = nicePrintFraction (prefix, b, "i") ;
+  else
+    {
+      printf("(") ;
+      a = nicePrintFraction (prefix, a, "") ;
+      b = nicePrintFraction (" + ", b, "i") ;
+      printf(")") ;
+    }
+  return a + I * b ;
+} /* nicePrint */
+
+/*******************************************************************************************/
+static int niceInt (float x)
+{
+  int k = x >= 0 ? x + .01 : x - .01 ;
+  return k ;
+} /* niceInt */
+
+/*******************************************************************************************/
+
+static double nicePrintFraction (const char *prefix, double x, const char *suffix)
+{
+  int i = 1000000 ;
+  int s = x >= 0 ? 1 : -1 ;
+  
+  x *= s ;
+  if (niceInt (1000000*x) == 0)
+    { x = 0 ; s = 1 ; }
+  printf ("%s", prefix) ;
+  if (niceInt (1000000*x) == 1000000 * niceInt (x))
+    printf ("%.0f", s*x) ;
+  else
+    for (i = 2 ; i <= 2048 ; i++)
+      if (niceInt (10000*i*x) == 10000 * niceInt (i*x))
+	{
+	  int y = i * x + .1 ;
+	  printf ("%d/%d", s*y, i) ;
+	  i = 1000000 ;
+	}
+  if (i < 1000000)
+    printf ("%.5f", s*x) ;
+  if (x != 0)
+    printf ("%s", suffix) ;
+
+  return s * x ;
+} /* nicePrintFraction */
+
+/*******************************************************************************************/
+
+static void niceComplexShow (MX a)
+{
+  int i,j, iMax = a->shapes[0], jMax = a->shapes[1] ;
+  const complex float *zc ;
+
+  if (a->rank == 1) { jMax = iMax ; iMax = 1 ;}
+  mxValues (a, 0, 0, &zc) ;
+  printf ("## %s", a->name) ;
+  for (i = 0 ; i < iMax ; i++)
+    {
+      printf ("\n") ;
+      for (j = 0 ; j < jMax ; j++)
+	nicePrint ("\t", zc[iMax*j + i]) ;
+    }
+  printf ("\n") ;
+  return ;
+} /* niceShow */
+
+/*******************************************************************************************/
+
+static void niceFloatShow (MX a)
+{
+  int i,j, iMax = a->shapes[0], jMax = a->shapes[1] ;
+  const float *zf ;
+
+  if (a->rank == 1) { jMax = iMax ; iMax = 1 ;}
+  mxValues (a, 0, &zf, 0) ;
+  printf ("## %s", a->name) ;
+  for (i = 0 ; i < iMax ; i++)
+    {
+      printf ("\n") ;
+      for (j = 0 ; j < jMax ; j++)
+	nicePrintFraction ("\t", zf[iMax*j + i],"") ;
+    }
+  printf ("\n") ;
+  return ;
+} /* niceFloatShow */
+
+/*******************************************************************************************/
+static void niceIntShow (MX a)
+{
+  int i,j, iMax = a->shapes[0], jMax = a->shapes[1] ;
+  const int *zi ;
+
+  if (a->rank == 1) { jMax = iMax ; iMax = 1 ;}
+  mxValues (a, &zi, 0, 0) ;
+  printf ("## %s", a->name) ;
+  for (i = 0 ; i < iMax ; i++)
+    {
+      printf ("\n") ;
+      for (j = 0 ; j < jMax ; j++)
+	printf ("\t%d", zi[iMax*j + i]) ;
+    }
+  printf ("\n") ;
+  return ;
+} /* niceIntShow */
+
+/*******************************************************************************************/
+
+void mxNiceShow (MX a)
+{
+  switch (a->type)
+    {
+    case MX_NULL: break ;
+    case MX_BOOL:
+    case MX_INT: niceIntShow (a) ; break ;
+    case MX_FLOAT: niceFloatShow (a) ; break ;
+    case MX_COMPLEX: niceComplexShow (a) ; break ;
+    }
+  return ;
+} /* mxNiceShow */
+
 /**********************************************************************/
 /************************  end of file ********************************/
 /**********************************************************************/

@@ -206,6 +206,7 @@ void freeinit (void)
       bufPos = 0 ; /* will force bufRead */
       isInitialised = TRUE ;
       freeOut (0) ; /* needed be the linker 2017_02_26 */
+      /*  filAddDir (".") ; */
     }
 }
 

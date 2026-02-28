@@ -45,13 +45,8 @@ extern BOOL finalCleanup ;	/* in messubs.c */
 
 /******** tells how much system stack used *********/
 
-char *stackorigin ;
-
 mysize_t stackused (void)
-{ char x ;
-  if (!stackorigin)          /* ideally should set in main() */
-    stackorigin = &x ;
-  return stackorigin - &x ;        /* MSDOS stack grows down */
+{ return 0 ;
 }
 
 /************ Array : class to implement variable length arrays ************/
@@ -228,8 +223,8 @@ static void uArrayFinalise (void *cp)
   
   if (reportArray != (Array)2)
     totalAllocatedMemory -= a->dim * a->size ;
-  if (!finalCleanup) messfree (a->base) ;
-  a->magic = 0 ;
+  if (!a->lock && !finalCleanup) messfree (a->base) ;
+  a->magic = 0 ; a->base = 0 ;
   totalNumberActive-- ;
   if (!finalCleanup && reportArray != (Array)1 && reportArray != (Array)2) 
     arr(reportArray, a->id, Array) = 0 ;
@@ -311,7 +306,7 @@ char *uArray (Array a, int i)
         arrayExtend (a,i) ;
       a->max = i+1 ;
     }
-  return a->base + i*a->size ;
+  return a->base + ((long int)i)*a->size ;
 }
 
 /***************/
@@ -333,13 +328,13 @@ char *uArray (Array a, int i)
  char *uArrCheck (Array a, int i, int size)
 {
   if (! a)
-    messcrash ("dereferecning a null Array") ;
+    messcrash ("dereferencing a null Array") ;
   if (size != a->size)
     messcrash ("Array size mismatch accessing array of size %d with pointer if typse-size %d", a->size, size) ;
   if (i >= a->max || i < 0)
     messcrash ("array index %d out of bounds [0,%d]",
 	       i, a->max - 1) ;
-  return a->base + i*a->size ;
+  return a->base + ((long int)i)*a->size ;
 }
 
 /**************/
@@ -419,23 +414,35 @@ void arrayCompress(Array a)
 
 /****************/
 
-/* 31.7.1995 dok408  added arraySortPos() - restricted sorting to tail of array */
+/****************/
 
-void arraySort(Array a, int (*order)(const void*, const void*)) { arraySortPos(a, 0, order) ; }
-
-void arraySortPos (Array a, mysize_t pos, int (*order)(const void*, const void*))
+/* 2025_09_10 , added arraySortSlice */
+void arraySortSlice (Array a, mysize_t pos1, mysize_t pos2, int (*order)(const void*, const void*))
 {
-  unsigned int n = a->max - pos ;
-  int s = a->size ;
-  void *v = a->base + pos * a->size ;
- 
-  if (pos < 0) messcrash("arraySortPos: pos = %d", pos);
-
+  mysize_t n = pos2 - pos1 ;
+  
+  if (! arrayExists (a))
+    messcrash("arraySortSlice called on non existing array, please edit the source code") ;
+  if (pos1 < 0)
+    messcrash("pos1 = %ld < 0 in arraySortSlice", pos1) ;
+  if (pos2 > a->max)
+    messcrash("pos2 = %ld > max = %ld in arraySortSlice", pos2, a->max) ;
+  
   if (n > 1) 
-  {
-    mSort (v, n, s, order) ;
-  }
+    {
+      int s = a->size ;
+      void *v = a->base + s * pos1 ;
+      mSort (v, n, s, order) ;
+    }
 }
+
+/* 31.7.1995 dok408  added arraySortPos() - restricted sorting to tail of array */
+void arraySortPos (Array a, mysize_t  pos, int (*order)(const void*, const void*))
+{ return arraySortSlice(a, pos, a ? a->max : 0, order) ;  }
+
+void arraySort (Array a, int (*order)(const void*, const void*))
+{ return arraySortSlice(a, 0, a ? a->max : 0, order) ;  }
+
 
 /***********************************************************/
 

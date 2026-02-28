@@ -426,7 +426,7 @@ static int bigFloatVarianceSorted (BigArray a, float *medianp, float *averagep, 
 
   if (2 * n == bigArrayMax(a))
     {
-      median = (bigArr (a, n - 1, float) + arr (a, n, float)) / 2 ;
+      median = (bigArr (a, n - 1, float) + bigArr (a, n, float)) / 2 ;
     }
   else
     {

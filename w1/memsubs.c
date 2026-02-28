@@ -13,9 +13,8 @@
  * Created: Thu Aug 20 16:54:55 1998 (rd)
  *-------------------------------------------------------------------
  */
+/* define MALLOC_CHECK here to check mallocs - or preferably in regular.h */
 
-/* define MALLOC_CHECK here to check mallocs - also in regular.h */
-#define MALLOC_CHECK 
 #include "regular.h"
 
 #if defined(NEXT) || defined(HP)
@@ -610,11 +609,11 @@ static void *myMalloc (mysize_t size, BOOL recursion)
   void *cp = 0 ;
 
   /* ii >= 0 look silly, but on 2011_02_12, we looped with ii == -266904305 */
-  for (ii = 0 ; ! cp && ii < 30 && ii >= 0 ; ii++)
+  for (ii = 0 ; ! cp && ii < 30 ; ii++)
     {
       cp = malloc (size) ;
       if (cp)
-	memset (cp, 0, size) ; 
+	{ memset (cp, 0, size) ;  }
       else  /* wishful thinking for 5 minutes */
 	{
 	  invokeDebugger () ;

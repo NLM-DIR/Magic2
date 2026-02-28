@@ -14,8 +14,6 @@ char dnaDecodeChar[] =
 char rnaDecodeChar[] =
  { '-','a','u','w','g','r','k','d','c','m','y','h','s','v','b','n','>','<'} ;
 
-char complementBase[] =	
- { 0, T_,A_,W_,C_,Y_,M_,H_,G_,K_,R_,D_,S_,B_,V_,N_,RS_,FS_ } ;
 /* this is the mapping use to parse in */
 char dnaEncodeChar[] =
 {  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
@@ -29,6 +27,16 @@ char dnaEncodeChar[] =
    0,   0,  R_,  S_,  T_,  U_,  V_,  W_,  N_,  Y_,   0,   0,   0,   0,   0,   0,
 } ;
 
+char hardComplementBase[] =	
+ { 0, T_,A_,W_,C_,Y_,M_,H_,G_,K_,R_,D_,S_,B_,V_,N_,RS_,FS_ } ;
+
+char checkComplementBase (char cc)
+{
+  int n = cc ;
+  if (n < 0 || n > 17)
+    messcrash ("complementBase(%d) out of range", n) ;
+  return hardComplementBase[n] ;
+}
 
 /********************************************************/
 /*
@@ -245,7 +253,7 @@ static char Se_atoms[27] =
 int pepWeight (Array pep)  /* encoded array */
 {
   char *cp ;
-  int i, residue, w = -1 ;
+  int residue, w = -1 ;
 
   int Ccnt = 0;  /* initialize counters */
   int Hcnt = 2;  /* always start with water */
@@ -255,22 +263,24 @@ int pepWeight (Array pep)  /* encoded array */
   int Secnt = 0;
   
   
-  if (pep && (i = arrayMax(pep)))
-  {
-    cp = arrp (pep, 0, char) - 1 ;
-    while (cp++, i--)
-      {
-	residue = *cp ;
-
-	if (H_atoms[residue] == 0)  /* unsupported AA */
-	  return w ;                /* bail out */
-	Ccnt += C_atoms[residue];
-	Hcnt += H_atoms[residue];
-	Ncnt += N_atoms[residue];
-	Ocnt += O_atoms[residue];
-	Scnt += S_atoms[residue];
-	Secnt += Se_atoms[residue];
-      }
+  if (pep)
+    {
+      int i = arrayMax(pep) ;
+      cp = arrp (pep, 0, char) - 1 ;
+      while (cp++, i--)
+	{
+	  residue = *cp ;
+	  if (residue == 22)
+	    break ;
+	  if (H_atoms[residue] == 0)  /* unsupported AA */
+	    return w ;                /* bail out */
+	  Ccnt += C_atoms[residue];
+	  Hcnt += H_atoms[residue];
+	  Ncnt += N_atoms[residue];
+	  Ocnt += O_atoms[residue];
+	  Scnt += S_atoms[residue];
+	  Secnt += Se_atoms[residue];
+	}
     }
   
   w = (12.01115 * Ccnt) + (1.0079 * Hcnt) +
@@ -375,10 +385,15 @@ float pepPI (Array pep) /* encoded array */
   for (i = n = 0, cp = arrp(pep,0,char) ; i < max ; i++, cp++)
     {
       n = pepDecodeChar[(int)*cp] - 'A' ;
+      if (n < 0)  /* stop = '*'- 'A' = -23 */
+	{
+	  max = i ;
+	  break ;
+	}
       aaCount [n]++ ;
       if (!i)  nTermResidue = n ;
+      cTermResidue = n ;
     }
-  cTermResidue = n ;
   
   for (ii = 0, charge = 1.0 ; 
        ii < MAXLOOP && (phMax - phMin) > EPSI ;
@@ -556,9 +571,9 @@ char reverseCodon (const char* cp)
 {
   char temp[3] ;
 
-  temp[0] = complementBase[(int)cp[2]] ;
-  temp[1] = complementBase[(int)cp[1]] ;
-  temp[2] = complementBase[(int)cp[0]] ;
+  temp[0] = complementBase(cp[2]) ;
+  temp[1] = complementBase(cp[1]) ;
+  temp[2] = complementBase(cp[0]) ;
   return codon (temp) ;
 }
 /****************/
@@ -567,9 +582,9 @@ char antiCodon (const char* cp)
 {
   char temp[3] ;
 
-  temp[0] = complementBase[(int)cp[0]] ;
-  temp[1] = complementBase[(int)cp[-1]] ;
-  temp[2] = complementBase[(int)cp[-2]] ;
+  temp[0] = complementBase(cp[0]) ;
+  temp[1] = complementBase(cp[-1]) ;
+  temp[2] = complementBase(cp[-2]) ;
   return codon (temp) ;
 }
 

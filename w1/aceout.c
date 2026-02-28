@@ -33,8 +33,10 @@
  */
 
 #include <wh/regular.h>
-#include <wh/aceio.h>					    /* provide incomplete (public) type */
-#include <wh/mytime.h>	
+#include <wh/aceio.h>	    /* provide incomplete (public) type */
+#include <wh/mytime.h>
+#include <wh/fastItoA.h>
+
 /************************************************************/
 
 /* We used to have a huge buffer within the aceout struct because we didn't  */
@@ -466,12 +468,12 @@ BOOL aceOutStreamPos (ACEOUT fo, long int *posp)
 #define ESUCCESS 0
 #include <errno.h>
 
-int aceOutBinary (ACEOUT fo, const void *data, int size)
+int aceOutBinary (ACEOUT fo, const void *data, long int size)
      /* copy a binary structure onto a text stack
       * RETURNS errno */
 { 
   int errno_result = ESUCCESS;
-  int num_bytes_written = 0;
+  long int num_bytes_written = 0;
 
   if (!aceOutExists(fo))
     messcrash("aceOutBinary() - received invalid fo pointer");
@@ -491,7 +493,7 @@ int aceOutBinary (ACEOUT fo, const void *data, int size)
       fo->line++;
     }
 
-  fo->byte += (long int)num_bytes_written;
+  fo->byte += num_bytes_written;
 
   return errno_result;
 } /* aceOutBinary */
@@ -913,6 +915,28 @@ static void aceOutCloseFileStack(ACEOUT fo)
 
 
 /************************************************/
+#ifdef JUNK
+static Array activePipes = 0 ;
+
+static pipeRegister (int pid)
+{
+  if (! activePipes )
+    activePipes = arrayCreate (128, long int) ;
+  activePipes (arrayMax(activePipes), long int) = pid ;
+}
+
+static pipeWait (void)
+{
+  if (activePipes)
+    {
+      int i, iMax = arrayMax (activePipes) ;
+      long int pid = arr (activePipes, i, long int) ;
+      wait (pid) ;
+    }
+  return ;
+}
+#endif
+/************************************************/
 
 static void aceOutFinalise (void *block)
 {
@@ -1083,6 +1107,8 @@ ACEOUT aceOutCreate (const char *outFileName, const char *suffix, BOOL gzo, AC_H
   int ln = outFileName ? strlen(outFileName)  : 0 ;
   int lnS = suffix ? strlen(suffix)  : 0 ;
 
+  if (ln > 0 && lnS > 1 && outFileName[ln-1]== '/' && suffix[0] == '.')
+    { suffix++ ; lnS-- ; }
   if (! suffix || (ln > lnS && ((ccp = strstr (outFileName, suffix)) && ccp == outFileName + ln - lnS)))
     suffix = "" ;
 
@@ -1109,6 +1135,16 @@ ACEOUT aceOutCreate (const char *outFileName, const char *suffix, BOOL gzo, AC_H
     }
   return ao ;
 } /* aceOutCreate */
+
+/*************************************************************************************/
+/* return number of characters used to write this number */
+int aceOutInt (ACEOUT ao, int nn)
+{
+  char buf[128] ;
+  int k = fast_itoa (buf, nn) ;
+  aceOut (ao, buf) ;
+  return k ;
+} /* aceOutInt */
 
 /*************************************************************************************/
 

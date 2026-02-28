@@ -43,11 +43,57 @@
 
 #include "regular.h"
 
+
+/* time gain is less than 1/200 on 32bytes struct  */
+static void insertionSort (char *b, mysize_t n, int s, int (*cmp)(const void *va, const void *vb))
+{
+  mysize_t i, j ;
+  char buf[s] ;
+  for (i = 1 ; i < n ; i++)
+    {
+      j = i - 1 ;
+      if ((*cmp) (b + i*s, b + j*s) >= 0)
+	continue ;
+      memcpy (buf, b + i*s, s) ;
+      memcpy (b + i*s, b + j*s, s) ;
+      while (j > 0 && (*cmp) (b + (j-1)*s, buf) > 0)
+	{
+	  memcpy (b + j*s, b + (j-1)*s, s) ;
+	  j-- ;
+	}
+      memcpy (b + j*s, buf, s) ;
+    }
+} /* insertionSort */
+
+
+static void insertionSortInt (int *b, mysize_t n, int (*cmp)(const void *va, const void *vb))
+{
+   mysize_t i, j ;
+   int tmp ;
+   for (i = 1 ; i < n ; i++)
+    {
+      j = i - 1 ;
+      if (cmp (b + i, b+j) >= 0)
+	continue ;
+      tmp = b[i] ;
+      b[i] = b[j] ;
+      while (j > 0 && cmp (b + j - 1, &tmp) > 0)
+	{
+	  b[j] = b[j-1] ;
+	  j-- ;
+	}
+      b[j] = tmp ;
+    }
+} /* insertionSortInt */
+
 static void mDoSortInt (int *b, mysize_t n, int (*cmp)(const void *va, const void *vb), int *buf)
 {
   int *b0 = buf, *b1, *b2 ;
   mysize_t  n1, n2 ;
 
+  /* 2025_05_24: 32 is the sweet spot butthe difference is minimal */
+  if (n <= 32) { insertionSortInt(b, n, cmp) ; return ; }
+  
   n1 = n / 2 ; n2 = n - n1 ;
   b1 = b ; b2 = b + n1 ;
 
@@ -116,6 +162,9 @@ static void mDoSort (char *b, mysize_t n, int s, int (*cmp)(const void *va, cons
   char *b0 = buf, *b1, *b2 ;
   mysize_t  n1, n2 ;
 
+  /* gain is around 2% on 32bytes struct  */
+  if (0 && n <= 16) { insertionSort (b, n, s, cmp) ; return ; }
+  
   n1 = n >> 1 ; n2 = n - n1 ;
   b1 = b ; b2 = b + (n1 * s);
 
@@ -126,7 +175,7 @@ static void mDoSort (char *b, mysize_t n, int s, int (*cmp)(const void *va, cons
     return ;
 
   while (n1 > 0 && n2 > 0)
-    {
+    { 
       if ((*cmp) (b1, b2) <= 0)
 	{
 	  memcpy (b0, b1, s) ;
@@ -167,7 +216,7 @@ void mSort (void *b, mysize_t n, int s, int (*cmp)(const void *va, const void *v
   if (size < 4*1024)
     buf = sBuf ;
   else
-    buf = mBuf = (char *) messalloc (size) ;
+    buf = mBuf = (char *) malloc (size) ;
   
     /* buf = bufBig ; */
 
@@ -180,7 +229,7 @@ void mSort (void *b, mysize_t n, int s, int (*cmp)(const void *va, const void *v
   else
     mDoSort ((char *)b, n, s, cmp, buf) ;
 
-  messfree (mBuf) ;
+  free (mBuf) ;
 } /* mSort */
 
 /***********************************************************/

@@ -164,7 +164,7 @@ FILE* callScriptPipe (const char *script, const char *args)
   return callCdScriptPipe (0, script, args) ;
 }
 
-/* mieg 207_01_17
+/* mieg 2007_01_17
  *
  * Man page on solaris says:
  * The following function can be used in a  multithreaded  pro-

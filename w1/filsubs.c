@@ -306,6 +306,13 @@ static char *filDoName (const char *name, const char *ending, const char *spec, 
     { 
       part = stackCreate (128) ;
       full = stackCreate (MAXPATHLEN) ;
+    /* 
+    * add cwd as default to search.  This use of getcwd() is ok because
+    * if you look above, you see that the Stack full was created with
+    * MAXPATHLEN bytes in it.
+    */
+      /* filAddDir (".") ; 2025_04_22 now done in freeinit() */
+      /* getcwd (stackText (full, 0), MAXPATHLEN )) ; */
     }
 
   /*
@@ -319,7 +326,8 @@ static char *filDoName (const char *name, const char *ending, const char *spec, 
   * append an extension if they asked for one.
   */
   if (ending && *ending)
-    { catText (part, ".") ;
+    {
+      if (*ending != '.' && *ending != '/') catText (part, ".") ;
       catText (part, ending) ;
     }
 	/* NB filName is reentrant in the sense that it can be called 
@@ -335,27 +343,23 @@ static char *filDoName (const char *name, const char *ending, const char *spec, 
       stackClear (full) ;
       catText (full, stackText (part, 0)) ;
       result = stackText (full, 0) ;
+
       if (filCheck (result, spec))
 	return result ;
       else
 	return 0 ;
     }
   
-  
-  if (!dirPath)		
-    {
-    /* 
-    * add cwd as default to search.  This use of getcwd() is ok because
-    * if you look above, you see that the Stack full was created with
-    * MAXPATHLEN bytes in it.
-    */
-      filAddDir ("./") ; /* getcwd (stackText (full, 0), MAXPATHLEN )) ; */
-    }
-
   /*
   * walk down the directory path, looking for the specified file
   * in each directory
   */
+  if (! dirPath && ! strict)
+    filAddDir (".") ; 
+  stackCursor (dirPath, 0) ;
+  dir = stackNextText (dirPath) ;
+  if (! dir && ! strict)
+    filAddDir (".") ; 
   stackCursor (dirPath, 0) ;
   while ((dir = stackNextText (dirPath)))
     { 
@@ -365,7 +369,7 @@ static char *filDoName (const char *name, const char *ending, const char *spec, 
       result = stackText (full, 0) ;
       if (filCheck (result, spec))
 	return result ;
-      if (strict)
+      if (strict && strcmp (dir, "./"))
 	break ;
     }
   return 0 ;
@@ -691,7 +695,6 @@ void filclose (FILE *fil)
 
   if (!fil || fil == stdin || fil == stdout || fil == stderr)
     return ;
-  fclose (fil) ;
   if (mailFile && assFind (mailFile, fil, &filename))
     { if (assFind (mailAddress, fil, &address))
 	callScript ("mail", messprintf ("%s < %s", address, filename)) ;
@@ -702,6 +705,7 @@ void filclose (FILE *fil)
       unlink ((char *) filename) ;
       messfree (filename) ;
     }
+  fclose (fil) ;
 } /* filclose */
 
 /***********************************/

@@ -450,7 +450,7 @@ BOOL topoChronoOrder (Array aa, KEYSET lines, KEYSET cols)
   ww = arrayHandleCreate (i, WI, h) ;
   array (ww, i - 1, WI).w = 0 ; /* make room */
     
-  for (pass = 0 ; moved && pass < 1000 ; pass++)
+  for (pass = 0 ; moved && pass < 3000 ; pass++)
     {
       moved = topoChronoSortLines (aa, 0, iMax, jMax, lines, ww, pass) ;
       if (0 && isSym) /* FAUX, il faut remanier la matrices, pas juste la table des cosl */

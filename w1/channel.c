@@ -63,6 +63,26 @@ void channelDebug (CHAN *c, int debug, char *title)
 } /* chanDebug */
 
 /*******************************************************************************************************/
+/* number of packets received by channel c, negative is channel is still open */
+int channelCount (CHAN *c)
+{
+  int n = 0 ;
+
+  if (c)
+    {
+      pthread_mutex_lock (&(c->c.mutex)) ;
+      n = c->c.nPut1 ;
+      if (! c->c.isClosed)
+	n = -n ;
+      if (c->c.debug)
+	fprintf (stderr, " - channelCount %s : closed=%d count=%d\n", c->c.title[0] ? c->c.title : "no-name", c->c.isClosed ? 1 : 0, n) ;
+      pthread_mutex_unlock (&(c->c.mutex)) ;
+    }
+
+  return n ;
+} /* channelCount */
+
+/*******************************************************************************************************/
 
 void channelClose (CHAN *c)
 {
@@ -79,6 +99,64 @@ void channelClose (CHAN *c)
       pthread_mutex_unlock (&(c->c.mutex)) ;
     }
 } /* chanClose */
+
+/*******************************************************************************************************/
+
+void channelAddSources (CHAN *c, int nSources)
+{
+  if (c && nSources >= 0)
+    {
+      pthread_mutex_lock (&(c->c.mutex)) ;
+      if (c->c.debug)
+	fprintf (stderr, "channel %s add %d sources, new total %d\n"
+		 , c->c.title[0] ? c->c.title : "no-name"
+		 , nSources, c->c.nSources + nSources
+		 ) ;
+      if (! c->c.isClosed)
+	c->c.nSources += nSources ;
+      else
+	messcrash ("channel %s Add %d Sources called on closed channel"
+		 , c->c.title[0] ? c->c.title : "no-name"
+		 , nSources
+		 ) ;
+      pthread_mutex_unlock (&(c->c.mutex)) ;
+    }
+} /* chanAddSources */
+
+/*******************************************************************************************************/
+
+void channelCloseSource (CHAN *c)
+{
+  if (c)
+    {
+      pthread_mutex_lock (&(c->c.mutex)) ;
+      if (c->c.debug)
+	fprintf (stderr, "channel %s received closeSources, %d remaining sources"
+		 , c->c.title[0] ? c->c.title : "no-name"
+		 , c->c.nSources - 1
+		 ) ;
+      if (! c->c.isClosed)
+	c->c.nSources-- ;
+      else
+	messcrash ("channel %s closeSource called on closed channel"
+		 , c->c.title[0] ? c->c.title : "no-name"
+		 ) ;
+      if (c->c.nSources < 0)
+	messcrash ("channel %s closeSources called beyond the number of added sources"
+		 , c->c.title[0] ? c->c.title : "no-name"
+		 ) ;
+      if (c->c.nSources == 0)
+	{
+	  c->c.isClosed = TRUE ;
+	  if (c->c.debug)
+	    fprintf (stderr, " - Closing channel %s\n"
+		     , c->c.title[0] ? c->c.title : "no-name"
+		     ) ;
+	  pthread_cond_signal(&(c->c.notEmpty)) ;
+	}
+      pthread_mutex_unlock (&(c->c.mutex)) ;
+    }
+} /* chanCloseAt */
 
 /*******************************************************************************************************/
 
@@ -224,7 +302,7 @@ int uChannelMultiGet (CHAN *c, void *vp, int size, int max, BOOL wait)
 	     ) ; 
  
   if (! 
-      (((c->c.in + 1) % c->c.cMax) == c->c.out)  /* the chammel is full */
+      (((c->c.in + 1) % c->c.cMax) == c->c.out)  /* the channel is full */
       )
     {
       int i ;
@@ -248,8 +326,83 @@ void *uChannelGet (CHAN *c, void *vp, int size)
 } /* uChannelGet */
 
 /*******************************************************************************************************/
+/* channelGetMaxWait : blocking get with maximum wait time             */
+/* Returns:                                                            */
+/*   >0 : success, data copied, number of records read (usually 1)    */
+/*    0 : channel closed and empty                                     */
+/*   -1 : timeout reached, no data available                           */
+/* ------------------------------------------------------------------- */
+int uChannelGetMaxWait(CHAN *c, void *vp, int size, double maxSeconds)
+{
+  if (! c || c->c.magic != uChannelDestroy)
+    messcrash ("Invalid channel passed to uChannelGetMaxWait") ;
+
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  time_t sec = (time_t)maxSeconds;
+  long nsec = (long)((maxSeconds - sec) * 1e9) ;
+  ts.tv_sec += sec;
+  ts.tv_nsec += nsec;
+  if (ts.tv_nsec >= 1000000000L)
+    {
+      ts.tv_sec++ ;
+      ts.tv_nsec -= 1000000000L ;
+    }
+  
+  pthread_mutex_lock (&c->c.mutex);
+  
+  while (TRUE)
+    {
+      // Check condition WHILE HOLDING the mutex (safe, no race)
+      if (c->c.isClosed && c->c.in == c->c.out)
+	{
+	  memset (vp, 0, size) ; /* a close channel returns a zeroed buffer */
+	  /* repeat the broadcast in case another client is waiting */
+	  pthread_cond_signal(&(c->c.notEmpty)) ;
+	  pthread_mutex_unlock (&(c->c.mutex)) ;
+	  return 0 ;
+	}
+      
+      if (c->c.in != c->c.out)
+	{
+	  /* data available, copy safely */
+	  memcpy (vp, c->vp + c->c.size * c->c.out, size) ;
+	  c->c.out = (c->c.out + 1) % c->c.cMax ;
+	  c->c.nGet++ ;
+	  if (! (((c->c.in + 1) % c->c.cMax) == c->c.out)  /* the channel is full */
+	      )
+	    {
+	      int i ;
+	      pthread_cond_signal (&(c->c.notFull)) ;
+	      for (i = 0 ; i < CHANNEL_SELECT_MAX ; i++)
+		if (c->c.select[i])
+		  pthread_cond_broadcast (&((c->c.select[i])->c.notFull)) ;
+	    }
+	  pthread_mutex_unlock (&(c->c.mutex)) ;
+	  return 1 ;
+	}
+      
+      // empty and open → wait with timeout
+      int ret = pthread_cond_timedwait(&(c->c.notEmpty), &(c->c.mutex), &ts);
+      
+      if (ret == ETIMEDOUT)
+	{
+	  pthread_mutex_unlock (&(c->c.mutex)) ;
+	  return -1 ;
+	}
+      
+        /*  spurious wakeup or real signal → recheck condition */
+    }
+  
+  /* unreachable */
+  pthread_mutex_unlock (&(c->c.mutex)) ;
+  messcrash ("unreachable in uChannelGetMaxWait") ;
+  return 0 ;
+} /* channelGetMaxWait */
+
+/*******************************************************************************************************/
 /* return TRUE if one of the channel is probably ready
- * no garantee, since we realse the mutex. the calling function must then use tryGet
+ * no garantee, since we relealse the mutex. the calling function must then use tryGet
  * on each channel
  */
 
@@ -332,7 +485,6 @@ int uChannelMultiPut (CHAN *c, void *vp, int size, int max, BOOL wait)
     pthread_mutex_lock (&(c->c.mutex)) ;
 
   /* we always keep one slot empty in the circle otherwise at init time we would not be able to put */ 
-  c->c.nPut1 += max ;
   while (((c->c.in + 1) % c->c.cMax) == c->c.out && rc == 0)  /* the chammel is full */
     {
       if (! wait)  /* return FALSE immediatly */
@@ -350,6 +502,7 @@ int uChannelMultiPut (CHAN *c, void *vp, int size, int max, BOOL wait)
     }
 
   	  /* actual work */
+  c->c.nPut1 += max ;
   while (max-- && ((c->c.in + 1) % c->c.cMax) != c->c.out)
      {
        memcpy (c->vp + c->c.size * c->c.in, vp + nn * c->c.size, size) ;
@@ -397,6 +550,4 @@ void channelTest (int nn)
 
 /*******************************************************************************************************/
 /*******************************************************************************************************/
-
-
-
+/*******************************************************************************************************/
