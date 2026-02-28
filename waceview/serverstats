@@ -130,9 +130,9 @@ foreach serv  (any gold ara_1 worm_1 36a_1 37a_1 mm_37_1 rat_1)
   echo -n  "server $serv $nam, statistics for $year $month, cumulated "
   date
   if ($serv == any) then
-    cat  ../*/LOGS.$year'_'$mmm | egrep '(webpfamg|REMOTE_ADDR)' >! ss.$serv.all
+    zcat  ../*/LOGS.$year'_'$mmm.gz | egrep '(webpfamg|REMOTE_ADDR)' >! ss.$serv.all
   else
-    cat ../$serv/server.log* ../$serv/LOGS.$year'_'$mmm | egrep '(webpfamg|REMOTE_ADDR)' >! ss.$serv.all
+    zcat ../$serv/LOGS.$year'_'$mmm.gz | egrep '(webpfamg|REMOTE_ADDR)' >! ss.$serv.all
   endif
   if ($serv == "37a_1") cat ../BLAST/log_file | grep human >> ss.$serv.all
   if ($serv == "37a_2") cat ../BLAST/log_file | grep human >> ss.$serv.all

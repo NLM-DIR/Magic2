@@ -8,10 +8,14 @@ vesta> crontab -l
 #       list of people who get mail, and he is frequently watching on weekends
 #
 # plot on thursday - the only day that new plot data is ready
+# START_SERVERS is launched at a quarter past every hour every day
+# rotate restarts the server once a day as a sanity measure
 #
 # minute hour   day     month   day_of_week     command
 #                               (sunday=0)
 #
+2024: on ace01
+crontab -l
 17      3       *       *       0       /home/mieg/SERVER/LOGS/daywatch crash rotate
 17      3       *       *       1       /home/mieg/SERVER/LOGS/daywatch crash rotate
 17      3       *       *       2       /home/mieg/SERVER/LOGS/daywatch crash rotate
@@ -20,7 +24,8 @@ vesta> crontab -l
 17      3       *       *       5       /home/mieg/SERVER/LOGS/daywatch crash rotate
 17      3       *       *       6       /home/mieg/SERVER/LOGS/daywatch crash rotate
 50      23      *       *       *       /home/mieg/SERVER/LOGS/daywatch cgi
-43      *       *       *       *       /home/mieg/SERVER/LOGS/ctxclean 
+43      *       *       *       *       /home/mieg/SERVER/LOGS/ctxclean
 19      *       *       *       *       /home/mieg/SERVER/LOGS/ace_timer
 49      *       *       *       *       /home/mieg/SERVER/LOGS/ace_timer
-# */5      *       *       *       *       /home/mieg/SERVER/LOGS/checklife
+00	15	*	*	*	/home/mieg/SERVER/LOGS/START_SERVERS 600
+

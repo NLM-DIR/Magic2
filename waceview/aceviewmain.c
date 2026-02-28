@@ -26,8 +26,10 @@ june 2007: separate the page in 5 subpages: fgene,fmol, fexp, ffunc, genome
     * These fields exist to be displayed to the user.
     */
 
-#define VERSION "v75"
-#define DATA_VERSION "v75a"
+/* synchronize with AceView/CHANGE */
+#define VERSION "v81"  
+#define DATA_VERSION "v81a"
+
 typedef struct dbConfigStruct {
   const char *dbName ; /* public name of the server, i.e. human */
   char dbSpecies ;
@@ -66,7 +68,8 @@ static DBCF dbConfig[] =
 
   { "coli", 'c'     , VERSION , "ace01", 2342001, "coli",                  "June 2015" } ,
   
-  { "debug", 'h'     , VERSION , "acedev01", 12345, "worm",                  "April 2007" } ,
+  { "debug", 'h'     , VERSION , "acedev01", 12345, "worm",                  "Jan 2025" } ,
+  { "droso", 'h'     , VERSION , "acedev01", 54321, "droso",                  "Jan 2025" } ,
 
   { "test01", 'h'     , VERSION , "ace01", 12345, "human",                  "Aug 2010" } , 
   { "test31", 'h'     , VERSION , "ace31", 12345, "human",                  "April 2007" } ,
@@ -374,7 +377,7 @@ static int  cgi_sanitize_word (char *txt, const char *w)
   int nn = 0, n = strlen (w) ;
   char *cp = txt ;
 
-  while ((cp = strcasestr (cp, w)))
+  while ((cp = (char *) strcasestr (cp, w)))
     { 
       memset (cp, ' ', n) ; cp += n ; nn += n ; 
     }
