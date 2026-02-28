@@ -39,7 +39,7 @@
 #define DtPmapPadSheet "DtPmapPadSheet"
 #define DtPmapFingerprint "DtPmapFingerprint"
 #define DtClass "DtClass"
-#define DtBqlDisplay "DtBqlDisplay"
+#define DtBqlDisp "DtBqlDisp"
 #define DtQueryBuilder "DtQueryBuilder"
 #define DtQueryByExample "DtQueryByExample"
 #define DtDNAcompare "DtDNAcompare"

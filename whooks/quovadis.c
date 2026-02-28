@@ -29,6 +29,7 @@
 #include "hseqdisp.h"
 #include "orepeats.h"
 #include "dump.h"
+#include "bqldisp.h"
 
 extern DumpFunc dumpFunc[] ;
 extern ParseFunc parseFunc[] ;
@@ -36,14 +37,6 @@ extern KillFunc killFunc[] ;
 
 #ifndef NON_GRAPHIC
 
-
-#ifdef ED_G_NEVER_INCLUDE_THIS_CODE
-/* NO, this causes the build to fail, if this sort of thing is to be included*/
-/* then it can be done with a special build flag that is supplied to the     */
-/* make using the USEROPTS variable as detailed in truemake....              */
-/*                                                                           */
-#define DEBUG    1  /* mieg , i want acdbtest linked in */
-#endif /* ED_G_NEVER_INCLUDE_THIS_CODE */
 #define DEBUG    1  /* mieg , i want acdbtest linked in */
 
 extern Array  displayFuncArray ;
@@ -63,7 +56,7 @@ extern Array  displayFuncArray ;
 #include "dendrogram.h"
 #include "hseqdisp.h" 
 #include "querydisp.h"		/* for bqlCreate qbeCreate, qbuildCreate */
-
+#include "bqldisp.h"
 
 /* these externs have to be removed and replaced with includes
    that declare the prototypes for these functions */
@@ -149,7 +142,7 @@ MENUOPT quovadis[] = {
             { qbeCreate,        "Query by Examples"},   
 #endif
             { qbuildCreate,     "Query builder"}, 
-            { bqlDisplayCreate,        "Select"},   
+            { bqldCreate,        "BQL table queries"},   
   
             { qspreadDispCreate, "Table Maker"},
 #if defined(WIN32)
@@ -292,6 +285,8 @@ static void displayInit (void)
   hook (DtGLOCBIG, glocBigDisplay) ;
   hook (DtGeneExp, geneExpDisplay) ;
 #endif
+
+  hook (DtBqlDisp, bqlDisplay) ;
 
   hook (FMAP, fMapDisplay) ;
   hook (PEPMAP, pepDisplay) ;

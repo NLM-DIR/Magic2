@@ -173,6 +173,7 @@ KEY _Alternative_exon
 , _VAnnotation
 , _VClone_Group
 , _VFiche
+, _VIntron
 , _VKantor
 , _VNewName
 , _VRNAi
@@ -216,6 +217,8 @@ void cDNAAlignInit (void)
   _VClone_Group = KEYKEY(key) ;
   lexaddkey ("Fiche", &key, _VMainClasses) ; 
   _VFiche = KEYKEY(key) ;
+  lexaddkey ("Intron", &key, _VMainClasses) ; 
+   _VIntron = KEYKEY(key) ; 
   lexaddkey ("Kantor", &key, _VMainClasses) ; 
    _VKantor = KEYKEY(key) ; 
   lexaddkey ("Newname", &key, _VMainClasses) ; 
