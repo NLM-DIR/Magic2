@@ -741,7 +741,7 @@ static void mspcpy(MSP *dest, MSP *src)
 }
 
 
-static void sortMSPs(int (*func)())
+static void sortMSPs(int (*func)(MSP*,MSP*))
 {
     MSP tmpmsp, *msp1, *msp2;
 
