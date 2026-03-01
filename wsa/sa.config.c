@@ -295,7 +295,7 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	saUsage (hprintf (h, "Cannot find file -I %s specified on the command line", pp->inConfigFileName), 0, 0) ;
       while (aceInCard (ai))
 	{
-	  char *cq, *cr, *cp = aceInWord (ai) ;
+	  char *cq, *cr = 0, *cp = aceInWord (ai) ;
 	  
 	  line++ ;
 	  if (! cp || ! *cp || *cp == '#')
@@ -320,7 +320,7 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	  rc->fileName1 = strnew (cp, pp->h) ;
 	  if (! dictAdd (fDict, cp, 0))
 	    saUsage (hprintf (h, "Duplicate file name %s\n at line %d of file -T %s"
-			      , cr
+			      , cp
 			      , line
 			      , pp->inConfigFileName
 			      ), 0, 0) ;

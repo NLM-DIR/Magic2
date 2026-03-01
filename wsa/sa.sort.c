@@ -243,7 +243,7 @@ int saSort (BigArray aa, int type)
   long int N = bigArrayMax (aa) ;
   char *cp = N ?  (char *) aa->base : 0 ;
   int s = aa->size ;
-  int (*cmp)(const void *va, const void *vb) ;
+  int (*cmp)(const void *va, const void *vb) = NULL ;
   int usedGPU = 0 ;
   
   switch (type)

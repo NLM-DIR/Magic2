@@ -256,7 +256,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 {
   long int iMax ; 
   long int jMax ; 
-  long int i, j, k ;
+  long int i, j ;
   AC_HANDLE h = bb->h ;
   int maxRepeats = pp->maxTargetRepeats ;
     
@@ -373,12 +373,12 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 	  vp->pos = ii + mstep2 < iMax ? (up + mstep2)->seed : wordMax ;
 	  vp->seed = ii + mstep1 < iMax ? (up + mstep1)->seed : wordMax ;
 	  
-	  k = iMax - ii ;
-	  if (k > mstep1)
-	    k = mstep1 ;
 	  vp++ ;
 	  jMax++ ;
 	}
+      int k = iMax - ii ;
+      if (k > mstep1)
+	k = mstep1 ;
       memcpy (vp, up, k * sizeof (CW)) ;
       vp += k ; up += k ;
       jMax += k ; 
@@ -619,9 +619,9 @@ void saTargetIndexCreate (PP *pp)
 
   /* copy the actual config file used to create the index */
   if (pp->tConfigFileName)
-    system (hprintf(h, "\\cp %s %s/tConfig\n", pp->tConfigFileName, pp->indexName)) ;
+    filFileCopy (pp->tConfigFileName, hprintf(h, "%s/tConfig\n", pp->indexName)) ;
   else
-    system (hprintf(h, "touch %s/tConfig\n", pp->indexName)) ;
+    (void) system (hprintf(h, "touch %s/tConfig\n", pp->indexName)) ;
   ac_free (h) ;
   return ;
 }  /* saTargetIndexCreate */

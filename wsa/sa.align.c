@@ -1652,7 +1652,7 @@ static void alignAdjustExons (const PP *pp, BB *bb, Array bestAp, Array aa, Arra
 static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array aa, Array dna, int chromA, Array dnaG, Array dnaGR, Array bestAp, int maxJump, int maxJump2)
 {
   AC_HANDLE h = 0 ;
-  int ii, jj, i1, i2, iMax ;
+  int ii, jj = 0, i1, i2, iMax ;
   ALIGN *up, *vp, *wp ;
   int i02 = 0 ;
   int chainAli = 0 ;
@@ -2508,7 +2508,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
   ALIGN *ap ;
   long int ii, iMax = bigArrayMax (hits), kMax = 0 ;
   int a1, a2, x1, x2 ;
-  int b1, b2, y1, y2, ha1, readOld = 0, chromOld = 0, readA = 0, chromA = 0, read1 = 0, iiGood = 0 ;
+  int b1 = 0, b2 = 0, y1 = 0, y2 = 0, ha1 = 0, readOld = 0, chromOld = 0, readA = 0, chromA = 0, read1 = 0, iiGood = 0 ;
   BOOL isDownOld = TRUE ;
   Array dna = 0, dnaG = 0, dnaGR = 0 ;
   int errMax = pp->errMax ; /* 999999 ; */
@@ -2526,6 +2526,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
   int nTargetRepeatsOld = 0 ;
   const int nTRmask = (0x1 << NTARGETREPEATBITS) - 1 ;
 
+  y1 = y2 = 0 ;
   for (ii = 0, hit = bigArrp (hits, 0, HIT) ; ii < iMax ; ii++, hit++)
     {
       int read = hit->read ;
@@ -2607,7 +2608,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  if (kMax)
 	    {
 	      if (donor)
-		ap->donor = donor ;
+		ap->donor = donor ;  /* uninitialized ? */
 	      if (acceptor)
 		ap->acceptor = acceptor ;
 	    }
@@ -2937,7 +2938,7 @@ void saAlignDo (const PP *pp, BB *bb)
 	      int chrom = 0, mult ;
 	      int k, kk = 0, a1 = 0 ;
 	      HIT *up  ;
-	      COUNTCHROM *zp, *zp0 ;
+	      COUNTCHROM *zp = 0, *zp0 = 0 ;
 	      arrayMax (countChroms) = 0 ;
 
 	      /* establish zones */

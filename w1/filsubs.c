@@ -902,7 +902,7 @@ BOOL filAge (const char *name, const char *end,
 /* info. about the file mode but we would need to get hold of all sorts of   */
 /* other information (effective UID, group membership) to use it.            */
 /*                                                                           */
-BOOL filCopyFile(char *curr_name, char *new_name)
+BOOL filFileCopy (const char *curr_name, const char *new_name)
 {
   BOOL status = TRUE ;
   struct stat file_stat ;

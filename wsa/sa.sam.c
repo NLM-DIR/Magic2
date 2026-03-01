@@ -497,7 +497,7 @@ int saSamExport (ACEOUT ao, ACEOUT aoe, const PP *pp, BB *bb)
 
   for (ia = 0, read = chain = 0 ; ia < aMax ; ia++, ap++)
     {
-      int k ;
+      int k = 1 ;
       if (ap->read != read || ap->chain != chain)
 	k = exportOneSam (ao, aoe, pp, bb, record, cigar, cigarettes, errors, ap, ia, aMax) ;
       read = ap->read ;

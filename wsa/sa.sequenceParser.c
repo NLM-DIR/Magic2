@@ -797,7 +797,7 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
   ACEIN ai1 = 0 ;
   ACEIN ai2 = 0 ;
   int line1 = 0, line2 = 0, line10 = 0 ;
-  Array dna1, dna2, dnas ;
+  Array dna1 = 0, dna2 = 0, dnas = 0 ;
   Array qual1 = 0, qual2 = 0 ;
   char targetClass = tc ? tc->targetClass : 0 ;
   char namBufG [NAMMAX+12] ;
@@ -1118,7 +1118,8 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       globalDnaCreate (bb) ;
       t2 = clock () ;
       
-      saCpuStatRegister (isGenome ? "1.GParser" : "2.ReadParser", pp->agent, bb->cpuStats, t1, t2, arrayMax (dnas) - 1) ;
+      if (dnas)
+	saCpuStatRegister (isGenome ? "1.GParser" : "2.ReadParser", pp->agent, bb->cpuStats, t1, t2, arrayMax (dnas) - 1) ;
       nPuts++  ;
       channelPut (chan, bb, BB) ;
       channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
