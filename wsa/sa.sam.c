@@ -40,7 +40,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
       {
 	ep = arrp (errors, ii, A_ERR)  ;
 	if (ep->iShort < ap->x1 - 1 || ep->iShort >= ap->x2) continue ; /* may happen when fixing a duplication not authorized in sam */
-	if (isDown && ep->iLong + 1 <= ap->a1)
+	if (isDown && ep->iLong + 1 < ap->a1)
 	  continue ;
 	if (! isDown && ep->iLong + 1 > ap->a1)
 	  continue ;
