@@ -65,14 +65,12 @@ void saConfigIsIndexAccessible (PP *pp)
   else
     {
       AC_HANDLE h = ac_new_handle () ;
-      const char *cp = pp->indexName ;
-      char *cq ;
       if (pp->createIndex)
 	{
-	  cq = hprintf (h, "mkdir %s ; \\rm %s/* ; echo test > %s/sortalign.testFile", cp, cp, cp) ;
-	  system (cq) ;
+	  if (filCreateDir (pp->indexName))
+	    saUsage (hprintf (h, "Cannot create and access the index directory: %s", pp->indexName), 0, 0) ;
 	}
-      cq = hprintf (h, "%s/sortalign.testFile", pp->indexName) ;
+      char *cq = hprintf (h, "%s/sortalign.testFile", pp->indexName) ;
       ACEIN ai = aceInCreate (cq, FALSE, h) ;
       if (! ai)
 	saUsage (hprintf (h, "Cannot create and access the index directory: %s", pp->indexName), 0, 0) ;

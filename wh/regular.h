@@ -378,6 +378,8 @@ BOOL filremove (const char *name, const char *ending) ;
 FILE *filtmpopen (char **nameptr, const char *spec) ;
 BOOL filtmpremove (const char *name) ;
 void filtmpcleanup (void) ;
+BOOL filCopyFile(char *curr_name, char *new_name) ;
+BOOL filCreateDir (const char *dirName) ; /* return TRUE if success */
 
 /* file chooser */
 typedef FILE* (*QueryOpenRoutine)(char*, char*, char*, const char*, const char*) ;

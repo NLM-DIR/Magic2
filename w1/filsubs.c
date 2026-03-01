@@ -993,5 +993,55 @@ BOOL filCopyFile(char *curr_name, char *new_name)
 
 
 /************************************************************/
+/************************************************************/
+
+BOOL filCreateDir (const char *dirName)
+{
+  struct stat st ;
+  
+  // Check if it already exists
+  if (stat(dirName, &st) == 0)
+    {
+      // Exists → check it's really a directory
+      if (S_ISDIR(st.st_mode)) 
+	return TRUE ;           // success: already exists and is a directory
+      
+      fprintf(stderr, "%s exists but is not a directory\n", dirName) ;
+      return FALSE ;
+    }
+
+  // Find last slash
+  const char *cp = strrchr(dirName, '/');
+  if (cp && cp > dirName)
+    {
+      int n = cp - dirName + 1 ;
+      char parent[n] ;
+      strncpy (parent, dirName, n) ;
+      parent [n-1] = 0 ;
+      if (!filCreateDir (parent))
+	return FALSE ;   /* failed */
+    }
+  
+  /* Does not exist → create it
+   * mode = 0755, but final permissions = 0755 & ~umask
+   * respecting users default mask
+   */
+  if (mkdir(dirName, 0755) == 0)
+    return TRUE ;               // success
+
+  // Failed
+  if (errno == EEXIST)
+    { /* Someone else created it between stat() and mkdir()
+       * Usually safe to consider it a success in this context
+       */
+        return TRUE ;
+    }
+  
+  perror ("mkdir") ;
+  return FALSE ;
+}
+
+/************************************************************/
 /********************** end of file *************************/
+/************************************************************/
 

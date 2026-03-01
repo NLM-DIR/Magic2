@@ -1556,8 +1556,22 @@ static void alignAdjustExons (const PP *pp, BB *bb, Array bestAp, Array aa, Arra
 		    {
 		      ep = arrp (zp.errors, ie, A_ERR) ;
 		      int es = ep->iShort + 1 ;
-		      if (es >= vp->x1 && es <= vp->x2)
+		      int dx1 = 0, da = 0 ;  
+		      switch (ep->type)
+			{  /* locate erroneous base */
+			case INSERTION: dx1 = 0 ; da = 1 ; break ;
+			case INSERTION_DOUBLE: dx1 = 1 ; da = 2 ; break ;
+			case INSERTION_TRIPLE: dx1 = 2 ; da = 3 ; break ;
+			case TROU: dx1 = -1 ; da = -1 ; break ;
+			case TROU_DOUBLE: dx1 = -1 ; da = -2 ; break ;
+			case TROU_TRIPLE: dx1 = -1; da = -3 ; break ;
+			default : break ;
+			}
+		      if (es == vp->x1 && dx1 == -1)
+			{ vp->a1++ ; continue ; }
+		      if (es + dx1 >= vp->x1)
 			{
+			  if (es > vp->x2) break ;
 			  if (! vp->errors)
 			    vp->errors = arrayHandleCreate (8, A_ERR, bb->h) ;
 			  A_ERR *eq = arrayp (vp->errors, j++, A_ERR) ;
