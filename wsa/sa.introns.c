@@ -388,8 +388,8 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	      return ;
 	    }
 
-run -x titi4/IDX -i titi4/s9324.fasta -o titi4/S --debug
-  /* find the next zY (candidate bestY1) */
+	  /* run -x titi4/IDX -i titi4/s9324.fasta -o titi4/S --debug */
+	  /* find the next zY (candidate bestY1) */
 	  zY = cY1 ;
 	  j = cJ + 1 ;
 	  if (j < nEy)
