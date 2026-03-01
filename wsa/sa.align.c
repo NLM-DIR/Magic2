@@ -307,26 +307,48 @@ static BOOL alignExtendHit (Array dna, Array dnaG, Array dnaGR, Array err
 /**************************************************************/
 /**************************************************************/
 
-static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, ADAPTORS *adaptors, int i0, int iMax)
+static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, ADAPTORS *adaptors, int ii0)
 {
   int x1 = up->x1 ;
   int slBonus = 4 ;
   int leftClip = up->leftClip ;  /* already initialized to jump5 */
   BOOL doUpper = FALSE ;
-  
-  if (x1 > 1)
+  BOOL isFirst = FALSE ;
+  char buf[32] = {0} ;
+      
+  int dx = x1 - 1 ;
+  int Dx = dx ;
+  int nT = 0 ;
+  if (dx > 30) { dx = 30 ; }
+
+  if (ii0 == 0 || up[-1].read != up[0].read)
+    isFirst = TRUE ;
+  else
     {
-      int nT = 0 ;
-      int dx = x1 - 1 ;
-      int Dx = dx ;
-      char buf[32] ;
-      memset (buf, 0, 32) ;
-      if (dx > 30) { dx = 30 ; }
-      char *cp = arrp (dna, x1 - 2, char) ; /* last unaligned base */
+      if (dx > x1 - up[-1].x2 - 1)
+	dx = x1 - up[-1].x2 - 1 ;
+    }
+
+  char *cp = arrp (dna, x1 - 2, char) ; /* last unaligned base */
+  for (int i = 0 ; i < dx ; i++, cp--)
+    {
+      int cc = complementBase(*cp) ;
+      buf[i] = cc ;
+      switch (cc)
+	{
+	case A_:
+	  nT++ ;
+	  break ;
+	}
+    }
+  
+  if (isFirst && dx > 4)
+    {
       long int *overH = (up->read & 0x1 ? bb->runStat.overhangL2 : bb->runStat.overhangL1) ;
       if (up->targetClass == 'G')
 	{
 	  int first = -1 ;
+	  cp = arrp (dna, x1 - 2, char) ; /* last unaligned base */
 	  int cc = complementBase(*cp) ;
 	  switch (cc)
 	    {
@@ -347,17 +369,6 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 	    }
 
 	  /* search for a polyT */
-	  for (int i = 0 ; i < dx ; i++, cp--)
-	    {
-	      cc = complementBase(*cp) ;
-	      buf[i] = cc ;
-	      switch (cc)
-		{
-		case A_:
-		  nT++ ;
-		  break ;
-		}
-	    }
 	  
 	  /* may be we should look for the adaptor before Dx - dx */
 	  if (bb->isRna >= 0 && nT >= 7 && 10 * nT >= 9 * dx && Dx < dx + 10)
@@ -481,7 +492,7 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 			  up->ali -= di ;
 			  up->a1 += (up->a1 < up->a2 ? di :- di) ;
 			  cp = arrp (dna, up->x1 - 1, char) ;
-			  if (1 && di > 0) /* extend the inaligned buffer */
+			  if (1 && di > 0) /* extend the unaligned buffer */
 			    {
 			      for (int i = 30 ; i >= di ; i--)
 				buf[i] = buf[i- di] ;
@@ -490,7 +501,7 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 			      buf[31] = 0 ;
 			    }
 			    
-			  for (vp = up, jj = i0 ; jj < iMax && vp->read == up->read && vp->chain == up->chain ; jj++, vp++)
+			  for (vp = up, jj = ii0 ; jj < iMax && vp->read == up->read && vp->chain == up->chain ; jj++, vp++)
 			    {
 			      vp->score -= di ;
 			      vp->chainScore -= di ;
@@ -504,14 +515,15 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 		}
 	    }
 	}
-    done:
-      for (int i = 0 ; i < dx ; i++)
-	buf[i] = dnaDecodeChar[(int)buf[i]] ;
-      if (doUpper)
-	bufferToUpper (buf) ;
-      if (strlen (buf) > 0)
-	  dictAdd (bb->dict, buf, &up->leftOverhang) ;
     }
+ done:
+  for (int i = 0 ; i < dx ; i++)
+    buf[i] = dnaDecodeChar[(int)buf[i]] ;
+  if (doUpper)
+    bufferToUpper (buf) ;
+  if (strlen (buf) > 0)
+    dictAdd (bb->dict, buf, &up->leftOverhang) ;
+
   up->leftClip = leftClip ;
   return leftClip ;
 } /* alignFormatLeftOverhang */
@@ -2085,7 +2097,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
 		  dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
 		}
-	      ap->leftClip = alignFormatLeftOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii, iMax) ;
+	      ap->leftClip = alignFormatLeftOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii) ;
 	      
 	    }
 	  if (ap->x2 == ap->chainX2 && ap->x2 < arrayMax (dna))	

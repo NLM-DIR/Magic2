@@ -388,7 +388,8 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	      return ;
 	    }
 
-	  /* find the next zY (candidate bestY1) */
+run -x titi4/IDX -i titi4/s9324.fasta -o titi4/S --debug
+  /* find the next zY (candidate bestY1) */
 	  zY = cY1 ;
 	  j = cJ + 1 ;
 	  if (j < nEy)
@@ -888,8 +889,8 @@ void saIntronStranding (PP *pp, Array aa)
       /* cumul by coverage */
       for (k = 1 ; k < 12 ; k++)
 	{	
-	  cGood[zp->run][k] += cGood[zp->run][k-1] ;
-	  cOther[zp->run][k] += cOther[zp->run][k-1] ;
+	  cGood[run][k] += cGood[run][k-1] ;
+	  cOther[run][k] += cOther[run][k-1] ;
 	}
     }
   for (run = 0 ; run < runMax ; run++)
