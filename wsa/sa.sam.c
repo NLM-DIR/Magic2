@@ -120,8 +120,11 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
     }
   for (int i = 0 ; i < iSeg ; i++)    
     vtxtPrintf (cigar, segs[i]) ;
-
-  
+#ifdef JUNK
+  static int cumul = 0 ;
+  cumul += lSam ;
+  fprintf (stderr, "oneSamExon a1=%d a2=%d da = %d lSam=%d cumul = %d\n", a1, a2, da, lSam, cumul) ; 
+#endif
   return lSam ;
 } /*  exportOneSamExon */
 

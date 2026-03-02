@@ -1334,7 +1334,6 @@ static void alignAdjustExons (const PP *pp, BB *bb, Array bestAp, Array aa, Arra
 	  KEYSET ks = keySetHandleCreate (h1) ;
 	  Array dnaI = 0, dnaShort = dna, errors = arrayHandleCreate (20, A_ERR, bb->h) ;
 	  int ie, ia = 0, da ;
-	  int ln = arrayMax (dnaG) ;
 	  char *cp, *cq ;
 	  A_ERR *ep ;
 	  ALIGN zp ;
@@ -1392,130 +1391,62 @@ static void alignAdjustExons (const PP *pp, BB *bb, Array bestAp, Array aa, Arra
 		  da = vp->a2 - vp->a1 + 1 ;
 		  if (vp->chain == -1 || da < 1) continue ;
 		  keySet (ks, ia++) = vp->a1 - jj - 1 ;
-		  cp = arrayp (dnaI, jj + da, char) ;
+		  cp = arrayp (dnaI, jj + da + 64, char) ; /* make room */
 		  cq = arrp (dnaG, vp->a1 - 1 , char) ;
 		  cp = arrayp (dnaI, jj, char) ;
 		  memcpy (cp, cq, da) ;
 		  jj += da ;
 		  cp += da ;
-		  if (vp[1].chain == chain)
+		  if (vp[1].chain == chain)  /* try to adjust on gt_ag */ 
 		    {
-		      int du = vp[1].x1 - vp->x2 - 1 ;
-		      int du0 = du ;
-		      cp = arrayp (dnaI, jj + du + 6, char) ;
-		      cp = arrp (dnaI, jj, char) ;
-		      BOOL isDonor = TRUE ;
-		      if (du > 0)
-			{ /* in the overlap OR the bases form the donor and acceptor exon */
-			  cq = arrp (dnaG, vp->a2 - 1, char) ;
-			  char *cr = arrp (dnaG, vp[1].a1 - 1, char) ;
-			  if (cr[-2] == A_ && cr[-1] == G_ && cq[du + 1] == G_ && cq[du+2] == T_)
-			    { /* copy the extension of the donor exon */
-			      memcpy (cp, cq+1, du) ;
-			    }
-			  else if (du >= 1 && cr[-2] == A_ && cr[-1] == G_ && cq[du + 1 -1] == G_ && cq[du+2-1] == T_)
-			    { /* copy the extension of the donor exon with deletion */
-			      du-- ;
-			      memcpy (cp, cq+1, du) ;
-			    }
-			  else if (du >= 2 && cr[-2] == A_ && cr[-1] == G_ && cq[du + 1 -2] == G_ && cq[du+2-2] == T_)
-			    { /* copy the extension of the donor exon with double deletion */
-			      du-=2 ;
-			      memcpy (cp, cq+1, du) ;
-			    }
-			  else if (du >=3 && cr[-2] == A_ && cr[-1] == G_ && cq[du + 1 -3] == G_ && cq[du+2-3] == T_)
-			    { /* copy the extension of the donor exon with triple deletion */
-			      du-=3 ;
-			      memcpy (cp, cq+1, du) ;
-			    }
-			  else if (du >= 1 && cr[-2] == A_ && cr[-1] == G_ && cq[du + 2] == G_ && cq[du+3] == T_)
-			    { /* copy the extension of the donor exon with insertion */
-			      du++ ;
-			      memcpy (cp, cq+1, du) ;
-			    }
-			  else if (du >= 1 && cr[-2] == A_ && cr[-1] == G_ && cq[du + 3] == G_ && cq[du+4] == T_)
-			    { /* copy the extension of the donor exon with double insertion */
-			      du+=2 ;
-			      memcpy (cp, cq+1, du) ;
-			    }
-			  else if (du >=1 && cr[-2] == A_ && cr[-1] == G_ && cq[du + 4] == G_ && cq[du+5] == T_)
-			    { /* copy the extension of the donor exon with triple insertion */
-			      du+=3 ;
-			      memcpy (cp, cq+1, du) ;
-			    }
-			  else if (cq[1] == G_ && cq[2] == T_ && cr[- du - 2] == A_ && cr[-du - 1] == G_)
-			    { /* copy the extension of the acceptor exon */
-			      isDonor = FALSE ;
-			      /* do not copy it will be automatic since we shift vp[1] below */
-			    }
-			  else if (du >= 0 && cq[1] == G_ && cq[2] == T_ && cr[- du - 2] == A_ && cr[-du - 1] == G_)
-			    { /* copy the extension of the acceptor exon with insertion */
-			      isDonor = FALSE ;
-			      /* do not copy it will be automatic since we shift vp[1] below */
-			    }
-			  else if (du >= 0 && cq[1] == G_ && cq[2] == T_ && cr[- du - 3] == A_ && cr[-du - 2] == G_)
-			    { /* copy the extension of the acceptor exon with insertion */
-			      isDonor = FALSE ;
-			      du++ ;
-			      /* do not copy it will be automatic since we shift vp[1] below */
-			    }
-			  else if (du >= 0 && cq[1] == G_ && cq[2] == T_ && cr[- du - 4] == A_ && cr[-du - 3] == G_)
-			    { /* copy the extension of the acceptor exon with insertion */
-			      isDonor = FALSE ;
-			      du+=2 ;
-			      /* do not copy it will be automatic since we shift vp[1] below */
-			    }
-			  else if (du >= 0 && cq[1] == G_ && cq[2] == T_ && cr[- du - 1] == A_ && cr[-du - 0] == G_)
-			    { /* copy the extension of the acceptor exon with deletion */
-			      isDonor = FALSE ;
-			      du-- ;
-			      /* do not copy it will be automatic since we shift vp[1] below */
-			    }
-			  else if (du >= 0 && cq[1] == G_ && cq[2] == T_ && cr[- du - 0] == A_ && cr[-du + 1] == G_)
-			    { /* copy the extension of the acceptor exon with deletion */
-			      isDonor = FALSE ;
-			      du-=2 ;
-			      /* do not copy it will be automatic since we shift vp[1] below */
-			    }
-			  else if (du >= 0 && cq[1] == G_ && cq[2] == T_ && cr[- du + 1] == A_ && cr[-du + 2] == G_)
-			    { /* copy the extension of the acceptor exon with deletion */
-			      isDonor = FALSE ;
-			      du-=3 ;
-			      /* do not copy it will be automatic since we shift vp[1] below */
-			    }
-			  else
-			    memset (cp, N_, du) ;
-			  if (1 || isDonor)
+		      int du0 = vp[1].x1 - vp->x2 - 1 ;
+		      int gap = 0, gap2 = 0, shift = 0 ;
+		      const char *cq1 = arrp (dnaG, vp->a2 - 1, char) ;  /* last base of first exon */
+		      const char *cr1 = arrp (dnaG, vp[1].a1 - 1, char) ; /* first base of second exon */
+		      for (gap2 = 0 ; gap2 <= 6 ; gap2++)
+			{ /* try gaps of successive size 0, 1, -1, 2, -2 , 3 , -3 looking for gt-ag */
+			  gap =  (1 - 2 * (gap2 & 0x1)) * (gap2 >> 1) ;
+			  for (shift = -3 ; shift < du0 + 3 ; shift++ )
 			    {
-			      jj += du0 - du ;
-			      cp += du0 - du ;
-			      vp->a2 += du0 - du ; vp->x2 += du0 - du ;
+			      const char *cq2 = cq1 + shift + 1 ; /* if shift == 0, first base of intron */
+			      const char *cr2 = cr1 + shift - 1 - du0 - gap ; /* if !shift && !gap, last base of intron */ 
+			      if (cq2[0] == G_  && cq2[1] == T_ && cr2[-1] == A_ && cr2[0] == G_)
+				goto foundTrueIntron ;
 			    }
-			  else
-			    du = du0 ;
-			  vp[1].x1 -= du ; vp[1].a1 -= du ;
 			}
+		    foundTrueIntron:
+		      vp->x2 += shift ;  /* adjust the right coordinates of the first exon */
+		      vp->a2 += shift ;
+		      if (shift < 0)
+			{  /* remove a few bases from the first exon */
+			  jj += shift ;
+			  cp += shift ;
+			}
+		      else if (shift > 0)
+			{  /* copy a few more bases extending the first exon */
+			  cp = arrayp (dnaI, jj + shift + 1, char) ; /* make room */
+			  cp = arrayp (dnaI, jj, char) ;
+			  memcpy (cp, cq1 +1, shift)  ;
+			  jj += shift ;
+			  cp += shift ;
+			}
+		      vp[1].x1 += shift - du0 - gap ;  /* adjust the left coordinates of the second exon */
+		      vp[1].a1 += shift - du0 - gap ; /* do not copy dna, this will be handled at the next iteration */
 		    }
 		}
-	      vp-- ; ia-- ;
 	      zp.x2 = vp->x2 ;
 	      zp.a2 = jj ;
+	      arrayMax (dnaI) = jj ;
+	      /* add 100 bases to the right */
+	      int shift = (vp->a2 < arrayMax (dnaG) - 100 ? 100 :  arrayMax (dnaG) - vp->a2) ;
+	      cp = arrayp (dnaI, jj + shift + 1, char) ; /* make room */
+	      cp = arrayp (dnaI, jj, char) ;
+	      const char *cq1 = arrp (dnaG, vp->a2, const char) ;
+	      memcpy (cp, cq1, shift) ;
+	      jj += shift ;
+	      cp += shift ;
+	      *cp = 0 ;
 
-	      if (vp->x2 < lnShort)
-		{
-		  cp = arrp (dnaI, jj, char) ;
-		  da = ln > vp->a2 + 100 ? 100 : ln - vp->a2 ;
-		  if (da)
-		    {
-		      cp = arrayp (dnaI, jj + da, char) ; /* may reallocate */
-		      cp = arrp (dnaI, jj, char) ;
-		      cq = arrp (dnaG, vp->a2, char) ;
-		      memcpy (cp, cq, da ) ;
-		      jj += da ;
-		    }
-		  arrayMax (dnaI) = jj ;
-		}
-	      
 	      /* align the read on the genomic image of the transcript */
 	      zp.errors = errors ;
 	      arrayMax (zp.errors) = 0 ;

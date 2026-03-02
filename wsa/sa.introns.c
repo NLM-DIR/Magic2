@@ -337,6 +337,15 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
       vp->errors = vp->errors ? vp->errors : wp->errors ;
       if (vp->errors && vp->nErr)
 	epX = arrayp (vp->errors, vp->nErr - 1, A_ERR) ; /* the extra errors from wp are not copied, hence set to zero */
+      if (! vp->nErr)
+	{
+	  vp->nErr = 1 ;
+	  vp->errors = arrayHandleCreate (20, A_ERR, bb->h) ;
+	  epX = arrayp (vp->errors, 0, A_ERR) ;
+	  epX->iShort = wp->x1 ;
+	  epX->iLong = wp->a1 ;
+	  epX->type = ERREUR ;
+	}	  
       memset (wp, 0, sizeof (ALIGN)) ; nEy = 0 ;
       wp->chain = -1 ;
       return ;
