@@ -106,3 +106,14 @@ void saGPUSort (char *cp, long int number_of_records, int type)
 
     return ;
 }
+
+
+void saGPUMatchHits(CW** index_parts, long int* sizes, unsigned int num_parts)
+{
+    for (unsigned int i=0;i < num_parts;i++) {
+        auto start = std::chrono::high_resolution_clock::now();
+        thrust::device_vector<CW> d_vec(index_parts[i], index_parts[i] + sizes[i]);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::cerr << "Copy index partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    }
+}

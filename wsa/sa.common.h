@@ -3,6 +3,9 @@
  *
  */
 
+#ifndef SA_COMMON_H
+#define SA_COMMON_H
+
 #define NSHIFTEDTARGETREPEATBITS 8
 
 typedef struct codeWordsStruct {
@@ -20,6 +23,7 @@ typedef struct hitStruct {
   unsigned int x1 ;  /* bio coordinate on read */
 } __attribute__((aligned(16))) HIT ;
 
+
 typedef struct seedMatchStruct {
   unsigned int readSeed ;    /* place holder, set to zero */
   unsigned int read ;        /* index in bb->dict << 1 | (0x1 for minus words) */
@@ -32,3 +36,4 @@ typedef struct seedMatchStruct {
   unsigned int targetFlags ; /* copied from target index */
 } __attribute__((aligned(32))) SEEDMATCH ;
 
+#endif /* SA_COMMON_H */

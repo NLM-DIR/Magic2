@@ -27,6 +27,7 @@
 
 
 #include "sa.h"
+#include "sa.gpusort.h"
 
 #ifdef __SSE2__
 #define VECTORIZED_MEM_CPY
@@ -1179,6 +1180,31 @@ static void export (const void *vp)
   return ;
 } /* export */
 
+
+void matchHitsGPU(const PP* p, BB* bbG, BB* bb)
+{
+    int i;
+    CW** index_parts = (CW**)malloc(NN * sizeof(CW*));
+    long int* sizes = (long int*)malloc(NN * sizeof(long int));
+
+    for (i=0;i < NN;i++) {
+        index_parts[i] = bigArrayp(bbG->cwsN[i], 0, CW);
+        sizes[i] = bigArrayMax(bbG->cwsN[i]);
+    }
+
+    saGPUMatchHits(index_parts, sizes, NN);
+
+
+    if (index_parts) {
+        free(index_parts);
+    }
+    if (sizes) {
+        free(sizes);
+    }
+}
+
+
+
 /**************************************************************/
 
 static void wholeWork (const void *vp)
@@ -1202,6 +1228,9 @@ static void wholeWork (const void *vp)
       saCodeSequenceSeeds (pp, &bb, pp->iStep, FALSE) ;
 
       if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
+
+      matchHitsGPU(pp, &bbG, &bb);
+
 
       /* sort words */
       for (int k = 0 ; k < NN ; k++)
