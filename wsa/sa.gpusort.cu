@@ -10,6 +10,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
+#include <thrust/binary_search.h>
 #include <chrono>
 #include <iostream>
 
@@ -110,10 +111,20 @@ void saGPUSort (char *cp, long int number_of_records, int type)
 
 void saGPUMatchHits(CW** index_parts, long int* sizes, unsigned int num_parts)
 {
+    std::vector< thrust::device_vector<CW> > d_vecs;
+    d_vecs.reserve(num_parts);
     for (unsigned int i=0;i < num_parts;i++) {
         auto start = std::chrono::high_resolution_clock::now();
-        thrust::device_vector<CW> d_vec(index_parts[i], index_parts[i] + sizes[i]);
+        d_vecs.emplace_back(index_parts[i], index_parts[i] + sizes[i]);
         auto end = std::chrono::high_resolution_clock::now();
         std::cerr << "Copy index partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
     }
+
+    CW* probe = index_parts[0] + 1234;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto it = thrust::lower_bound(d_vecs[0].begin(), d_vecs[0].end(), *probe,
+                                  compare_CW());
+    auto end = std::chrono::high_resolution_clock::now();
+    std::cerr << "Lower bound search for  " << probe->seed << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+
 }
