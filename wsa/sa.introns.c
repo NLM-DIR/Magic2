@@ -13,7 +13,7 @@
  * to intron support and discovery
  */
 
-#define ARRAY_CHECK
+/* #define ARRAY_CHECK */
 #include "sa.h"
 
 /**************************************************************/

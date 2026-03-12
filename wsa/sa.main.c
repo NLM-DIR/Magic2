@@ -1774,11 +1774,11 @@ int main (int argc, const char *argv[])
     messcrash ("The source code assumes that long unsigned ints use 64 bits not %d, sorry", 8 * sizeof (long unsigned int)) ;
 
   /***************** amount or parallelization **************************/
-  int nCPU = get_number_of_cpus_per_node () ;
+  int nCPU = get_number_of_cpus () ;
 
   /* defaults */
-  nAgents = 3 * nCPU / 2 ;  /* number of aligner agents */
-  p.nBlocks = 3 * nCPU / 2 ;  /* max number of BB blocks processed in parallel */
+  nAgents = 4 * nCPU / 2 ;  /* number of aligner agents */
+  p.nBlocks = 4 * nCPU / 2 ;  /* max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;

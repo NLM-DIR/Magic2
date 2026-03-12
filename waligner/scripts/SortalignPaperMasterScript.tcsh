@@ -104,12 +104,12 @@ setenv SV     v72.81.18M.e4.W.mars5    # edited del/ins using sa.test.c
 setenv SVlast v72.81.18M.e4.W.mars5
 setenv SV     v73.81.18M.e4.W.mars5    # favor the introns seeds by contructing immediatly clipped exons
 setenv SVlast v73.81.18M.e4.W.mars5    # use 3/2 n_cpus, hence 176 on the farm with 2 nodes, then we ran out of RAM
-setenv SV     v74.81.18M.e4.W.mars8    # use 3/2n_cpus per nonde hence 32 on the farm
-setenv SVlast v74.81.18M.e4.W.mars8
-#setenv SV     v75.81.18M.e4.W.mars8    # use    n_cpus per nonde hence 32 on the farm
-#setenv SVlast v75.81.18M.e4.W.mars8
-#setenv SV     v76.81.18M.e4.W.mars8    # use 2   n_cpus per nonde hence 32 on the farm
-#setenv SVlast v76.81.18M.e4.W.mars8
+setenv SV     v74.81.18M.e4.mars12      # use 3/2n_cpus per nonde hence 32 on the farm
+setenv SVlast v74.81.18M.e4.mars12
+#setenv SV     v75.81.18M.e4.mars12    # use    n_cpus per nonde hence 24 on the farm
+#setenv SVlast v75.81.18M.e4.mars12
+# setenv SV     v76.81.18M.e4.mars12    # use 2   n_cpus per nonde hence 48 on the farm
+# setenv SVlast v76.81.18M.e4.mars12
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -123,7 +123,7 @@ endif
 
 setenv NOINTRONSEEDS 0
 setenv EXPORTSAM 0
-setenv EXPORTWIGGLES 1
+setenv EXPORTWIGGLES 0
 setenv EXPORTWIGGLEENDS 0
 setenv seedLength 16
 setenv seedLength 18

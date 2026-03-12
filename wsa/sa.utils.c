@@ -255,26 +255,7 @@ long get_available_ram_kb(void)
     return 1024 * 1024;   // 1 GB safety fallback
 }
 
-#ifdef JUNK
-In your dripper: Before launching a new block, check:
-  In your dripper: Before launching a new block, check:
-
-  long avail_kb = get_available_ram_kb();
-long projected_kb = avail_kb * 0.8;  // 80% threshold
-long block_ram_estimate = 20LL * 1024 * 1024;  // e.g., 20 GB per block in KB
-
-if (current_blocks < N && get_current_rss_kb() + block_ram_estimate < projected_kb) {
-    // Safe to drip new block
-} else {
-    usleep(100000);  // Wait and retry every 0.1 s
-}
-
-  This auto-balances: On multi-node (e.g., 4x24 CPU, assume 128 GB/node),
-    it caps blocks to fit RAM. On single-node (4 CPU, say 32 GB total),
-    it naturally limits to fewer blocks. Tune estimates/thresholds based on tests.
-#endif
-    
-int get_number_of_cpus(void)
+int get_number_of_cpus (void)
 {
 #ifdef __APPLE__
     /* macOS specific path */
@@ -287,55 +268,36 @@ int get_number_of_cpus(void)
     return 1;
 #else
     /* Linux and other Unix systems */
-    long n = sysconf(_SC_NPROCESSORS_ONLN);
-    if (n <= 0)
-        n = sysconf(_SC_NPROCESSORS_CONF);
-    return (n > 0) ? (int)n : 1;
+    int n = 0 ;
+    FILE *f = fopen("/sys/devices/system/node/node0/cpulist", "r") ;
+    if (f)
+      {
+        char line[4096];
+        int i ;
+        if (fgets(line, sizeof(line), f))
+	  {
+	    char *cp = line ;
+	    while (cp)
+	      {
+		char *cq = strchr (cp, ',') ;
+		if (cq) *cq = 0 ;
+		char *cr = strchr (cp, '-') ;
+		if (cr)
+		  {
+		    int a = 0, b = 0 ;
+		    *cr = 0 ;
+		    a = atoi (cp) ;
+		    b = atoi (cr+1) ;
+		    n += b - a + 1 ; 
+		  }
+		else
+		  n++ ;
+		cp = cq ? cq + 1 : 0 ;
+	      }
+	  }
+	fclose (f) ;
+      }
+    return n ; 
 #endif
 }
-
-
-int get_number_of_cpus_per_node (void)
-{
- /* First, find which NUMA node we are currently running on */
-  FILE *f = fopen("/proc/self/status", "r");
-  if (!f) goto fallback;
-  
-  char line[256];
-  int current_node = 0;
-  
-  while (fgets(line, sizeof(line), f)) {
-    if (sscanf(line, "Mems_allowed_list: %d", &current_node) == 1) {
-      break;
-    }
-  }
-  fclose(f);
-  
-  /* Now count how many CPUs belong to this node */
-  char path[128];
-  snprintf(path, sizeof(path), "/sys/devices/system/node/node%d/cpumap", current_node);
-  
-  f = fopen(path, "r");
-  if (!f) goto fallback;
-
-  unsigned long long map = 0;
-  if (fscanf(f, "%llx", &map) == 1) {
-    fclose(f);
-    return __builtin_popcountll(map);   // count the number of set bits
-  }
-  fclose(f);
-
- fallback:
-  /* Fallback: return total CPUs on the machine */
-  return get_number_of_cpus () ;
-}
-
-#ifdef JUNK
-
-foreach ii (1 2 3 4)
-  \rm -rf titi$ii ; /usr/bin/time -f "TIMING E %E U %U M %M P %P" ~/ace/bin.LINUX_4_OPT/sortalign -x Aligners/011_SortAlignG6R3/IDX.GRCh38.18.81 -i Fasta/iRefSeq38/iRefSeq38.fasta.gz --align -o titi$ii >& titi$ii.err &
-sleep 4
-end
-
-#endif
 

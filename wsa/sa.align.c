@@ -12,7 +12,7 @@
  * This module extends seed hits to full alignments
  */
 
-#define ARRAY_CHECK
+/* #define ARRAY_CHECK */
 
 
 #include "sa.h"
@@ -1222,43 +1222,63 @@ static int alignLocateChains1 (Array bestAp, Array aa, int myRead)
 
 /**************************************************************/
 
-static void alignAdjustIntrons (const PP *pp, BB *bb, Array bestAp, Array aa)
+static void alignAdjustIntrons (const PP *pp, BB *bb, Array bestAp, Array aa, int myRead)
 {
   ALIGN *up, *vp, *wp ;
   int ii, jj, chromA = 0 ;
   Array dnaG = 0 ;
-  int chain = 0 ;
-  
+
+  /* eliminate included candidates */
   for (int ic = 1 ; ic < arrayMax (bestAp) ; ic++)
     {
-      /* adjust introns */
       int k = array (bestAp, ic, int) ;
       if (!k) continue ;
       up = vp = arrp (aa, k - 1, ALIGN) ; 
       int chain = up->chain ;
+
+      while (vp)
+	{
+	  wp = (vp[1].chain == chain ? vp + 1 : 0) ;
+	  if (wp && vp > up && vp->x1 > wp->x1)
+	    vp->chain = -1 ;
+	  vp = wp ;
+	}
+    }
+
+  int iMax = alignLocateChains1 (bestAp, aa, myRead) ;
+  for (int ic = 1 ; ic < arrayMax (bestAp) ; ic++)
+    {
+      int k = array (bestAp, ic, int) ;
+      if (!k) continue ;
+      up = vp = arrp (aa, k - 1, ALIGN) ; 
+      int chain = up->chain ;
+      int iv = k - 1, iw = iv + 1 ;
       if (up->chrom != chromA)
 	{
 	  chromA = up->chrom ;
 	  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
 	}
 
-      
-      wp = (vp[1].chain == chain ? vp + 1 : 0) ;
-      while (vp && wp)
-	{
-	  if (vp > up && vp->x1 > wp->x1)
+      wp = (iv < iMax - 1 && vp[1].chain == chain ? vp + 1 : 0) ;
+      while (iw < iMax && vp && wp)
+	{	  
+	  if (wp)
 	    {
-	      memset (vp, 0, sizeof (ALIGN)) ; vp->chain = -1 ;
-	      saIntronsOptimize (bb, up, wp, dnaG) ;
+	      saIntronsOptimize (bb, vp, wp, dnaG) ;
+	      if (wp->chain == -1)   /* happens if the exons were merged */
+		{
+		  wp = (iw < iMax - 1 && wp[1].chain == chain ? wp + 1 : 0) ;
+		  iw++ ;
+		  continue ;
+		}
 	    }
-	  else
-	    saIntronsOptimize (bb, vp, wp, dnaG) ;
-	  if (wp->chain != -1)   /* happens if the exons were merged */
-	    vp = wp ;
-	  wp = (vp[0].chain && wp[1].chain == vp[0].chain ? wp + 1 : 0) ;
+	  vp = wp ; iv = iw ;
+	  wp = (iv < iMax - 1 && vp[1].chain == chain ? vp + 1 : 0) ;
+	  iw = iv + 1 ;
 	}
     }
-  
+
+  /* clean up */
   for (ii = jj = 0, up = vp = arrp (aa, ii, ALIGN) ; ii < arrayMax (aa) ; up++, ii++)
     {
       if (up->chain > 0)
@@ -1269,7 +1289,7 @@ static void alignAdjustIntrons (const PP *pp, BB *bb, Array bestAp, Array aa)
     }
   arrayMax (aa) = jj ;
   
-  for (int ii = 0 ; ii < arrayMax (aa) ; ii++)
+  for (int ii = 0, chain = 0 ; ii < arrayMax (aa) ; ii++)
     {
       up = arrayp (aa, ii, ALIGN) ; 
       if (up->chain != chain)
@@ -1493,7 +1513,6 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 	    }
 	  ja++ ;
 	  vp->nErr = vp->errors ? arrayMax (vp->errors) : 0 ;
-	  vp->nMID = del + ins + sub ;
 	}
     }
   else
@@ -1548,7 +1567,40 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 	    jj++ ;
 	  }
       arrayMax (aa) = jj ;
-    }      
+    }
+
+  /* count the errors */
+  if (1)
+    {
+      int iMax = arrayMax (aa) ;
+      ALIGN *vp = arrp (aa, 0, ALIGN) ;
+
+      for (int ii = 0 ; ii < iMax ; ii++, vp++)
+	{
+	  vp->nErr = vp->nMID = 0 ;
+	  if(vp->errors)
+	    {
+	      A_ERR *ep = arrp (vp->errors, 0, A_ERR) ;
+	      int ieMax = arrayMax (vp->errors) ;
+	      vp->nErr = vp->nMID = ieMax ;
+	      for (int ie = 0 ; ie < ieMax ; ie++, ep++)
+		switch (ep->type)
+		  {
+		  case TROU_DOUBLE:
+		  case INSERTION_DOUBLE:
+		    vp->nMID++ ;
+		    break ;
+		  case TROU_TRIPLE:
+		  case INSERTION_TRIPLE:
+		    vp->nMID += 2 ;
+		    break ;
+		  default:
+		    break ;
+		  }
+	    }
+	}
+    }  
+  
   ac_free (h) ;
   return ;
 } /* alignAdjustExonChainDo */
@@ -1613,7 +1665,7 @@ static void alignAdjustExonChain (const PP *pp, BB *bb, Array bestAp, Array aa, 
     }
 
   /* analyse and edit the chain */
-  alignAdjustExonChainDo (pp, bb, bestAp, aa, myRead, dna, errors, nAli, nErr,  maxJump, maxJump2) ;
+  if (1) alignAdjustExonChainDo (pp, bb, bestAp, aa, myRead, dna, errors, nAli, nErr,  maxJump, maxJump2) ;
   
   if (! isDown)
     { /* flip back the fixed chain */
@@ -2426,7 +2478,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
   if (iMax)
     {
       /* adjust introns */
-      alignAdjustIntrons (pp, bb, bestAp, aa) ;
+      if (1) alignAdjustIntrons (pp, bb, bestAp, aa, myRead) ;
       /* adjust exons */
       if (1) alignAdjustExons (pp, bb, bestAp, aa, myRead, dna, maxJump, maxJump2) ;
       iMax = alignLocateChains (bestAp, aa, myRead) ;
@@ -2799,6 +2851,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		int y1 = bp->x1 ;
 		BOOL ok = TRUE ;
 		
+		if (a1 <10 || b1 < 10 || a2 < 10)
+		  continue ;
 		if (ap->errors)
 		  {
 		    int ie, ieMax = arrayMax (ap->errors) ;
