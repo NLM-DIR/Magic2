@@ -9,9 +9,16 @@
 extern "C" {
 #endif
 
+typedef void GPUIndex;
+
 void saGPUSort (char *cp, long int number_of_records, int type);
 
-void saGPUMatchHits(CW** index_parts, long int* sizes, unsigned int num_parts);
+GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_parts);
+
+GPUIndex* GPUIndexFree(GPUIndex* idx);
+
+void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
+                    unsigned int num_parts);
 
 #ifdef __cplusplus
 }

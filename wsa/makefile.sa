@@ -120,7 +120,7 @@ CCCL_INCLUDES=
 #CCCL_INCLUDES = -I$(CCCL)/thrust -I$(CCCL)/libcudacxx/include -I$(CCCL)/cub
 
 sa.gpusort.o: sa.gpusort.cu
-	nvcc -c $(CCCL_INCLUDES) -I ../wsa --std=c++17 -Wno-deprecated-gpu-targets -o $@ $<
+	nvcc -c $(CCCL_INCLUDES) -I ../wsa --std=c++17 -Wno-deprecated-gpu-targets --extended-lambda -o $@ $<
 
 GPU_OBJS=
 ifneq (,$(findstring GPU,${ACEDB_MACHINE}))
