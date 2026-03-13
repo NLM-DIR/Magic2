@@ -1419,29 +1419,24 @@ int main (int argc, const char *argv[])
 	  char *cp = 0 ;
 	  const char *outFormat = 0 ;
 
-	  p.sraOutFormatPE = TRUE ; /* default */
+	  p.sraDownloadFormat = SRAPE ; /* default */
 	  if (getCmdLineText (h, &argc, argv, "--O", &(outFormat)))
 	    {
 	      cp = strnew (outFormat, h) ;
-	      p.sraOutFormatPE = FALSE ; /* default */
-	      while (cp)
+	      if (cp)
 		{
-		  char *cq = strchr (cp, ',') ;
-		  if (cq) *cq = 0 ;
 		  if (! strcmp (cp, "PE"))
-		    p.sraOutFormatPE = TRUE ;
+		    p.sraDownloadFormat = SRAPE ;    /* 8 lines per pair (twice fasta) */
 		  else if (! strcmp (cp, "PEQ"))
-		    p.sraOutFormatPEQ = TRUE ;
+		    p.sraDownloadFormat = SRAPEQ ;    /* 8 lines per pair (twice fastq) */
 		  else if (! strcmp (cp, "fasta"))
-		    p.sraOutFormatFasta = TRUE ;
+		    p.sraDownloadFormat = SRAFASTA ;  /* 2 files per pair, fasta format */
 		  else if (! strcmp (cp, "fastq"))
-		    p.sraOutFormatFastq = TRUE ;
+		    p.sraDownloadFormat = SRAFASTQ ;  /* 2 files per pair, fastq format */
 		  else
 		    saUsage ("-O parameter should of one or several of  PE,PEQ,fasta,fastq", argc, argv) ;
-		  
-		  cp = cq ? cq + 1 : 0 ;
 		}
-	    }
+	    }  
 		    
 	  getCmdLineInt (&argc, argv, "--maxGB", &(p.maxSraGb)) ;
 	  if (p.maxSraGb < 0)
@@ -1777,8 +1772,8 @@ int main (int argc, const char *argv[])
   int nCPU = get_number_of_cpus () ;
 
   /* defaults */
-  nAgents = 4 * nCPU / 2 ;  /* number of aligner agents */
-  p.nBlocks = 4 * nCPU / 2 ;  /* max number of BB blocks processed in parallel */
+  nAgents = 3 * nCPU / 2 ;  /* number of aligner agents */
+  p.nBlocks = 3 * nCPU / 2 ;  /* max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;

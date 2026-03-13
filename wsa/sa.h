@@ -54,6 +54,7 @@
 
 typedef struct nodeStruct { double x ; CHAN *cx, *cy, *cu, *cv, *done ; int k ; } NODE ;
 
+typedef enum {SRAPE=1,SRAPEQ,SRAFASTA,SRAFASTQ} SRADOWNLOADFORMAT ;
 typedef enum {FASTA=1, FASTQ, FASTC, RAW, SRA, SRACACHE, SRACACHE1, SRACACHE2, INTRONS, GFF} DnaFormat ;
 typedef struct targetClassStruct {
   char targetClass ; /* single char a-z, A-Z */
@@ -313,9 +314,7 @@ typedef struct pStruct {
   int maxSraGb ; /* max number of Gigabases in each SRA download, 0 : no max */
   BOOL sraOutFormatPE ; /* default: 4 lines per pair (>id1, atgc, >id2. atgc */
   BOOL deduplicate ;
-  BOOL sraOutFormatPEQ ; /* 8 lines per pair (twice fastq) */
-  BOOL sraOutFormatFasta ; /* 2 files per pair, fasta format */
-  BOOL sraOutFormatFastq ; /* 2 files per pair, fastq format */
+  SRADOWNLOADFORMAT sraDownloadFormat ; 
   long int wiggleCumul ; /* in million bases */
   long int cds, utr, intronic, intergenic ;
   BOOL splice ;

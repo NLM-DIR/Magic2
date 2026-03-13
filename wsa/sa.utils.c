@@ -273,7 +273,6 @@ int get_number_of_cpus (void)
     if (f)
       {
         char line[4096];
-        int i ;
         if (fgets(line, sizeof(line), f))
 	  {
 	    char *cp = line ;

@@ -667,6 +667,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   BB b ;
   CHAN *chan = pp->plChan ;
   BOOL debug = FALSE ;
+  BOOL needQual = FALSE ;
   int BMAX = isGenome ? 100000 : (pp->BMAX << 20) ;
   const char *ccp ;
   long int bytes = 0, nBytes = 0 ;
@@ -723,7 +724,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   SRAObj* sra = SraObjNew(sraID);
   format = SRACACHE ;
   
-  while ((!Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, BMAX, SRA_FASTA)))
+  while ((!Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, BMAX, needQual ? SRA_FASTQ : SRA_FASTA)))
     {
       if (ao)	aceOut (ao, ccp) ;  /* caching */
 
@@ -1176,7 +1177,7 @@ void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 int saSequenceParseSraDownload (const PP *pp, const char *sraID)
 {
   AC_HANDLE h = ac_new_handle () ;
-  char *fNam = 0 ;
+  char *fNam = 0, *fNam1 = 0, *fNam2 = 0 ;
   char *cr = 0 ;
   ACEOUT ao = 0 ; 
   char tBuf[25] ;
@@ -1188,12 +1189,7 @@ int saSequenceParseSraDownload (const PP *pp, const char *sraID)
 	messcrash ("\nCannot create or cannot write in the SRA cache directory ./SRA") ;
     }
 
-  if (pp->sraOutFormatPE)
-    fNam = hprintf (h, "SRA/%s.sra.fasta", sraID) ;
-  else if (pp->sraOutFormatPEQ)
-
-  
-  for (int pass = 0 ; pass < 2 ; pass++)  /* check in the cache */
+  for (int pass = 0 ; !cr && pass < 2 ; pass++)  /* check in the cache */
     {
       cr = 0 ;
 
@@ -1203,7 +1199,9 @@ int saSequenceParseSraDownload (const PP *pp, const char *sraID)
 	  fNam = hprintf (h, "SRA/%s.sra.fastq", sraID) ;
 	  break ;
 	case 1:  /* search fasta file */
-	  if (pp->sraOutFormatPEQ)
+	  if (pp->sraDownloadFormat == SRAPEQ)
+	    continue ;  /* we need the fastq */ 
+	  if (pp->sraDownloadFormat == SRAFASTQ)
 	    continue ;  /* we need the fastq */ 
 	  fNam = hprintf (h, "SRA/%s.sra.fasta", sraID) ;
 	  break ;
@@ -1226,6 +1224,30 @@ int saSequenceParseSraDownload (const PP *pp, const char *sraID)
     }
 
   /* download */
+
+  BOOL needQual = FALSE ;
+  fNam = 0 ;
+  if (pp->sraDownloadFormat == SRAPE)
+    fNam = hprintf (h, "SRA/%s.sra.fasta", sraID) ;
+  else if (pp->sraDownloadFormat == SRAPEQ)
+    {
+      needQual = TRUE ;
+      fNam = hprintf (h, "SRA/%s.sra.fastq", sraID) ;
+    }
+  else if (pp->sraDownloadFormat == SRAFASTA)
+    {
+      fNam1 = hprintf (h, "SRA/%s.1.fasta", sraID) ;
+      fNam2 = hprintf (h, "SRA/%s.2.fasta", sraID) ;
+    }
+  else if (pp->sraDownloadFormat == SRAFASTQ)
+    {
+      needQual = TRUE ;
+      fNam1 = hprintf (h, "SRA/%s.1.fastq", sraID) ;
+      fNam2 = hprintf (h, "SRA/%s.2.fastq", sraID) ;
+    }
+
+  if (!fNam)
+    messcrash ("\nonly SRA download formats PE and PEQ are implemented ") ;
   ao = aceOutCreate (fNam, 0, TRUE, h) ;
   if (!ao)
     messcrash ("\nCannot create the SRA cache file %s", fNam) ;
@@ -1239,7 +1261,7 @@ int saSequenceParseSraDownload (const PP *pp, const char *sraID)
   fprintf (stderr, "%s : SRA download %s ", timeBufShowNow(tBuf), sraID) ;
   if (Gb) fprintf (stderr, "(top %d GigaBases) ", Gb) ;
 
-  while ((! Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, num_bases, SRA_FASTA)))
+  while ((! Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, num_bases, needQual ? SRA_FASTQ : SRA_FASTA)))
     {
       fprintf (stderr, ".") ;
       aceOut (ao, ccp) ;

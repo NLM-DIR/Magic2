@@ -106,8 +106,8 @@ setenv SV     v73.81.18M.e4.W.mars5    # favor the introns seeds by contructing 
 setenv SVlast v73.81.18M.e4.W.mars5    # use 3/2 n_cpus, hence 176 on the farm with 2 nodes, then we ran out of RAM
 setenv SV     v74.81.18M.e4.mars12      # use 3/2n_cpus per nonde hence 32 on the farm
 setenv SVlast v74.81.18M.e4.mars12
-#setenv SV     v75.81.18M.e4.mars12    # use    n_cpus per nonde hence 24 on the farm
-#setenv SVlast v75.81.18M.e4.mars12
+# setenv SV     v75.81.18M.e4.mars12    # use    n_cpus per nonde hence 24 on the farm
+# setenv SVlast v75.81.18M.e4.mars12
 # setenv SV     v76.81.18M.e4.mars12    # use 2   n_cpus per nonde hence 48 on the farm
 # setenv SVlast v76.81.18M.e4.mars12
 
@@ -1056,9 +1056,10 @@ date
        mv RESULTS/$mm/$run/Aligned.out.sam RESULTS/$mm/$run/sam
     endif
 
-    if (-e RESULTS/$mm/$run/$run/$run.sam && ! -e RESULTS/$mm/$run/s2g.samTools.txt) then
-      samtools stats RESULTS/$mm/$run/$run/$run.sam | gawk -f scripts/sam_stats.awk > RESULTS/$mm/$run/s2g.samTools.txt  
+    if (-e RESULTS/$mm/$run/$run/$run.sam && ! -e RESULTS/$mm/$run/samTools.stats) then
+      samtools stats RESULTS/$mm/$run/$run/$run.sam > RESULTS/$mm/$run/$run/samTools.stats
     endif
+    # cat RESULTS/$mm/$run/$run/samTools.stats | gawk -f scripts/sam_stats.awk > RESULTS/$mm/$run/s2g.samTools.txt  
 
     if (! -e RESULTS/$mm/$run/s2g.samStats) then
       set sam=RESULTS/$mm/$run/sam
