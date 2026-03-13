@@ -1375,7 +1375,7 @@ int main (int argc, const char *argv[])
   const char *species = 0 ;
   AC_HANDLE h ;
   int nAgents = 10 ;
-  int channelDepth = 10 ;
+  int channelDepth = 2 ;
   mytime_t t0, t1 ;
   
   freeinit () ; 
@@ -1785,7 +1785,6 @@ int main (int argc, const char *argv[])
     getCmdLineInt (&argc, argv, "--nB", &(p.nBlocks));
   if (p.nBlocks == 1)
     { nAgents = 1 ; }
-  channelDepth = 4 ; /* 1 + p.nBlocks/2 ; */
   maxThreads = 128 ;  /* UNIX  max on lmem12 machine */
   getCmdLineInt (&argc, argv, "--max_threads", &maxThreads) ;
   if (maxThreads < 24)
@@ -1913,14 +1912,14 @@ int main (int argc, const char *argv[])
   /******************** launch the multiprocessing ***************************************/
 
   wego_max_threads (maxThreads) ;
-  if (0)   channelDepth = 10 ;
+  channelDepth = 2 ;
 
   if (1)
     {
       /* Create the communication channels */
       p.fpChan = channelCreate (4096, RC, p.h) ; /* this chan nust be deep enough to accept all file names at once */
       channelDebug (p.fpChan, debug, "fpChan") ;
-      p.npChan = channelCreate (6, int, p.h) ; /* count BB per inFile */
+      p.npChan = channelCreate (4, int, p.h) ; /* count BB per inFile */
       channelDebug (p.npChan, debug, "npChan") ;
       p.gmChan = channelCreate (1, BB, p.h) ;
       channelDebug (p.gmChan, debug, "gmChan") ;
