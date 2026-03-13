@@ -110,6 +110,8 @@ setenv SVlast v74.81.18M.e4.mars12
 # setenv SVlast v75.81.18M.e4.mars12
 # setenv SV     v76.81.18M.e4.mars12    # use 2   n_cpus per nonde hence 48 on the farm
 # setenv SVlast v76.81.18M.e4.mars12
+setenv SV     v77.81.18M.e4.mars12    # use 2   n_cpus + 2 
+setenv SVlast v77.81.18M.e4.mars12
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV

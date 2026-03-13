@@ -1772,8 +1772,8 @@ int main (int argc, const char *argv[])
   int nCPU = get_number_of_cpus () ;
 
   /* defaults */
-  nAgents = 3 * nCPU / 2 ;  /* number of aligner agents */
-  p.nBlocks = 3 * nCPU / 2 ;  /* max number of BB blocks processed in parallel */
+  nAgents = nCPU ; /* was 3 * nCPU / 2 ;   number of aligner agents */
+  p.nBlocks = nCPU + 2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;

@@ -2078,10 +2078,11 @@ static void alignAdjustExonsOld (const PP *pp, BB *bb, Array bestAp, Array aa, A
  * and recompute its trimmed exact pattern of errors
  * before sending to alignSelectBestDynamicPath
  */
-static void findIntronMates (Array aa, BigArray introns)
+static void findIntronMates (const PP *pp, Array aa, BigArray introns)
 {
   int iMax = arrayMax (aa) ;
   int ne2a = 0, ne2d = 0 ;
+  int errCost = pp->errCost ;
   long int jj = 0, jMax = introns ? bigArrayMax (introns) : 0 ;
   ALIGN *up ;
   HIT *vp = jMax ? bigArrp (introns, 0, HIT) :  0 ;
@@ -2091,6 +2092,7 @@ static void findIntronMates (Array aa, BigArray introns)
   AC_HANDLE h = ac_new_handle () ;
   BigArray e2d = bigArrayHandleCreate (2*iMax, HIT, h) ;
   BigArray e2a = bigArrayHandleCreate (2*iMax, HIT, h) ;
+  KEYSET chromCounts = keySetHandleCreate (h) ;
   
   /* associate exons to donors and acceptors */
   for (int ii = 0 ; ii < iMax ; ii++)
@@ -2099,18 +2101,26 @@ static void findIntronMates (Array aa, BigArray introns)
       int chrom = up->chrom ;
       int read = up->read ;
       long int dj = jMax / 16 ;
+      int ali = up->x2 - up->x1 + 1 ;
 
+      up->mateChrom = ii ; /* original numerotation */
+      up->score = ali - up->nErr * errCost ;
+      if (up->score < 0)
+	{
+	  up->chain = -1 ;
+	  continue ;
+	}
+      
       if (dj)
 	{
 	  for (; jj < jMax ; jj += dj, vp += dj)
 	    {
 	      if (vp->read < read) continue ;
-	      if (vp->read > read) break ;
+	      if (vp->read >= read) break ;
 	    }
-	  if (jj > 0)
+	  for (; jj > 0; jj -= dj, vp -= dj)
 	    {
-	      vp -= dj ;
-	      jj -= dj ;
+	      if (vp->read < read) break ;
 	    }
 	  if (jj < 0)
 	    {
@@ -2119,26 +2129,66 @@ static void findIntronMates (Array aa, BigArray introns)
 	    }
 	}
       
-      for (; jj > 0 && vp->read >= read ; jj--, vp--)
+      for (; jj < jMax && vp->read < read ; jj++, vp++)
 	;
       
       for (; jj < jMax ; jj++, vp++)
 	{
 	  if (vp->read < read) continue ;
 	  if (vp->read > read) break ;
-	  if (vp->chrom == chrom && vp->a1 <= up->a2 + 1 && vp->a1 > up->a1)
+	  if (vp->chrom == chrom)
 	    {
-	      HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
-	      hp->a1 = ii ; hp->x1 = (int)jj ;
-	    }
-	  if (vp->chrom == chrom && vp->x1 < up->a2 && vp->x1 >= up->a1 - 1)
-	    {
-	      HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
-	      hp->a1 = ii ; hp->x1 = (int)jj ;
+	      if (vp->a1 <= up->a2 + 1 && vp->a1 > up->a1)
+		{
+		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
+		  hp->a1 = ii ; hp->x1 = (int)jj ;
+		  keySet (chromCounts, chrom)++ ;
+		}
+	      if (vp->x1 < up->a2 && vp->x1 >= up->a1 - 1)
+		{
+		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
+		  hp->a1 = ii ; hp->x1 = (int)jj ;
+		  keySet (chromCounts, chrom)++ ;
+		}
 	    }
 	}
     }
+  
+  int nChroms = 0, bestChrom = -1, maxCount = 0 ;
+  int nc = keySetMax (chromCounts) ;
+  if (! nc)
+    goto done ;
+  for (KEY c = 0, *ip = arrp (chromCounts, 0, KEY) ; c < nc ; c++, ip++)
+    if (*ip)
+      {
+	nChroms++ ;
+	if (*ip > maxCount)
+	  { maxCount = *ip ; bestChrom = c ; }
+      }
 
+  /* evaluate the X zone mapping to the best chrom */
+  int cX1 = 999999999 , cX2 = 0 ;
+  for (int ii = 0 ; ii < iMax ; ii++)  
+    {
+      up = arrp (aa, ii, ALIGN) ;
+      if (up->chain >= 0 && up->chrom == bestChrom)
+	{
+	  if (cX1 > up->x1) cX1 = up->x1 ;
+	  if (cX2 < up->x2) cX2 = up->x2 ;
+	}
+    }
+  
+  /* clean all hits on chromosomes with too few introns in the same zone */
+  nc = 0 ;
+  for (int ii = 0 ; ii < iMax ; ii++)  
+    {
+      up = arrp (aa, ii, ALIGN) ;
+      int chrom = up->chrom ;
+      int n = keySet (chromCounts, chrom) ;
+      if (2 * n < maxCount - 4 && up->x2 <= cX2 + 10 && up->x1 >= cX1 - 10)
+	{ nc++ ; if (1) up->chain = -1 ; }
+    }
+      
   /* associate pairs of exons, trim them */
   int ie2a = 0, ie2d = 0 ;
   for (ie2d = 0 ; ie2d < ne2d ; ie2d++)
@@ -2190,6 +2240,8 @@ static void findIntronMates (Array aa, BigArray introns)
       
       ALIGN *wp ;
       up = arrp (aa, ii, ALIGN) ;
+      if (up->chain < 0)
+	continue ;
       id = up->mateA2 ;
       ia = up->mateA1 ;
       if (id > 0)
@@ -2205,7 +2257,7 @@ static void findIntronMates (Array aa, BigArray introns)
 	    up->mateA1 = 0 ;
 	}
     }
-
+ done:
   ac_free (h) ;
 } /* findIntronMates */
 
@@ -2239,7 +2291,8 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	  int ali = up->x2 - up->x1 + 1 ;
 	  int score = ali - up->nErr * errCost ;
 	  
-	  if (score > 0)
+	  if (up->chain >= 0 && /* eliminated by find introns */
+	      score > 0)
 	    {
 	      up->chain = 0 ;
 	      up->chainScore = 0 ;
@@ -2300,7 +2353,9 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	      if (!foundI2) i02 = i2 + 1 ;
 	      continue ;
 	    }  
-	  if (up->mateA1 > 0 && up->mateA1 != i2 + 1)
+	  if (up->x2 > vp->x1 && up->mateA1 > 0 && up->mateA1 != vp->mateChrom + 1)
+	    continue ;
+	  if (0 && up->x1 < vp->x2 && up->mateA2 > 0 && up->mateA2 != vp->mateChrom + 1)
 	    continue ;
 	  foundI2 = TRUE ;
 	  if (vp->chrom == chrom
@@ -3093,7 +3148,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  if (kMax)
 	    { /* create chain scores */
 	      if (kMax > 1) arraySort (aa, saAlignOrder) ;
-	      findIntronMates (aa, bb->intronHits) ;
+	      findIntronMates (pp, aa, bb->intronHits) ;
 	      alignSelectBestDynamicPath (pp, bb, aaa, aa, dna, chromA, dnaG, dnaGR, bestAp, maxJump, maxJump2) ;
 	    }
 	  arrayMax (aa) = kMax = 0 ;
@@ -3214,7 +3269,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
   if (kMax)
     { /* create chain scores */
       if (kMax > 1) arraySort (aa, saAlignOrder) ;
-      findIntronMates (aa, bb->intronHits) ;
+      findIntronMates (pp, aa, bb->intronHits) ;
       alignSelectBestDynamicPath (pp, bb, aaa, aa, dna, chromA, dnaG, dnaGR, bestAp, maxJump, maxJump2) ;
     }
 
