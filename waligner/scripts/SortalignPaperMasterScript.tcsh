@@ -2032,7 +2032,7 @@ end
 echo "Creating the intron counts"
 foreach target (T2T GRCh38 HG19)
   set IDB=$target.INTRON_DB
-  if (-e $IDB/introns.ace) continue
+  if (-e $IDB/introns.aceXXX) continue
     echo '#' > $IDB/introns.tsf
     foreach mm ($iMethods)
       foreach run ($iRuns)
