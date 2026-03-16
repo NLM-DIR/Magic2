@@ -526,6 +526,8 @@ BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run)
 	}
       isSet = TRUE ;
     }
+  else if (set == -999999)
+    ac_free (h) ;
   else
     messcrash ("Bad call set=%d to saSetGetAdaptors", set) ;
 

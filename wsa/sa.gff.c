@@ -155,6 +155,7 @@ void saGffBinaryParser (PP *pp)
 	    }
 	}
     }
+  ac_free (h) ;
 } /* saGffBinaryParser */
 
 /**************************************************************/

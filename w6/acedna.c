@@ -1998,6 +1998,8 @@ static int oligoEntropy16 (unsigned const char *dna, int ln, int minEntropy)
   int cc, bb[16] ;
   BOOL complement = FALSE ;
 
+  if (ln == -999999)
+    { ac_free (ee) ; return -1 ; }
   memset (bb, 0, sizeof(bb)) ;
 
   if (dna)
@@ -2071,7 +2073,7 @@ static int oligoEntropy16 (unsigned const char *dna, int ln, int minEntropy)
 
 /********************************************************************/
 
-
+/* call with ln = -999999 to clean the memory */
 int oligoEntropy (unsigned const char *dna, int ln, int minEntropy) 
 {
   return oligoEntropy16 (dna, ln, minEntropy) ;

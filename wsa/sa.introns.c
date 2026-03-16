@@ -13,7 +13,7 @@
  * to intron support and discovery
  */
 
-/* #define ARRAY_CHECK */
+/* #define ARRAY_CHECK  */
 #include "sa.h"
 
 /**************************************************************/
@@ -409,7 +409,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	      vp->a2 = wp->a2 ;
 	      vp->x2 = wp->x2 ;
 	      cI++ ;
-	      for (int i = cJ + 1 ; i < nEy ; i++, cI++)
+	      for (int i = cJ + 1 ; i < nEy ; i++)
 		array (vp->errors, cI++, A_ERR) = array (wp->errors, i, A_ERR) ;
 	      vp->nErr = arrayMax (vp->errors) = cI ;
 	      if (!vp->nErr)

@@ -110,8 +110,8 @@ setenv SVlast v74.81.18M.e4.mars12
 # setenv SVlast v75.81.18M.e4.mars12
 # setenv SV     v76.81.18M.e4.mars12    # use 2   n_cpus per nonde hence 48 on the farm
 # setenv SVlast v76.81.18M.e4.mars12
-setenv SV     v77.81.18M.e4.mars12    # use 2   n_cpus + 2 
-setenv SVlast v77.81.18M.e4.mars12
+# setenv SV     v77.81.18M.e4.mars12    # use 2   n_cpus + 2 
+# setenv SVlast v77.81.18M.e4.mars12
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -1972,7 +1972,7 @@ endif
 
 setenv iRuns "$runs"
 #setenv iRuns "iRefSeq iRefSeq38"
-set iMethods="011_SortAlignG5R5 012_SortAlignG3R3 013_SortAlignG3R1 11_MagicBLAST_2018 12_MagicBLAST_2022 13_MagicBLAST_2024 21_HISAT2_4threads 23_HISAT2_16threads 31_STARlong 53_Minimap2_16threads"
+set iMethods="011_SortAlignG6R3 012_SortAlignG3R3 013_SortAlignG3R1 11_MagicBLAST_2018 12_MagicBLAST_2022 13_MagicBLAST_2024 21_HISAT2_4threads 23_HISAT2_16threads 31_STARlong 53_Minimap2_16threads"
 set iMethods="$methods"
 
 echo "Creating the INTRON_DB databases"

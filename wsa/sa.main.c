@@ -1772,8 +1772,8 @@ int main (int argc, const char *argv[])
   int nCPU = get_number_of_cpus () ;
 
   /* defaults */
-  nAgents = nCPU ; /* was 3 * nCPU / 2 ;   number of aligner agents */
-  p.nBlocks = nCPU + 2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
+  nAgents = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;   number of aligner agents */
+  p.nBlocks = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;
@@ -2263,7 +2263,10 @@ int main (int argc, const char *argv[])
 	ac_free (p.bbG.h) ;
     }
   /* wego_log is the thread-safe way to pass messages to stderr */
-  if (p.justStats && p.outFileName)  system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)) ;  
+  if (p.justStats && p.outFileName)  system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)) ;
+  saSetGetAdaptors (-999999, 0, 0, 0) ;
+  oligoEntropy (0, -999999, 0) ;
+    ac_free (p.h) ;
   if (0)   ac_free (h) ; /* blocks on channel cond destroy */
   return 0 ;
 }

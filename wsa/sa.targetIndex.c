@@ -148,7 +148,7 @@ void saDictMapRead (DICT *dict, const char *fNam)
   BigArray seqIds = 0 ;
   char *cp ;
 
-  seqIds = bigArrayMapRead (fNam, char, FALSE, h) ; /* memory map the words */
+  seqIds = bigArrayMapRead (fNam, char, TRUE, h) ; /* memory map the words */
 
   nn = 0 ; ln = 255 ;
   cp = bigArrayp (seqIds, nn, char) ;

@@ -58,6 +58,29 @@ int saAlignOrder (const void *va, const void *vb)
 } /* saAlignOrder */
 
 /**************************************************************/
+
+int saRafiaOrder (const void *va, const void *vb)
+{
+  const ALIGN *up = va ;
+  const ALIGN *vp = vb ;
+  int n ;
+  n = up->read - vp->read ; if (n) return n ;
+  n = up->chrom - vp->chrom ; if (n) return n ;
+  n = up->chainA1 + up->chainX1 - vp->chainA1+ vp->chainX1  ; if (n) return n ;
+  n = up->chainX1 - vp->chainX1  ; if (n) return n ;
+  n = up->chainX2 - vp->chainX2  ; if (n) return n ;
+  n = up->x1 - vp->x1  ; if (n) return n ;
+  n = up->x2 - vp->x2  ; if (n) return -n ;
+  n = up->chain - vp->chain ; if (n) return n ;
+  n = up->a1 - vp->a1  ; if (n) return n ;
+  n = up->a2 - vp->a2  ; if (n) return n ;
+  n = up->chainScore - vp->chainScore ; if (n) return -n ;
+  n = up->nErr - vp->nErr ; if (n) return n ;
+  n = up->nTargetRepeats - vp->nTargetRepeats ; if (n) return 1 ;
+  return 0 ;
+} /* saRafiaOrder */
+
+/**************************************************************/
 /* a0 = a1 - x1 is the putative position of base 1 of the read 
  * It also works for the negative strand (a1 < 0, x1 > 0).
  */
@@ -2696,8 +2719,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
   
 {
   ALIGN *ap, *vp ;
-  int ii ;
-  int iMax = alignLocateChains1 (bestAp, aa, read) ;  
+  int ii, iMax ;
   int nChains = 0 ;
   char allTc[256] ;
   Array dna = 0, dna1 = 0, dna2 = 0 ;
@@ -2705,18 +2727,19 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
   Array dnaG = 0, dnaGR = 0 ;
   int read1 = read & (~0x1) ;
   int read2 = read | 0x1 ;
-
+  
+  arraySort (aa, saAlignOrder) ;
   dna1 = arr (bb->dnas, read1, Array) ;
   dna2 = arr (bb->dnas, read2, Array) ;
   
-  /* create chains */
-  /* overhangs */
+  /* format the overhangs, possibly editing the scores*/
   iMax = arrayMax (aa) ;
   if (iMax)
     for (ii = 0, ap = arrp (aa, ii, ALIGN) ; ii < iMax ; ii++, ap++)
       if (read == ap->read)
 	{
 	  dna = ap->read & 0x1 ? dna2 : dna1 ;
+	  ap->next = 0 ; /* now used to flag repeated genes */
 	  ap->leftClip = ((ap->read & 0x1) ? bb->rc.jump5r2 : bb->rc.jump5r1) ;
 	  if (ap->leftClip > arrayMax (dna))
 	    ap->leftClip = 0 ;
@@ -2744,13 +2767,128 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    }
 	}
 
-  /* format the errors */
-  if (0 && bb->lane == 169 && read == 41873)
-    invokeDebugger() ;
-  /*
-    run -x Aligners/011_SortAlignG5R5/IDX.T2T.18.31 --maxTargetRepeats 31 -i titi.f.fasta+titi.r.fasta --align --method 011_SortAlignG5R5 --run FrontalCortex_CHP_Chimpanzee -o toto4 --step 5 --numactl --nB 1 --nA 1
-  */
+  /* create rafias == merge colinear chains as a  single chain with bubbles */
+  arraySort (aa, saAlignOrder) ;
+  iMax = alignLocateChains1 (bestAp, aa, read) ;
+  BOOL clean = TRUE ;
+  if (arrayMax (bestAp) > 1)
+    {
+      int di1 = 1, di2 = 0 ;
+      iMax = arrayMax (aa) ;
+      clean = FALSE ;
+      arraySort (aa, saRafiaOrder) ;
+      for (int i1 = 0 ; i1 < iMax ; i1 += di1)
+	{
+	  ALIGN *ap1 = arrp (aa, i1, ALIGN) ;
+	  int chain1 = ap1->chain ;
+	  /* locate the while chain [i1, i1 + di1[ */
+	  for (di1 = 1 ; i1 + di1 < iMax && ap1[di1].chain == chain1 ; di1++)
+	    ;
+	  /* locate the next chain on the same chromosome */
+	  if (i1 + di1 >= iMax)
+	    continue ;
+	  ALIGN *ap2 = ap1 + di1 ;
+	  if (ap2->chrom != ap1->chrom)
+	    continue ;
+
+	  int chain2 = ap2->chain ;
+	  for (di2 = 1 ; i1 + di1 + di2 < iMax && ap2[di2].chain == chain2 ; di2++)
+	    ;
+	  BOOL isDown = ap1->chainA2 > ap1->chainA1 ? TRUE : FALSE ;
+	  
+	  int du = ap1->chainX2 - ap2->chainX1 - 1 ;  /* if > 0, there is a double cover */
+	  int da = isDown ? ap1->chainA2 - ap2->chainA1 - 1 : ap2->chainA1 - ap1->chainA2 - 1 ;
+	  if (da < 1<<20  && du < 100)
+	    {
+	      int newChainScore = ap1->chainScore + ap2->chainScore ;
+	      int newChainAli = ap1->chainAli + ap2->chainAli ;
+	      int newChainErr = ap1->chainErr+ ap2->chainErr ;
+	      int newChainMID = ap1->chainMID + ap2->chainMID ;
+
+			      
+	      if (du > 0) /* clip the tail of ap1 */
+		{
+		  ap1[di1-1].x2 -= du ;
+		  ap1[di1-1].a2 -= (isDown ? du : -du) ;
+		  newChainScore -= du ;
+		  newChainAli -= du ;
+		}
+	      for (int i = 0 ; i < di1 ; i++)
+		{
+		  ap1[i].chainScore = newChainScore ;
+		  ap1[i].chainErr = newChainErr ;
+		  ap1[i].chainAli = newChainAli ;
+		  ap1[i].chainMID = newChainMID ;
+		  
+		  ap1[i].chainX2 = ap2->chainX2 ;
+		  ap1[i].chainA2 = ap2->chainA2 ;
+		}
+	      for (int i = 0 ; i <= di2 ; i++)
+		{
+		  ap2[i].chain = ap1->chain ;
+		  ap2[i].chainScore = newChainScore ;
+		  ap2[i].chainErr = newChainErr ;
+		  ap2[i].chainAli = newChainAli ;
+		  ap2[i].chainMID = newChainMID ;
+		  
+		  ap2[i].chainX1 = ap1->chainX1 ;
+		  ap2[i].chainA1 = ap1->chainA1 ;
+		}
+	      di1 = 0 ; /* we want to iterate on the same chain1 to catch a possible third element */
+	    }
+	}
+    }
   
+  /* eliminate major overlaps  */
+  if (! clean)
+    {
+      arraySort (aa, saAlignOrder) ;
+      iMax = alignLocateChains1 (bestAp, aa, read) ;
+    }
+  
+  if (arrayMax (bestAp) > 1)
+    for (int ic1 = 0 ; ic1 < arrayMax (bestAp) ; ic1++)
+      {
+	int k1 = array (bestAp, ic1, int) ;
+	if (! k1) continue ;
+	ALIGN *ap1 = arrp (aa, k1 - 1, ALIGN) ;
+	for (int ic2 = 0 ; ic2 < arrayMax (bestAp) ; ic2++)
+	  {
+	    int k2 = array (bestAp, ic2, int) ;
+	    if (! k2) continue ;
+	    ALIGN *ap2 = arrp (aa, k2 - 1, ALIGN) ;
+	    
+	    int z1 = (ap1->chainX1 > ap2->chainX1 ? ap1->chainX1 : ap2->chainX1) ;
+	    int z2 = (ap1->chainX2 < ap2->chainX2 ? ap1->chainX2 : ap2->chainX2) ;
+	    int dz = z2 - z1 ;
+	    int du = ap1->chainX2 - ap1->chainX1 ;
+	    int dv = ap2->chainX2 - ap2->chainX1 ;
+	    
+	    if (2 * dz > du || 2 * dz > dv) /* significant overlap */
+	      {
+		ALIGN *ap3 = 0 ;
+		int k3, chain3 ;
+		clean = FALSE ;
+		if (ap1->chainScore < ap2->chainScore)
+		  { ap3 = ap1 ; k3 = k1 ; } /* kill ap1 */
+		else if (ap1->chainScore > ap2->chainScore)
+		  { ap3 = ap2 ; k3 = k2 ; } /* kill ap2 */
+		else /* is echo */
+		  ap2->next = 1 ;
+		if (ap3)
+		  {
+		    chain3 = ap3->chain ;
+		    for ( ; k3 < iMax && (ap3->chain == -1 || ap3->chain == chain3) ; k3++)
+		      ap3->chain = -1 ;
+		  }
+	      }
+	  }
+      }
+  if (! clean)
+    iMax = alignLocateChains1 (bestAp, aa, read) ;
+
+
+  /* format the errors */
   iMax = arrayMax (aa) ;
   if (iMax)
     for (ii = 0, ap = arrp (aa, ii, ALIGN) ; ii < iMax ; ii++, ap++)
@@ -2776,9 +2914,11 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		alignFormatErrors (pp, bb, ap, dna, dnaG, dnaGR, read) ;	  
 	      if (! pp->sam && ! pp->bam)
 		arrayDestroy (ap->errors) ;
+
 	    }
 	}
-  
+        
+
   /* global statistics */
   /* stranding : once per target class */
   memset (allTc, 0, sizeof (allTc)) ;
@@ -2788,7 +2928,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
       int k = array (bestAp, ic, int) ;
       if (! k) continue ;
       ap = arrp (aa, k - 1, ALIGN) ;
-      if (read == ap->read)
+      if (read == ap->read && ! ap->next)
 	{
 	  int a1 = ap->a1 ;
 	  int a2 = ap->a2 ;
@@ -2803,19 +2943,18 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    s = !s ;
 	  if (ap->chrom & 0x1)
 	    s = !s ;
+
 	  if (s)
 	    bb->runStat.GF[tc]++ ;
 	  else
 	    bb->runStat.GR[tc]++ ;
-	  
-	  bb->runStat.nReadsAlignedPerTargetClass[tc]++ ;
-	  bb->runStat.nBasesAlignedPerTargetClass[tc]+=ap->chainX2 - ap->chainX1 + 1 ;
 	}
     }
   /* increase the block stats */
   nChains = 0 ;
   if (arrayMax (bestAp))
     {
+      BOOL isComplex = FALSE ;
       int tc0 = 0 ;
       nChains = 0 ;
       memset (allTc, 0, sizeof (allTc)) ;
@@ -2827,49 +2966,42 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  if (! k) continue ;
 	  vp = arrp (aa, k - 1, ALIGN) ;
 	  if (! vp->chainScore) continue ;
+	  if (vp->chain <= 0) continue ;
 	  int tc = vp->targetClass ;
 	  if (read == vp->read)
 	    {
 	      if (! ap)
 		{
 		  ap = vp ;
-		  tc0 = ap->targetClass ;
+		  tc0 = tc ;
+		  allTc[tc0] = 1 ;
 		  bb->nAli++ ;
-		  bb->runStat.nReadsAlignedPerTargetClass[0]++ ;
-		  bb->runStat.nBasesAlignedPerTargetClass[0]+=ap->chainX2 - ap->chainX1 + 1 ;
 		  bb->runStat.nMultiAligned[0]++ ;
+		  bb->runStat.nReadsAlignedPerTargetClass[0]++ ;
+		  bb->runStat.nBasesAlignedPerTargetClass[tc]+=ap->chainX2 - ap->chainX1 + 1 ;
 		  nChains = 1 ;
-		  bb->runStat.nAlignments++ ;
 		  if (ap->chainErr == 0 && ap->leftClip + ap->chainAli >= ap->rightClip)
-		    {
-		      bb->runStat.nPerfectReads++ ;
-		      if (0)
-			fprintf (stderr, "PERFECT\t%s%s\n", dictName(bb->dict, (ap->read)>>1), (ap->read & 0x1 ? "<" : ">")) ;
-		    }
+		    bb->runStat.nPerfectReads++ ;
 		}
-      
-	      if (ap != vp && tc == tc0)
-		{ /* count multiali only in main class */
-		  int z1 = (ap->chainX1 > vp->chainX1 ? ap->chainX1 : vp->chainX1) ;
-		  int z2 = (ap->chainX2 < vp->chainX2 ? ap->chainX2 : vp->chainX2) ;
-		  int dz = z2 - z1 ;
-		  int du = ap->chainX2 - ap->chainX1 ;
-		  int dv = vp->chainX2 - vp->chainX1 ;
-		  
-		  if (2 * dz > du || 2 * dz > dv) /* significant overlap */
-		    {
-		      bb->runStat.nAlignments++ ;
-		      nChains++ ;
-		      continue ;
-		    }
-		}
-
-	      if (tc == tc0)
+	      else if (ap->next)
+		{ nChains++ ; bb->runStat.nAlignments++ ; }
+	      else
 		{
+		  isComplex = TRUE ;
+
+		  bb->runStat.nBasesAlignedPerTargetClass[0]+=ap->chainX2 - ap->chainX1 + 1 ;
+		  bb->runStat.nBasesAlignedPerTargetClass[tc]+=ap->chainX2 - ap->chainX1 + 1 ;
+		  if (! allTc[tc])
+		    {
+		      allTc[tc] = 1 ;
+		      bb->runStat.nReadsAlignedPerTargetClass[tc]++ ;
+		    }
+	      
 		  bb->runStat.nErr += vp->chainErr ;
 		  bb->runStat.nMID += vp->chainMID ;
 		  bb->aliDx += vp->chainAli ;
 		  bb->aliDa += vp->chainAli ;
+		  
 		  if (vp->read & 0x1)
 		    bb->runStat.nBaseAligned2 += vp->chainAli ;
 		  else
@@ -2880,7 +3012,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
       if (nChains)
 	bb->runStat.nMultiAligned[nChains > 10 ? 10 : nChains]++ ;
     }
-
+  
+  
   /* register the introns */
   int intronMaxOld = arrayMax (bb->confirmedIntrons) ;
   iMax = arrayMax (aa) ;
