@@ -5443,7 +5443,6 @@ int main (int argc, const char **argv)
   getCmdLineOption (&argc, argv, "-suffix2", &sx.suffix2) ;
   
   getCmdLineOption (&argc, argv, "-o", &sx.outFileName) ;
-
   if ( getCmdLineOption (&argc, argv, "-autotest", 0))
     autotest (argv[0]) ;
 
@@ -5619,6 +5618,17 @@ int main (int argc, const char **argv)
     sx.out = COUNT ;
   if (sx.out == COUNT)
     sx.doCount = TRUE ;
+
+  if (sx.outFileName)
+    {
+      char *cp = strstr (sx.outFileName, ".fasta") ;
+      if (cp && sx.out == FASTA && strlen (cp) == 6) *cp = 0 ;
+      cp = strstr (sx.outFileName, ".fastq") ;
+      if (cp && sx.out == FASTQ && strlen (cp) == 6) *cp = 0 ;
+      cp = strstr (sx.outFileName, ".fastc") ;
+      if (cp && sx.out == FASTC && strlen (cp) == 6) *cp = 0 ;
+    }
+
 
   /*
     if (sx.splitLongDna && sx.out != RAW && sx.out != FASTA && sx.out != FASTC)

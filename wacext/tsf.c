@@ -1243,7 +1243,8 @@ static void tsfExportTable (TSF *tsf, ACEOUT ao)
       int tag = up->tag ;
       int n, sample ;
 	
-      aceOutf (ao, "%d", ii+1) ;  /* line number */
+      if (0) aceOutf (ao, "%d", ii+1) ;  /* line number */
+      else aceOut (ao, "-") ; /* do not modify number of columns */
       if (tsf->noMerge)
 	{
 	  char *cr, *ccp = (char *) dictName (tagDict, tag) ; /* hack unprotect the dictName */

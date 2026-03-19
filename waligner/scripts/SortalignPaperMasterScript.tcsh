@@ -112,6 +112,10 @@ setenv SVlast v74.81.18M.e4.mars12
 # setenv SVlast v76.81.18M.e4.mars12
 # setenv SV     v77.81.18M.e4.mars12    # use 2   n_cpus + 2 
 # setenv SVlast v77.81.18M.e4.mars12
+setenv SV     v78.81.18M.e4.mars17    # use 3/2 n_cpus , fixed the alignment
+setenv SVlast v78.81.18M.e4.mars17
+setenv SV     v79.81.18M.e4.mars17    # use 3/2 n_cpus, bMax =10 fixed the alignment
+setenv SVlast v79.81.18M.e4.mars17
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -207,7 +211,7 @@ setenv bigIlluminaRuns "RNA_PolyA_A_1_50Gb RNA_PolyA_B_1_47Gb "
 
 setenv ABRuns "A_100PE B_100PE A_polyA_151PE B_polyA_151PE A_Total_151PE B_Total_151PE B_Roche454_352 A_Nanopore.1234 B_Nanopore.1306 A_PacBio.1745 B_PacBio.1810 A_Total_PacBio.2822 HG02_Revio_PacBio.2044 "
 setenv iRefSeqRuns "iRefSeq38 iRefSeq38.g"
-setenv refseqRuns "iRefSeq38 iRefSeq38.g iRefSeqT2T iRefSeqT2T.g"
+setenv iRefSeqRuns "iRefSeq38 iRefSeq38.g iRefSeqT2T iRefSeqT2T.g"
 setenv dnaRuns "DNA_ChipSeq1_SE35 DNA_ChipSeq2_SE35 DNA_B_151PE"
 setenv wormRuns "  Worm_RNA_150PE "
 setenv monkeyRuns "Chimpanzee_0.92pc Macaque_2.69pc PTMacaque_2.71pc Baboon_2.92pc Marmoset_3.14 SquirrelMonkey_3.08pc MouseLemur_2.64pc"
@@ -1951,7 +1955,7 @@ goto phaseLoop
 
 ##############################################################################
 
-phase_introns2:
+phase_introns:
 # locate the introns in baruzzo
 
 if (! -e  HG19.INTRON_DB/known_introns.ace2) then
@@ -2093,7 +2097,7 @@ end
  cat GRCh38.INTRON_DB/introns.counts.txt | gawk -F '\t' '{any[$2]++;anyC[$2]+=$3;}/NULL/{new[$2]++;newC[$2]+=$3;}/In_mRNA/{known[$2]++;knownC[$2]+=$3;}END{for (m in any)printf("GRCh38\t%s\t%d\t%d\t%d\t%d\t%d\t%d\n",m,any[m],known[m],new[m],anyC[m],knownC[m],newC[m]);}' | sort > _b
  cat HG19.INTRON_DB/introns.counts.txt | gawk -F '\t' '{any[$2]++;anyC[$2]+=$3;}/NULL/{new[$2]++;newC[$2]+=$3;}/In_mRNA/{known[$2]++;knownC[$2]+=$3;}END{for (m in any)printf("HG19\t%s\t%d\t%d\t%d\t%d\t%d\t%d\n",m,any[m],known[m],new[m],anyC[m],knownC[m],newC[m]);}' | sort > _h
 
- phase_introns:
+ phase_introns2:
 setenv iRuns "$runs"
 #setenv iRuns "iRefSeq iRefSeq38"
 set iMethods="011_SortAlignG5R5 012_SortAlignG3R3 013_SortAlignG3R1 11_MagicBLAST_2018 12_MagicBLAST_2022 13_MagicBLAST_2024 21_HISAT2_4threads 23_HISAT2_16threads 31_STARlong 53_Minimap2_16threads"

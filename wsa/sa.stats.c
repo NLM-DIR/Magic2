@@ -307,6 +307,7 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
 
   up->nPerfectReads += vp->nPerfectReads ;
   up->nAlignments += vp->nAlignments ;
+  up->nComplexReads += vp->nComplexReads ;
   up->nBaseAligned1 += vp->nBaseAligned1 ;
   up->nBaseAligned2 += vp->nBaseAligned2 ;
   up->nSupportedIntrons = saSupportedIntrons (pp, run) ;
@@ -618,6 +619,12 @@ void saRunStatExport (const PP *pp, Array runStats)
 		   , runNam
 		   , up->nPerfectReads
 		   , 100.0 * up->nPerfectReads / (.000001 + up->p.nReads)
+		   ) ;
+
+	  aceOutf (ao, "%s\tComplex_reads\tif\t%ld\t%.3f\n"
+		   , runNam
+		   , up->nComplexReads
+		   , 100.0 * up->nComplexReads / (.000001 + up->p.nReads)
 		   ) ;
 
 	  aceOutf (ao, "%s\tBases\tiii\t%ld\t%ld\t%ld\n"

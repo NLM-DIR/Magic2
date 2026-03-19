@@ -1837,7 +1837,7 @@ int main (int argc, const char *argv[])
   if (p.minAliPerCent < 0) p.minAliPerCent = 0 ;
   if (p.minAli < p.minScore) p.minAli = p.minScore ;
 
-  p.BMAX = 20 ;
+  p.BMAX = 10 ;
   getCmdLineInt (&argc, argv, "--bMax", &(p.BMAX)) ;
   if (p.BMAX < 1) p.BMAX = 1 ;
   if (p.BMAX > 1024) p.BMAX = 1024 ;

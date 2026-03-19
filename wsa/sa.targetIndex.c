@@ -622,8 +622,9 @@ void saTargetIndexCreate (PP *pp)
     filFileCopy (pp->tConfigFileName, hprintf(h, "%s/tConfig", pp->indexName)) ;
   else
     {
-      FILE *f = filopen (hprintf(h, "touch %s/tConfig\n", pp->indexName), 0, "w") ;
-      filclose (f) ;
+      ACEOUT ao = aceOutCreate (filName (pp->indexName, "/tConfig", "w") , 0, 0, h) ;
+      if (pp->tFileName)
+	aceOutf (ao, "G\t%s\n", pp->tFileName) ;
     }
   ac_free (h) ;
   return ;
