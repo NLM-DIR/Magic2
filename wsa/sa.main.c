@@ -304,7 +304,7 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
   int maxTargetRepeats = pp->maxTargetRepeats  ;
   long int nIntronHits = 0 ;
     
-  intronHits = bb->intronHits = bigArrayHandleCreate (10000, HIT, bb->h) ;
+  intronHits = bb->intronHits = bigArrayHandleCreate (10000, INTRONHIT, bb->h) ;
   for (int kk = 0; kk < NN ; kk++)
     {
       long int i = 0, iMax = bigArrayMax (bbG->cwsN[kk]);
@@ -461,7 +461,7 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 		    {
 		      BOOL readUp = rw->nam & 0x1 ;
 		      BOOL chromUp = cw1->nam & 0x1 ; 
-		      HIT *intronHit = 0 ;
+		      INTRONHIT *intronHit = 0 ;
 		      unsigned int z = cw1->intron ;
 		      unsigned int isIntronDown = (z >> 28) & 0x4 ;
 		      int da1 =  z & 0xf ; /* nb of letters in first exon : 4....11 */
@@ -496,7 +496,7 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
 			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
 
-			  intronHit = bigArrayp (intronHits, nIntronHits++, HIT) ;
+			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
 			  intronHit->chrom =  cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
 			  intronHit->read = rw->nam >> 1 ;
 			  intronHit->a1 = a1 ;
@@ -528,11 +528,13 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
 		          x1 = rw->pos + (seedLength - da1) - 1 ;  /* matching base on the read */
 			  
-			  intronHit = bigArrayp (intronHits, nIntronHits++, HIT) ;
+			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
 			  intronHit->chrom =  cw1->nam | 0x1 ; /* to select plus strand, kill the last bit */
 			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->a1 = a1 ;
-			  intronHit->x1 = a1 + da - 1 ;
+			  intronHit->x1 = x1 ;
+			  intronHit->x2 = x1 + 1 ;
+			  intronHit->a1 = a1 ; /* first base of intron */
+			  intronHit->a2 = a1 + da - 1 ; /* last base of intron */
 			  
 			  /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
 			  nn++ ;

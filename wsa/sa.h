@@ -398,6 +398,12 @@ typedef struct intronStruct {
   char feet[6] ;
 } __attribute__((aligned(32))) INTRON ;
 		  
+typedef struct intronHitStruct {
+  int read ;
+  int chrom ;
+  int x1, x2, a1, a2 ;
+} __attribute__((aligned(32))) INTRONHIT ;
+		  
 typedef struct doubleIntronStruct {
   int run ;
   int chrom ;

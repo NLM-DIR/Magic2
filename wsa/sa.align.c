@@ -59,6 +59,22 @@ int saAlignOrder (const void *va, const void *vb)
 
 /**************************************************************/
 
+static int intronHitOrder (const void *va, const void *vb)
+{
+  const INTRONHIT *up = va ;
+  const INTRONHIT *vp = vb ;
+  int n ;
+  n = up->read - vp->read ; if (n) return n ;
+  n = up->chrom - vp->chrom ; if (n) return n ;
+  n = up->x1 - vp->x1  ; if (n) return n ;
+  n = up->x2 - vp->x2  ; if (n) return -n ;
+  n = up->a1 - vp->a1  ; if (n) return n ;
+  n = up->a2 - vp->a2  ; if (n) return n ;
+  return 0 ;
+} /* intronHitOrder */
+
+/**************************************************************/
+
 int saRafiaOrder (const void *va, const void *vb)
 {
   const ALIGN *up = va ;
@@ -1783,7 +1799,7 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
   int errCost = pp->errCost ;
   long int jj = 0, jMax = introns ? bigArrayMax (introns) : 0 ;
   ALIGN *up, *up2 ;
-  HIT *vp, *vp0 = jMax ? bigArrp (introns, 0, HIT) :  0 ;
+  INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
   if (! jMax) return 0 ;
 
@@ -2390,7 +2406,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
       /*   bitSet (bb->isAligned, up->read) ; */
       for (ii = 0 ; ii < iMax ; ii++, up++)
 	{
-	  if (up->score > -10)
+	  if (up->chainScore > -10)
 	    {
 	      vp = arrayp (aaa, kMax++, ALIGN) ;
 	      *vp = *up ;
@@ -2398,7 +2414,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	    }
 	}
     }
-  iMax = alignLocateChains (bestAp, aaa, myRead) ;  
+  if (0) iMax = alignLocateChains (bestAp, aaa, myRead) ;  
   ac_free (h) ;
   
   return ;
@@ -2899,6 +2915,23 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    }
 	}
 
+  /* register the alignments */
+  long int kMax = bigArrayMax (aaa) ;
+  iMax = arrayMax (aa) ;
+  if (iMax)
+    {
+      ap = arrp (aa, 0, ALIGN) ;
+      /*   bitSet (bb->isAligned, ap->read) ; */
+      for (ii = 0 ; ii < iMax ; ii++, ap++)
+	if (read == ap->read)
+	  {
+	    vp = bigArrayp (aaa, kMax++, ALIGN) ;
+	    *vp = *ap ;
+	    vp->nChains = nChains ;
+	    vp->nTargetRepeats = nChains ;
+	  }
+    }
+
   return ;
 } /* alignDoRegisterOnePair */
 
@@ -3307,7 +3340,7 @@ void saAlignDo (const PP *pp, BB *bb)
 
   if (bb->intronHits && bigArrayMax (bb->intronHits) > 1)
     {
-      saSort (bb->intronHits, 2) ; /* hitReadOrder */
+      bigArraySort (bb->intronHits, intronHitOrder) ; /* hitReadOrder */
       bigArrayCompress (bb->intronHits) ;
     }
   
