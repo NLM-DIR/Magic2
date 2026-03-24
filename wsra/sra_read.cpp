@@ -75,12 +75,12 @@ int SraRead(ngs::ReadIterator& it, int max_bases, stringstream& ss)
         if (it.nextFragment()) {
             if (it.isPaired()) {
                 string read_id = it.getReadId().toString();
-                ss << ">" << read_id << ".1" << endl;
+                ss << ">" << read_id << "/1" << endl;
                 string bases(std::move(it.getFragmentBases().toString()));
                 ss << bases << endl;
                 num_bases += bases.length();
 
-                ss << ">" << read_id << ".2" << endl;
+                ss << ">" << read_id << "/2" << endl;
                 if (it.nextFragment()) {
                     string bases(std::move(it.getFragmentBases().toString()));
                     ss << bases << endl;
@@ -107,22 +107,22 @@ int SraReadFastq(ngs::ReadIterator& it, int max_bases, stringstream& ss)
         if (it.nextFragment()) {
             if (it.isPaired()) {
                 string read_id = it.getReadId().toString();
-                ss << "@" << read_id << ".1" << endl;
+                ss << "@" << read_id << "/1" << endl;
                 string bases(std::move(it.getFragmentBases().toString()));
                 ss << bases << endl;
                 num_bases += bases.length();
 
-                ss << "+" << read_id << ".1" << endl;
+                ss << "+" << endl;
                 string qualities(std::move(it.getFragmentQualities().toString()));
                 ss << qualities << endl;
 
-                ss << "@" << read_id << ".2" << endl;
+                ss << "@" << read_id << "/2" << endl;
                 if (it.nextFragment()) {
                     string bases(std::move(it.getFragmentBases().toString()));
                     ss << bases << endl;
                     num_bases += bases.length();
 
-                    ss << "+" << read_id << ".1" << endl;
+                    ss << "+" << endl;
                     string qualities(std::move(it.getFragmentQualities().toString()));
                     ss << qualities << endl;
                 }
