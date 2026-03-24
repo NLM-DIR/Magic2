@@ -24,8 +24,11 @@ SRAObj* SraObjFree(SRAObj* sra);
    to reads in FASTA or FASTQ format. The function downloads complete reads,
    so in most cases the number of downloaded bases will be just above
    num_bases. If quality_scores == 0, then the downloaded reads will be
-   in the FASTA format, otherwise FASTQ with quality scores. */
-const char* SraGetReadBatch(SRAObj* sra, int num_bases, int quality_scores);
+   in the FASTA format, otherwise FASTQ with quality scores.
+   If split_spot == 0 then both mates of paired reads are downloaded to buff1,
+   otherwise they are split into buff1 and buff2. */
+int SraGetReadBatch(SRAObj* sra, long int num_bases, int quality_scores,
+                    int split_spot, const char** buff1, const char** buff2);
 
 
 #ifdef __cplusplus

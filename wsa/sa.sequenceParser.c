@@ -670,6 +670,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   BOOL needQual = FALSE ;
   int BMAX = isGenome ? 100000 : (pp->BMAX << 20) ;
   const char *ccp ;
+  int split_spot = 0;
   long int bytes = 0, nBytes = 0 ;
   int nPuts = 0 ;
   DnaFormat format = rc->format ;
@@ -723,8 +724,9 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   t1 = clock () ;
   SRAObj* sra = SraObjNew(sraID);
   format = SRACACHE ;
-  
-  while ((!Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, BMAX, needQual ? SRA_FASTQ : SRA_FASTA)))
+  SraGetReadBatch(sra, BMAX, needQual ? SRA_FASTQ : SRA_FASTA, split_spot,
+                  &ccp, NULL);
+  while ((!Gb || nMax-- > 0) && ccp)
     {
       if (ao)	aceOut (ao, ccp) ;  /* caching */
 
@@ -768,6 +770,9 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
       /* export the databalock to the channel */
       nPuts++ ;
       channelPut (chan, bb, BB) ;
+
+      SraGetReadBatch(sra, BMAX, needQual ? SRA_FASTQ : SRA_FASTA, split_spot,
+                      &ccp, NULL);
     }
   channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
   
@@ -1254,6 +1259,8 @@ int saSequenceParseSraDownload (const PP *pp, const char *sraID)
   
   SRAObj* sra = SraObjNew(sraID);
   const char *ccp ;
+  const char *ccp_2;
+  int split_spot = 0;
   int num_bases = 1 << 27 ; /* 128 M */
   long unsigned int nMax = Gb ;
   nMax <<= 30 ; /* to be in Gigabases */
@@ -1261,10 +1268,15 @@ int saSequenceParseSraDownload (const PP *pp, const char *sraID)
   fprintf (stderr, "%s : SRA download %s ", timeBufShowNow(tBuf), sraID) ;
   if (Gb) fprintf (stderr, "(top %d GigaBases) ", Gb) ;
 
-  while ((! Gb || nMax-- > 0) && (ccp = SraGetReadBatch(sra, num_bases, needQual ? SRA_FASTQ : SRA_FASTA)))
+  SraGetReadBatch(sra, num_bases, needQual ? SRA_FASTQ : SRA_FASTA, split_spot,
+                  &ccp, NULL);
+  while ((! Gb || nMax-- > 0) && ccp)
     {
       fprintf (stderr, ".") ;
       aceOut (ao, ccp) ;
+
+      SraGetReadBatch(sra, num_bases, needQual ? SRA_FASTQ : SRA_FASTA,
+                      split_spot, &ccp, &ccp_2);
     }
   fprintf (stderr, " done: %s\n", timeBufShowNow(tBuf)) ;
   SraObjFree(sra);
