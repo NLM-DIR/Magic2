@@ -72,28 +72,28 @@ int SraRead(ngs::ReadIterator& it, int max_bases, stringstream& ss)
 {
     size_t num_bases = 0;
     while (num_bases < max_bases && it.nextRead()) {
-	if (it.nextFragment()) {
-	    if (it.isPaired()) {
-		string read_id = it.getReadId().toString();
-		ss << ">" << read_id << ".1" << endl;
-		string bases(std::move(it.getFragmentBases().toString()));
-		ss << bases << endl;
-		num_bases += bases.length();
+        if (it.nextFragment()) {
+            if (it.isPaired()) {
+                string read_id = it.getReadId().toString();
+                ss << ">" << read_id << ".1" << endl;
+                string bases(std::move(it.getFragmentBases().toString()));
+                ss << bases << endl;
+                num_bases += bases.length();
 
-		ss << ">" << read_id << ".2" << endl;
-		if (it.nextFragment()) {
-		    string bases(std::move(it.getFragmentBases().toString()));
-		    ss << bases << endl;
-		    num_bases += bases.length();
-		}
-	    }
-	    else {
-		ss << ">" << it.getReadId().data() << endl;
-		string bases(std::move(it.getFragmentBases().toString()));
-		ss << bases << endl;
-		num_bases += bases.length();
-	    }
-	}
+                ss << ">" << read_id << ".2" << endl;
+                if (it.nextFragment()) {
+                    string bases(std::move(it.getFragmentBases().toString()));
+                    ss << bases << endl;
+                    num_bases += bases.length();
+                }
+            }
+            else {
+                ss << ">" << it.getReadId().data() << endl;
+                string bases(std::move(it.getFragmentBases().toString()));
+                ss << bases << endl;
+                num_bases += bases.length();
+            }
+        }
     }
 
     return 0;
