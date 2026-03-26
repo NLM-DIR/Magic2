@@ -320,15 +320,17 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 		  j++ ; vp++ ;
 		}
 	    }
-	  else if (nI && nI < maxRepeats)  /* was nX < maxRepeats, but we stall on the RefEq XR */
+	  else /*was  if (nI && nI < maxRepeats)  ; was nX < maxRepeats, but we stall on the RefEq XR */
 	    {
 	      for (wp = up, m = 0 ; m < n ; wp++, m++)
 		{
-		  nI = ((wp->intron >> 31) & 0x1) ? 1 : 0 ;
+		  int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
+		  
+		  nI = (tc == 'R' || tc == 'M' || tc == 'C' || ((wp->intron >> 31) & 0x1) ? 1 : 0) ;
 		  if (nI)
 		    {
 		      if (((wp->intron >> 31) & 0x1) == 0x0)
-			wp->intron = n ;
+			wp->intron = 1 ; /* favor intron and rrna */
 		      if (vp < wp)
 			*vp = *wp ;
 		      j++ ; vp++ ;

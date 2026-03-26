@@ -48,6 +48,25 @@ void saCreateRandomGenome (PP *pp, int nMb)
     buf[ii] = atgc[randint() % 4] ;
   buf[iMax] = 0 ;
 
+  /* creata duplications at intron boundaries */
+  for (ii = 0 ; ii < nMb ; ii++)
+    {
+      for (jj = 1 ; jj < 10 ; jj++)
+	{  /* create canonical sliding intron feets */
+	  int a1 = 10000 * ii + 100 * jj ;
+	  buf[a1 - 2] = 'a' ;
+	  buf[a1 - 1] = 'g' ;
+	  buf[a1] = 'g' ;
+	  buf[a1 +1] = 't' ;
+	}
+      /* duplicate 20 bases */
+      for (jj = 0 ; jj < 5 ; jj++)
+	{
+	  int a1 = 10000 * ii + 90 + 200 * jj ;
+	  memcpy (buf + a1 + 100, buf + a1 , 20) ;
+	}
+    }
+  
   for (ii = 0 ; ii < nMb  ; ii++)
     {
       int a1, a2, da = 0 , dda ;

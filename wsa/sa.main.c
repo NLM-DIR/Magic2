@@ -499,9 +499,10 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
 			  intronHit->chrom =  cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
 			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->a1 = a1 ;
-			  intronHit->x1 = a1 + da - 1 ;
-			  
+			  intronHit->a1 = a1 - 1 ;  /* last base of first exon */
+			  intronHit->a2 = a1 + da ; /* first base of second exon */
+			  intronHit->x1 = x1 - 1 ;  /* last base of first exon */
+			  intronHit->x2 = x1 ;      /* first base of second exon */
 			  /* Create a hit to the first two bases of the acceptor exon (x1/ a1 + da) */
 			  nn++ ;
 			  hit = bigArrayp (hits, k++, HIT) ;
@@ -533,8 +534,8 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 			  intronHit->read = rw->nam >> 1 ;
 			  intronHit->x1 = x1 ;
 			  intronHit->x2 = x1 + 1 ;
-			  intronHit->a1 = a1 ; /* first base of intron */
-			  intronHit->a2 = a1 + da - 1 ; /* last base of intron */
+			  intronHit->a1 = a1 - 1 ; /* first base of intron */
+			  intronHit->a2 = a1 + da ; /* last base of intron */
 			  
 			  /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
 			  nn++ ;
@@ -544,7 +545,7 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
 			  hit->x1 =
 			    ((x1 + 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives th intron strand */
+			    | isIntronDown    /* bit 3 gives the intron strand */
 			    | 0x2             /* acceptor site */
 			    ;
 			  hit->a1 =
@@ -562,7 +563,7 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
 			  hit->x1 =
 			    ((x1 - 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives th intron strand */
+			    | isIntronDown    /* bit 3 gives the intron strand */
 			    | 0x1             /* donor site */
 			    ;
 			  hit->a1 =
@@ -603,6 +604,636 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 
   return nn ;
 }  /* matchHitsDo */
+
+/**************************************************************/
+/**************************************************************/
+
+static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
+{
+  BOOL debug = FALSE ;
+  BOOL useIntronSeeds = ! pp->ignoreIntronSeeds ;
+  BigArray hitsArray = bigArrayHandleCreate(64, BigArray, bb->h);
+  long int nn = 0, k = 0, kkk = 0 ;
+  int nHA = 0, hMax = 100000 ;
+  const long unsigned int mask26 = (1L << 26) - 1 ;
+  BigArray hits = bigArrayHandleCreate(hMax, HIT, bb->h);
+  bigArray (hitsArray, nHA++, BigArray) = hits ;
+  BigArray intronHits = 0 ;
+  const int seedLength = pp->seedLength ;
+  const int intronBonus = 1 ;
+  int absoluteMax = 0x1 << NTARGETREPEATBITS ;
+  int absoluteX1Max = 0x1 << ( 31 - 3 - NTARGETREPEATBITS) ;
+  int maxTargetRepeats = pp->maxTargetRepeats  ;
+  long int nIntronHits = 0 ;
+    
+  intronHits = bb->intronHits = bigArrayHandleCreate (10000, INTRONHIT, bb->h) ;
+  for (int kk = 0; kk < NN ; kk++)
+    {
+      long int i = 0, iMax = bigArrayMax (bbG->cwsN[kk]);
+      long int j = 0, jMax = bigArrayMax (bb->cwsN[kk]);
+
+
+      if (!iMax || !jMax)
+	continue ;
+      
+      unsigned int mask = step1 - 1 ;
+      const CW *restrict cw = bigArrp(bbG->cwsN[kk], 0, CW) ;
+      const CW *restrict rw = bigArrp(bb->cwsN[kk], 0, CW) ;
+      const CW *restrict cw1;
+      const CW *restrict cwMax = cw + iMax ;
+      HIT *restrict hit;
+
+      while  (i < iMax && j < jMax)
+	{
+	  if (0 && kk == 1 && rw->seed == 185667857)
+	    printf("(rw->seed == 185667857)\n") ;
+	  if ((i & mask) == 0)
+	    {
+	      if (rw->seed <= (unsigned int) cw->seed)
+		{
+		  cw++ ;
+		  i++ ;
+		  bb->skips0++;
+		  continue;
+		}
+	      else if (rw->seed <= (unsigned int) cw->pos)
+		{
+		  cw += step1 ;
+		  i += step1 ;
+		  bb->skips1++;
+		  continue;
+		}
+	      else if (rw->seed <= (unsigned int) cw->nam)
+		{
+		  cw += step2 ;
+		  i += step2 ;
+		  bb->skips2++;
+		  continue;
+		}
+	      else if (rw->seed <= (unsigned int) cw->intron)
+		{
+		  cw += step3 ;
+		  i += step3 ;
+		  bb->skips3++;
+		  continue;
+		}
+	      else
+		{
+		  cw += step4 ;
+		  i += step4 ;
+		  bb->skips4++;
+		  continue;
+		}
+	    }
+	  if (cw->seed < rw->seed)
+	    /* { int di = ((i & 0xf) == 0 && (cw+16)->seed < rw->seed ? 16 : 1) ; i += di ; cw += di ; bb->skipsNotFound++ ;  } */
+ 	    { i++; cw++; bb->skipsNotFound++ ; } 
+	  else if (cw->seed > rw->seed)
+	    /* { int dj = ((j & 0xf) == 0 && (rw+16)->seed < cw->seed ? 16 : 1) ; j += dj ; rw += dj ; } */
+	    { j++ ; rw++ ; }
+	  else
+	    {
+	      long int a1, x1, i1 = i ;
+	      bb->skipsFound++ ;
+	      int nTargetRepeats = cw->intron ;
+	      
+	      if (0 &&   /* avoid, this kills the intron seeds */
+		  nTargetRepeats > maxTargetRepeats)
+		{ j++ ; rw++ ; continue ; }
+	      if (nTargetRepeats >= absoluteMax)
+		nTargetRepeats = absoluteMax - 1 ; /* we will report absoluteMax (i.e. 31) even is value is higher */
+
+	      for (cw1 = cw ; cw1 < cwMax ; i1++, cw1++)
+		{
+		  if ((i1 & mask) == 0)
+		    continue ;
+		  if (cw1->seed != rw->seed)
+		    break ;
+		  /* success, non intron case */
+		  if (((cw1->intron >> 31) & 0x1) == 0x0)
+		    {
+		      BOOL readUp = rw->nam & 0x1 ;
+		      BOOL chromUp = cw1->nam & 0x1 ;
+		      int nTargetRepeats = cw1->intron ;
+		      
+		      if (1 && nTargetRepeats > maxTargetRepeats)
+			continue ; 
+		      if (0 && useIntronSeeds) continue ;
+		      nn++ ;
+		      hit = bigArrayp (hits, k++, HIT) ;
+		      hit->read = rw->nam >> 1 ;
+		      a1 = cw1->pos ;
+		      x1 = rw->pos ;
+		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
+		      readUp = 0 ;
+#ifdef JUNK      		    
+		      if (1)
+			{
+			  fprintf (stderr, "MATCH\t%d\t%d\t%d\t%d\t%d\t%d\n"
+				   , kk
+				   , rw->nam
+				   , rw->seed
+				   , rw->pos
+				   , cw->nam
+				   , cw->pos
+				   ) ;
+			}
+#endif		      
+		      if (! chromUp)  /* plus strand of the genome */
+			{
+			  hit->a1 =
+			    a1            /* position of the first base of the seed */
+			    - x1          /* locate the virtual position of base 0 of the read */
+			    + 1 ;         /* avoid zero */
+			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
+			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
+			}
+		      else    /* minus strand of the genome */
+			{
+			  hit->a1 =
+			    a1            /* position of the first base of the seed */
+			    + (seedLength - 1)  /* go the last base of the seed */
+			    + x1   /* locate the virtual position of base 0 of the read */
+			    + 1 ;  /* avoid zero */
+			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
+			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
+			}
+		    }
+		  else  if (useIntronSeeds)  /* INTRON */
+		    {
+		      BOOL readUp = rw->nam & 0x1 ;
+		      BOOL chromUp = cw1->nam & 0x1 ; 
+		      INTRONHIT *intronHit = 0 ;
+		      unsigned int z = cw1->intron ;
+		      unsigned int isIntronDown = (z >> 28) & 0x4 ;
+		      int da1 =  z & 0xf ; /* nb of letters in first exon : 4....11 */
+		      int da  =  ((z >> 4) & mask26) ;  /* intron length < 32Mb */
+
+		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
+		      readUp = 0 ;
+		      hit = 0 ;
+		      
+		      if (! chromUp)  /* plus strand on the read and on the genome */
+			{
+			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
+		          x1 = rw->pos + da1 ;  /* matching base on the read */
+			  
+			  /* Create a hit to the last two bases of the donor exon (x1-2 / a1-2) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1 - 2) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x1             /* donor site */
+			    ;
+			  hit->a1 =
+			    (a1 - 2)            /* position of the first base of the seed */
+			    - (x1 - 2)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+
+			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
+			  intronHit->chrom =  cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  intronHit->read = rw->nam >> 1 ;
+			  intronHit->a1 = a1 - 1 ;  /* last base of first exon */
+			  intronHit->a2 = a1 + da ; /* first base of second exon */
+			  intronHit->x1 = x1 - 1 ;  /* last base of first exon */
+			  intronHit->x2 = x1 ;      /* first base of second exon */
+			  /* Create a hit to the first two bases of the acceptor exon (x1/ a1 + da) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x2             /* acceptor site */
+			    ;
+			  hit->a1 =
+			    (a1 + da)            /* position of the first base of the seed */
+			    - (x1)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+			}
+
+		     else  /* plus strand on the read and minus strand  on the genome */
+			{
+			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
+		          x1 = rw->pos + (seedLength - da1) - 1 ;  /* matching base on the read */
+			  
+			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
+			  intronHit->chrom =  cw1->nam | 0x1 ; /* to select plus strand, kill the last bit */
+			  intronHit->read = rw->nam >> 1 ;
+			  intronHit->x1 = x1 ;
+			  intronHit->x2 = x1 + 1 ;
+			  intronHit->a1 = a1 - 1 ; /* first base of intron */
+			  intronHit->a2 = a1 + da ; /* last base of intron */
+			  
+			  /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1 + 1) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x2             /* acceptor site */
+			    ;
+			  hit->a1 =
+			    (a1 - 1)       /* position of the first base of the seed */
+			    + (x1 + 1)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+			  
+			  /* Create a hit to the last two bases of the donor exon (x1-1,x1/ a1 + da+1,a1+da) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1 - 1) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x1             /* donor site */
+			    ;
+			  hit->a1 =
+			    (a1 + da + 1)            /* position of the first base of the seed */
+			    + (x1 - 1)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+			}
+		    }
+		  else
+		    continue ;
+		  
+		  hit->chrom ^= (hit->read & 0x1) ; /* flip chrom for the second read of a pair */
+		  if (0 && rw->seed == 168430082)
+		    printf("(rw->seed == 168430082)\n") ;
+		
+		  if (k >= hMax)
+		    {
+		      bigArrayMax (hits) = k  ;
+		      hits = bigArrayHandleCreate(hMax, HIT, bb->h);
+		      bigArray (hitsArray, nHA++, BigArray) = hits ;
+		      kkk += k ;
+		      k = 0 ;
+		    }
+		}
+	      j++ ; rw++ ;
+	    }
+	}
+      bigArrayDestroy (bb->cwsN[kk]) ; /* the read words are no longer needed */
+      bigArrayMax (hits) = k ;
+      kkk += k ;
+    }
+  bb->hits = hitsArray ;
+
+  if (debug)
+    fprintf (stderr, "..MatchHitsDo found %ld matches\n", kkk) ;
+
+  return nn ;
+}  /* matchHitsDo2 */
+
+/**************************************************************/
+/**************************************************************/
+
+static long int  matchHitsDo3 (const PP *pp, BB *bbG, BB *bb)
+{
+  BOOL debug = FALSE ;
+  BOOL useIntronSeeds = ! pp->ignoreIntronSeeds ;
+  BigArray hitsArray = bigArrayHandleCreate(64, BigArray, bb->h);
+  long int nn = 0, k = 0, kkk = 0 ;
+  int nHA = 0, hMax = 100000 ;
+  const long unsigned int mask26 = (1L << 26) - 1 ;
+  BigArray hits = bigArrayHandleCreate(hMax, HIT, bb->h);
+  bigArray (hitsArray, nHA++, BigArray) = hits ;
+  BigArray intronHits = 0 ;
+  const int seedLength = pp->seedLength ;
+  const int intronBonus = 1 ;
+  int absoluteMax = 0x1 << NTARGETREPEATBITS ;
+  int absoluteX1Max = 0x1 << ( 31 - 3 - NTARGETREPEATBITS) ;
+  int maxTargetRepeats = pp->maxTargetRepeats  ;
+  long int nIntronHits = 0 ;
+    
+  intronHits = bb->intronHits = bigArrayHandleCreate (10000, INTRONHIT, bb->h) ;
+  for (int kk = 0; kk < NN ; kk++)
+    {
+      long int i = 0, iMax = bigArrayMax (bbG->cwsN[kk]);
+      long int j = 0, jMax = bigArrayMax (bb->cwsN[kk]);
+
+
+      if (!iMax || !jMax)
+	continue ;
+      
+      unsigned int mask = step1 - 1 ;
+      const CW *restrict cw = bigArrp(bbG->cwsN[kk], 0, CW) ;
+      const CW *restrict rw = bigArrp(bb->cwsN[kk], 0, CW) ;
+      const CW *restrict cw1;
+      const CW *restrict cwMax = cw + iMax ;
+      HIT *restrict hit;
+
+#ifdef JUNK      
+      if (kk == 6)
+	{
+	  const CW *restrict zw = bigArrp(bb->cwsN[kk], 0, CW) ;
+	  for (long int i = 0 ; i < bigArrayMax (bb->cwsN[kk]) ; i++, zw++)
+		 fprintf (stderr, "SEED\t%u\t%u\t%u\t%u\n"
+			  , kk
+			  , zw->nam
+			  , zw->seed
+			  , zw->pos
+			  ) ;
+	}
+#endif      
+
+      while  (i < iMax && j < jMax)
+	{
+	  if (0 && kk == 1 && rw->seed == 185667857)
+	    printf("(rw->seed == 185667857)\n") ;
+	  if ((i & mask) == 0)
+	    {
+	      if (rw->seed <= (unsigned int) cw->seed)
+		{
+		  cw++ ;
+		  i++ ;
+		  bb->skips0++;
+		  continue;
+		}
+	      else if (rw->seed <= (unsigned int) cw->pos)
+		{
+		  cw += step1 ;
+		  i += step1 ;
+		  bb->skips1++;
+		  continue;
+		}
+	      else if (rw->seed <= (unsigned int) cw->nam)
+		{
+		  cw += step2 ;
+		  i += step2 ;
+		  bb->skips2++;
+		  continue;
+		}
+	      else if (rw->seed <= (unsigned int) cw->intron)
+		{
+		  cw += step3 ;
+		  i += step3 ;
+		  bb->skips3++;
+		  continue;
+		}
+	      else
+		{
+		  cw += step4 ;
+		  i += step4 ;
+		  bb->skips4++;
+		  continue;
+		}
+	    }
+	  if (cw->seed < rw->seed)
+	    /* { int di = ((i & 0xf) == 0 && (cw+16)->seed < rw->seed ? 16 : 1) ; i += di ; cw += di ; bb->skipsNotFound++ ;  } */
+ 	    { i++; cw++; bb->skipsNotFound++ ; } 
+	  else if (cw->seed > rw->seed)
+	    /* { int dj = ((j & 0xf) == 0 && (rw+16)->seed < cw->seed ? 16 : 1) ; j += dj ; rw += dj ; } */
+	    { j++ ; rw++ ; }
+	  else
+	    {
+	      long int a1, x1, i1 = i ;
+	      bb->skipsFound++ ;
+	      int nTargetRepeats = cw->intron ;
+	      
+	      if (0 &&   /* avoid, this kills the intron seeds */
+		  nTargetRepeats > maxTargetRepeats)
+		{ j++ ; rw++ ; continue ; }
+	      if (nTargetRepeats >= absoluteMax)
+		nTargetRepeats = absoluteMax - 1 ; /* we will report absoluteMax (i.e. 31) even is value is higher */
+
+	      for (cw1 = cw ; cw1 < cwMax ; i1++, cw1++)
+		{
+		  if ((i1 & mask) == 0)
+		    continue ;
+		  if (cw1->seed != rw->seed)
+		    break ;
+		  /* success, non intron case */
+		  if (((cw1->intron >> 31) & 0x1) == 0x0)
+		    {
+		      BOOL readUp = rw->nam & 0x1 ;
+		      BOOL chromUp = cw1->nam & 0x1 ;
+		      int nTargetRepeats = cw1->intron ;
+		      
+		      if (1 && nTargetRepeats > maxTargetRepeats)
+			continue ; 
+		      if (0 && useIntronSeeds) continue ;
+		      nn++ ;
+		      hit = bigArrayp (hits, k++, HIT) ;
+		      hit->read = rw->nam >> 1 ;
+		      a1 = cw1->pos ;
+		      x1 = rw->pos ;
+		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
+		      readUp = 0 ;
+#ifdef JUNK      		    
+		      if (1)
+			{
+			  fprintf (stderr, "MATCH\t%d\t%d\t%d\t%d\t%d\t%d\n"
+				   , kk
+				   , rw->nam
+				   , rw->seed
+				   , rw->pos
+				   , cw->nam
+				   , cw->pos
+				   ) ;
+			}
+#endif		      
+		      if (! chromUp)  /* plus strand of the genome */
+			{
+			  hit->a1 =
+			    a1            /* position of the first base of the seed */
+			    - x1          /* locate the virtual position of base 0 of the read */
+			    + 1 ;         /* avoid zero */
+			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
+			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
+			}
+		      else    /* minus strand of the genome */
+			{
+			  hit->a1 =
+			    a1            /* position of the first base of the seed */
+			    + (seedLength - 1)  /* go the last base of the seed */
+			    + x1   /* locate the virtual position of base 0 of the read */
+			    + 1 ;  /* avoid zero */
+			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
+			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
+			}
+		    }
+		  else  if (useIntronSeeds)  /* INTRON */
+		    {
+		      BOOL readUp = rw->nam & 0x1 ;
+		      BOOL chromUp = cw1->nam & 0x1 ; 
+		      INTRONHIT *intronHit = 0 ;
+		      unsigned int z = cw1->intron ;
+		      unsigned int isIntronDown = (z >> 28) & 0x4 ;
+		      int da1 =  z & 0xf ; /* nb of letters in first exon : 4....11 */
+		      int da  =  ((z >> 4) & mask26) ;  /* intron length < 32Mb */
+
+		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
+		      readUp = 0 ;
+		      hit = 0 ;
+		      
+		      if (! chromUp)  /* plus strand on the read and on the genome */
+			{
+			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
+		          x1 = rw->pos + da1 ;  /* matching base on the read */
+			  
+			  /* Create a hit to the last two bases of the donor exon (x1-2 / a1-2) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1 - 2) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x1             /* donor site */
+			    ;
+			  hit->a1 =
+			    (a1 - 2)            /* position of the first base of the seed */
+			    - (x1 - 2)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+
+			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
+			  intronHit->chrom =  cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  intronHit->read = rw->nam >> 1 ;
+			  intronHit->a1 = a1 - 1 ;  /* last base of first exon */
+			  intronHit->a2 = a1 + da ; /* first base of second exon */
+			  intronHit->x1 = x1 - 1 ;  /* last base of first exon */
+			  intronHit->x2 = x1 ;      /* first base of second exon */
+			  /* Create a hit to the first two bases of the acceptor exon (x1/ a1 + da) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x2             /* acceptor site */
+			    ;
+			  hit->a1 =
+			    (a1 + da)            /* position of the first base of the seed */
+			    - (x1)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  if (hit->x1 > absoluteX1Max)
+			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+			}
+
+		     else  /* plus strand on the read and minus strand  on the genome */
+			{
+			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
+		          x1 = rw->pos + (seedLength - da1) - 1 ;  /* matching base on the read */
+			  
+			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
+			  intronHit->chrom =  cw1->nam | 0x1 ; /* to select plus strand, kill the last bit */
+			  intronHit->read = rw->nam >> 1 ;
+			  intronHit->x1 = x1 ;
+			  intronHit->x2 = x1 + 1 ;
+			  intronHit->a1 = a1 - 1 ; /* first base of intron */
+			  intronHit->a2 = a1 + da ; /* last base of intron */
+			  
+			  /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1 + 1) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x2             /* acceptor site */
+			    ;
+			  hit->a1 =
+			    (a1 - 1)       /* position of the first base of the seed */
+			    + (x1 + 1)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+			  
+			  /* Create a hit to the last two bases of the donor exon (x1-1,x1/ a1 + da+1,a1+da) */
+			  nn++ ;
+			  hit = bigArrayp (hits, k++, HIT) ;
+			  hit->read = rw->nam >> 1 ;
+			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
+			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
+			  hit->x1 =
+			    ((x1 - 1) << 3)   /* reserve 3 bits for the intron seeds */
+			    | isIntronDown    /* bit 3 gives the intron strand */
+			    | 0x1             /* donor site */
+			    ;
+			  hit->a1 =
+			    (a1 + da + 1)            /* position of the first base of the seed */
+			    + (x1 - 1)          /* locate the virtual position of base 0 of the read */
+			    - intronBonus       /* prefer intron match to exon match */
+			    + 1 ;               /* avoid zero */
+			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+			}
+		    }
+		  else
+		    continue ;
+		  
+		  hit->chrom ^= (hit->read & 0x1) ; /* flip chrom for the second read of a pair */
+		  if (0 && rw->seed == 168430082)
+		    printf("(rw->seed == 168430082)\n") ;
+		
+		  if (k >= hMax)
+		    {
+		      bigArrayMax (hits) = k  ;
+		      hits = bigArrayHandleCreate(hMax, HIT, bb->h);
+		      bigArray (hitsArray, nHA++, BigArray) = hits ;
+		      kkk += k ;
+		      k = 0 ;
+		    }
+		}
+	      j++ ; rw++ ;
+	    }
+	}
+      bigArrayDestroy (bb->cwsN[kk]) ; /* the read words are no longer needed */
+      bigArrayMax (hits) = k ;
+      kkk += k ;
+    }
+  bb->hits = hitsArray ;
+
+  if (debug)
+    fprintf (stderr, "..MatchHitsDo found %ld matches\n", kkk) ;
+
+  return nn ;
+}  /* matchHitsDo3 */
 
 /**************************************************************/
 /**************************************************************/
@@ -1229,34 +1860,43 @@ void saUsage (char *message, int argc, const char **argv)
 	       "//       example 2:   -i f1_1.fastq+f1_2.fastq,f2_1.fastq.gz+f2_2.fastq.gz\n"
 	       "//        Align read pairs, again possibly using different formats.\n"
 	       "//     The file format is implied by the file name, or may be provided explicitly using\n"
-	       "//       --raw   | --fasta  | --fastq | --fastc | -sra\n"
+	       "//       --raw   | --fasta  | --fastq | --fastc | --interleaved\n"
+	       "//        interleaved fasta and fastq files present paired end reads as consecutive records\n" 
 	       "//     for example when using  '-i - ' to pipe sequence files into the pipeline\n"
 	       "//       example 3: zcat fx.*.fastq.gz | sortalign -x XYZ -i --fastq -o results/fx\n"
 	       "// -I <config_fileName>\n"
 	       "//     A more precise definition of a set of sequencing files to be analysed\n"
-	       "//     Eech line contains 1 to 3 tab separated columns\n"
+	       "//     Each line contains 1 to 3 tab separated columns\n"
 	       "//          FileName[s]  RunName Descriptors\n"
 	       "//     Example:\n"
 	       "//          f1.fasta run1 RNA,Nanopore\n"
-	       "//          f.R1.gz+f.R2.gz  run2  DNA,fastq,Illumina\n"
+	       "//          f_R1.gz+f_R2.gz  run2  DNA,fastq,Illumina\n"
 	       "//        A table with a single column of sequence files is acceptable, the format will be deduced from the file names\n"
-	       "//     1: file name, mandatory\n"
+	       "//     1: File name, mandatory\n"
 	       "//        For paired end sequencing, provide, as in the second example (f1.F+f1.R), two file names separated by a plus\n"
-	       "//        A file named (.fa, .fasta, .fastq, .fastc) implies that format, the file may be gzipped (.gz)\n"
-	       "//        A file named (SRR[0-9]*) implies direct SRA download, with optional caching in the ./SRA directory\n"
-	       "//        A file named (.sra.fasta.gz) is a fasta file with read-pairs on successive lines\n"
+	       "//         A file named (.fa, .fasta, .fastq, .fastc) implies that format, the file may be gzipped (.gz)\n"
+	       "//         A file named (SRR[0-9]*) implies direct SRA download, with optional caching in the ./SRA directory\n"
+	       "//        Or use interleaved files"
+	       "//         A file named (.sample_12.fasta.gz) is a fasta file with read-pairs on successive lines\n"
 	       "//     2: Run name, optional,the name must not contain spaces or special characters, as it will be used to name subdirectories\n"
 	       "//     3: Descriptors, optional, the options are coma separated, possibilities are\n"
 	       "//        DNA/RNA : [default RNA], if DNA sortalign will not clip polyA or jump introns\n"
 	       "//        Machine : [default Illumina], one of Illumina, PacBio, Nanopore,..\n"
 	       "//        Adaptors=atagg,cctg   run specific adaptor sequences\n"
 	       "//        Format : [default fasta], one of sra, raw, fasta, fastq, fastc, only needed if not implied by the file name\n"
+	       "//                                  sample_12.fasta, sample_12.fastq indicate interleaved files\n"	
+	       "//  --sra\n  : implied if the run is called SRR*"
+	       "//    When the requested sequences are is SRA format they are automatically downloaded from NCBI SRA archive\n"
 	       "//  --sraCaching\n"
 	       "//    When the requested sequences are is SRA format they are automatically downloaded from NCBI SRA archive\n"
-	       "//    If --sraCaching is set, the (large) downloaded fasta.gz files are copied and saved in the ./SRA local directory\n"
+	       "//    If --sraCaching is set, data are saved as (large) .fastq.gz or .fasta.gz in the ./SRA local directory\n"
+	       "//    Paired end runs are stored as interleaved .sample_12.fastq.gz default(or .sample_12.fasta.gz\n"
+	       "//    Or as pairs of files _R1.fastq.gz, _R2.fastq.gz\n"
 	       "//    This is only useful if you intend to align these sequences several times or reuse them in other programs\n" 
-	       "//  --sraDownload SRR123,SRR456,SRR999 \n"
+	       "//  --sraDownload SRR123,SRR456,SRR999 [--fasta] [--fastq] [--split_pairs]\n"
 	       "//    Just download a set of SRR entries into the cache directory ./SRA/SRR123.fasta.gz ... \n"
+	       "//    the format is .fastq (default) or .fasta (if --fasta is set)\n"
+	       "//    Paired end data are interleaved by default (.sample_12.fastq.gz) unless --split_pairs is set\n"
 	       "//    This command is optional, since sortalign provides direct SRA access\n"
 	       "//    --maxGB <int> : [default no limit]\n"
 	       "//      Limit the sraDownload to <int> Gigabases per SRR entry\n" 
@@ -1268,7 +1908,7 @@ void saUsage (char *message, int argc, const char **argv)
 	       "//   All output files will share this prefix, large outputs are split\n"
 	       "//   Examples : -o x/y/z  all output files will be named x/y/z.something\n"
        	       "//              -o x/y/   all output files will be named x/y/something\n"
-	       "// --gzo : the output files will be gziped\n" 
+	       "// --gzo : the output files will be gziped (data downloaded from SRA are always gzipped)\n" 
 
 	       "// ALIGNMENT FORMAT:\n"
 	       "//   By default, the aligments are exported in .hits format\n"
@@ -1419,31 +2059,24 @@ int main (int argc, const char *argv[])
       if (getCmdLineText (h, &argc, argv, "--sraDownload", &sraID))
 	{
 	  char *cp = 0 ;
-	  const char *outFormat = 0 ;
 
-	  p.sraDownloadFormat = SRAPE ; /* default */
-	  if (getCmdLineText (h, &argc, argv, "--O", &(outFormat)))
-	    {
-	      cp = strnew (outFormat, h) ;
-	      if (cp)
-		{
-		  if (! strcmp (cp, "PE"))
-		    p.sraDownloadFormat = SRAPE ;    /* 8 lines per pair (twice fasta) */
-		  else if (! strcmp (cp, "PEQ"))
-		    p.sraDownloadFormat = SRAPEQ ;    /* 8 lines per pair (twice fastq) */
-		  else if (! strcmp (cp, "fasta"))
-		    p.sraDownloadFormat = SRAFASTA ;  /* 2 files per pair, fasta format */
-		  else if (! strcmp (cp, "fastq"))
-		    p.sraDownloadFormat = SRAFASTQ ;  /* 2 files per pair, fastq format */
-		  else
-		    saUsage ("-O parameter should of one or several of  PE,PEQ,fasta,fastq", argc, argv) ;
-		}
-	    }  
-		    
-	  getCmdLineInt (&argc, argv, "--maxGB", &(p.maxSraGb)) ;
+	  p.sraDownload = TRUE ;
+	  p.fasta = getCmdLineBool (&argc, argv, "--fasta");
+	  p.fastq = getCmdLineBool (&argc, argv, "--fastq");
+	  p.fastc = getCmdLineBool (&argc, argv, "--fastc");
+	  p.raw = getCmdLineBool (&argc, argv, "--raw");
+	  p.sra = getCmdLineBool (&argc, argv, "--sra");
+	  p.split_pairs = getCmdLineBool (&argc, argv, "--split_pairs") ;
+	  p.interleaved = getCmdLineBool (&argc, argv, "--interleaved") ;
+	  
+	  getCmdLineFloat (&argc, argv, "--maxGB", &(p.maxSraGb)) ;
 	  if (p.maxSraGb < 0)
 	    saUsage ("--maxGB parameter should be positive", argc, argv) ;
 
+	  /*****************  Check tat all parameters have been parsed *******************/
+	  if (argc > 1)
+	    saUsage (0, argc, argv) ;
+	  
 	  cp = strnew (sraID, h) ;
 	  while (cp)
 	    {
@@ -1521,8 +2154,16 @@ int main (int argc, const char *argv[])
 
   p.gzi = getCmdLineBool (&argc, argv, "--gzi") ;   /* decompress input files (implicit for files named .gz) */
   p.gzo = getCmdLineBool (&argc, argv, "--gzo") ;   /* compress most output files */
+  p.fasta = getCmdLineBool (&argc, argv, "--fasta");
+  p.fastq = getCmdLineBool (&argc, argv, "--fastq");
+  p.fastc = getCmdLineBool (&argc, argv, "--fastc");
+  p.raw = getCmdLineBool (&argc, argv, "--raw");
+  p.sra = getCmdLineBool (&argc, argv, "--sra");
+  p.split_pairs = getCmdLineBool (&argc, argv, "--split_pairs") ;
+  p.interleaved = getCmdLineBool (&argc, argv, "--interleaved") ;
 
-  getCmdLineInt (&argc, argv, "--maxGB", &(p.maxSraGb));
+  getCmdLineBool (&argc, argv, "--numactl") ; /* to consume --numactl if --debug is set  */
+  getCmdLineFloat (&argc, argv, "--maxGB", &(p.maxSraGb));
   if (p.maxSraGb < 0)
     saUsage ("--maxGB parameter should be positive", argc, argv) ;
 
@@ -1731,16 +2372,13 @@ int main (int argc, const char *argv[])
    * but the best way is not to provide this parameter and let the the format be implied by the file names
           .fasta[.gz]
 	  .fastq[.gz]
-	  -fna[.gz]
+	  .fna[.gz]
 	  .fa[.gz]
 	  .fastc[.gz]
+	  .sample_12.fasta[.gz]
+	  .sample_12.fastq[.gz]
 	  SRR*
    */
-  p.fasta = getCmdLineBool (&argc, argv, "--fasta");
-  p.fastq = getCmdLineBool (&argc, argv, "--fastq");
-  p.fastc = getCmdLineBool (&argc, argv, "--fastc");
-  p.raw = getCmdLineBool (&argc, argv, "--raw");
-  p.sra = getCmdLineBool (&argc, argv, "--sra");
   
   /***************** run name  ***********/
 
@@ -1839,7 +2477,7 @@ int main (int argc, const char *argv[])
   if (p.minAliPerCent < 0) p.minAliPerCent = 0 ;
   if (p.minAli < p.minScore) p.minAli = p.minScore ;
 
-  p.BMAX = 10 ;
+  p.BMAX = 3 ;
   getCmdLineInt (&argc, argv, "--bMax", &(p.BMAX)) ;
   if (p.BMAX < 1) p.BMAX = 1 ;
   if (p.BMAX > 1024) p.BMAX = 1024 ;
@@ -2268,7 +2906,7 @@ int main (int argc, const char *argv[])
   if (p.justStats && p.outFileName)  system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)) ;
   saSetGetAdaptors (-999999, 0, 0, 0) ;
   oligoEntropy (0, -999999, 0) ;
-    ac_free (p.h) ;
+  ac_free (p.h) ;
   if (0)   ac_free (h) ; /* blocks on channel cond destroy */
   return 0 ;
 }

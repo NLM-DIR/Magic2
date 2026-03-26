@@ -54,8 +54,7 @@
 
 typedef struct nodeStruct { double x ; CHAN *cx, *cy, *cu, *cv, *done ; int k ; } NODE ;
 
-typedef enum {SRAPE=1,SRAPEQ,SRAFASTA,SRAFASTQ} SRADOWNLOADFORMAT ;
-typedef enum {FASTA=1, FASTQ, FASTC, RAW, SRA, SRACACHE, SRACACHE1, SRACACHE2, INTRONS, GFF} DnaFormat ;
+typedef enum {FASTA=1, FASTA2, FASTQ, FASTQ2, FASTC, RAW, SRA,INTRONS, GFF} DnaFormat ;
 typedef struct targetClassStruct {
   char targetClass ; /* single char a-z, A-Z */
   int priority ;
@@ -281,7 +280,7 @@ typedef struct pStruct {
   Array confirmedSLs ;
   Array confirmedIntrons ;
   Array doubleIntrons ;
-  BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching ;
+  BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
   BOOL sam, bam, hitsFormat, exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;
@@ -312,10 +311,9 @@ typedef struct pStruct {
   int errRateMax ;       /* (--align case) max number of errors in seed extension */
   int OVLN ;
   int gpu ;
-  int maxSraGb ; /* max number of Gigabases in each SRA download, 0 : no max */
+  float maxSraGb ; /* max number of Gigabases in each SRA download, 0 : no max */
   BOOL sraOutFormatPE ; /* default: 4 lines per pair (>id1, atgc, >id2. atgc */
   BOOL deduplicate ;
-  SRADOWNLOADFORMAT sraDownloadFormat ; 
   long int wiggleCumul ; /* in million bases */
   long int cds, utr, intronic, intergenic ;
   BOOL splice ;
@@ -341,6 +339,17 @@ typedef struct hitStruct {
   unsigned int a1 ;  /* bio coordinates on chrom (base 1) */
   unsigned int x1 ;  /* bio coordinate on read */
 } __attribute__((aligned(16))) HIT ;
+
+
+typedef struct seedMatchStruct {
+  int read ; /* index in bb->dict << 1 | (0x1 for minus words) */
+  int x1 ;   /* bio coordinate of first letter of seed in read */
+  unsigned int readFlags ; /* copy in these 3 fileds seed/nam/intron of the read CW */
+  int target ; /* index in pp->bbG.dict << 1 | (0x1 for minus chromosome strand) */
+  int a1 ;   /* bio coordinate of first letter of seed in target */
+  unsigned int targetFlags ; /* copy in these 3 fileds seed/nam/intron of the read CW */
+} __attribute__((aligned(16))) SEEDMATCH ;
+
 #endif
 typedef struct countChromStruct {
   float weight ;
@@ -361,7 +370,8 @@ typedef struct alignStruct {
   int chain, chainX1, chainX2, chainA1, chainA2 ;
   int id, previous, next ;
   int ali, chainAli, score, chainScore ;
-  int pairScore, mateChrom, mateA1, mateA2, pairLength ;
+  unsigned int mateChrom, mateA1, mateA2 ;
+  unsigned int pairScore, pairLength ;
   int nN, nErr, nMID, chainErr, chainMID ;
   int nTargetRepeats ;
   int nChains ;
@@ -513,7 +523,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget) ;
   
 /* sa.sequenceParser.c */
 void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
-int saSequenceParseSraDownload (const PP *pp, const char *sraID) ;
+int saSequenceParseSraDownload (PP *pp, const char *sraID) ;
 void saSequenceParseGzBuffer (const PP *pp, BB *bb) ;
 void saSequenceDeduplicate (const PP *pp, BB *bb) ;
 

@@ -116,6 +116,18 @@ setenv SV     v78.81.18M.e4.mars17    # use 3/2 n_cpus , fixed the alignment
 setenv SVlast v78.81.18M.e4.mars17
 setenv SV     v79.81.18M.e4.mars17    # use 3/2 n_cpus, bMax =10 fixed the alignment
 setenv SVlast v79.81.18M.e4.mars17
+setenv SV     v80.81.18M.e4.mars19    # use 3/2 n_cpus, bMax =10 improved findIntronMates
+setenv SVlast v80.81.18M.e4.mars19
+setenv SV     v81.81.18M.e4.mars19    # use 3/2 n_cpus, bMax =10 dicarded findIntronMates, extend only inwards from intron seeds
+setenv SVlast v81.81.18M.e4.mars19
+setenv SV     v82.81.18M.e4.mars21    # use 3/2 n_cpus, bMax =3 discardedd findIntronMates 
+setenv SVlast v82.81.18M.e4.mars21
+setenv SV     v82.81.18M.e4.mars21    # use 3/2 n_cpus, bMax =3 discardedd findIntronMates 
+setenv SVlast v82.81.18M.e4.mars21
+setenv SV     v83.81.18M.e4.mars21    # use 3/2 n_cpus, bMax =3 discarded findIntronMates new data download and pairs in _R2 files
+setenv SVlast v83.81.18M.e4.mars21
+setenv SV     v84.81.18M.e4.mars25    # idem, reconstructed the iDX using rrna and edited the pair system
+setenv SVlast v84.81.18M.e4.mars25
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -905,12 +917,12 @@ foreach run ($runs)
       if (-e Fasta/$run/$run.reverse.fastq.gz) set read_2=Fasta/$run/$run.reverse.fastq.gz
       if (-e Fasta/$run/$run.forward.fasta.gz) set read_1=Fasta/$run/$run.forward.fasta.gz
       if (-e Fasta/$run/$run.reverse.fasta.gz) set read_2=Fasta/$run/$run.reverse.fasta.gz
-      if ($method == 011_SortAlignG6R3 && -e Fasta/$run/$run.sra.fasta.gz) set read_1=Fasta/$run/$run.sra.fasta.gz
-      if ($method == 012_SortAlignG3R3 && -e Fasta/$run/$run.sra.fasta.gz) set read_1=Fasta/$run/$run.sra.fasta.gz
-      if ($method == 013_SortAlignG3R1 && -e Fasta/$run/$run.sra.fasta.gz) set read_1=Fasta/$run/$run.sra.fasta.gz
-      if ($method == 014_SortAlignG3R3.g && -e Fasta/$run/$run.sra.fasta.gz) set read_1=Fasta/$run/$run.sra.fasta.gz
-      if ($method == 015_SortAlignG3R1.g && -e Fasta/$run/$run.sra.fasta.gz) set read_1=Fasta/$run/$run.sra.fasta.gz
-      if ($read_1 == Fasta/$run/$run.sra.fasta.gz) set read_2=""
+      if ($method == 011_SortAlignG6R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
+      if ($method == 012_SortAlignG3R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
+      if ($method == 013_SortAlignG3R1 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
+      if ($method == 014_SortAlignG3R3.g && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
+      if ($method == 015_SortAlignG3R1.g && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
+      if ($read_1 == Fasta/$run/$run.sample_12.fasta.gz) set read_2=""
       
       if (! -e $read_1) then
         echo "Run $run Missing read file $read_1"
@@ -1002,7 +1014,7 @@ foreach species (any)
     echo "$nRun.$run\t$mm\tt\t$multiP" >> $out.parallel.tsf
   end
 end
-
+  ls -ls $out.*
   date >> COMPARE/timing.txt
 
   set type=wallT
@@ -1036,7 +1048,7 @@ end
   echo "" >> COMPARE/timing.txt
   echo "\n" >> COMPARE/timing.txt
 end
-  mv COMPARE/timing.txt COMPARE/timing.$SV.txt
+  \cp COMPARE/timing.txt COMPARE/timing.$SV.txt
     
 goto phaseLoop
 

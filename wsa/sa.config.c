@@ -225,8 +225,10 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 
 	  rc->format = FASTA ; /* default */
 	  int ln = strlen (rc->fileName1) ;
-	  if (strstr (rc->fileName1, ".sra.fasta.gz") == rc->fileName1 + ln - 13) rc->format = SRACACHE ;
-	  else if (strstr (rc->fileName1, ".sra.fasta") == rc->fileName1 + ln - 10) rc->format = SRACACHE ;
+	  if (strstr (rc->fileName1, ".sample_12.fasta.gz") == rc->fileName1 + ln - 19) rc->format = FASTA2 ;
+	  else if (strstr (rc->fileName1, ".sample_12.fasta") == rc->fileName1 + ln - 16) rc->format = FASTA2 ;
+	  else if (strstr (rc->fileName1, ".sample_12.fastq.gz") == rc->fileName1 + ln - 19) rc->format = FASTQ2 ;
+	  else if (strstr (rc->fileName1, ".sample_12.fastq") == rc->fileName1 + ln - 16) rc->format = FASTQ2 ;
 	  else if (strstr (rc->fileName1, ".fasta.gz") == rc->fileName1 + ln - 9) rc->format = FASTA ;
 	  else if (strstr (rc->fileName1, ".fastq.gz") == rc->fileName1 + ln - 9) rc->format = FASTQ ;
 	  else if (strstr (rc->fileName1, ".fasta") == rc->fileName1 + ln - 6) rc->format = FASTA ;
@@ -277,7 +279,10 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	      rc->pairedEnd = TRUE ;
 	      rs->p.nFiles++ ;
 	    }
-	  if (rc->format == FASTC)
+	  if (pp->interleaved && rc->format == FASTA) rc->format = FASTA2 ;
+	  if (pp->interleaved  && rc->format == FASTQ) rc->format = FASTQ2 ;		  
+	  
+	  if (rc->format == FASTC || rc->format == FASTA2 || rc->format == FASTQ2)
 	      rc->pairedEnd = TRUE ;
 
 	  cp = cq + 1 ;
@@ -346,13 +351,14 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	  while (cp)
 	    {
 	      int k = 0 ;
-	      
+	      BOOL sample_12 = FALSE ;
 	      if (*cp == '#')
 		break ;
 	      cq = strchr (cp, ',') ;
 	      if (cq)
 		*cq++ = 0 ;
 	      if (! strcasecmp (cp, "fasta")) rc->format = FASTA ;
+	      else if (! strcasecmp (cp, "sample_12")) sample_12 = TRUE ;
 	      else if (! strcasecmp (cp, "fastq")) rc->format = FASTQ ;
 	      else if (! strcasecmp (cp, "fastc")) rc->format = FASTC ;
 	      else if (! strcasecmp (cp, "raw")) rc->format = RAW ;
@@ -374,17 +380,20 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 		rc->jump5r1 = k ;
 	      else if (sscanf (cp, "jump2=%d", &k) && k >0)
 		rc->jump5r2 = k ;
-		
-		  
+
+	      if (sample_12 && rc->format == FASTA) rc->format = FASTA2 ;
+	      if (sample_12 && rc->format == FASTQ) rc->format = FASTQ2 ;		  
 	      cp = cq ;
-	    }
+	    } 
 
 	  if (! rc->format)
 	    {
 	      int ln = strlen (rc->fileName1) ;
 	      rc->format = FASTA ; /* default */
-	      if (strstr (rc->fileName1, ".sra.fasta.gz") == rc->fileName1 + ln - 13) rc->format = SRACACHE ;
-	      else if (strstr (rc->fileName1, ".sra.fasta") == rc->fileName1 + ln - 10) rc->format = SRACACHE ;
+	      if (strstr (rc->fileName1, ".sample_12.fasta.gz") == rc->fileName1 + ln - 19) rc->format = FASTA2 ;
+	      else if (strstr (rc->fileName1, ".sample_12.fasta") == rc->fileName1 + ln - 16) rc->format = FASTA2 ;
+	      else if (strstr (rc->fileName1, ".sample_12.fastq.gz") == rc->fileName1 + ln - 19) rc->format = FASTQ2 ;
+	      else if (strstr (rc->fileName1, ".sample_12.fastq") == rc->fileName1 + ln - 16) rc->format = FASTQ2 ;
 	      else if (strstr (rc->fileName1, ".fasta.gz") == rc->fileName1 + ln - 9) rc->format = FASTA ;
 	      else if (strstr (rc->fileName1, ".fastq.gz") == rc->fileName1 + ln - 9) rc->format = FASTQ ;
 	      else if (strstr (rc->fileName1, ".fasta") == rc->fileName1 + ln - 6) rc->format = FASTA ;
@@ -399,7 +408,10 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	      else if (! strncmp (rc->fileName1, "DRR", 3)) rc->format = SRA ;
 	      else if (! strncmp (rc->fileName1, "ERR", 3)) rc->format = SRA ;
 	    }
-
+	  
+	  if (pp->interleaved && rc->format == FASTA) rc->format = FASTA2 ;
+	  if (pp->interleaved  && rc->format == FASTQ) rc->format = FASTQ2 ;		  
+	  
 	  if (rc->format == SRA)  /* check in the cache */
 	    {
 	    }
@@ -417,8 +429,8 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	  rs->p.nFiles++ ;
 	  if (rc->fileName2)
 	    rs->p.nFiles++ ;
-	  if (rc->fileName2 || rc->format == FASTC)
-	      rc->pairedEnd = TRUE ;
+	  if (rc->fileName2 || rc->format == FASTC || rc->format == FASTA2 || rc->format == FASTQ2)
+	    rc->pairedEnd = TRUE ;
 	} 
       
       ac_free (h) ;

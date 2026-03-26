@@ -72,7 +72,7 @@ static void showCws (const PP *pp, BB *bb, BigArray cws)
 	      da1 =  cw->intron & 0xf ;
 	      da  =  ((cw->intron >> 4) & mask26) ;
 	    }
-	  printf (".. r=%d\t%d\t%u\t%s\t%s\t%s\tii=%ld\tda1=%d\tda=%d\n"
+	  printf (".. r=%u\t%u\t%u\t%s\t%s\t%s\tii=%ld\tda1=%d\tda=%d\n"
 		  , cw->nam,cw->pos, cw->seed
 		  , bb ? dictName(bb->dict, cw->nam >> 2) : dictName(pp->bbG.dict, cw->nam >> 1)
 		  , buf, bufR, ii
@@ -92,11 +92,11 @@ static int knownIntronOrder (const void *va, const void *vb)
   int n ;
 
   /* chrom order */
-  n = up->chrom - vp->chrom ; if (n) return n ;
+  n = (up->chrom > vp->chrom) - (up->chrom < vp->chrom) ; if (n) return n ; 
   /* strand order is implied by the parity of up->chrom */
-  /* n = (up->a1 > up->a2) - (vp->a1 > vp->a2) ; if (n) return n ; */
   /* a1 order */
-  n = up->a1 - vp->a1 ; if (n) return n ;
+  n = (up->a1 > vp->a1) - (vp->a1 > vp->a1) ; if (n) return n ; 
+
   return 0 ;
 } /* knownIntronOrder */
 
@@ -299,7 +299,7 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
 		cw->seed = word ;
 		cw->pos = a1 ; /* in introns, a1 cannot be zero */
 		cw->intron =                  /* bit 30 alone, isExon */
-		  (0x1 << 31)                 /* bit 31: isIntron */
+		  (0x1u << 31)                 /* bit 31: isIntron */
 		  | (isIntronDown ? (0x1 << 30) : 0) /* bit 30: intron strand */
 		  | ((da & mask26)  << 4)            /* bits 5-30 : intron length */
 		  | (dx1 & 0xf)          /* bits 0-4 : number of seed letters in the left exon, dx1 < 16 */

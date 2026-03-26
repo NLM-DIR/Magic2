@@ -1491,19 +1491,19 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
       if (err1 && arrayMax (err1))
 	{
 	  ep = arrp (err1, 0, A_ERR) ;
-	  *a1p = ep->iLong  ;
-	  *x1p = ep->iShort ;
-	  /* *a1p *x2p is the bio coord base after the first error */
+	  *a1p = ep->iLong  + 1 ;
+	  *x1p = ep->iShort + 1 ;
+	  /* *a1p *x2p is the C coord base after the first error */
 	  if (*x1p > 1 && *a1p > 1)
 	    {
-	      u1 = *x1p ; u2 = *a1p ; /* C type coord of first error */
+	      u1 = *x1p - 1 ; u2 = *a1p - 1 ; /* C type coord of first error */
 	    }
 	}
       if (maxErrorOld == -2)
 	{ maxError = -2 ; doExtend = TRUE ; }
       if (maxErrorOld == -3)
 	{ maxError = -2 ; doExtend = FALSE ; }
-      if ((u1 > y1 && u2 >= b1) || doExtend)
+      if ((u1 > y1 - 1 && u2 > b1 - 1) || doExtend)
 	  {
 	    int uz1 = u1 - 1, uz2 = u2 - 1 ;
 	    u1 = y1 - 1; u2 = b1 - 1 ;
