@@ -261,7 +261,7 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	      saSetGetAdaptors (2, &isRna, 0, rc->run) ;
 	    }
 
-	  if (rc->format == SRA)  /* check in the cache */
+	  if (pp->sraCaching || rc->format == SRA)  /* check in the cache */
 	    {
 	    }
 	  else

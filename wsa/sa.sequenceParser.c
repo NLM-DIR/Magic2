@@ -348,7 +348,7 @@ void saSequenceParseGzBuffer (const PP *pp, BB *bb)
       char namBuf [NAMMAX + 12] ;
       ACEIN ai = aceInCreateFromText (bb->gzBuffer, 0, h) ;
       DnaFormat format = bb->rc.format ;
-      
+
       unsigned char atgcn[256] ;
       memset (atgcn, 4, sizeof(atgcn)) ;
       atgcn[A_] = 0 ;
@@ -681,7 +681,7 @@ static BOOL sraIsPairedEnd (const char *seq, BOOL *hasQualp)
 /**************************************************************/
 /* we need to download 4 lines to recognize pairs */
 static void sraCachingOut (ACEOUT *ao1p, ACEOUT *ao2p, const char *seq, const char *seq2, const char *sraID
-			   , BOOL split_pairs, BOOL fastq, AC_HANDLE h0)
+			   , BOOL fastq, BOOL split_pairs, AC_HANDLE h0)
 {
   AC_HANDLE h = ac_new_handle () ;
   char *fNam = 0, *fNam2 = 0 ;
@@ -806,30 +806,28 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   const char *sraID = rc ? rc->fileName1 : tc->fileName ;
   char tBuf[25] ;
   clock_t t1, t2 ;
-  int Gb = pp->maxSraGb ;
-  int num_bases = 1 << 27 ; /* 128 M */
-  long unsigned int nMax = Gb ;
-  nMax <<= 30 ; /* to be in Gigabases */
-  nMax /=  num_bases ; 
 
-  
-
-  if (isGenome || (format != FASTA2 && format != FASTQ2))
+  if (isGenome || (!pp->sraCaching && format != SRA && format != FASTA2 && format != FASTQ2))
     messcrash ("Bad internal options in sraSequenceParser, please edit the code, sorry") ;
-
-  if (format == SRA)  /* check in the cache */
+  
+  if (format == SRA || pp->sraCaching)  /* check in the cache */
     {
       char *fNam = 0 ;
-      fNam = hprintf (pp->h, "SRA/%s.fasta", sraID) ;
-      char *cr = filName (fNam, 0, "r") ;
-      if (cr)
+      fNam = hprintf (pp->h, "SRA/%s", sraID) ;
+      char *cr = 0 ;
+      
+      if (! cr)
 	{
-	  format = FASTA ;
-	  fprintf (stderr, "Found cached file %s\n", fNam) ;
+	  cr = filName (fNam, ".fasta", "r") ;
+	  if (cr)
+	    {
+	      format = FASTA ;
+	      fprintf (stderr, "Found cached file %s\n", fNam) ;
+	    }
 	}
       if (! cr)
 	{
-	  cr = filName (fNam, ".gz", "r") ;
+	  cr = filName (fNam, "fasta.gz", "r") ;
 	  if (cr)
 	    {
 	      format = FASTA ;
@@ -838,20 +836,57 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	}
       if (! cr)
 	{
-	  cr = filName (fNam, ".sample_12.gz", "r") ;
+	  cr = filName (fNam, ".sample_12.fasta.gz", "r") ;
 	  if (cr)
 	    {
 	      format = FASTA2 ;
-	      fprintf (stderr, "Found cached file %s.sample_12.gz\n", fNam) ;
+	      fprintf (stderr, "Found cached file %s.sample_12.fasta.gz\n", fNam) ;
 	    }
 	}
       if (! cr)
 	{
-	  cr = filName (fNam, ".sample_12", "r") ;
+	  cr = filName (fNam, ".sample_12.fasta", "r") ;
 	  if (cr)
 	    {
 	      format = FASTA2 ;
-	      fprintf (stderr, "Found cached file %s.sample_12\n", fNam) ;
+	      fprintf (stderr, "Found cached file %s.sample_12.fasta\n", fNam) ;
+	    }
+	}
+      if (! cr)
+	{
+	  cr = filName (fNam, ".sample_12.fastq.gz", "r") ;
+	  if (cr)
+	    {
+	      format = FASTQ2 ;
+	      fprintf (stderr, "Found cached file %s.sample_12.fastq.gz\n", fNam) ;
+	    }
+	}
+      
+      if (! cr)
+	{
+	  cr = filName (fNam, ".sample_12.fastq", "r") ;
+	  if (cr)
+	    {
+	      format = FASTQ2 ;
+	      fprintf (stderr, "Found cached file %s.sample_12.fastq\n", fNam) ;
+	    }
+	}
+      if (! cr)
+	{
+	  cr = filName (fNam, ".fastq.gz", "r") ;
+	  if (cr)
+	    {
+	      format = FASTQ ;
+	      fprintf (stderr, "Found cached file %s.fastq.gz\n", fNam) ;
+	    }
+	}
+      if (! cr)
+	{
+	  cr = filName (fNam, ".fastq", "r") ;
+	  if (cr)
+	    {
+	      format = FASTQ ;
+	      fprintf (stderr, "Found cached file %s.fastq\n", fNam) ;
 	    }
 	}
       
@@ -863,22 +898,34 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  return fastaSequenceParser (pp, rc, tc, bb, isGenome) ; 
 	}
     }
-
+  
   t1 = clock () ;
   SRAObj* sra = SraObjNew(sraID);
+  const char *seq, *seq2 ;
   BOOL firstPass = TRUE ;
   BOOL fastq = pp->fastq ;
   BOOL split_pairs = pp->split_pairs ;
-  const char *seq, *seq2 ;
+  int num_bases = 1 << 27 ; /* 128 M */
+  float Gb = pp->maxSraGb ;
+  long unsigned int nMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
+
+  format = FASTA ;
+  if (! pp->sraCaching) /* for internal use, prefer interleaved fasta */
+    fastq = FALSE ;
+  split_pairs = FALSE ;
+
+  if (num_bases > nMax) num_bases = nMax ;
+  nMax =  (nMax + num_bases - 1) / num_bases ; 
   format = SRA ;
-  
+
+  if (! Gb) num_bases = BMAX ;
   while (!Gb || nMax-- > 0)
     {
-      SraGetReadBatch(sra, BMAX, fastq, split_pairs, &seq, &seq2) ;
+      SraGetReadBatch(sra, num_bases, fastq, split_pairs, &seq, &seq2) ;
       if (seq)
 	{
 	  if (firstPass && pp->sraCaching)
-	    sraCachingOut (&ao1, &ao2, seq, seq2, sraID, fastq, split_pairs, h) ;
+	  sraCachingOut (&ao1, &ao2, seq, seq2, sraID, fastq, split_pairs, h) ;
 	  firstPass = FALSE ;
 	  if (ao1 || ao2)
 	    sraCacheDo (ao1, ao2, seq, seq2) ;
@@ -891,14 +938,10 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  
 	  if (format == SRA)
 	    {   /* check for identifiers signaling a paired end read */
-	      const char *cq = seq ;
-	      int nDots = 0 ;
-	      while (cq && *cq != '\n')
-		nDots += (*cq++ == '.' ? 1 : 0) ;
-	      if (nDots == 3)
-		format = FASTA2 ;
-	      else
+	      if (split_pairs)
 		format = FASTA ;
+	      else
+		format = FASTA2 ;
 	    }
 	  
 	  /* create a data block */
@@ -1322,15 +1365,15 @@ void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
   if (0 && ! isGenome && ! rc->pairedEnd)
     return saUringSequenceParser (pp, rc, tc, bb) ;
 
-  if (! isGenome &&
-      (
-       (format == FASTA && !rc->pairedEnd) ||
-       format == FASTA2
-       )
-      )
-    return fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
-  else if (! isGenome && format == SRA)
-    return sraSequenceParser (pp, rc, tc, bb, isGenome) ;
+  if (! isGenome)
+    {
+      if (format == SRA ||  pp->sraCaching)
+	return sraSequenceParser (pp, rc, tc, bb, isGenome) ;
+      else if ((format == FASTA && !rc->pairedEnd) ||
+	       format == FASTA2       
+	       )
+	return fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
+    }
   else
     return otherSequenceParser (pp, rc, tc, bb, isGenome) ;
 } /* saSequenceParse */
@@ -1344,7 +1387,8 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
   char *cr = 0 ;
   ACEOUT ao1 = 0, ao2 = 0 ; 
   char tBuf[25] ;
-  float Gb = pp->maxSraGb ;
+  BOOL fastq = pp->fastq ;
+  int split_pairs = pp->split_pairs ;
 
   if (!filCreateDir("./SRA"))
     messcrash ("\nCannot create or cannot write in the SRA cache directory ./SRA") ;
@@ -1352,59 +1396,74 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
   {{  /* check in the cache */
       cr = 0 ;
 
-      if (! cr)
+      if (! fastq)
 	{
-	  fNam = hprintf (h, "SRA/%s.fasta", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s.fastq", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s.sample_12.fasta", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s.sample_12.fastq", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s_R2.fastq", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.fasta", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.sample_12.fasta", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s_R2.fasta", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.fasta.gz", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s_R2.fasta.gz", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.sample_12.fasta.gz", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	}      
 
-
-      if (! cr)
+      if (1) /* fastq contains fasta, no need to download again */
 	{
-	  fNam = hprintf (h, "SRA/%s.fasta.gz", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.fastq", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.sample_12.fastq", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s_R2.fastq", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.fastq.gz", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s_R2.fastq.gz", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
+	  if (! cr)
+	    {
+	      fNam = hprintf (h, "SRA/%s.sample_12.fastq.gz", sraID) ;
+	      cr = filName (fNam, 0, "r") ;
+	    }
 	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s.fastq.gz", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s.sample_12.fasta.gz", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s.sample_12.fastq.gz", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      if (! cr)
-	{
-	  fNam = hprintf (h, "SRA/%s_R2.fastq.gz", sraID) ;
-	  cr = filName (fNam, 0, "r") ;
-	}
-      
+      else
       
       if (cr)
 	{            /* file already in cache */
@@ -1419,9 +1478,8 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
   const char *seq, *seq2 ;
   int nn = 0 ;
   BOOL firstPass = TRUE ;
-  BOOL fastq = pp->fastq ;
-  int split_pairs = pp->split_pairs ;
   int num_bases = 1 << 27 ; /* 128 M */
+  float Gb = pp->maxSraGb ;
   long unsigned int nMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
   if (num_bases > nMax) num_bases = nMax ;
   nMax =  (nMax + num_bases - 1) / num_bases ; 

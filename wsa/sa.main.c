@@ -2350,6 +2350,14 @@ int main (int argc, const char *argv[])
     p.introns = TRUE ;  /* stay on previous value is not set */
   
   p.sraCaching = getCmdLineBool (&argc, argv, "--sraCaching");   /* cache the files downlaoded from NCBI/SRA */
+  if (p.sraCaching)
+    {
+      if (!filCreateDir("./SRA"))
+	messcrash ("\nCannot create or cannot write in the SRA cache directory ./SRA") ;
+    }
+  else
+    p.fastq = p.split_pairs = FALSE ;
+
 
   /* action options ***/
   p.wiggle = getCmdLineBool (&argc, argv, "--wiggles") ;
