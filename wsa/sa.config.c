@@ -612,7 +612,7 @@ int saConfigCheckTargetIndex (PP *pp)
       char *fNam = filName (pp->indexName, "/seedLength", "r") ;
       ACEIN ai = aceInCreate (fNam , 0, h) ;
       BOOL ok = FALSE ;
-
+      int maxTargetRepeats = pp->maxTargetRepeats ;
       if (ai && aceInCard (ai))
 	{
 	  char *cp = aceInWord (ai) ;
@@ -624,6 +624,8 @@ int saConfigCheckTargetIndex (PP *pp)
 	  ok = aceInInt (ai, &(pp->tStep)) ;
 	  aceInStep (ai, '\t') ;
 	  ok = aceInInt (ai, &(pp->maxTargetRepeats)) ;
+	  if (maxTargetRepeats > 0  && pp->maxTargetRepeats > maxTargetRepeats)
+	    pp->maxTargetRepeats = maxTargetRepeats ;
 	  if (! pp->wiggle_step)
 	    {
 	      aceInStep (ai, '\t') ;

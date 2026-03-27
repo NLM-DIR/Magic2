@@ -128,6 +128,10 @@ setenv SV     v83.81.18M.e4.mars21    # use 3/2 n_cpus, bMax =3 discarded findIn
 setenv SVlast v83.81.18M.e4.mars21
 setenv SV     v84.81.18M.e4.mars25    # idem, reconstructed the iDX using rrna and edited the pair system
 setenv SVlast v84.81.18M.e4.mars25
+setenv SV     v85.81.18M.e4.mars25    # idem, reconstructed again the iDX using rrna and avoiding repeats even for nI and rrna
+setenv SVlast v85.81.18M.e4.mars25
+setenv SV     v86.81.18M.e4.mars27    # idem, reconstructed again the iDX using rrna and avoiding repeats even for nI and rrna
+setenv SVlast v86.81.18M.e4.mars27
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -917,6 +921,9 @@ foreach run ($runs)
       if (-e Fasta/$run/$run.reverse.fastq.gz) set read_2=Fasta/$run/$run.reverse.fastq.gz
       if (-e Fasta/$run/$run.forward.fasta.gz) set read_1=Fasta/$run/$run.forward.fasta.gz
       if (-e Fasta/$run/$run.reverse.fasta.gz) set read_2=Fasta/$run/$run.reverse.fasta.gz
+      if (-e Fasta/$run/$run.forward.fasta.gz) set read_1=Fasta/$run/$run.forward.fasta.gz
+      if (-e Fasta/$run/$run'_R1.fasta.gz') set read_1=Fasta/$run/$run'_R1.fasta.gz'
+      if (-e Fasta/$run/$run'_R2.fasta.gz') set read_2=Fasta/$run/$run'_R2.fasta.gz'
       if ($method == 011_SortAlignG6R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($method == 012_SortAlignG3R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($method == 013_SortAlignG3R1 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
@@ -2048,7 +2055,7 @@ end
 echo "Creating the intron counts"
 foreach target (T2T GRCh38 HG19)
   set IDB=$target.INTRON_DB
-  if (-e $IDB/introns.aceXXX) continue
+  if (-e $IDB/introns.$SV.ace) continue
     echo '#' > $IDB/introns.tsf
     foreach mm ($iMethods)
       foreach run ($iRuns)
@@ -2071,11 +2078,11 @@ foreach target (T2T GRCh38 HG19)
 	endif
       end
     end
-    cat $IDB/introns.tsf | sort | gawk -F '\t' '/^#/{next;}{if($2 != old){old=$2;split(old,aa,"__");split(aa[2],bb,"_");a1=bb[1];a2=bb[2];if(a1<100 || a2<100){old=0;next;}ln=a2-a1;if(ln<0)ln=-ln;ln+=1;printf("\nIntron %s\nIntron\nIntMap %s %d %d\nLength %d\n", old,aa[1],a1,a2, ln);}printf("de_duo %s__%s %d\n",$1,$3,$5);}END{printf("\n");}' > $IDB/introns.ace
+    cat $IDB/introns.tsf | sort | gawk -F '\t' '/^#/{next;}{if($2 != old){old=$2;split(old,aa,"__");split(aa[2],bb,"_");a1=bb[1];a2=bb[2];if(a1<100 || a2<100){old=0;next;}ln=a2-a1;if(ln<0)ln=-ln;ln+=1;printf("\nIntron %s\nIntron\nIntMap %s %d %d\nLength %d\n", old,aa[1],a1,a2, ln);}printf("de_duo %s__%s %d\n",$1,$3,$5);}END{printf("\n");}' > $IDB/introns.$SV.ace
     tace $IDB  <<EOF
       query find intron de_duo
       edit -D de_duo
-      parse  $IDB/introns.ace
+      parse  $IDB/introns.$SV.ace
       bql -o  $IDB/introns.counts.txt select ii,mm,nn,mrna from ii in ?Intron where ii#de_duo, mm in ii->de_duo, nn in mm[1] , mrna in ii#in_mrna
       query find intron In_MRNA
       save
@@ -2090,12 +2097,12 @@ if (! -e T2T.INTRON_DB/T2T.renamed.genome.fasta.gz) then
 endif
 
 echo "Creating the intron feet, only new introns will be analyzed"
-foreach target (T2T GRCh38)
+foreach target (T2T GRCh38 HG19)
   set IDB=$target.INTRON_DB
   echo "altintrons --setFeet --db $IDB -p toto"
         altintrons --setFeet --db $IDB -p toto
 endif
-foreach target (T2T GRCh38)
+foreach target (T2T GRCh38 HG19)
   set IDB=$target.INTRON_DB
     tace $IDB  <<EOF	
       bql -o  $IDB/introns.counts.txt select ii,mm,nn,mrna from ii in ?Intron where ii#de_duo && ii#gt_ag , mm in ii->de_duo, nn in mm[1] , mrna in ii#in_mrna

@@ -488,7 +488,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
     }
   bb->cwsN = halloc (NN * sizeof(BigArray), bb->h) ;
 
-  if (1)
+  if (pp->debug)
     fprintf (stderr, "Agent %d lane %d allocated %d seeds\n", bb->readerAgent, bb->lane, nSeeds) ;
   for (k = 0 ; k < NN ; k++)
     bb->cwsN[k] = cwsN[k] ;

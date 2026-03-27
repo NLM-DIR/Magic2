@@ -259,7 +259,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
   long int i, j ;
   AC_HANDLE h = bb->h ;
   int maxRepeats = pp->maxTargetRepeats ;
-    
+  unsigned int intronMask = (0x1 << 31) ;    
   BigArray aa ;
   CW *up, *vp, *wp, *upMax ;
   unsigned int wordMax = 0xffffffff ;
@@ -290,50 +290,54 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
       for (i = 0, j = 0 ; i < iMax ; up++, i++)
 	{
 	  /* int tc = *dictName(pp->bbG.dict,up->nam >> 1) ; */
-	  int m, n = 0, nI = 0 ;
+	  int m, n = 0, nI = 0, nR = 0 ;
 	  wp = up ;
-
-	  if (maxRepeats && pp->knownIntrons)
-	    {
-	      while (wp < upMax && wp->seed == up->seed)
-		{
-		  nI += ((wp->intron >> 31) & 0x1) ? 1 : 0 ;
-		  wp++ ;
-		}
-	    }
-	  else
-	    {
-	      while (wp < upMax && wp->seed == up->seed)
-		wp++ ;
-	    }
+	  while (wp < upMax && wp->seed == up->seed)
+	    wp++ ;
 	  n = wp - up ;
 	  
-
 	  if (!maxRepeats || n < maxRepeats)
 	    {
 	      for (wp = up, m = 0 ; m < n ; wp++, m++)
 		{
-		  if (((wp->intron >> 31) & 0x1) == 0x0)
+		  if (!(wp->intron & intronMask))
 		    wp->intron = n ;
 		  if (vp < wp)
 		    *vp = *wp ;
 		  j++ ; vp++ ;
 		}
 	    }
-	  else /*was  if (nI && nI < maxRepeats)  ; was nX < maxRepeats, but we stall on the RefEq XR */
+
+	  else /* start again and count separatelly the introns and the mito/rRNA */
 	    {
+	      
+	      nI = nR = 0 ;
 	      for (wp = up, m = 0 ; m < n ; wp++, m++)
 		{
-		  int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
-		  
-		  nI = (tc == 'R' || tc == 'M' || tc == 'C' || ((wp->intron >> 31) & 0x1) ? 1 : 0) ;
-		  if (nI)
+		  int tc = *dictName(pp->bbG.dict,up->nam >> 1) ;
+		  nR += (tc == 'R' || tc == 'M' || tc == 'C' ? 1 : 0) ;
+		  nI += ((wp->intron & intronMask) ? 1 : 0) ;
+		}
+	      
+	      if (nI < maxRepeats || nR < maxRepeats)
+		{
+		  for (wp = up, m = 0 ; m < n ; wp++, m++)
 		    {
-		      if (((wp->intron >> 31) & 0x1) == 0x0)
-			wp->intron = 1 ; /* favor intron and rrna */
-		      if (vp < wp)
-			*vp = *wp ;
-		      j++ ; vp++ ;
+		      int tc = *dictName(pp->bbG.dict,up->nam >> 1) ;
+		      if (nI < maxRepeats && (wp->intron & intronMask))
+			{
+			  if (vp < wp)
+			    *vp = *wp ;
+			  j++ ; vp++ ;
+			}
+			
+		      else if (nR < maxRepeats && (tc == 'R' || tc == 'M' || tc == 'C'))
+			{
+			  wp->intron = nR ;
+			  if (vp < wp)
+			    *vp = *wp ;
+			  j++ ; vp++ ;
+			}
 		    }
 		}
 	    }

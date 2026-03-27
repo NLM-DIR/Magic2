@@ -599,7 +599,7 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
     }
   bb->hits = hitsArray ;
 
-  if (debug)
+  if (pp->debug)
     fprintf (stderr, "..MatchHitsDo found %ld matches\n", kkk) ;
 
   return nn ;
@@ -1287,7 +1287,7 @@ static void sortHitsFuse (const PP *pp, BB *bb)
   long int iMax = aa ? bigArrayMax (aa) : 0 ;
   char tBuf[25] ;
   
-  if (pp->debug) printf ("+++ %s: Start sort hits merging %ld arrays\n", timeBufShowNow (tBuf), iMax) ;
+  if (pp->debug) printf ("+++ %s: Start sortHitsFuse merging %ld arrays\n", timeBufShowNow (tBuf), iMax) ;
 
 
   if (iMax == 0)
@@ -1667,7 +1667,7 @@ static void wholeWork (const void *vp)
       saSequenceParseGzBuffer (pp, &bb) ;
       saCodeSequenceSeeds (pp, &bb, pp->iStep, FALSE) ;
 
-      if (1 || pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
+      if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
 
       /* sort words */
       for (int k = 0 ; k < NN ; k++)
@@ -2283,8 +2283,6 @@ int main (int argc, const char *argv[])
 	messcrash ("\n parameter --seedlength %d cannot excered 19, sorry\n", p.seedLength) ;
     }
 
-  p.maxTargetRepeats = 31 ;  /* was 81  31 12 */
-  getCmdLineInt (&argc, argv, "--maxTargetRepeats", &p.maxTargetRepeats) ;
 
 
   getCmdLineText (h, &argc, argv, "-x", &(p.indexName)) ;
@@ -2477,6 +2475,7 @@ int main (int argc, const char *argv[])
   getCmdLineInt (&argc, argv, "--minAli", &(p.minAli)) ;
   getCmdLineInt (&argc, argv, "--minAliPerCent", &(p.minAliPerCent)) ;
   getCmdLineInt (&argc, argv, "--errRatMax", &(p.errRateMax)) ;
+  getCmdLineInt (&argc, argv, "--maxTargetRepeats", &p.maxTargetRepeats) ;
   p.maxIntron = 1000000 ;
   getCmdLineInt (&argc, argv, "--maxIntron", &(p.maxIntron)) ;
 
@@ -2531,6 +2530,9 @@ int main (int argc, const char *argv[])
   p.tArray = saTargetParseConfig (&p) ;
   if (p.createIndex)
     { /* The human genome index consumes around 18 Gigabytes of RAM */
+      if (p.maxTargetRepeats <= 0)
+	p.maxTargetRepeats = 31 ;  /* was 81  31 12 */
+
       saTargetIndexCreate (&p) ;
       goto done ;
     }
@@ -2860,7 +2862,7 @@ int main (int argc, const char *argv[])
     }
   if (p.wiggle)
     saWiggleExport (&p, nAgents) ;
-  saCpuStatExport (&p, cpuStats) ;
+  if (p.debug) saCpuStatExport (&p, cpuStats) ;
   saPolyAsExport (&p, p.confirmedPolyAs) ;
   saSLsExport (&p, p.confirmedSLs) ;
   saRunStatExport (&p, p.runStats) ; /* must come afer PolyAsExport and IntronsExport */

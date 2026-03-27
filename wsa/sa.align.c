@@ -1668,7 +1668,7 @@ static void alignAdjustExonChain (const PP *pp, BB *bb, Array bestAp, Array aa, 
       nAli += da > 0 ? da + 1 : -da + 1 ;
     }
   
-  if (! nErr && nAli >= lnShort)   /* elephant */
+  if (! nErr && nAli < lnShort)   /* elephant */
     return ;
 
   if (! isDown)
@@ -1768,7 +1768,8 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
   INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
   if (! jMax) return 0 ;
-  return 0 ;
+  if (1) return 0 ;
+  if (jMax > 100)   return 0 ;
   AC_HANDLE h = ac_new_handle () ;
   BigArray e2d = bigArrayHandleCreate (2*iMax, HIT, h) ;
   BigArray e2a = bigArrayHandleCreate (2*iMax, HIT, h) ;
@@ -2980,7 +2981,9 @@ static void alignDoOneRead (const PP *pp, BB *bb
   /*   unsigned int uu = 0 ; */
   int donor = 0, acceptor = 0 ;
   int intronBonus  = 1 ; /* this is a coodinate bonus, not a score bonus */
-  
+  BOOL ignoreIntronSeeds = FALSE ;   /* code stall on some RefSeqT2T XR with very highly repeated intron seeds
+				      * XM_047446984.1|Gene|LOC124908110|GeneId|124908110 has 20k and 120k hits
+				      */
   int nTargetRepeats  = 1 ;
   int nTargetRepeatsOld = 0 ;
   const int nTRmask = (0x1 << NTARGETREPEATBITS) - 1 ;
@@ -3013,6 +3016,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 
       if (read != readA)
 	{ readA = read ; dna = arr (bb->dnas, read, Array) ; }
+      ignoreIntronSeeds = (iMax > arrayMax (dna) ? TRUE : FALSE) ;
       if (chrom != chromA)
 	{
 	  chromA = chrom ;
@@ -3026,6 +3030,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
       if (arrayMax (dna) > 200 &&  nTargetRepeats > 10)
 	continue ;
       x1 = x1 >> NTARGETREPEATBITS ;
+      if (0 && x1 && ignoreIntronSeeds) continue ;
       BOOL isIntronDown = (x1 >> 2) & 0x1 ;
       isDown = (chrom & 0x1)  ? FALSE : TRUE ;
       donor = x1 & 0x1 ;
@@ -3064,7 +3069,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	   (! isDown && a1 <= b1 && a2 >= b2)
 	   )
 	  &&
-	  nTargetRepeats >= nTargetRepeatsOld >> 1
+	  nTargetRepeats >= (nTargetRepeatsOld >> 1)
 	  )
 	{
 	  if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tDoublet of %d\t%s\t%d\n", ii, read, x1, x2, chrom, a1, a2, iiGood, dictName (pp->bbG.dict, chrom >> 1), hit->a1) ;
