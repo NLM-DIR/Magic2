@@ -1379,7 +1379,7 @@ void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 } /* saSequenceParse */
 
 /**************************************************************/
-
+foobar
 int saSequenceParseSraDownload (PP *pp, const char *sraID)
 {
   AC_HANDLE h = ac_new_handle () ;
