@@ -1375,7 +1375,7 @@ void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 	return fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
     }
 
-  return otherSequenceParser (pp, rc, tc, bb, isGenome) ;
+  return otherSequenceParser (pp, rc, tc, bb, isGenome) ;   
 } /* saSequenceParse */
 
 /**************************************************************/
