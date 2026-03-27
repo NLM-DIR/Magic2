@@ -1375,7 +1375,7 @@ void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 	return fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
     }
 
-  return otherSequenceParser (pp, rc, tc, bb, isGenome) ;
+  return otherSequenceParser (pp, rc, tc, bb, isGenome) ;   
 } /* saSequenceParse */
 
 /**************************************************************/
@@ -1384,7 +1384,7 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
 {
   AC_HANDLE h = ac_new_handle () ;
   char *fNam = 0 ;
-  char *cr = 0 ;
+  char *cr = 0 ; 
   ACEOUT ao1 = 0, ao2 = 0 ; 
   char tBuf[25] ;
   BOOL fastq = pp->fastq ;
