@@ -879,23 +879,29 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    vtxtPrintf(txt2, "%s%d:%c>%c"
 		       , sep
 		       , isUp ? xLongR : xLong
-		       , ccLR, ccSR
+		       , ccL, ccSR
 		       ) ;
 	  }  
 	  break ;
 	case TROU: 
 	  {
 	    char *ss = "-", ccL, ccLR ;
-	    
-	    ccL = arr(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
-	    ccLR = ccL ;
+	    int da = isUp ? 2 : 0 ;
+	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
+		    
+	    if (isUp)
+	      while (cp[-2] == cp[0]) { da++; cp-- ;}
+
+	    ccL = cp[0] ;
+	    ccLR = isUp ? complementBase(ccL) : ccL ;
 	    
 	    ccL = dnaDecodeChar[(int)ccL] ;
 	    ccLR = dnaDecodeChar[(int)ccLR] ;
 
+
 	    vtxtPrintf (txt1, "%s%d:%s%c"
 			, sep
-			, xShort
+			, xShort + da
 			, ss
 			, ccLR
 			) ;
@@ -903,7 +909,7 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 			, sep
 		       , isUp ? xLongR : xLong
 			, ss 
-			, ccLR 
+			, ccL 
 			) ;
 	    
 	  }
@@ -912,20 +918,26 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	case TROU_DOUBLE:
 	  {
 	    char *ss = "--", cc1L, cc2L, cc1LR, cc2LR ;
+	    int da = isUp ? 1 : 0 ;
+	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
 	    
-	    cc1L = arr(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
-	    cc2L = arr(dnaG, isUp ? xLongR - 1 +1 : xLong - 1 + 1, unsigned char) ;
-	    cc1LR = cc1L ; // isUp ? complementBase(cc2L) : cc1L ; 
-	    cc2LR = cc2L ; // isUp ? complementBase(cc1L) : cc2L ; 
+	    if (isUp)
+	      while (cp[-2] == cp[0]) { da++; cp-- ;}
+
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+	    cc1LR = isUp ? complementBase(cc2L) : cc1L ; 
+	    cc2LR = isUp ? complementBase(cc1L) : cc2L ; 
 	    
 	    cc1L = dnaDecodeChar[(int)cc1L] ;
 	    cc2L = dnaDecodeChar[(int)cc2L] ;
 	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
 	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
 
+
 	    vtxtPrintf (txt1, "%s%d:%s%c%c"
 			, sep
-			, xShort + (isUp ? 1 : 0)
+			, xShort + da
 			, ss
 			, cc1LR, cc2LR
 			) ;
@@ -933,7 +945,7 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 			, sep
 			, isUp ? xLongR : xLong
 			, ss 
-			, cc1LR, cc2LR
+			, cc1L, cc2L
 			) ;
 	    
 	  }
@@ -941,13 +953,19 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	case TROU_TRIPLE:
 	  {
 	    char *ss = "---", cc1L, cc2L, cc3L, cc1LR, cc2LR, cc3LR ;
+	    int da = isUp ? 1 : 0 ;
+	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
 	    
-	    cc1L = arr(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
-	    cc2L = arr(dnaG, isUp ? xLongR - 1 + 1 : xLong - 1 + 1, unsigned char) ;
-	    cc3L = arr(dnaG, isUp ? xLongR - 1 + 2 : xLong - 1 + 2, unsigned char) ;
-	    cc1LR = cc1L ; // isUp ? complementBase(cc3L) : cc1L ; 
-	    cc2LR = cc2L ; // isUp ? complementBase(cc2L) : cc2L ;
-	    cc3LR = cc3L ; // isUp ? complementBase(cc1L) : cc3L ; 
+	    if (isUp)
+	      while (cp[-3] == cp[0]) { da++; cp-- ;}
+
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+	    cc3L = cp[2] ;
+	    
+	    cc1LR = isUp ? complementBase(cc3L) : cc1L ; 
+	    cc2LR = isUp ? complementBase(cc2L) : cc2L ;
+	    cc3LR = isUp ? complementBase(cc1L) : cc3L ; 
 	    
 	    cc1L = dnaDecodeChar[(int)cc1L] ;
 	    cc2L = dnaDecodeChar[(int)cc2L] ;
@@ -956,17 +974,17 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
 	    cc3LR = dnaDecodeChar[(int)cc3LR] ;
 
-	    vtxtPrintf (txt1, "%s%d:%s%c%c%c"
+	    vtxtPrintf (txt1, "%s%d:%s%c%c%cZZda=%d"
 			, sep
-			, xShort + (isUp ? 1 : 0)
+			, xShort + da
 			, ss
-			, cc1LR, cc2LR, cc3LR
+			, cc1LR, cc2LR, cc3LR, da
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c%c"
 			, sep
 			, isUp ? xLongR : xLong
 			, ss 
-			, cc1LR, cc2LR, cc3LR
+			, cc1L, cc2L, cc3L
 			) ;
 	  }
 	  break ;
@@ -982,7 +1000,7 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 
 	    vtxtPrintf (txt1, "%s%d:%s%c"
 			, sep
-			, xShort + (isUp ? 0 : 0)
+			, xShort + (isUp ? -1 : 0)
 			, ss
 			, cc1S
 			) ;
@@ -1048,7 +1066,7 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c%c"
 			, sep
-			, xShort + (isUp ? 0 : 0)
+			, xShort + (isUp ? 1 : 0)
 			, ss
 			, isUp ? cc1S : cc1S
 			, isUp ? cc2S : cc2S
