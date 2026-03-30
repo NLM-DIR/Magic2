@@ -885,61 +885,82 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	  break ;
 	case TROU: 
 	  {
-	    char *ss = "-", ccL, ccLR ;
-	    int da = isUp ? 2 : 0 ;
+	    char *ss = "-", cc1L, cc1S, cc1LR, cc1SR ;
+	    int da = isUp ? 1 : 0 ;
 	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
-		    
-	    if (isUp)
-	      while (cp[-2] == cp[0]) { da++; cp-- ;}
-
-	    ccL = cp[0] ;
-	    ccLR = isUp ? complementBase(ccL) : ccL ;
 	    
-	    ccL = dnaDecodeChar[(int)ccL] ;
-	    ccLR = dnaDecodeChar[(int)ccLR] ;
+	    cc1L = cp[0] ;
+	    
+	    if (isUp)
+	      while (cp[-1] == cp[0]) { da++; cp-- ;}
+	    if (da>1) ss = "*-" ;
+	    if (!isUp) { if (cp[-1] == cp[0]) ss = "*-" ; }
+	    
+	    cc1S = cp[0] ;
+	    
+	    cc1LR = isUp ? complementBase(cc1L) : cc1L ; 
+	    
+	    cc1SR = isUp ? complementBase(cc1S) : cc1S ; 
+	    
+	    cc1L = dnaDecodeChar[(int)cc1L] ;
+	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
 
+	    cc1S = dnaDecodeChar[(int)cc1S] ;
+	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c"
 			, sep
 			, xShort + da
 			, ss
-			, ccLR
+			, cc1SR
 			) ;
-	    vtxtPrintf (txt2,"%s%d:%s%c"
+	    vtxtPrintf (txt2, "%s%d:%s%c"
 			, sep
-		       , isUp ? xLongR : xLong
+			, isUp ? xLongR : xLong
 			, ss 
-			, ccL 
+			, cc1L
 			) ;
-	    
 	  }
 	  break ;
 
 	case TROU_DOUBLE:
 	  {
-	    char *ss = "--", cc1L, cc2L, cc1LR, cc2LR ;
+	    char *ss = "--", cc1L, cc2L, cc1S, cc2S, cc1LR, cc2LR, cc1SR, cc2SR ;
 	    int da = isUp ? 1 : 0 ;
 	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
 	    
-	    if (isUp)
-	      while (cp[-2] == cp[0]) { da++; cp-- ;}
-
 	    cc1L = cp[0] ;
 	    cc2L = cp[1] ;
+	    
+	    if (isUp)
+	      while (cp[-1] == cp[1]) { da++; cp-- ;}
+	    if (da>1) ss = "*--" ;
+	    if (!isUp) { if (cp[-1] == cp[1]) ss = "*--" ; }
+	    
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
+	    
 	    cc1LR = isUp ? complementBase(cc2L) : cc1L ; 
-	    cc2LR = isUp ? complementBase(cc1L) : cc2L ; 
+	    cc2LR = isUp ? complementBase(cc1L) : cc2L ;
+	    
+	    cc1SR = isUp ? complementBase(cc2S) : cc1S ; 
+	    cc2SR = isUp ? complementBase(cc1S) : cc2S ;
 	    
 	    cc1L = dnaDecodeChar[(int)cc1L] ;
 	    cc2L = dnaDecodeChar[(int)cc2L] ;
 	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
 	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
 
+	    cc1S = dnaDecodeChar[(int)cc1S] ;
+	    cc2S = dnaDecodeChar[(int)cc2S] ;
+	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
+	    cc2SR = dnaDecodeChar[(int)cc2SR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c"
 			, sep
 			, xShort + da
 			, ss
-			, cc1LR, cc2LR
+			, cc1SR, cc2SR
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c"
 			, sep
@@ -947,25 +968,34 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 			, ss 
 			, cc1L, cc2L
 			) ;
-	    
 	  }
 	  break ;
 	case TROU_TRIPLE:
 	  {
-	    char *ss = "---", cc1L, cc2L, cc3L, cc1LR, cc2LR, cc3LR ;
+	    char *ss = "---", cc1L, cc2L, cc3L, cc1S, cc2S, cc3S, cc1LR, cc2LR, cc3LR , cc1SR, cc2SR, cc3SR ;
 	    int da = isUp ? 1 : 0 ;
 	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
 	    
-	    if (isUp)
-	      while (cp[-3] == cp[0]) { da++; cp-- ;}
-
 	    cc1L = cp[0] ;
 	    cc2L = cp[1] ;
 	    cc3L = cp[2] ;
 	    
+	    if (isUp)
+	      while (cp[-1] == cp[2]) { da++; cp-- ;}
+	    if (da>1) ss = "*---" ;
+	    if (!isUp) { if (cp[-1] == cp[2]) ss = "*---" ; }
+	    
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
+	    cc3S = cp[2] ;
+	    
 	    cc1LR = isUp ? complementBase(cc3L) : cc1L ; 
 	    cc2LR = isUp ? complementBase(cc2L) : cc2L ;
 	    cc3LR = isUp ? complementBase(cc1L) : cc3L ; 
+	    
+	    cc1SR = isUp ? complementBase(cc3S) : cc1S ; 
+	    cc2SR = isUp ? complementBase(cc2S) : cc2S ;
+	    cc3SR = isUp ? complementBase(cc1S) : cc3S ; 
 	    
 	    cc1L = dnaDecodeChar[(int)cc1L] ;
 	    cc2L = dnaDecodeChar[(int)cc2L] ;
@@ -974,11 +1004,18 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
 	    cc3LR = dnaDecodeChar[(int)cc3LR] ;
 
-	    vtxtPrintf (txt1, "%s%d:%s%c%c%cZZda=%d"
+	    cc1S = dnaDecodeChar[(int)cc1S] ;
+	    cc2S = dnaDecodeChar[(int)cc2S] ;
+	    cc3S = dnaDecodeChar[(int)cc3S] ;
+	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
+	    cc2SR = dnaDecodeChar[(int)cc2SR] ;
+	    cc3SR = dnaDecodeChar[(int)cc3SR] ;
+
+	    vtxtPrintf (txt1, "%s%d:%s%c%c%c"
 			, sep
 			, xShort + da
 			, ss
-			, cc1LR, cc2LR, cc3LR, da
+			, cc1SR, cc2SR, cc3SR
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c%c"
 			, sep
@@ -990,17 +1027,28 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	  break ;
 	case INSERTION: 
 	  {
-	    char *ss = "+", cc1S, cc1SR ;
-	    
-	    cc1S = arr(dna, xShort - 1, unsigned char) ;
-	    cc1SR = isUp ? complementBase(cc1S) : cc1S ;
+	    char *ss = "+", cc1S, cc1L, cc1LR ;
+	    xShort = isUp ? xShort - 1 : xShort ;
+	    unsigned char *cp = arrp(dna, xShort - 1, unsigned char) ;
+
+
+	    cc1L = cp[0] ;
+
+	    int da = 0 ; 
+	    if (isUp)
+	      while (cp[0] == cp[1]) { da++; cp++ ;}
+	    if (da) ss = "*+" ;
+	    if (!isUp) { if (cp[-1] == cp[0]) ss = "*+" ; }
+
+	    cc1S = cp[0] ;
+	    cc1LR = isUp ? complementBase(cc1L) : cc1L ; 
 	    
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
-	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
+	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c"
 			, sep
-			, xShort + (isUp ? -1 : 0)
+			, xShort + da
 			, ss
 			, cc1S
 			) ;
@@ -1008,7 +1056,7 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 			, sep
 			, isUp ? xLongR : xLong
 			, ss 
-			, cc1SR
+			, cc1LR
 			) ;
 	    
 	  }
@@ -1016,67 +1064,96 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 
 	case INSERTION_DOUBLE:
 	  {
-	    char *ss = "++", cc1S, cc2S, cc1SR, cc2SR ;
+	    char *ss = "++", cc1S, cc2S, cc1L, cc2L, cc1LR, cc2LR ;
+	    xShort = isUp ? xShort - 1 : xShort ;
+	    unsigned char *cp = arrp(dna, xShort - 1, unsigned char) ;
 
-	    xShort = isUp ? xShort - 1 : xShort ; 
-	    cc1S = arr(dna, xShort - 1, unsigned char) ;
-	    cc2S = arr(dna, xShort - 1 + 1, unsigned char) ;
-	    cc1SR = isUp ? complementBase(cc2S) : cc1S ; 
-	    cc2SR = isUp ? complementBase(cc1S) : cc2S ;
+
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+
+	    int da = 0 ; 
+	    if (isUp)
+	      while (cp[0] == cp[2]) { da++; cp++ ;}
+	    if (da) ss = "*++" ;
+	    if (!isUp) { if (cp[-1] == cp[1]) ss = "*++" ; }
+	    
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
+
+	    cc1LR = isUp ? complementBase(cc2L) : cc1L ; 
+	    cc2LR = isUp ? complementBase(cc1L) : cc2L ;
+
 	    
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
 	    cc2S = dnaDecodeChar[(int)cc2S] ;
-	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
-	    cc2SR = dnaDecodeChar[(int)cc2SR] ;
+	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
+	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c"
 			, sep
-			, xShort + (isUp ? 0 : 0)
+			, xShort + da
 			, ss
-			, isUp ? cc1S : cc1S
-			, isUp ? cc2S : cc2S
+			, cc1S
+			, cc2S
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c"
 			, sep
 			, isUp ? xLongR : xLong
 			, ss 
-			, cc1SR, cc2SR
+			, cc1LR
+			, cc2LR
 			) ;
 	    
 	  }
 	  break ;
+	      
 	  
 	case INSERTION_TRIPLE:
 	  {
-	    char *ss = "+++", cc1S, cc2S, cc3S, cc1SR, cc2SR, cc3SR ;
-	    xShort = isUp ? xShort - 2 : xShort ; 
-	    cc1S = arr(dna, xShort - 1, unsigned char) ;
-	    cc2S = arr(dna, xShort - 1 + 1, unsigned char) ;
-	    cc3S = arr(dna, xShort - 1 + 2, unsigned char) ;
-	    cc1SR = isUp ? complementBase(cc3S) : cc1S ; 
-	    cc2SR = isUp ? complementBase(cc2S) : cc2S ;
-	    cc3SR = isUp ? complementBase(cc1S) : cc3S ; 
+	    char *ss = "+++", cc1S, cc2S, cc3S, cc1L, cc2L, cc3L, cc1LR, cc2LR, cc3LR ;
+	    xShort = isUp ? xShort - 2 : xShort ;
+	    unsigned char *cp = arrp(dna, xShort - 1, unsigned char) ;
+
+
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+	    cc3L = cp[2] ;
+
+	    int da = 0 ;
+	    if (isUp)
+	      while (cp[0] == cp[3]) { da++; cp++ ;}
+	    if (da) ss = "*+++" ;
+	    if (!isUp) { if (cp[-1] == cp[2]) ss = "*+++" ; }
+
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
+	    cc3S = cp[2] ;
+
+	    cc1LR = isUp ? complementBase(cc3L) : cc1L ; 
+	    cc2LR = isUp ? complementBase(cc2L) : cc2L ;
+	    cc3LR = isUp ? complementBase(cc1L) : cc3L ; 
 	    
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
 	    cc2S = dnaDecodeChar[(int)cc2S] ;
 	    cc3S = dnaDecodeChar[(int)cc3S] ;
-	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
-	    cc2SR = dnaDecodeChar[(int)cc2SR] ;
-	    cc3SR = dnaDecodeChar[(int)cc3SR] ;
+	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
+	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
+	    cc3LR = dnaDecodeChar[(int)cc3LR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c%c"
 			, sep
-			, xShort + (isUp ? 1 : 0)
+			, xShort + da
 			, ss
-			, isUp ? cc1S : cc1S
-			, isUp ? cc2S : cc2S
-			, isUp ? cc3S : cc3S
+			, cc1S
+			, cc2S
+			, cc3S
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c%c"
 			, sep
 			, isUp ? xLongR : xLong
 			, ss 
-			, cc1SR, cc2SR, cc3SR
+			, cc1LR, cc2LR, cc3LR
 			) ;
 	    
 	  }
