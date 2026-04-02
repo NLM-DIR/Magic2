@@ -326,7 +326,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   int nEy = wp->nErr ;
   int i, j, nE ;
   int bestN, bestI = -1, bestJ = -1 ;
-  int dy = vp->x2 - wp->x1 + 1 ;  /* dy > 0 recouvrement, dy < 0: trou dans le read */
+  int dy = 0 ;  /* dy > 0 recouvrement, dy < 0: trou dans le read */
   BOOL isDown = (vp->a1 < vp->a2 ? TRUE : FALSE ) ;
   int da = isDown ? vp->a2 - wp->a1 + 1: wp->a1 - vp->a2 + 1 ;
   /* int day = dy - da ; */
@@ -334,6 +334,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   if (0 && da < 4 && da > -4 && dy < 4 && dy > -4 && vp->chrom == wp->chrom)
     {
       /* merge the 2 alignments */
+      dy = vp->x2 - wp->x1 + 1 ;
       vp->a2 = wp->a2 ;
       vp->x2 = wp->x2 ;
       if (dy || wp->nErr)
@@ -379,13 +380,13 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   dy = vp->x2 - wp->x1 + 1 ;
   if (dy > 0 && nEx + nEy > 0)
     {
-      int zX =x2 , zY ;
+      int zX = x2 , zY ;
       int zEx = 0, zEy = nEy ;
       epX = epY = 0 ; bestI = 0 ; bestJ = -1 ; nE = 0 ; 
       for (i = 0 ; i < nEx ; i++)
 	{  /* count the vp errors that cannot be clipped */
 	  epX = arrp (vp->errors, i, A_ERR) ;
-	  int zX = epX->iShort ; /* last good base */
+	  zX = epX->iShort ; /* last good base */
 	  if (zX  < y1 - 1) /* bio coords */
 	    { bestI = i + 1 ; zEx++ ; }
 	  else
@@ -450,7 +451,8 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 		{  /* eating this Y error is favorable */
 		  zEy-- ;
 		  nE = zEx + zEy ;
-		  if (nE < bestN) { bestN = nE ; bestJ = j ; bestI = i ; }
+		  if (nE < bestN)
+		    { bestN = nE ; bestJ = j ; bestI = i ; }
 		  cJ = j ; cY1 = zY ;
 		  continue ;
 		}
@@ -480,7 +482,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	      epX = arrp (vp->errors, bestI, A_ERR) ;
 	      vp->x2 = epX->iShort ;  /* last exact base bio coords */
 	      /* vp->a2 = epX->iLong + (isDown ? 0 : 2) ; */
-	      int zA = epX->iLong + (isDown ? 0 : -1) ;
+	      int zA = epX->iLong + (isDown ? 0 : 0) ;
 	      vp->a2 = (vp->chrom & 0x1 ?  arrayMax(dnaG) - zA + 1 : zA) ;
 	    }
 	  nEx = bestI ;

@@ -162,6 +162,7 @@ typedef struct bStruct {
   Array quals ;
   BigArray globalDna ;   /* concatenation of all sequence DNAs separated by blocks of nnn */
   BigArray globalDnaR ;  /* concatenation of all reverse sequences, in the same order */
+  BigArray msps ;        /* BigArray of seedmatches */
   BigArray hits ;        /* BigArray of read<->genome hits */
   BigArray *cwsN ;         /* BigArray of codeWords */
   long unsigned int nSeqs ;  /* number of sequences in bloc */
@@ -347,7 +348,7 @@ typedef struct seedMatchStruct {
   unsigned int readFlags ; /* copy in these 3 fileds seed/nam/intron of the read CW */
   int target ; /* index in pp->bbG.dict << 1 | (0x1 for minus chromosome strand) */
   int a1 ;   /* bio coordinate of first letter of seed in target */
-  unsigned int targetFlags ; /* copy in these 3 fileds seed/nam/intron of the read CW */
+  unsigned int targetFlags ; /* copy in these 3 fields seed/nam/intron of the read CW */
 } __attribute__((aligned(16))) SEEDMATCH ;
 
 #endif

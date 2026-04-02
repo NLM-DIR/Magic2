@@ -24,7 +24,7 @@
  * as befits a good Cuban CIGAR
  */
 
-static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nMp, int *nSubp, int *nInsp, int *nDelp)
+static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nMp, int *nSubp, int *nInsp, int *nDelp, Array dnaG)
 {
   A_ERR *ep ;
   Array errors = ap->errors ;
@@ -39,17 +39,17 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
     for (ii = 0 ; ii < iMax ; ii++)
       {
 	ep = arrp (errors, ii, A_ERR)  ;
-	if (ep->iShort < ap->x1 - 1 || ep->iShort >= ap->x2) continue ; /* may happen when fixing a duplication not authorized in sam */
-	if (isDown && ep->iLong + 1 < ap->a1)
-	  continue ;
-	if (! isDown && ep->iLong + 1 > ap->a1)
-	  continue ;
 	int xShort = ep->iShort + 1 ;
-	int xLong = ep->iLong + 1 ;
+	int xLong = isDown ? ep->iLong + 1 : arrayMax (dnaG) - ep->iLong ;
+	if (xShort < ap->x1 || xShort > ap->x2) continue ; /* may happen when fixing a duplication not authorized in sam */
+	if (isDown && xLong < ap->a1)
+	  continue ;
+	if (! isDown && xLong > ap->a1)
+	  continue ;
 	if (xShort <= 0 || xLong <= 0)
 	  continue ;
 	
-	da = ep->iLong - a1 + 1 ; /* number of exact matches, not including the problem */
+	da = xLong - a1 ; /* number of exact matches, not including the problem */
 	if (da < 0)
 	  continue ;
 	switch (ep->type)
@@ -62,7 +62,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
 	    break ;
 	  case INSERTION:
 	    *nInsp  += 1 ;
-	    a1 = ep->iLong + 1 ;
+	    a1 = xLong ;
 	    lSam += da + 1 ;
 	    if (da > 0) snprintf(segs[iSeg++], L, "%dM", da) ;
 	    snprintf(segs[iSeg++], L, "1I") ;
@@ -70,7 +70,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
 	    break ;
 	  case INSERTION_DOUBLE:     
 	    *nInsp += 2 ;
-	    a1 = ep->iLong + 1 ;
+	    a1 = xLong ;
 	    lSam += da + 2 ;
 	    if (da > 0) snprintf(segs[iSeg++], L, "%dM", da) ;
 	    snprintf(segs[iSeg++], L, "2I") ;
@@ -78,7 +78,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
 	    break ;
 	  case INSERTION_TRIPLE:     
 	    *nInsp += 3 ;
-	    a1 = ep->iLong + 1 ;
+	    a1 = xLong ;
 	    lSam += da + 3 ;
 	    if (da > 0) snprintf(segs[iSeg++], L, "%dM", da) ;
 	    snprintf(segs[iSeg++], L, "3I") ;
@@ -86,7 +86,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
 	    break ;
 	  case  TROU:
 	    *nDelp += 1 ;
-	    a1 = ep->iLong + 2 ;
+	    a1 = xLong + 1 ;
 	    lSam += da ;
 	    if (da > 0) snprintf(segs[iSeg++], L, "%dM", da) ;
 	    snprintf(segs[iSeg++], L, "1D") ;
@@ -94,7 +94,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
 	    break ;
 	  case TROU_DOUBLE:
 	    *nDelp += 2 ;
-	    a1 = ep->iLong + 3 ;
+	    a1 = xLong + 2 ;
 	    lSam += da ;
 	    if (da > 0) snprintf(segs[iSeg++], L, "%dM", da) ;
 	    snprintf(segs[iSeg++], L, "2D") ;
@@ -102,7 +102,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
 	    break ;
 	  case TROU_TRIPLE:
 	    *nDelp += 3 ;
-	    a1 = ep->iLong + 4 ;
+	    a1 = xLong + 3 ;
 	    lSam += da ;
 	    if (da > 0) snprintf(segs[iSeg++], L, "%dM", da) ;
 	    snprintf(segs[iSeg++], L, "3D") ;
@@ -120,10 +120,9 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
     }
   for (int i = 0 ; i < iSeg ; i++)    
     vtxtPrintf (cigar, segs[i]) ;
-#ifdef JUNK
+#ifndef JUNK
   static int cumul = 0 ;
   cumul += lSam ;
-  fprintf (stderr, "oneSamExon a1=%d a2=%d da = %d lSam=%d cumul = %d\n", a1, a2, da, lSam, cumul) ; 
 #endif
   return lSam ;
 } /*  exportOneSamExon */
@@ -135,7 +134,7 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
   good: 	23S31M3I2I46M1I121M8N3M3I182M
   
 */
-static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array dna, int *nMp, int *nSubp, int *nInsp, int *nDelp, int *nGapp)
+static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array dna, Array dnaG, int *nMp, int *nSubp, int *nInsp, int *nDelp, int *nGapp)
 {
   int ii ;
   ALIGN *ap = ap0 ;
@@ -157,7 +156,7 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
       
       for (ii = 0 ; ii < iMax - 1 ; ii++, ap++)
 	{
-	  lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp) ;
+	  lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp, dnaG) ;
 
 	  int dx = ap[1].x1 - ap[0].x2 - 1 ;
 	  if (dx > 0)
@@ -182,7 +181,7 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
 	    }
 	}
 
-      lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp) ;
+      lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp, dnaG) ;
       
       /* gap en queue */
       x2 = ap->x2 ;
@@ -207,7 +206,7 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
       
       for (ii = 0 ; ii < iMax - 1 ; ii++, ap--)
 	{
-	  lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp) ;
+	  lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp, dnaG) ;
 	  int dx = ap[0].x1 - ap[-1].x2 - 1 ;
 	  if (dx > 0)
 	    {
@@ -230,8 +229,7 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
 	      *nGapp += da ;
 	    }
 	}
-      lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp) ;
-      
+      lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp, dnaG) ;
       /* gap en queue */
       x1 = ap->x1 ;
       if (x1 > 1)
@@ -240,7 +238,6 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
 	  lSam += x1 - 1 ;
 	}
     }
-
   return lSam ;
 } /* exportOneSamCigar */
 
@@ -270,6 +267,8 @@ static int exportOneSam (ACEOUT ao, ACEOUT aoe, const PP *pp, BB *bb, vTXT recor
   BOOL isSupplementary = FALSE ;
   BOOL isOrphan = FALSE ; 
   Array dna = arr (bb->dnas, read, Array) ;
+  int chromA = ap->chrom ;
+  Array dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
   int nM = 0, nSub = 0, nIns = 0, nDel = 0, nGap = 0 ;
 
   vtxtClear (record)  ;
@@ -381,14 +380,14 @@ if (1)
     }
     
   /* CIGAR */
-  int lSam = exportOneSamCigar (bb, cigar, ap0, kMax, dna, &nM, &nSub, &nIns, &nDel, &nGap) ;
+  int lSam = exportOneSamCigar (bb, cigar, ap0, kMax, dna, dnaG, &nM, &nSub, &nIns, &nDel, &nGap) ;
   int da = arrayMax (dna) - lSam ;
   if (da == 0) /* success */
     vtxtPrintf (record, "\t%s", vtxtPtr (cigar)) ;
   else
     {
       aceOutf (aoe, "ERROR: Cigar error in lSam != dnaMax:%d != %d %s\n>%s\n"
-	       , lSam, arrayMax(dna), vtxtPtr (cigar)
+	       , lSam, arrayMax(dna), vtxtPtr (cigar) ? vtxtPtr (cigar) : "-"
 	       , dictName (dict, read >> 1)
 	       )  ;
       

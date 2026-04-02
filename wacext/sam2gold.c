@@ -416,7 +416,7 @@ static void s2gParseOneSamFile (S2G *s2g, const char *fNam, int method, int gold
   Array cigarettes = arrayHandleCreate (128, SAMCIGAR, h) ; 
   KEYSET ksu = keySetHandleCreate (h) ;
   long int nAlignedBases = 0 ;
-  long int nErrors = 0, nMID = 0 ;
+  long int nErrors = 0 ;
   long int nBases = 0 ;
   long int nUnalignedReads = 0 ;
   long int nAlignedReads = 0 ;
@@ -424,6 +424,8 @@ static void s2gParseOneSamFile (S2G *s2g, const char *fNam, int method, int gold
   BOOL isNewPerfectCandidate = FALSE ;
   ACEOUT aoPerfect = aceOutCreate (s2g->outFileName, ".perfect.list", 0, h) ;  
   BOOL nmDoesNotCountInDels = FALSE ;
+  int line = 0 ;
+
   nn = nn0 ;
 
   if (s2g->method && strstr (s2g->method, "STAR")) nmDoesNotCountInDels =  TRUE ;
@@ -437,11 +439,12 @@ static void s2gParseOneSamFile (S2G *s2g, const char *fNam, int method, int gold
        */
       BOOL isComplete = FALSE ;
       int isMulti ;
-
+      line++ ;
       ccp = aceInWord (ai) ;
       if (! ccp || *ccp == '#' || *ccp == '/' || *ccp == '@')
 	continue ;
-
+      if (! aceInFileName(ai))
+	break ;
       /* seqBuf : adjust the suffix indicating paired ends */
       strncpy (seqBuf, ccp, 127) ;
 

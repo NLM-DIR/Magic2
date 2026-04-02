@@ -288,7 +288,6 @@ static void sortWords (const void *vp)
 
 static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 {
-  BOOL debug = FALSE ;
   BOOL useIntronSeeds = ! pp->ignoreIntronSeeds ;
   BigArray hitsArray = bigArrayHandleCreate(64, BigArray, bb->h);
   long int nn = 0, k = 0, kkk = 0 ;
@@ -610,23 +609,9 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 
 static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
 {
-  BOOL debug = FALSE ;
-  BOOL useIntronSeeds = ! pp->ignoreIntronSeeds ;
-  BigArray hitsArray = bigArrayHandleCreate(64, BigArray, bb->h);
-  long int nn = 0, k = 0, kkk = 0 ;
-  int nHA = 0, hMax = 100000 ;
-  const long unsigned int mask26 = (1L << 26) - 1 ;
-  BigArray hits = bigArrayHandleCreate(hMax, HIT, bb->h);
-  bigArray (hitsArray, nHA++, BigArray) = hits ;
-  BigArray intronHits = 0 ;
-  const int seedLength = pp->seedLength ;
-  const int intronBonus = 1 ;
-  int absoluteMax = 0x1 << NTARGETREPEATBITS ;
-  int absoluteX1Max = 0x1 << ( 31 - 3 - NTARGETREPEATBITS) ;
-  int maxTargetRepeats = pp->maxTargetRepeats  ;
-  long int nIntronHits = 0 ;
-    
-  intronHits = bb->intronHits = bigArrayHandleCreate (10000, INTRONHIT, bb->h) ;
+  BigArray sms = bigArrayHandleCreate(pp->BMAX * (1 << 20)/pp->tStep, SEEDMATCH, bb->h);
+  long int nSm = 0 ;
+
   for (int kk = 0; kk < NN ; kk++)
     {
       long int i = 0, iMax = bigArrayMax (bbG->cwsN[kk]);
@@ -641,7 +626,6 @@ static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
       const CW *restrict rw = bigArrp(bb->cwsN[kk], 0, CW) ;
       const CW *restrict cw1;
       const CW *restrict cwMax = cw + iMax ;
-      HIT *restrict hit;
 
       while  (i < iMax && j < jMax)
 	{
@@ -693,15 +677,8 @@ static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
 	    { j++ ; rw++ ; }
 	  else
 	    {
-	      long int a1, x1, i1 = i ;
+	      long int i1 = i ;
 	      bb->skipsFound++ ;
-	      int nTargetRepeats = cw->intron ;
-	      
-	      if (0 &&   /* avoid, this kills the intron seeds */
-		  nTargetRepeats > maxTargetRepeats)
-		{ j++ ; rw++ ; continue ; }
-	      if (nTargetRepeats >= absoluteMax)
-		nTargetRepeats = absoluteMax - 1 ; /* we will report absoluteMax (i.e. 31) even is value is higher */
 
 	      for (cw1 = cw ; cw1 < cwMax ; i1++, cw1++)
 		{
@@ -709,208 +686,25 @@ static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
 		    continue ;
 		  if (cw1->seed != rw->seed)
 		    break ;
-		  /* success, non intron case */
-		  if (((cw1->intron >> 31) & 0x1) == 0x0)
-		    {
-		      BOOL readUp = rw->nam & 0x1 ;
-		      BOOL chromUp = cw1->nam & 0x1 ;
-		      int nTargetRepeats = cw1->intron ;
-		      
-		      if (1 && nTargetRepeats > maxTargetRepeats)
-			continue ; 
-		      if (0 && useIntronSeeds) continue ;
-		      nn++ ;
-		      hit = bigArrayp (hits, k++, HIT) ;
-		      hit->read = rw->nam >> 1 ;
-		      a1 = cw1->pos ;
-		      x1 = rw->pos ;
-		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
-		      readUp = 0 ;
-#ifdef JUNK      		    
-		      if (1)
-			{
-			  fprintf (stderr, "MATCH\t%d\t%d\t%d\t%d\t%d\t%d\n"
-				   , kk
-				   , rw->nam
-				   , rw->seed
-				   , rw->pos
-				   , cw->nam
-				   , cw->pos
-				   ) ;
-			}
-#endif		      
-		      if (! chromUp)  /* plus strand of the genome */
-			{
-			  hit->a1 =
-			    a1            /* position of the first base of the seed */
-			    - x1          /* locate the virtual position of base 0 of the read */
-			    + 1 ;         /* avoid zero */
-			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
-			}
-		      else    /* minus strand of the genome */
-			{
-			  hit->a1 =
-			    a1            /* position of the first base of the seed */
-			    + (seedLength - 1)  /* go the last base of the seed */
-			    + x1   /* locate the virtual position of base 0 of the read */
-			    + 1 ;  /* avoid zero */
-			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
-			}
-		    }
-		  else  if (useIntronSeeds)  /* INTRON */
-		    {
-		      BOOL readUp = rw->nam & 0x1 ;
-		      BOOL chromUp = cw1->nam & 0x1 ; 
-		      INTRONHIT *intronHit = 0 ;
-		      unsigned int z = cw1->intron ;
-		      unsigned int isIntronDown = (z >> 28) & 0x4 ;
-		      int da1 =  z & 0xf ; /* nb of letters in first exon : 4....11 */
-		      int da  =  ((z >> 4) & mask26) ;  /* intron length < 32Mb */
-
-		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
-		      readUp = 0 ;
-		      hit = 0 ;
-		      
-		      if (! chromUp)  /* plus strand on the read and on the genome */
-			{
-			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
-		          x1 = rw->pos + da1 ;  /* matching base on the read */
-			  
-			  /* Create a hit to the last two bases of the donor exon (x1-2 / a1-2) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 - 2) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x1             /* donor site */
-			    ;
-			  hit->a1 =
-			    (a1 - 2)            /* position of the first base of the seed */
-			    - (x1 - 2)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-
-			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
-			  intronHit->chrom =  cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->a1 = a1 - 1 ;  /* last base of first exon */
-			  intronHit->a2 = a1 + da ; /* first base of second exon */
-			  intronHit->x1 = x1 - 1 ;  /* last base of first exon */
-			  intronHit->x2 = x1 ;      /* first base of second exon */
-			  /* Create a hit to the first two bases of the acceptor exon (x1/ a1 + da) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x2             /* acceptor site */
-			    ;
-			  hit->a1 =
-			    (a1 + da)            /* position of the first base of the seed */
-			    - (x1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			}
-
-		     else  /* plus strand on the read and minus strand  on the genome */
-			{
-			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
-		          x1 = rw->pos + (seedLength - da1) - 1 ;  /* matching base on the read */
-			  
-			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
-			  intronHit->chrom =  cw1->nam | 0x1 ; /* to select plus strand, kill the last bit */
-			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->x1 = x1 ;
-			  intronHit->x2 = x1 + 1 ;
-			  intronHit->a1 = a1 - 1 ; /* first base of intron */
-			  intronHit->a2 = a1 + da ; /* last base of intron */
-			  
-			  /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 + 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x2             /* acceptor site */
-			    ;
-			  hit->a1 =
-			    (a1 - 1)       /* position of the first base of the seed */
-			    + (x1 + 1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			  
-			  /* Create a hit to the last two bases of the donor exon (x1-1,x1/ a1 + da+1,a1+da) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 - 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x1             /* donor site */
-			    ;
-			  hit->a1 =
-			    (a1 + da + 1)            /* position of the first base of the seed */
-			    + (x1 - 1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			}
-		    }
-		  else
-		    continue ;
-		  
-		  hit->chrom ^= (hit->read & 0x1) ; /* flip chrom for the second read of a pair */
-		  if (0 && rw->seed == 168430082)
-		    printf("(rw->seed == 168430082)\n") ;
-		
-		  if (k >= hMax)
-		    {
-		      bigArrayMax (hits) = k  ;
-		      hits = bigArrayHandleCreate(hMax, HIT, bb->h);
-		      bigArray (hitsArray, nHA++, BigArray) = hits ;
-		      kkk += k ;
-		      k = 0 ;
-		    }
+		  /* create a match record */
+		  SEEDMATCH *smp = bigArrayp (sms, nSm++, SEEDMATCH) ;
+		  smp->read = rw->nam ;
+		  smp->x1 = rw->pos ;
+		  smp->readFlags = rw->intron ;
+		  smp->read = cw1->nam ;
+		  smp->x1 = cw1->pos ;
+		  smp->targetFlags = cw1->intron ;
 		}
 	      j++ ; rw++ ;
 	    }
 	}
       bigArrayDestroy (bb->cwsN[kk]) ; /* the read words are no longer needed */
-      bigArrayMax (hits) = k ;
-      kkk += k ;
     }
-  bb->hits = hitsArray ;
 
-  if (debug)
-    fprintf (stderr, "..MatchHitsDo found %ld matches\n", kkk) ;
+  if (pp->debug)
+    fprintf (stderr, "..MatchHitsDo2 found %ld seed-matches\n", nSm) ;
 
-  return nn ;
+  return nSm ;
 }  /* matchHitsDo2 */
 
 /**************************************************************/
