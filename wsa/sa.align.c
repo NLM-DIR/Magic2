@@ -142,6 +142,47 @@ static void showCountChroms (Array countChroms)
 } /* showCountChroms */
 
 /**************************************************************/
+
+static void alignCheckSize (BB *bb, Array aa)
+{
+  int ii, iMax = arrayMax (aa) ;
+  int nD, nI ;
+  for (ii = 0 ; ii < iMax ; ii++)
+    {
+      ALIGN *up = arrp (aa, ii, ALIGN) ;
+      int dx = up->x2 - up->x1 + 1 ;
+      int da = up->a2 - up->a1 ;
+      da = (da > 0 ? da + 1 : -da+ 1 ) ;
+      nD = nI = 0 ;
+      
+      if (up->errors)
+	{
+	  int jj, jMax = arrayMax (up->errors) ;
+	  for (jj = 0 ; jj < jMax ; jj++)
+	    {
+	      A_ERR *ep = arrp (up->errors, jj, A_ERR) ;
+	      switch (ep->type)
+		{
+		case TROU: nD += 1 ; break ;
+		case TROU_DOUBLE: nD += 2 ; break ;
+		case TROU_TRIPLE: nD += 3 ; break ;
+		case INSERTION: nI += 1 ; break ;
+		case INSERTION_DOUBLE: nI += 2 ; break ;
+		case INSERTION_TRIPLE: nI += 3 ; break ;
+		default: break ;
+		}
+	    }
+	}
+      if (0 && da + nI != dx + nD)
+	messcrash ("\nRead %s dx=%d da=%d nI=%d nD=%d dA+nI-dx-nD=%d\n"
+		   , dictName (bb->dict, up->read >> 1)
+		   , dx, da, nI, nD, da+nI-dx-nD
+		   ) ;
+    }
+  return ;
+} /* alignCheckSize */
+
+/**************************************************************/
 /* merge align->errors into bb->errors */
 /* sorry, we use this extremelly obfuscated way to encode the errors
  * rather than a simple clear utilisation of vp->type + actual bases
@@ -1526,6 +1567,7 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
   /* align the read on the genomic image of the transcript */
   int x1 = zp.x1 ;
   int x2 = zp.x2,  a2 = zp.a2 ;
+
   zp.errors = errors ;
   arrayMax (zp.errors) = 0 ;
   
@@ -1551,6 +1593,9 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
       int ii, iMax = arrayMax (aa) ;
       int ja, dda = 0 ;
       ALIGN *vp, *up = arrp (aa, 0, ALIGN) ;
+      Array dnaG = arr (pp->bbG.dnas, up->chrom >> 1, Array) ;
+      int lnLong = arrayMax(dnaG) ;
+      int lnShort = arrayMax (dna) ;
       
       for (vp = up, ja = 1, ii = 0 ; ii < iMax ; ii++, vp++)
 	{
@@ -1601,6 +1646,11 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 		    case TROU_TRIPLE: dda-=3 ; del += 3 ; break ;
 		    case ERREUR: sub++ ; break ;
 		    default : break ;
+		    }
+		  if (! isDown )
+		    {
+		      eq->iShort = lnShort - eq->iShort - 1 ;
+		      eq->iLong = lnLong - eq->iLong - 1 ;
 		    }
 		}
 	    }
@@ -1688,7 +1738,7 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 	      vp->nErr = vp->nMID = ieMax ;
 	      for (int ie = 0 ; ie < ieMax ; ie++, ep++)
 		{
-		  if (! isDown)
+		  if (0 && ! isDown)
 		    {
 		      ep->baseShort = complementBase(ep->baseShort & 0xf) ;
 		      ep->iShort = lnShort - ep->iShort - 1 ;
@@ -1763,7 +1813,7 @@ static void alignAdjustExonChain (const PP *pp, BB *bb, Array bestAp, Array aa, 
       nAli += da > 0 ? da + 1 : -da + 1 ;
     }
   
-  if (! nErr && nAli < lnShort)   /* elephant */
+  if (! nErr && nAli >= lnShort)   /* elephant v88: >=,   v87:< was plain wrong*/
     return ;
 
   if (! isDown)
@@ -1863,7 +1913,7 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
   INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
   if (! jMax) return 0 ;
-  if (1) return 0 ;
+  if (0) return 0 ;
   if (jMax > 100)   return 0 ;
   AC_HANDLE h = ac_new_handle () ;
   BigArray e2d = bigArrayHandleCreate (2*iMax, HIT, h) ;
@@ -2372,10 +2422,14 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 
   if (iMax)
     {
+      int dnaLn = arrayMax (dna) ;
       /* adjust introns */
+      if (1) alignCheckSize (bb, aa) ;
       if (1) alignAdjustIntrons (pp, bb, bestAp, aa, myRead) ;
+      if (1) alignCheckSize (bb, aa) ;
       /* adjust exons */
       if (1) alignAdjustExons (pp, bb, bestAp, aa, myRead, dna, maxJump, maxJump2) ;
+      if (1) alignCheckSize (bb, aa) ;
       iMax = alignLocateChains (bestAp, aa, myRead) ;
       
       /* Compute the clean chain score */
@@ -2418,14 +2472,16 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	      if (chainA2 < vp->a2) chainA2 = vp->a2 ;
 	      
 	    }
-	  if (chainAli > arrayMax (dna))
-	    chainAli = arrayMax (dna) ;
+	  if (chainAli > dnaLn)
+	    chainAli = dnaLn ;
 
 	  /* filter */
 	  if (chainScore < pp->minScore ||
 	      chainAli < pp->minAli ||
-	      100 * chainAli < pp->minAliPerCent * arrayMax (dna) ||
-	      100 * chainErr > pp->errRateMax * chainAli
+	      chainErr > pp->errMax ||
+	      100 * chainAli < pp->minAliPerCent * dnaLn ||
+	      100 * chainErr > pp->errRateMax * chainAli ||
+	      (! pp->errMax && chainErr > 1 && dnaLn < 50)    /* user can override our minimal quality */
 	      )
 	    chainScore = chainAli = chainErr = chainMID = 0 ;
 	  
@@ -2618,9 +2674,27 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    ;
 	  BOOL isDown = ap1->chainA2 > ap1->chainA1 ? TRUE : FALSE ;
 	  
-	  int du = ap1->chainX2 - ap2->chainX1 - 1 ;  /* if > 0, there is a double cover */
-	  int da = isDown ? ap1->chainA2 - ap2->chainA1 - 1 : ap2->chainA1 - ap1->chainA2 - 1 ;
-	  if (da < 1<<20  && du < 100)
+	  int du = ap1->chainX2 - ap2->chainX1 + 1 ;  /* if > 0, there is a double cover */
+	  int da = isDown ? ap1->chainA2 - ap2->chainA1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
+
+	  if (0)
+	    {
+	      if (da > 0 && du >= ap1->chainAli)
+		{ /* kill chain ap1 */
+		  for (int i = 0 ; i < di1 ; i++)
+		    {
+		      ap1[i].chain = -1 ;
+		      ap1[i].score = ap1[i].chainScore = 0 ;
+		    }
+		  continue ;
+		}
+	      if (da < 0 && du >= ap1->chainAli)
+		{ /* keep both as independant rafia, happens for a XR mir */
+		  continue ;
+		}
+	    }
+
+	  if (/* da > 0 && */ da < 1<<20  && du < 100)
 	    {
 	      int newChainScore = ap1->chainScore + ap2->chainScore ;
 	      int newChainAli = ap1->chainAli + ap2->chainAli ;
@@ -2768,6 +2842,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  tc0 = tc ;
 		  allTc[tc0] = 1 ;
 		  bb->nAli++ ;
+		  bb->runStat.nAlignments++ ;
 		  bb->runStat.nMultiAligned[0]++ ;
 		  bb->runStat.nReadsAlignedPerTargetClass[0]++ ;
 		  nChains = 1 ;
@@ -3122,7 +3197,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 
       x1 = hit->x1 ;
       nTargetRepeats = (x1 & nTRmask) ;
-      if (arrayMax (dna) > 200 &&  nTargetRepeats > 10)
+      if (arrayMax (dna) > 200 &&  nTargetRepeats > 20)
 	continue ;
       x1 = x1 >> NTARGETREPEATBITS ;
       if (0 && x1 && ignoreIntronSeeds) continue ;
@@ -3348,6 +3423,8 @@ static void alignDoOnePair (const PP *pp, BB *bb
 	  int jj = 0 ;
 	  ALIGN *up, *vp ;
 	  int bestScore = 0 ;
+	  BOOL isCompatiblePair = FALSE ;
+	  BOOL isCirclePair = FALSE ;
 	  
 	  for (i1 = 1 ; i1 < iMax1 ; i1++)
 	    {
@@ -3381,6 +3458,8 @@ static void alignDoOnePair (const PP *pp, BB *bb
 			  px->db = db ;
 			  px->score = score ;
 			}
+		      if (da < 0 && da > -10000 && score >= bestScore)
+			isCirclePair = TRUE ;
 		    }
 		}
 	    }
@@ -3469,18 +3548,22 @@ static void alignDoOnePair (const PP *pp, BB *bb
 		  
 	      if (kk)
 		{
-		  bb->runStat.nCompatiblePairs++ ;
+		  isCompatiblePair = TRUE ;
 		  ALIGN *zp = arrayp (aaa, kk, ALIGN) ; memset (zp, 0, sizeof (ALIGN)) ;
 		  memcpy (arrp (aaa, 0, ALIGN), arrp (aaa1, 0, ALIGN), kk * sizeof (ALIGN)) ;
 		}
-	      else
-		bb->runStat.nIncompatiblePairs++  ;
 	      arrayMax (aaa) = kk ;
 	    }
 	  bb->runStat.nPairsAligned++ ;
-
-	  if (0) /* hasCirclePair */
-	    bb->runStat.nCirclePairs++ ;
+	  if (isCompatiblePair)
+	    bb->runStat.nCompatiblePairs++ ;
+	  else
+	    {
+	      bb->runStat.nIncompatiblePairs++  ;
+	      
+	      if (isCirclePair) /* isCirclePair */
+		bb->runStat.nCirclePairs++ ;
+	    }
 	}
     }
 
@@ -3705,7 +3788,7 @@ void saAlignDo (const PP *pp, BB *bb)
       long int baseAligned = bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2 ;
       long int iSupport = bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support ;
       if (0) iSupport = bb->runStat.nIntronSupportPlus + bb->runStat.nIntronSupportMinus ;
-      if (baseAligned > 2000000 && 4000 * iSupport < baseAligned)
+      if (3 * baseAligned > 100000 * pp->BMAX && 4000 * iSupport < baseAligned)
 	isRna = -1 ;
       if (saReadAdaptors (&adaptors, &(bb->runStat), TRUE))
 	saSetGetAdaptors (1, &isRna, &adaptors, bb->run) ;

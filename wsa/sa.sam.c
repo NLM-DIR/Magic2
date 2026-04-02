@@ -123,7 +123,6 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
 #ifndef JUNK
   static int cumul = 0 ;
   cumul += lSam ;
-  fprintf (stderr, "oneSamExon a1=%d a2=%d da = %d lSam=%d cumul = %d\n", a1, a2, da, lSam, cumul) ; 
 #endif
   return lSam ;
 } /*  exportOneSamExon */
@@ -208,14 +207,12 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
       for (ii = 0 ; ii < iMax - 1 ; ii++, ap--)
 	{
 	  lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp, dnaG) ;
-	  printf ("//////////////////////// oneSamCigarLoop ii=%d  lSam=%d\n", ii, lSam) ;
 	  int dx = ap[0].x1 - ap[-1].x2 - 1 ;
 	  if (dx > 0)
 	    {
 	      lSam += dx ;
 	      vtxtPrintf (cigar, "%dS", dx) ;
 	    }
-	  printf ("//////////////////////// oneSamCigarLoop ii=%d  lSam=%d\n", ii, lSam) ;
 	  if (dx < 0)
 	    {
 	      ap[-1].x2 += dx ;
@@ -233,7 +230,6 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
 	    }
 	}
       lSam += exportOneSamExon (bb, isDown, cigar, ap, nMp, nSubp, nInsp, nDelp, dnaG) ;
-      printf ("//////////////////////// oneSamCigar lSam=%d\n", lSam) ;
       /* gap en queue */
       x1 = ap->x1 ;
       if (x1 > 1)
@@ -241,9 +237,7 @@ static BOOL exportOneSamCigar (BB *bb, vTXT cigar, ALIGN *ap0, int iMax, Array d
 	  vtxtPrintf (cigar, "%dS", x1 - 1) ;
 	  lSam += x1 - 1 ;
 	}
-       printf ("//////////////////////// oneSamCigar queue lSam=%d\n", lSam) ;
     }
-  printf ("//////////////////////// oneSamCigarDone lSam=%d\n", lSam) ;
   return lSam ;
 } /* exportOneSamCigar */
 

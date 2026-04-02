@@ -195,10 +195,10 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
   long int nRawBases = pp->nRawBases ? pp->nRawBases : s0->p.nBase1 + s0->p.nBase2 ;
   
   aceOutf (ao, "%s\t%s\tPairs\t%ld\n", run, METHOD, s0->p.nPairs) ;
-  aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\n", run, METHOD, s0->nPairsAligned, (100.0 * s0->nPairsAligned)/(nRawReads/2 + .000001)) ;
-  aceOutf (ao, "%s\t%s\tnCompatible_pairs\t%ld\t%.2f%%\n", run, METHOD, s0->nCompatiblePairs, (100.0 * s0->nCompatiblePairs)/(s0->nPairsAligned + .000001)) ;
-  aceOutf (ao, "%s\t%s\tnCircle_pairs\t%ld\t%.2f%%\n", run, METHOD, s0->nCirclePairs, (100.0 * s0->nCirclePairs)/(s0->nPairsAligned + .000001)) ;
-  aceOutf (ao, "%s\t%s\tNon_compatible_pairs\t%ld\t%.2f%%\n", run, METHOD, s0->nIncompatiblePairs, (100.0 * s0->nIncompatiblePairs)/(s0->nPairsAligned + .000001)) ;
+  aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\tof_raw_pairs\n", run, METHOD, s0->nPairsAligned, (100.0 * s0->nPairsAligned)/(nRawReads/2 + .000001)) ;
+  aceOutf (ao, "%s\t%s\tnCompatible_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCompatiblePairs, (100.0 * s0->nCompatiblePairs)/(s0->nPairsAligned + .000001)) ;
+  aceOutf (ao, "%s\t%s\tnCircle_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCirclePairs, (100.0 * s0->nCirclePairs)/(s0->nPairsAligned + .000001)) ;
+  aceOutf (ao, "%s\t%s\tNon_compatible_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nIncompatiblePairs, (100.0 * s0->nIncompatiblePairs)/(s0->nPairsAligned + .000001)) ;
   
 
   aceOutf (ao, "%s\t%s\tReads\t%ld\n", run, METHOD, s0->p.nReads) ;  
@@ -208,42 +208,50 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
   if (s0->nClippedSL) aceOutf (ao, "\n%s\t%s\tClipped_SL\t%ld\n", run, METHOD, s0->nClippedSL) ;
   int nClipped = s0->nClippedAdaptor1L + s0->nClippedAdaptor2L + s0->nClippedAdaptor1R + s0->nClippedAdaptor2R ;
   if (nClipped) aceOutf (ao, "\n%s\t%s\tClipped_Adaptors\t%ld\n", run, METHOD, nClipped) ;
-  aceOutf (ao, "%s\t%s\tPerfect_reads\t%ld\t%.2f%%\n", run, METHOD, s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(nRawReads + .000001)) ;
-  aceOutf (ao, "%s\t%s\tAlignedReads\t%ld\t%.2f%%\n", run, METHOD, s0->nMultiAligned[0], (100.0 * s0->nMultiAligned[0])/(nRawReads + .000001)) ;
+  aceOutf (ao, "%s\t%s\tPerfect_reads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(s0->p.nReads + .000001)) ;
+  aceOutf (ao, "%s\t%s\tAlignedReads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[0], (100.0 * s0->nMultiAligned[0])/(nRawReads + .000001)) ;
+  aceOutf (ao, "%s\t%s\tUnalignedReads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, nRawReads - s0->nMultiAligned[0], (100.0 * (nRawReads - s0->nMultiAligned[0]))/(nRawReads + .000001)) ;
   
-  aceOutf (ao, "\n%s\t%s\tnAlignments\t%ld\t%.2f per aligned read\n", run, METHOD, s0->nAlignments, (1.0 * s0->nAlignments)/(s0->nMultiAligned[0] + .000001)) ;
-  aceOutf (ao, "%s\t%s\tnMultiAligned\t%ld\t%.2f%%\n", run, METHOD, s0->nMultiAligned[0] - s0->nMultiAligned[1], (100.0 * (s0->nMultiAligned[0] - s0->nMultiAligned[1]))/(s0->p.nReads + .000001)) ;
+  aceOutf (ao, "\n%s\t%s\tnAlignments\t%ld\t%.2f\tper_aligned_read\n", run, METHOD, s0->nAlignments, (1.0 * s0->nAlignments)/(s0->nMultiAligned[0] + .000001)) ;
+  aceOutf (ao, "%s\t%s\tnAlignedOnce\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[1], (100.0 * (s0->nMultiAligned[1]))/(nRawReads + .000001)) ;
+  aceOutf (ao, "%s\t%s\tnMultiAligned\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[0] - s0->nMultiAligned[1], (100.0 * (s0->nMultiAligned[0] - s0->nMultiAligned[1]))/(nRawReads + .000001)) ;
 
   aceOutf (ao, "%s\t%s\tnBases\t%ld\n", run, METHOD, s0->p.nBase1 + s0->p.nBase2) ;
   aceOutf (ao, "\n%s\t%s\tRawBases\t%ld\n", run, METHOD, nRawBases) ;
-  aceOutf (ao, "%s\t%s\tnAlignedBases\t%ld\t%.2f%%\n", run, METHOD, s0->nBaseAligned1 + s0->nBaseAligned2, 100.0 * (s0->nBaseAligned1 + s0->nBaseAligned2) / (nRawBases + .000001)) ;
-  aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t%.6f%%\n", run, METHOD, s0->nErr, (100.0 * s0->nErr)/(s0->nBaseAligned1 + s0->nBaseAligned2 + 0.00000001)) ;
-  aceOutf (ao, "%s\t%s\tnMismatches_and_InDels\t%ld\t%.6f%%\n", run, METHOD, s0->nMID, (100.0 * s0->nMID)/(s0->nBaseAligned1 + s0->nBaseAligned2 + 0.00000001)) ;
+  aceOutf (ao, "%s\t%s\tnAlignedBases\t%ld\t%.2f%%\tof_raw_bases\n", run, METHOD, s0->nBaseAligned1 + s0->nBaseAligned2, 100.0 * (s0->nBaseAligned1 + s0->nBaseAligned2) / (nRawBases + .000001)) ;
+  aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t%.6f%%\tof_aligned_bases\n", run, METHOD, s0->nErr, (100.0 * s0->nErr)/(s0->nBaseAligned1 + s0->nBaseAligned2 + 0.00000001)) ;
+  aceOutf (ao, "%s\t%s\tnMismatches_and_InDels\t%ld\t%.6f%%\tof_aligned_bases\n", run, METHOD, s0->nMID, (100.0 * s0->nMID)/(s0->nBaseAligned1 + s0->nBaseAligned2 + 0.00000001)) ;
 
   aceOutf (ao, "\n%s\t%s\tnPolyA_sites\t%ld\n", run, METHOD, confirmedPolyAsCountSites (pp, 0)) ;
-  aceOutf (ao, "\n%s\t%s\tSupported_introns\t%ld\n", run, METHOD, confirmedIntronsCountSites (pp, 0, 0)) ;
-  aceOutf (ao, "\n%s\t%s\tnDoubleIntrons\t%ld\n", run, METHOD, arrayMax (pp->doubleIntrons)) ;
-  aceOutf (ao, "%s\t%s\tIntron_supports\t%ld\t%ld\t%ld\t%.3f\n", run, METHOD
-	   , s0->gt_ag_Support + s0->ct_ac_Support 
-	   , s0->gt_ag_Support
-	   , s0->ct_ac_Support
-	   , s0->intronStranding
-	   ) ;
+
+  int isRna = 0 ;
+  saSetGetAdaptors (0, &isRna, 0, 1) ;
+  if (1 || isRna > 0)
+    {
+      aceOutf (ao, "\n%s\t%s\tSupported_introns\t%ld\tgt_ag seen once or other seen 3\n", run, METHOD, confirmedIntronsCountSites (pp, 0, 0)) ;
+      aceOutf (ao, "\n%s\t%s\tnDoubleIntrons\t%ld\n", run, METHOD, arrayMax (pp->doubleIntrons)) ;
+      aceOutf (ao, "%s\t%s\tIntron_supports\t%ld\t%ld\t%ld\t%.3f\n", run, METHOD
+	       /* , s0->gt_ag_Support + s0->ct_ac_Support 
+		  , s0->gt_ag_Support
+		  , s0->ct_ac_Support
+	       */
+	       , s0->nIntronSupportPlus + s0->nIntronSupportMinus
+	       , s0->nIntronSupportPlus
+	       , s0->nIntronSupportMinus
+	       , s0->intronStranding
+	       ) ;
+    }
   
   long int nUnaligned = nRawReads - s0->nMultiAligned[0] ;
-  aceOutf (ao, "\n%s\t%s\tnMultiAligned %d times\t%ld\t%.2f%%\n", run, METHOD, 0
-	   , nUnaligned
-	   , 100.0 * nUnaligned / (nRawReads + .000001)
-	   ) ;
   for (int j = 1 ; j < 11 ; j++)
     if (s0->nMultiAligned[j])
       {
-	aceOutf (ao, "%s\t%s\tnMultiAligned %d times\t%ld\t%.2f%%\n", run, METHOD
+	aceOutf (ao, "%s\t%s\tnMultiAligned %d times\t%ld\t%.2f%%\tof_aligned_reads\n", run, METHOD
 		 , j, s0->nMultiAligned[j]
-		 , 100.0 * s0->nMultiAligned[j] / (nRawReads + .000001)
+		 , 100.0 * s0->nMultiAligned[j] / (s0->nMultiAligned[0] + .000001)
 		 ) ;
       }
-  long int verif = 0 ;
+  long int verif = nUnaligned ;
   for (int j = 1 ; j < 11 ; j++)
     verif += s0->nMultiAligned[j] ;
   aceOutf (ao, "nReads = %ld , sum of multiAli = %ld, verif = %ld\n", nRawReads, verif, nRawReads - verif) ; 
@@ -585,22 +593,22 @@ void saRunStatExport (const PP *pp, Array runStats)
 	  const char *runNam = dictName (pp->runDict, run) ;
 	  
 	  aceOutf (ao, "%s\tPairs\ti\t%ld\n", runNam, up->p.nPairs) ;
-	  aceOutf (ao, "%s\tAligned_pairs\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tAligned_pairs\tift\t%ld\t%.3f\tof_raw_pairs\n"
 		   , runNam
 		   , up->nPairsAligned
 		   , 100.0 * up->nPairsAligned / (.000001 + up->p.nPairs)
 		   ) ;
-	  aceOutf (ao, "%s\tCompatible_pairs\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tCompatible_pairs\tift\t%ld\t%.3f\tof_aligned_pairs\n"
 		   , runNam
 		   , up->nCompatiblePairs
 		   , 100.0 * up->nCompatiblePairs / (.000001 + up->nPairsAligned)
 		   ) ;
-	  aceOutf (ao, "%s\tCircle_pairs\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tCircle_pairs\tift\t%ld\t%.3f\tof_aligned_pairs\n"
 		   , runNam
 		   , up->nCirclePairs
 		   , 100.0 * up->nCirclePairs / (.000001 + up->nPairsAligned)
 		   ) ;
-	  aceOutf (ao, "%s\tNon_compatible_pairs\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tNon_compatible_pairs\tift\t%ld\t%.3f\tof_aligned_pairs\n"
 		   , runNam
 		   , up->nIncompatiblePairs
 		   , 100.0 * up->nIncompatiblePairs / (.000001 + up->nPairsAligned)
@@ -610,21 +618,32 @@ void saRunStatExport (const PP *pp, Array runStats)
 	  if (up->lowEntropy)  aceOutf (ao, "%s\tLow_entropy_reads\ti\t%ld\n", runNam, up->lowEntropy) ;
 	  if (up->tooShortBases) aceOutf (ao, "%s\tToo_short_bases\ti\t%ld\n", runNam, up->tooShortBases) ;
 	  if (up->lowEntropyBases)  aceOutf (ao, "%s\tLow_entropy_bases\ti\t%ld\n", runNam, up->lowEntropyBases) ;
-	  aceOutf (ao, "%s\tAligned_reads\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tAligned_reads\tift\t%ld\t%.3f\tof_raw_reads\n"
 		   , runNam
 		   , up->nMultiAligned[0]
 		   , 100.0 * up->nMultiAligned[0] / (.000001 + up->p.nReads)
 		   ) ;
-	  aceOutf (ao, "%s\tPerfect_reads\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tUnligned_reads\tift\t%ld\t%.3f\tof_raw_reads\n"
+		   , runNam
+		   , up->p.nReads - up->nMultiAligned[0]
+		   , 100.0 * (up->p.nReads - up->nMultiAligned[0]) / (.000001 + up->p.nReads)
+		   ) ;
+	  aceOutf (ao, "%s\tPerfect_reads\tift\t%ld\t%.3f\tof_raw_reads\n"
 		   , runNam
 		   , up->nPerfectReads
 		   , 100.0 * up->nPerfectReads / (.000001 + up->p.nReads)
 		   ) ;
 
-	  aceOutf (ao, "%s\tComplex_reads\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tComplex_reads\tift\t%ld\t%.3f\tof_aligned_reads\n"
 		   , runNam
 		   , up->nComplexReads
-		   , 100.0 * up->nComplexReads / (.000001 + up->p.nReads)
+		   , 100.0 * up->nComplexReads / (.000001 + up->nMultiAligned[0])
+		   ) ;
+
+	  aceOutf (ao, "%s\tPartial_reads\tift\t%ld\t%.3f\tof_aligned_reads\n"
+		   , runNam
+		   , -100
+		   , 100.0 * up->nComplexReads / (.000001 + up->nMultiAligned[0])
 		   ) ;
 
 	  aceOutf (ao, "%s\tBases\tiii\t%ld\t%ld\t%ld\n"
@@ -633,7 +652,7 @@ void saRunStatExport (const PP *pp, Array runStats)
 		   , up->p.nBase1
 		   , up->p.nBase2
 		   ) ;
-	  aceOutf (ao, "%s\tAligned_bases\tififif\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tAligned_bases\tififift\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\tof_raw_bases\n"
 		   , runNam
 		   , up->nBaseAligned1 + up->nBaseAligned2
 		   , 100.0*(up->nBaseAligned1 + up->nBaseAligned2)/(.0001 + up->p.nBase1 + up->p.nBase2)
@@ -645,17 +664,18 @@ void saRunStatExport (const PP *pp, Array runStats)
 
 	  up->intergenic = up->wiggleCumul - up->cds - up->utr - up->intronic ;
 	  aceOutf (ao, "%s\tGenome_length\ti\t%ld\n", runNam, pp->genomeLength) ;
-	  aceOutf (ao, "%s\tCDS_utr_intronic_intergenic_Bases\tifififif\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\n"
-		   , runNam
-		   , up->cds
-		   , 100.0*(up->cds)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
-		   , up->utr
-		   , 100.0*(up->utr)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
-		   , up->intronic
-		   , 100.0*(up->intronic)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
-		   , up->intergenic
-		   , 100.0*(up->intergenic)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
-		   ) ;
+	  if (pp->wiggles)
+	    aceOutf (ao, "%s\tCDS_utr_intronic_intergenic_Bases\tifififif\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\n"
+		     , runNam
+		     , up->cds
+		     , 100.0*(up->cds)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
+		     , up->utr
+		     , 100.0*(up->utr)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
+		     , up->intronic
+		     , 100.0*(up->intronic)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
+		     , up->intergenic
+		     , 100.0*(up->intergenic)/(.000001 + up->cds + up->utr + up->intronic + up->intergenic)
+		     ) ;
 
 	  aceOutf (ao, "%s\tATGCN\tiiiii\t%ld\t%ld\t%ld\t%ld\t%ld\n"
 		   , runNam
@@ -749,33 +769,36 @@ void saRunStatExport (const PP *pp, Array runStats)
 		   , up->nMID
 		   , 100.0 * up->nMID /(.0001 + up->nBaseAligned1 + up->nBaseAligned2)
 		   ) ;
-	  {{
-	      int isRna = 0 ;
-	      if (saSetGetAdaptors (0, &isRna, 0, run))
-		aceOutf (ao, "%s\tStrategy\ti\t%d\n"
-		   , runNam
-		   , isRna
-		   ) ;
-	    }}		
-	  aceOutf (ao, "%s\tIntron_supports\tiiif\t%ld\t%ld\t%ld\t%.2f%%\n"
-		   , runNam
-		   , up->gt_ag_Support + up->ct_ac_Support 
-		   , up->gt_ag_Support
-		   , up->ct_ac_Support
-		   , up->intronStranding
-		   ) ;
-	  aceOutf (ao, "%s\tSupported_introns\ti\t%ld\n"
-		   , runNam
-		   , confirmedIntronsCountSites (pp, run, up)
-		   ) ;
-	  aceOutf (ao, "%s\tRaw_gt_ag_Support\ti\t%ld\n"
-		   , runNam
-		   , up->gt_ag_Support
-		   ) ;
-	  aceOutf (ao, "%s\tRaw_ct_ac_Support\ti\t%ld\n"
-		   , runNam
-		   , up->ct_ac_Support
-		   ) ;
+	  
+	  int isRna = 0 ;
+	  if (saSetGetAdaptors (0, &isRna, 0, run))
+	    aceOutf (ao, "%s\tStrategy\ti\t%d\n"
+		     , runNam
+		     , isRna
+		     ) ;
+
+	  if (isRna > 0)
+	    {
+	      aceOutf (ao, "%s\tIntron_supports\tiiif\t%ld\t%ld\t%ld\t%.3f%%\n"
+		       , runNam
+		       , up->nIntronSupportPlus + up->nIntronSupportMinus 
+		       , up->nIntronSupportPlus /* up->gt_ag_Support */
+		       , up->nIntronSupportMinus /* up->ct_ac_Support */
+		       , up->intronStranding
+		       ) ;
+	      aceOutf (ao, "%s\tSupported_introns\tit\t%ld\tgt_ag seen once or other seen 3\n"
+		       , runNam
+		       , confirmedIntronsCountSites (pp, run, up)
+		       ) ;
+	      aceOutf (ao, "%s\tRaw_gt_ag_Support\ti\t%ld\n"
+		       , runNam
+		       , up->gt_ag_Support
+		       ) ;
+	      aceOutf (ao, "%s\tRaw_ct_ac_Support\ti\t%ld\n"
+		       , runNam
+		       , up->ct_ac_Support
+		       ) ;
+	    }
 	  aceOutf (ao, "%s\tMin_read_length\ti\t%d\n", runNam, up->p.minReadLength) ;
 	  aceOutf (ao, "%s\tMax_read_length\ti\t%d\n", runNam, up->p.maxReadLength) ;
 	  if (up->p.lengthDistribution)

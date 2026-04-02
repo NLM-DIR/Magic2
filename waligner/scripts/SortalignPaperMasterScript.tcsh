@@ -132,6 +132,12 @@ setenv SV     v85.81.18M.e4.mars25    # idem, reconstructed again the iDX using 
 setenv SVlast v85.81.18M.e4.mars25
 setenv SV     v86.81.18M.e4.mars27    # idem, reconstructed again the iDX using rrna and avoiding repeats even for nI and rrna
 setenv SVlast v86.81.18M.e4.mars27
+setenv SV     v87.81.18M.e4.mars31    # idem, edited error tracking on both strands , sam refeq only has 3 padded errors
+setenv SVlast v87.81.18M.e4.mars31
+setenv SV     v88.81.18M.e4.mars31    # idem, elephant: call adjustExons >= rather than < in v87
+setenv SVlast v88.81.18M.e4.mars31
+setenv SV     v89.81.18M.e4.apr1      # idem, without the mir edition in rafia
+setenv SVlast v89.81.18M.e4.apr1
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -1127,7 +1133,7 @@ end
 echo -n "### Quality control for all methods and datasets : $SV : "  > COMPARE/samStats.$SV.txt
 date  >> COMPARE/samStats.$SV.txt
 echo "### True error rates in Baruzzo datasets:   t1=0.543,  t2=1.186, t3=6.024" >> COMPARE/samStats.$SV.txt
-cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/nUnaligned/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g' -e 's/nMultiAligned 2 times/nMultiAligned_2_sites/g' > RESULTS/allSamStats
+cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/UnalignedReads/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g'  > RESULTS/allSamStats
 
 \mv RESULTS/allSamStats RESULTS/allSamStats.old
 cat RESULTS/allSamStats.old | sed -e 's/nAlignedReads/AlignedReads/' -e 's/nPerfectReads/Perfect_reads/' -e 's/nRawBases/RawBases/' -e 's/nRawReads/RawReads/' -e 's/nReads/Reads/' -e 's/nErrors/nMismatches_and_InDels/' -e 's/nMismaches_and_InDels/nMismatches_and_InDels/' > RESULTS/allSamStats
@@ -1143,7 +1149,7 @@ setenv runsN `echo "$runs" | gawk '{for(k=1;k<=NF;k++)printf("%2d_%s ",k,$k);}'`
 set tsfMethods=`echo $methods | gawk '{sep="";for(i=1;i<=NF;i++){printf("%s%s",sep,$i);if(substr($i,1,2)=="01")printf(".%s",SV);sep=",";}}END{printf("\n");}' SV=$SV`
 echo $tsfMethods
 
-foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads nUnaligned nAlignedOnce nMultiAligned)
+foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads UnalignedReads nAlignedOnce nMultiAligned)
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
   if (-e  toto.tag) \rm toto.tag
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
@@ -1156,7 +1162,7 @@ foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads nUn
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
-foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads RawBases RawReads nUnaligned nAlignedOnce nMultiAligned)
+foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads RawBases RawReads UnalignedReads nAlignedOnce nMultiAligned)
   echo $tag
   if (-e  toto.tag) \rm toto.tag
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
@@ -1181,7 +1187,7 @@ foreach tag (nAlignments)
     end
   end
   echo "\nAverage_number_of_alignments per aligned read\t$SV" >> COMPARE/samStats.$SV.txt
-  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {gsub("%","",$5);printf("%s\t%s\tf\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
+  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {gsub("%","",$5);printf("%s\t%s\tf\t%s\n", $1,$2,$5-1);}}' tag=$tag >> toto.tag
    cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Average number of alignments" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
@@ -1257,8 +1263,8 @@ foreach tag (Non_compatible_pairs)
     end
   end
   echo "\nNon compatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
-  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {gsub("%","",$5);printf("%s\t%s\tf\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
-   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Compatible pairs" >> COMPARE/samStats.$SV.txt
+  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
+   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "%% Non compatible pairs" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
@@ -1272,8 +1278,8 @@ foreach tag (Non_compatible_pairs)
     end
   end
   echo "\nIncompatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
-  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {gsub("%","",$5);printf("%s\t%s\tf\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
-   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Incompatible pairs" >> COMPARE/samStats.$SV.txt
+  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($4) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$4);}}' tag=$tag >> toto.tag
+   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Non compatible pairs" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
