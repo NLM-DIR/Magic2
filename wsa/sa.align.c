@@ -2886,6 +2886,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
       ALIGN *bp ;
       int jj ;
       int intronBonus = 0 ;
+      int errCost = pp->errCost ;
       
       ap = arrp (aa, 0, ALIGN) ;
       /*   bitSet (bb->isAligned, ap->read) ; */
@@ -3027,7 +3028,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      }
 	  }
 
-      intronBonus *= 4 * (bb->isRna >= 0 ? 1 : -1) ;
+      intronBonus *= errCost * (bb->isRna >= 0 ? 1 : -1) ;
       
       ap = arrp (aa, 0, ALIGN) ;
       if (intronBonus)

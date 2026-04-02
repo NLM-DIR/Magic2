@@ -1995,7 +1995,7 @@ if (! -e  HG19.INTRON_DB/known_introns.ace2) then
   cat HG19.INTRON_DB/known_introns.txt | sort -u  >  HG19.INTRON_DB/known_introns.u.txt
 
   wc HG19.INTRON_DB/known_introns.txt HG19.INTRON_DB/known_introns.u.txt
-  cat  HG19.INTRON_DB/known_introns.u.txt | gawk -F '\t' '/^#/{next}{c=$1;x=$2;y=$3;ln=$4;t=$5;printf("Intron %s__%d_%d\nIntMap %s %d %d\nLength %d\nIn_mRNA %s\nIntron\n\n",c,y,x,c,y,x,ln,t);}}'  > HG19.INTRON_DB/known_introns.ace
+  cat  HG19.INTRON_DB/known_introns.u.txt | gawk -F '\t' '/^#/{next}{c=$1;x=$2;y=$3;ln=$4;t=$5;printf("Intron %s__%d_%d\nIntMap %s %d %d\nLength %d\nIn_mRNA %s\nIntron\n\n",c,y,x,c,y,x,ln,t);}'  > HG19.INTRON_DB/known_introns.ace
 endif
 
 
