@@ -900,8 +900,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
     }
   
   t1 = clock () ;
-  SRAObj* sra = SraObjNew(sraID);
-  const char *seq, *seq2 ;
+  SRAReadBatch* sra = SRAReadBatchNew(sraID);
   BOOL firstPass = TRUE ;
   BOOL fastq = pp->fastq ;
   BOOL split_pairs = pp->split_pairs ;
@@ -921,17 +920,17 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   if (! Gb) num_bases = BMAX ;
   while (!Gb || nMax-- > 0)
     {
-      SraGetReadBatch(sra, num_bases, fastq, split_pairs, &seq, &seq2) ;
-      if (seq)
+      SraGetReadBatch(sra, num_bases, fastq, split_pairs) ;
+      if (sra->seq)
 	{
 	  if (firstPass && pp->sraCaching)
-	  sraCachingOut (&ao1, &ao2, seq, seq2, sraID, fastq, split_pairs, h) ;
+	  sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, split_pairs, h) ;
 	  firstPass = FALSE ;
 	  if (ao1 || ao2)
-	    sraCacheDo (ao1, ao2, seq, seq2) ;
+	    sraCacheDo (ao1, ao2, sra->seq, sra->seq2) ;
 	  
-	  bytes = strlen (seq) ;
-	  bytes2 = seq2 ? strlen (seq2) : 0 ;
+	  bytes = strlen (sra->seq) ;
+	  bytes2 = sra->seq2 ? strlen (sra->seq2) : 0 ;
 	  nBytes += bytes + bytes2 ; 
 	  if (!bytes)
 	    messcrash ("No sequence found in SRA %s\n", sraID) ;
@@ -959,8 +958,8 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  bb->rc.fileName1 = sraID ;
 	  /* copy the buffer */
 	  bb->gzBuffer = halloc (bytes + bytes2 + 1, bb->h) ;
-	  memcpy (bb->gzBuffer, seq, bytes) ;
-	  memcpy (bb->gzBuffer + bytes, seq2, bytes2) ;
+	  memcpy (bb->gzBuffer, sra->seq, bytes) ;
+	  memcpy (bb->gzBuffer + bytes, sra->seq2, bytes2) ;
 	  
 	  bb->gzBuffer[bytes + bytes2] = 0 ;
 	  bb->nSeqs = 100 ;  /* a guess */
@@ -1474,8 +1473,7 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
     }}
   /* download */
   
-  SRAObj* sra = SraObjNew(sraID);
-  const char *seq, *seq2 ;
+  SRAReadBatch* sra = SRAReadBatchNew(sraID);
   int nn = 0 ;
   BOOL firstPass = TRUE ;
   int num_bases = 1 << 27 ; /* 128 M */
@@ -1488,22 +1486,22 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
   
   while (! Gb || nMax-- > 0)
     {
-      SraGetReadBatch(sra, num_bases, fastq, split_pairs, &seq, &seq2) ;
-      if (seq)
+      SraGetReadBatch(sra, num_bases, fastq, split_pairs) ;
+      if (sra->seq)
 	{
 	  nn++ ;
 	  if (firstPass)
-	    sraCachingOut (&ao1, &ao2, seq, seq2, sraID, fastq, split_pairs, h) ;
+	    sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, split_pairs, h) ;
 	  firstPass = FALSE ;
 	  fprintf (stderr, ".") ;
 
 	  if (!ao1 && ! ao2)
 	    break ;
 	  if (ao1 || ao2)
-	    sraCacheDo (ao1, ao2, seq, seq2) ;
+	    sraCacheDo (ao1, ao2, sra->seq, sra->seq2) ;
 	}
     }
-  SraObjFree(sra);
+  SRAReadBatchFree(sra);
   if (ao1)
     fprintf (stderr, " %s downloaded %d data blocks infile %s\ndone: %s\n", sraID, nn, aceOutFileName (ao1), timeBufShowNow(tBuf)) ;
   

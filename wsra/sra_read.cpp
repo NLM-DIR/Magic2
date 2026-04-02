@@ -10,12 +10,14 @@
 using namespace std;
 
 ngs::ReadIterator SraOpen(const char* accession);
-int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss);
-int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
-            stringstream& ss2);
-int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss);
-int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
-                 stringstream& ss2);
+size_t SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss,
+               bool& is_paired);
+size_t SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
+               stringstream& ss2, bool& is_paired);
+size_t SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss,
+                    bool& is_paired);
+size_t SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
+                    stringstream& ss2, bool& is_paired);
 
 
 struct SraObj {
@@ -30,67 +32,75 @@ struct SraObj {
 };
 
 
-SRAObj* SraObjNew(const char* accession)
+SRAReadBatch* SRAReadBatchNew(const char* accession)
 {
-    SraObj* retval = new SraObj(accession);
-
+    SRAReadBatch* retval = new SRAReadBatch();
+    if (!retval) {
+        return nullptr;
+    }
+    retval->sra_obj = static_cast<SRAObj*>(new SraObj(accession));
+    if (!retval->sra_obj) {
+        delete retval;
+        return nullptr;
+    }
     return retval;
 }
 
-
-SRAObj* SraObjFree(SRAObj* insra)
+SRAReadBatch* SRAReadBatchFree(SRAReadBatch* sra)
 {
-    SraObj* sra = static_cast<SraObj*>(insra);
     if (sra) {
-	delete sra;
+        if (sra->sra_obj) {
+            SraObj* obj = static_cast<SraObj*>(sra->sra_obj);
+            delete obj;
+        }
+        delete sra;
     }
     return nullptr;
 }
 
 
-int SraGetReadBatch(SRAObj* insra, long int num_bases, int quality_scores,
-                    int split_spot, const char** buff1, const char** buff2)
+
+int SraGetReadBatch(SRAReadBatch* sra, long int num_bases, int quality_scores,
+                    int split_spot)
 {
-    SraObj* sra = static_cast<SraObj*>(insra);
-    if (!buff1) {
-        return -1;
-    }
-    if (split_spot && !buff2) {
-        return -1;
-    }
     if (!sra) {
-        *buff1 = nullptr;
-        *buff2 = nullptr;
         return -1;
     }
+    size_t num_bases_read = 0;
+    bool is_paired;
+    SraObj* sra_obj = static_cast<SraObj*>(sra->sra_obj);
     if (split_spot) {
         stringstream ss1;
         stringstream ss2;
         if (quality_scores) {
-            SraReadFastq(sra->it, num_bases, ss1, ss2);
+            num_bases_read = SraReadFastq(sra_obj->it, num_bases, ss1, ss2,
+                                          is_paired);
         }
         else {
-            SraRead(sra->it, num_bases, ss1, ss2);
+            num_bases_read = SraRead(sra_obj->it, num_bases, ss1, ss2, is_paired);
         }
 
-        sra->buff.first = std::move(ss1.str());
-        sra->buff.second = std::move(ss2.str());
+        sra_obj->buff.first = std::move(ss1.str());
+        sra_obj->buff.second = std::move(ss2.str());
 
-        *buff1 = !sra->buff.first.empty() ? sra->buff.first.c_str() : nullptr;
-        *buff2 = !sra->buff.second.empty() ? sra->buff.second.c_str() : nullptr;
+        sra->seq = !sra_obj->buff.first.empty() ? sra_obj->buff.first.c_str() : nullptr;
+        sra->seq2 = !sra_obj->buff.second.empty() ? sra_obj->buff.second.c_str() : nullptr;
     }
     else {
         stringstream ss;
         if (quality_scores) {
-            SraReadFastq(sra->it, num_bases, ss);
+            num_bases_read = SraReadFastq(sra_obj->it, num_bases, ss, is_paired);
         }
         else {
-            SraRead(sra->it, num_bases, ss);
+            num_bases_read = SraRead(sra_obj->it, num_bases, ss, is_paired);
         }
 
-        sra->buff.first = std::move(ss.str());
-        *buff1 = !sra->buff.first.empty() ? sra->buff.first.c_str() : nullptr;
+        sra_obj->buff.first = std::move(ss.str());
+        sra->seq = !sra_obj->buff.first.empty() ? sra_obj->buff.first.c_str() : nullptr;
      }
+
+    sra->num_bases = num_bases_read;
+    sra->is_paired = is_paired ? 1 : 0;
 
     return 0;
 }
@@ -105,9 +115,11 @@ ngs::ReadIterator SraOpen(const char* accession)
 
 
 /* Download SRA reads as FASTA, interleaved for paired reads */
-int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss)
+size_t SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss,
+                 bool& is_paired)
 {
     size_t num_bases = 0;
+    is_paired = false;
     while (num_bases < max_bases && it.nextRead()) {
         if (it.nextFragment()) {
             if (it.isPaired()) {
@@ -123,6 +135,8 @@ int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss)
                     ss << bases << endl;
                     num_bases += bases.length();
                 }
+
+                is_paired = true;
             }
             else {
                 ss << ">" << it.getReadId().data() << endl;
@@ -133,15 +147,16 @@ int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss)
         }
     }
 
-    return 0;
+    return num_bases;
 }
 
 
 /* Download SRA reads as FASTA, split paired reads */
-int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
-            stringstream& ss2)
+size_t SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
+                 stringstream& ss2, bool& is_paired)
 {
     size_t num_bases = 0;
+    is_paired = false;
     while (num_bases < max_bases && it.nextRead()) {
         if (it.nextFragment()) {
             if (it.isPaired()) {
@@ -157,6 +172,8 @@ int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
                     ss2 << bases << endl;
                     num_bases += bases.length();
                 }
+
+                is_paired = true;
             }
             else {
                 ss1 << ">" << it.getReadId().data() << endl;
@@ -167,14 +184,16 @@ int SraRead(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
         }
     }
 
-    return 0;
+    return num_bases;
 }
 
 
 /* Download SRA reads as FASTQ, interleaved for paired reads */
-int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss)
+size_t SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss,
+                    bool& is_paired)
 {
     size_t num_bases = 0;
+    is_paired = false;
     while (num_bases < max_bases && it.nextRead()) {
         if (it.nextFragment()) {
             if (it.isPaired()) {
@@ -198,6 +217,8 @@ int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss)
                     string qualities(std::move(it.getFragmentQualities().toString()));
                     ss << qualities << endl;
                 }
+
+                is_paired = true;
             }
             else {
                 ss << ">" << it.getReadId().data() << endl;
@@ -212,15 +233,16 @@ int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss)
         }
     }
 
-    return 0;
+    return num_bases;
 }
 
 
 /* Download SRA reads as FASTA, split paired reads */
-int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
-                 stringstream& ss2)
+size_t SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
+                    stringstream& ss2, bool& is_paired)
 {
     size_t num_bases = 0;
+    is_paired = false;
     while (num_bases < max_bases && it.nextRead()) {
         if (it.nextFragment()) {
             if (it.isPaired()) {
@@ -244,6 +266,8 @@ int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
                     string qualities(std::move(it.getFragmentQualities().toString()));
                     ss2 << qualities << endl;
                 }
+
+                is_paired = true;
             }
             else {
                 ss1 << ">" << it.getReadId().data() << endl;
@@ -258,5 +282,5 @@ int SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss1,
         }
     }
 
-    return 0;
+    return num_bases;
 }

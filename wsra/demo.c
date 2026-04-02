@@ -3,21 +3,25 @@
 
 int main(void)
 {
-    SRAObj* sra = SraObjNew("SRR24511885");
+    SRAReadBatch* sra = SRAReadBatchNew("SRR24511885");
     int num_bases = 500;
-    const char* p1 = NULL;
-    const char* p2 = NULL;
 
     while (1) {
-        SraGetReadBatch(sra, num_bases, 1, 1, &p1, &p2);
-        if (!p1) {
+        SraGetReadBatch(sra, num_bases, 1, 1);
+        if (!sra->seq) {
             break;
         }
-        printf("%s", p1);
+        printf("%s", sra->seq);
         printf("\n---------------------\n\n");
-        if (p2) {
-            printf("%s", p2);
+        if (sra->seq2) {
+            printf("%s", sra->seq2);
         }
+
+        break;
     }
-    SraObjFree(sra);
+
+    printf("Paired: %s\n", sra->is_paired ? "yes" : "no");
+    printf("Num bases read: %d\n", sra->num_bases);
+
+    SRAReadBatchFree(sra);
 }
