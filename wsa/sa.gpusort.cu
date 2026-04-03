@@ -10,6 +10,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <thrust/iterator/constant_iterator.h>
+#include <thrust/set_operations.h>
 #include <thrust/sort.h>
 #include <thrust/binary_search.h>
 #include <thrust/adjacent_difference.h>
@@ -218,6 +219,33 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         BuildRuns(word_vec, w_unique_seeds, w_counts, w_starts);
         end = std::chrono::high_resolution_clock::now();
         std::cerr << "Build runs for read partition " << i << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << ", " << w_unique_seeds.size() << " unique seeds" << std::endl;
+
+
+        std::size_t max_common_words = std::min(idx_unique_seeds.size(),
+                                                w_unique_seeds.size());
+        if (max_common_words == 0) {
+            continue;
+        }
+
+
+        start = std::chrono::high_resolution_clock::now();
+        thrust::device_vector<std::uint32_t> common_words(max_common_words);
+        auto common_end = thrust::set_intersection(w_unique_seeds.begin(),
+                                                   w_unique_seeds.end(),
+                                                   idx_unique_seeds.begin(),
+                                                   idx_unique_seeds.end(),
+                                                   common_words.begin());
+
+        std::size_t num_common = static_cast<std::size_t>(
+                                        common_end - common_words.begin());
+        common_words.resize(num_common);
+        end = std::chrono::high_resolution_clock::now();
+        std::cerr << "Found " << common_words.size() << " matching seeds in partition " << i << " in "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+
+        if (num_common == 0) {
+            continue;
+        }
+
 
 
         start = std::chrono::high_resolution_clock::now();
