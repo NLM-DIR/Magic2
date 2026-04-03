@@ -9,6 +9,7 @@
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <thrust/iterator/constant_iterator.h>
 #include <thrust/sort.h>
 #include <thrust/binary_search.h>
 #include <thrust/adjacent_difference.h>
@@ -111,20 +112,61 @@ void saGPUSort (char *cp, long int number_of_records, int type)
 }
 
 
-typedef std::vector< thrust::device_vector<CW> > GPUIndexType;
+// Data used to search genome index
+struct GPUIndexType
+{
+    std::vector< thrust::device_vector<CW> > d_vecs;
+};
+
+struct SeedOfCW {
+    __host__ __device__
+    std::uint32_t operator()(const CW& x) const {
+        return x.seed;
+    }
+};
+
+// Find runs of the the same CW::seed value in input and return start position
+// and counts. Input must be sorted by CW::seed.
+static void BuildRuns(const thrust::device_vector<CW>& input,
+                      thrust::device_vector<std::uint32_t>& unique_seeds,
+                      thrust::device_vector<std::uint32_t>& counts,
+                      thrust::device_vector<std::uint32_t>& starts)
+{
+    unique_seeds.resize(input.size());
+    counts.resize(input.size());
+
+    auto keys_begin = thrust::make_transform_iterator(input.begin(), SeedOfCW{});
+    auto keys_end   = keys_begin + input.size();
+
+    auto end_pair = thrust::reduce_by_key(
+        keys_begin, keys_end,
+        thrust::make_constant_iterator<std::uint32_t>(1U),
+        unique_seeds.begin(),
+        counts.begin()
+    );
+
+    std::size_t n_groups = static_cast<std::size_t>(end_pair.first - unique_seeds.begin());
+    unique_seeds.resize(n_groups);
+    counts.resize(n_groups);
+    starts.resize(n_groups);
+
+    // find prefix sums
+    thrust::exclusive_scan(counts.begin(), counts.end(), starts.begin(), std::uint64_t{0});
+}
+
 
 GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_parts)
 {
-    GPUIndexType* d_vecs = new GPUIndexType();
-    d_vecs->reserve(num_parts);
+    GPUIndexType* index = new GPUIndexType();
+    index->d_vecs.reserve(num_parts);
     for (unsigned int i=0;i < num_parts;i++) {
         auto start = std::chrono::high_resolution_clock::now();
-        d_vecs->emplace_back(index_parts[i], index_parts[i] + sizes[i]);
+        index->d_vecs.emplace_back(index_parts[i], index_parts[i] + sizes[i]);
         auto end = std::chrono::high_resolution_clock::now();
         std::cerr << "Copy index partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
     }
 
-    return d_vecs;
+    return index;
 }
 
 
@@ -146,7 +188,8 @@ struct diff_CW {
 void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                     unsigned int num_parts)
 {
-    GPUIndexType& index_vecs = *static_cast<GPUIndexType*>(idx);
+    GPUIndexType* index = static_cast<GPUIndexType*>(idx);
+    auto& index_vecs = index->d_vecs;
 
     for (unsigned int i=0;i < num_parts;i++) {
         auto start = std::chrono::high_resolution_clock::now();
@@ -158,6 +201,24 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         thrust::sort(word_vec.begin(), word_vec.end(), compare_CW());
         end = std::chrono::high_resolution_clock::now();
         std::cerr << "Sorted word partition " << i << " in "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+
+        // build runs of unique words for index and reads
+        thrust::device_vector<std::uint32_t> idx_unique_seeds;
+        thrust::device_vector<std::uint32_t> idx_counts;
+        thrust::device_vector<std::uint32_t> idx_starts;
+        start = std::chrono::high_resolution_clock::now();
+        BuildRuns(index->d_vecs[i], idx_unique_seeds, idx_counts, idx_starts);
+        end = std::chrono::high_resolution_clock::now();
+        std::cerr << "Build runs for index partition " << i << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << ", " << idx_unique_seeds.size() << " unique seeds" << std::endl;
+
+        thrust::device_vector<std::uint32_t> w_unique_seeds;
+        thrust::device_vector<std::uint32_t> w_counts;
+        thrust::device_vector<std::uint32_t> w_starts;
+        start = std::chrono::high_resolution_clock::now();
+        BuildRuns(word_vec, w_unique_seeds, w_counts, w_starts);
+        end = std::chrono::high_resolution_clock::now();
+        std::cerr << "Build runs for read partition " << i << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << ", " << w_unique_seeds.size() << " unique seeds" << std::endl;
+
 
         start = std::chrono::high_resolution_clock::now();
         thrust::device_vector<std::size_t> upper_it(word_vec.size());
