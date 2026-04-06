@@ -97,6 +97,20 @@ static void showAli (Array aligns)
 } /* showAli */
 
 /**************************************************************/
+/* a0 = a1 - x1 is the putative position of base 1 of the read 
+ * It also works for the negative strand (a1 < 0, x1 > 0).
+ */
+static int seedMatchOrder (const void *va, const void *vb)
+{
+  const SEEDMATCH *up = va ;
+  const SEEDMATCH *vp = vb ;
+  int n ;
+
+  n = ((up->read > vp->read) - (up->read < vp->read)) ; if (n) return n ;
+  return n ;
+} /* hitReadPosOrder */
+
+/**************************************************************/
 /**************************************************************/
 /* cumulate the number of BB to be analyzed */
 static int NTODO = 0 ; 
@@ -496,7 +510,7 @@ static long int  matchSeedsOld (const PP *pp, BB *bbG, BB *bb)
 
 static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
 {
-  BigArray sms = bb->sms ;
+  BigArray sms = 0 ;
   long int nSm = 0 ;
 
   sms = bb->sms = bigArrayHandleCreate(pp->BMAX * (1 << 20)/pp->tStep, SEEDMATCH, bb->h) ;
@@ -596,7 +610,7 @@ static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
     fprintf (stderr, "..MatchSeedsDo2 found %ld seed-matches\n", nSm) ;
 
   return nSm ;
-}  /* matchSeedsDo2 */
+}  /* matchSeeds */
 
 /**************************************************************/
 
@@ -1176,7 +1190,12 @@ static void wholeWork (const void *vp)
 	  if (bb.length)
 	    nn = matchSeeds (pp, &bbG, &bb) ;
 	  if (nn)
-	    saSort (bb.sms, 4) ;
+	    {
+	      if (0)
+		saSort (bb.sms, 4) ;
+	      else
+		bigArraySort (bb.sms, seedMatchOrder) ;
+	    }
 #else
 	  messcrash ("matchSeedsGPU not yet written, sorry") ;
 #endif
@@ -2003,7 +2022,7 @@ int main (int argc, const char *argv[])
 
   /*******************  otherwise verify the existence of the indexes ********************/
   
-  NN = saConfigCheckTargetIndex (&p) ;
+  p.nIndex = NN = saConfigCheckTargetIndex (&p) ;
 
   /* check the existence of the input sequence files */
   inArray = saConfigGetRuns (&p, p.runStats) ;

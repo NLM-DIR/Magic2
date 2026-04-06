@@ -3152,9 +3152,11 @@ static void alignDoOneRead (const PP *pp, BB *bb
   /*   unsigned int uu = 0 ; */
   int donor = 0, acceptor = 0 ;
   int intronBonus  = 1 ; /* this is a coodinate bonus, not a score bonus */
-  BOOL ignoreIntronSeeds = FALSE ;   /* code stall on some RefSeqT2T XR with very highly repeated intron seeds
-				      * XM_047446984.1|Gene|LOC124908110|GeneId|124908110 has 20k and 120k hits
-				      */
+  /*
+    BOOL ignoreIntronSeeds = FALSE ;
+    * code stall on some RefSeqT2T XR with very highly repeated intron seeds
+    * XM_047446984.1|Gene|LOC124908110|GeneId|124908110 has 20k and 120k hits
+    */
   int nTargetRepeats  = 1 ;
   int nTargetRepeatsOld = 0 ;
   const int nTRmask = (0x1 << NTARGETREPEATBITS) - 1 ;
