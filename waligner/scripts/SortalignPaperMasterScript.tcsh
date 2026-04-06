@@ -138,6 +138,8 @@ setenv SV     v88.81.18M.e4.mars31    # idem, elephant: call adjustExons >= rath
 setenv SVlast v88.81.18M.e4.mars31
 setenv SV     v89.81.18M.e4.apr1      # idem, without the mir edition in rafia
 setenv SVlast v89.81.18M.e4.apr1
+setenv SV     v90.81.18M.e4.apr6      # idem, matchSeeds ready for GPU
+setenv SVlast v90.81.18M.e4.apr6
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV

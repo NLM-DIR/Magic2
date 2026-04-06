@@ -28,6 +28,13 @@
 
 #include "sa.h"
 
+#ifdef __SSE2__
+#define VECTORIZED_MEM_CPY
+#include <emmintrin.h> // SSE2
+#include <immintrin.h>
+#endif /* __SSE2__ */
+
+
 static int NN = 1 ;
 
 static void showHitsDo (HIT *hit, long int iMax) ;
@@ -590,8 +597,19 @@ static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
 		    break ;
 		  /* create a match record */
 		  SEEDMATCH *smp = bigArrayp (sms, nSm++, SEEDMATCH) ;
-		  smp->readSeed = smp->targetSeed = 0 ;
+#ifdef VECTORIZED_MEM_CPY3
+		  
+		  __m128i u = _mm_load_si128((__m128i*)rw) ;
+		  __m128i v = _mm_load_si128((__m128i*)cw1) ;
+		  
+		  __m128i mask = _mm_set_epi32(~0, ~0, ~0, 0) ;
+		  
+		  _mm_store_si128((__m128i*)smp,   _mm_and_si128(u, mask)) ;
+		  _mm_store_si128((__m128i*)smp+1, _mm_and_si128(v, mask)) ;  
 
+#else		  
+		  smp->readSeed = smp->targetSeed = 0 ;
+		  
 		  smp->read = rw->nam ;
 		  smp->x1 = rw->pos ;
 		  smp->readFlags = rw->intron ;
@@ -599,6 +617,7 @@ static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
 		  smp->target = cw1->nam ;
 		  smp->a1 = cw1->pos ;
 		  smp->targetFlags = cw1->intron ;
+#endif
 		}
 	      j++ ; rw++ ;
 	    }
@@ -1191,7 +1210,7 @@ static void wholeWork (const void *vp)
 	    nn = matchSeeds (pp, &bbG, &bb) ;
 	  if (nn)
 	    {
-	      if (0)
+	      if (1)
 		saSort (bb.sms, 4) ;
 	      else
 		bigArraySort (bb.sms, seedMatchOrder) ;

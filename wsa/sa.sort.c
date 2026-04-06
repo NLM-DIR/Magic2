@@ -198,7 +198,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 	  __m128i u = _mm_load_si128((__m128i*)up) ;
 	  __m128i v = _mm_load_si128((__m128i*)vp) ;
 
-	  int n = (*(unsigned int*)up <= *(unsigned int*)vp) ;
+	  int n = (*(unsigned int*)up <= *(unsigned int*)vp) ? 1 : 0 ;
 	  
 	  _mm_store_si128((__m128i*)wp, n  ? u : v) ;
 	  wp += s ;
@@ -228,44 +228,46 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 	}
       ok = TRUE ;
     }
-#endif
 
-#ifdef __AVX2__   /* defined automatically when -mavx2 is used */
-  
-  else if (cmp == seedMatchOrder) 
+  else if (0 && cmp == seedMatchOrder) 
     {
       while (n1 > 0 && n2 > 0)
 	{
-	  __m256i u = _mm256_load_si256((__m256i*)up);   /* load 32 bytes */
-	  __m256i v = _mm256_load_si256((__m256i*)vp);
-
-	  int n = (*(unsigned int*)up <= *(unsigned int*)vp) ;
-
-	  _mm256_store_si256((__m256i*)wp, n ? u : v) ;
-	  wp += s;                                      /* s = sizeof(struct) / sizeof(int) usually 8 */
-	  up += n * s;
-	  vp += (1 - n) * s;
-	  n1 -= n;
-	  n2 -= 1 - n;
+	  __m128i u1 = _mm_load_si128((__m128i*)up) ;
+	  __m128i v1 = _mm_load_si128((__m128i*)vp) ;
+	  __m128i u2 = _mm_load_si128((__m128i*)up+1) ;
+	  __m128i v2 = _mm_load_si128((__m128i*)vp+1) ;
+	  
+	  int n = (*(unsigned long int*)up + 1 <= *(unsigned long int*)vp + 1) ? 1 : 0 ;
+	  
+	  _mm_store_si128((__m128i*)wp, n  ? u1 : v1) ;
+	  _mm_store_si128((__m128i*)wp+1, n  ? u2 : v2) ;
+	  wp += s ;
+	  up += n * s ;
+	  vp += (1 - n) * s ;
+	  n1 -= n ;
+	  n2 -= 1 - n ;
 	}
       ok = TRUE;
     }
-
   else if (s == 32)
     {
       while (n1 > 0 && n2 > 0)
 	{
-	  __m256i u = _mm256_load_si256((__m256i*)up);   /* load 32 bytes */
-	  __m256i v = _mm256_load_si256((__m256i*)vp);
-
+	  __m128i u1 = _mm_load_si128((__m128i*)up) ;
+	  __m128i v1 = _mm_load_si128((__m128i*)vp) ;
+	  __m128i u2 = _mm_load_si128((__m128i*)up+1) ;
+	  __m128i v2 = _mm_load_si128((__m128i*)vp+1) ;
+	  
 	  int n = ((*cmp)(up, vp) <= 0) ? 1 : 0 ;
-
-	  _mm256_store_si256((__m256i*)wp, n ? u : v) ;
-	  wp += s;                                      /* s = sizeof(struct) / sizeof(int) usually 8 */
-	  up += n * s;
-	  vp += (1 - n) * s;
-	  n1 -= n;
-	  n2 -= 1 - n;
+	  
+	  _mm_store_si128((__m128i*)wp, n  ? u1 : v1) ;
+	  _mm_store_si128((__m128i*)wp+1, n  ? u2 : v2) ;
+	  wp += s ;
+	  up += n * s ;
+	  vp += (1 - n) * s ;
+	  n1 -= n ;
+	  n2 -= 1 - n ;
 	}
       ok = TRUE;
     }
@@ -277,7 +279,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 	{
 	  n = ((*cmp) (up, vp) <= 0) ? 1 : 0 ;
 
-	  memcpy (wp, (n<=0) ? up : vp, s) ;
+	  memcpy (wp, (n ? up : vp), s) ;
 	  wp += s ;
 	  up += n * s ;
 	  vp += (1 - n) * s ;
