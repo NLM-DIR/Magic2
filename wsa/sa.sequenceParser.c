@@ -650,6 +650,10 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 /**************************************************************/
 /**************************************************************/
 /* we need to download 4 lines to recognize pairs */
+#ifdef JUNK
+/* this code is good but not needed
+ * isPaired is returned from sra as sra->is_paired
+ */
 static BOOL sraIsPairedEnd (const char *seq, BOOL *hasQualp)
 {
   BOOL isPaired = FALSE ;
@@ -677,23 +681,18 @@ static BOOL sraIsPairedEnd (const char *seq, BOOL *hasQualp)
     }      
   return isPaired ;
 } /* sraIsPairedEnd */
+#endif
 
 /**************************************************************/
 /* we need to download 4 lines to recognize pairs */
 static void sraCachingOut (ACEOUT *ao1p, ACEOUT *ao2p, const char *seq, const char *seq2, const char *sraID
-			   , BOOL fastq, BOOL split_pairs, AC_HANDLE h0)
+			   , BOOL fastq, BOOL isPaired, BOOL split_pairs, AC_HANDLE h0)
 {
   AC_HANDLE h = ac_new_handle () ;
   char *fNam = 0, *fNam2 = 0 ;
-  BOOL hasQual = fastq ;
-  BOOL isPaired = seq2 ? TRUE : sraIsPairedEnd (seq, &hasQual) ;
 
   if (! isPaired)
     split_pairs = FALSE ;
-  if (! hasQual)
-    fastq = FALSE ; 
-  else
-    fastq = TRUE ; 
 
   if (! isPaired)
     {
@@ -702,7 +701,7 @@ static void sraCachingOut (ACEOUT *ao1p, ACEOUT *ao2p, const char *seq, const ch
       else
 	fNam = hprintf (h, "SRA/%s.fasta", sraID) ;
     }
-  else if (!split_pairs)
+  else if (isPaired && !split_pairs)
     {
       if (fastq)
 	fNam = hprintf (h, "SRA/%s.sample_12.fastq", sraID) ;
@@ -923,25 +922,38 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
       SraGetReadBatch(sra, num_bases, fastq, split_pairs) ;
       if (sra->seq)
 	{
-	  if (firstPass && pp->sraCaching)
-	  sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, split_pairs, h) ;
-	  firstPass = FALSE ;
-	  if (ao1 || ao2)
-	    sraCacheDo (ao1, ao2, sra->seq, sra->seq2) ;
-	  
-	  bytes = strlen (sra->seq) ;
-	  bytes2 = sra->seq2 ? strlen (sra->seq2) : 0 ;
-	  nBytes += bytes + bytes2 ; 
-	  if (!bytes)
+	  if (0)
+	    {
+	      bytes = strlen (sra->seq) ;
+	      bytes2 = sra->seq2 ? strlen (sra->seq2) : 0 ;
+	      nBytes += bytes + bytes2 ;
+	    }
+	  else
+	    nBytes = sra->num_bases ;
+	  if (!nBytes)
 	    messcrash ("No sequence found in SRA %s\n", sraID) ;
 	  
 	  if (format == SRA)
 	    {   /* check for identifiers signaling a paired end read */
-	      if (split_pairs)
-		format = FASTA ;
-	      else
+	      if (sra->is_paired)
 		format = FASTA2 ;
+	      else
+		format = FASTA ;
 	    }
+	  if (fastq)
+	    {   /* check for identifiers signaling a paired end read */
+	      if (sra->is_paired)
+		format = FASTQ2 ;
+	      else
+		format = FASTQ ;
+	    }
+
+	  if (firstPass && pp->sraCaching)
+	    sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, sra->is_paired, split_pairs, h) ;
+	  firstPass = FALSE ;
+	  if (ao1 || ao2)
+	    sraCacheDo (ao1, ao2, sra->seq, sra->seq2) ;
+	  
 	  
 	  /* create a data block */
 	  bb = &b ;
@@ -1491,7 +1503,7 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
 	{
 	  nn++ ;
 	  if (firstPass)
-	    sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, split_pairs, h) ;
+	    sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, sra->is_paired, split_pairs, h) ;
 	  firstPass = FALSE ;
 	  fprintf (stderr, ".") ;
 

@@ -642,7 +642,7 @@ void saRunStatExport (const PP *pp, Array runStats)
 
 	  aceOutf (ao, "%s\tPartial_reads\tift\t%ld\t%.3f\tof_aligned_reads\n"
 		   , runNam
-		   , -100
+		   , -100L
 		   , 100.0 * up->nComplexReads / (.000001 + up->nMultiAligned[0])
 		   ) ;
 

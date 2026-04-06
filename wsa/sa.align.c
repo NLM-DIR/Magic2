@@ -2424,12 +2424,12 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
     {
       int dnaLn = arrayMax (dna) ;
       /* adjust introns */
-      if (1) alignCheckSize (bb, aa) ;
+      if (0) alignCheckSize (bb, aa) ;
       if (1) alignAdjustIntrons (pp, bb, bestAp, aa, myRead) ;
-      if (1) alignCheckSize (bb, aa) ;
+      if (0) alignCheckSize (bb, aa) ;
       /* adjust exons */
       if (1) alignAdjustExons (pp, bb, bestAp, aa, myRead, dna, maxJump, maxJump2) ;
-      if (1) alignCheckSize (bb, aa) ;
+      if (0) alignCheckSize (bb, aa) ;
       iMax = alignLocateChains (bestAp, aa, myRead) ;
       
       /* Compute the clean chain score */
@@ -2481,7 +2481,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	      chainErr > pp->errMax ||
 	      100 * chainAli < pp->minAliPerCent * dnaLn ||
 	      100 * chainErr > pp->errRateMax * chainAli ||
-	      (! pp->errMax && chainErr > 1 && dnaLn < 50)    /* user can override our minimal quality */
+	      (pp->errMax == ERRMAXMAX && chainErr > 1 && dnaLn < 50)    /* user can override our minimal quality */
 	      )
 	    chainScore = chainAli = chainErr = chainMID = 0 ;
 	  
@@ -2677,8 +2677,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  int du = ap1->chainX2 - ap2->chainX1 + 1 ;  /* if > 0, there is a double cover */
 	  int da = isDown ? ap1->chainA2 - ap2->chainA1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
 
-	  if (0)
-	    {
+	  if (1)
+	    {  /* without this code, we have errors with the miRs */
 	      if (da > 0 && du >= ap1->chainAli)
 		{ /* kill chain ap1 */
 		  for (int i = 0 ; i < di1 ; i++)
@@ -3028,14 +3028,14 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      }
 	  }
 
-      intronBonus *= errCost * (bb->isRna >= 0 ? 1 : -1) ;
+      intronBonus *= 2 * errCost * (bb->isRna >= 0 ? 1 : -1) ;
       
       ap = arrp (aa, 0, ALIGN) ;
       if (intronBonus)
 	for (ii = 0 ; ii < iMax ; ii++, ap++)
 	  if (read == ap->read)
 	    {
-	      ap->score += intronBonus ;
+	      /* ap->score += intronBonus ; */
 	      ap->chainScore += intronBonus ;
 	    }
     }
@@ -3166,7 +3166,6 @@ static void alignDoOneRead (const PP *pp, BB *bb
       int chrom = hit->chrom ;
       BOOL isDown = TRUE ;
       BOOL isIntron = ((hit->x1  >> NTARGETREPEATBITS )  & 0x7) ? TRUE : FALSE ;
-
       if (! read || ! chrom)
 	continue ;
       if (ii < iMax  && ! memcmp (hit, hit + 1, sizeof (HIT)))
@@ -3187,7 +3186,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 
       if (read != readA)
 	{ readA = read ; dna = arr (bb->dnas, read, Array) ; }
-      ignoreIntronSeeds = (iMax > arrayMax (dna) ? TRUE : FALSE) ;
+      /*      ignoreIntronSeeds = (iMax > arrayMax (dna) ? TRUE : FALSE) ; */
       if (chrom != chromA)
 	{
 	  chromA = chrom ;
@@ -3201,7 +3200,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
       if (arrayMax (dna) > 200 &&  nTargetRepeats > 20)
 	continue ;
       x1 = x1 >> NTARGETREPEATBITS ;
-      if (0 && x1 && ignoreIntronSeeds) continue ;
+      /* if (0 && x1 && ignoreIntronSeeds) continue ; */
       BOOL isIntronDown = (x1 >> 2) & 0x1 ;
       isDown = (chrom & 0x1)  ? FALSE : TRUE ;
       donor = x1 & 0x1 ;
@@ -3595,7 +3594,7 @@ void saAlignDo (const PP *pp, BB *bb)
   int pass = 0 ;
   HIT * restrict hit ;
   HIT *h1, *h2 ;
-  long int ii, jj, iMax ;
+  long int iii, iiiMax, diii, ii, jj, iMax ;
   BigArray hits = 0 ;
   BigArray hits2 = 0 ;
   Array aa = 0 ;
@@ -3605,7 +3604,8 @@ void saAlignDo (const PP *pp, BB *bb)
   int n = NTARGETREPEATBITS ;
   int mask = (1 << n) - 1 ;
   ADAPTORS adaptors = {{0}} ;
-
+  BOOL SMS = bb->sms ? TRUE : FALSE ;
+  
   /* in pilot block, bb->isRna defaults to 0=RNA */
   bb->isRna = 0 ;
   if (1) 
@@ -3622,13 +3622,12 @@ void saAlignDo (const PP *pp, BB *bb)
     }
   
  secondPass:
-  iMax = bigArrayMax (bb->hits) ;
   h = ac_new_handle () ;
   hits = bigArrayHandleCreate (256, HIT, h) ;
   hits2 = bigArrayHandleCreate (256, HIT, h) ;  
   aa = arrayHandleCreate (128, ALIGN, h) ;
   err = arrayHandleCreate (256, A_ERR, h) ;
-  aaa = bigArrayHandleCreate (iMax, ALIGN, h) ;
+  aaa = bigArrayHandleCreate (1 << 15, ALIGN, h) ;
   countChroms = arrayHandleCreate (256, COUNTCHROM, h) ;
   bb->confirmedSLs = arrayHandleCreate (6400, SLS, bb->h) ;
   bb->confirmedPolyAs = arrayHandleCreate (64000, POLYA, bb->h) ;
@@ -3637,25 +3636,38 @@ void saAlignDo (const PP *pp, BB *bb)
   /*
     bb->isAligned = bitSetHandleCreate (bb->nSeqs, bb->h) ;
   */
-#ifdef JUNK
-  if (1)
-    {
-      for (ii = 0, hit = iMax ? bigArrp (bb->hits, 0, HIT) : 0 ; ii < iMax ; ii++, hit++)
-	fprintf (stderr, "BBHITS\t%ld\t%d\t%d\t%d\t%d\n"
-		 , ii
-		 , hit->read
-		 , hit->chrom
-		 , hit->a1
-		 , hit->x1
-		 ) ;
-    }
-#endif
 
-  for (ii = 0, hit = iMax ? bigArrp (bb->hits, 0, HIT) : 0 ; ii < iMax ; ii++, hit++)
+  iiiMax = SMS ? bigArrayMax (bb->sms) : bigArrayMax (bb->hits) ;
+
+  for (iii = 0 ; iii < iiiMax ; iii++)
     {
-      int nn = 1, read = hit->read, pair = read >> 1 ;
-      for (jj = ii + 1, h1 = hit + 1 ; jj < iMax && (h1->read >> 1) == pair ; jj++, h1++)
-	nn++ ;
+      int nn =  1 ;
+      if (SMS)
+	{
+	  if (!bb->hits)
+	    {
+	      bb->hits =  bigArrayHandleCreate(256, HIT, bb->h);
+	      bb->intronHits = bigArrayHandleCreate (128, INTRONHIT, bb->h) ;
+	    }
+	  diii = saGetPairHits (pp, bb, iii) ;
+	  nn = iMax = bigArrayMax (bb->hits) ;
+	  hit = iMax ? bigArrp (bb->hits, 0, HIT) : 0 ;
+	  ii = 0 ;
+	}
+      else
+	{
+	  hit = bigArrp (bb->hits, ii, HIT) ;
+	  iMax = iiiMax ;
+	  ii = iii ;
+
+	  
+	  unsigned int read = hit->read, pair = read >> 1 ;
+	  for (jj = ii + 1, h1 = hit + 1 ; jj < iMax && (h1->read >> 1) == pair ; jj++, h1++)
+	    nn++ ;
+	  diii = nn ;
+	}
+      hits = bb->hits ;
+      
       if (nn >= 1) /* this read has n+1 hit */
 	{ /* create  a copy of the hits of that read */
 	  h2 = bigArrayp (hits, nn - 1, HIT) ; /* make room */
@@ -3778,7 +3790,7 @@ void saAlignDo (const PP *pp, BB *bb)
 		}
 	    }
 	}
-      hit += nn - 1 ; ii += nn - 1 ;
+      iii += diii - 1 ;
     }
   
   bb->aligns = bigArrayHandleCopy (aaa, bb->h) ; /* resize */
@@ -3835,41 +3847,6 @@ void saAlignDo (const PP *pp, BB *bb)
 } /* saAlignDo */
 
 /**************************************************************/
+/**************************************************************/
+/**************************************************************/
 
-#ifndef YANN
-void saAlign (const void *vp)
-{
-  BB bb ;
-  const PP *pp = vp ;
-  char tBuf[25] ;
-  long int nnn = 0 ;
-  clock_t  t1, t2 ;
-
-  memset (&bb, 0, sizeof (BB)) ;
-  while (channelGet (pp->oaChan, &bb, BB))
-    {
-      if (pp->align && bb.hits)
-	{
-	  if (pp->debug) printf ("--- %s: Start align %lu seeds\n", timeBufShowNow (tBuf), bigArrayMax (bb.hits)) ;
-
-	  t1 = clock () ;
-	  saAlignDo (pp, &bb) ;
-	  nnn += bb.nAli ;
-	  t2 = clock () ;
-	  
-	  saCpuStatRegister ("7.Align_r", pp->agent, bb.cpuStats, t1, t2, bb.aligns ? bigArrayMax (bb.aligns) : 0) ;
-	  if (pp->debug) printf ("--- %s: Stop align %lu ali, %lu mismatches\n", timeBufShowNow (tBuf), bb.nAli, bb.nerr) ;
-	}
-      channelPut (pp->aeChan, &bb, BB) ;
-    }
-
-  int n = channelCount (pp->plChan) ;
-  if (pp->debug) printf ("..... close aeChan at %d,  found %ld ali\n", n, nnn) ;
-
-  channelCloseSource (pp->aeChan) ;
-
-  return ;
-} /* saAlign */
-#endif
-
-/********************************************************************/

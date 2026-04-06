@@ -21,10 +21,14 @@ typedef struct hitStruct {
 } __attribute__((aligned(16))) HIT ;
 
 typedef struct seedMatchStruct {
-  unsigned int read ; /* index in bb->dict << 1 | (0x1 for minus words) */
-  unsigned int x1 ;   /* bio coordinate of first letter of seed in read */
-  unsigned int readFlags ; /* copy in these 3 fileds seed/nam/intron of the read CW */
-  unsigned int target ; /* index in pp->bbG.dict << 1 | (0x1 for minus chromosome strand) */
-  unsigned int a1 ;   /* bio coordinate of first letter of seed in target */
-  unsigned int targetFlags ; /* copy in these 3 fileds seed/nam/intron of the read CW */
-} __attribute__((aligned(16))) SEEDMATCH ;
+  unsigned int readSeed ;    /* place holder, set to zero */
+  unsigned int read ;        /* index in bb->dict << 1 | (0x1 for minus words) */
+  unsigned int x1 ;          /* bio coordinate of first letter of seed in read */
+  unsigned int readFlags ;   /* copied from read index */
+  
+  unsigned int targetSeed ;  /* place holder, set to zero */
+  unsigned int target ;      /* index in pp->bbG.dict << 1 | (0x1 for minus chromosome strand) */
+  unsigned int a1 ;          /* bio coordinate of first letter of seed in target */
+  unsigned int targetFlags ; /* copied from target index */
+} __attribute__((aligned(32))) SEEDMATCH ;
+

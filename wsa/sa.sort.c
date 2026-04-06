@@ -23,6 +23,7 @@
 #ifdef __SSE2__
 #define VECTORIZED_MEM_CPY
 #include <emmintrin.h> // SSE2
+#include <immintrin.h>
 #endif /* __SSE2__ */
 
 #ifdef USEGPU
@@ -31,6 +32,11 @@
 #endif /* USEGPU */
 
 /**************************************************************/
+/**************************************************************/
+/* sort treating the full struct as a 256 bits unsigned int */
+
+/**************************************************************/
+/**************************************************************/
 
 static inline int cwOrder (const void *va, const void *vb)
 {
@@ -38,10 +44,21 @@ static inline int cwOrder (const void *va, const void *vb)
   const CW *vp = vb ;
   int n ;
   n = (up->seed > vp->seed) - (up->seed < vp->seed) ; if (n) return n ;
-  n = up->nam - vp->nam ; if (n) return n ;
-  n = (up->pos > vp->pos) - (up->pos < vp->pos) ; if (n) return n ;
+
   return 0 ;
 } /* cwOrder */
+
+/**************************************************************/
+
+static inline int seedMatchOrder (const void *va, const void *vb)
+{
+  const SEEDMATCH *up = va ;
+  const SEEDMATCH *vp = vb ;
+  int n ;
+  n = (up->read > vp->read) - (up->read < vp->read) ; if (n) return n ;
+
+  return 0 ;
+} /* seedMatchOrder */
 
 /**************************************************************/
 /* a0 = a1 - x1 is the putative position of base 1 of the read 
@@ -121,7 +138,9 @@ static BOOL newInsertionSort (char *b, mysize_t n, int s, int (*cmp)(const void 
  * but n=8,16,32 are equivalent speeds
  */
 
+__attribute__((target("avx2")))
 static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, int (*cmp)(const void *va, const void *vb))
+
 {
  char *up, *vp, *wp ;
   long int n1 = nn / 2 ;
@@ -190,6 +209,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 	}
       ok = TRUE ;
     }
+  
   else if (s == 16)
     {
       while (n1 > 0 && n2 > 0)
@@ -209,6 +229,48 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
       ok = TRUE ;
     }
 #endif
+
+#ifdef __AVX2__   /* defined automatically when -mavx2 is used */
+  
+  else if (cmp == seedMatchOrder) 
+    {
+      while (n1 > 0 && n2 > 0)
+	{
+	  __m256i u = _mm256_load_si256((__m256i*)up);   /* load 32 bytes */
+	  __m256i v = _mm256_load_si256((__m256i*)vp);
+
+	  int n = (*(unsigned int*)up <= *(unsigned int*)vp) ;
+
+	  _mm256_store_si256((__m256i*)wp, n ? u : v) ;
+	  wp += s;                                      /* s = sizeof(struct) / sizeof(int) usually 8 */
+	  up += n * s;
+	  vp += (1 - n) * s;
+	  n1 -= n;
+	  n2 -= 1 - n;
+	}
+      ok = TRUE;
+    }
+
+  else if (s == 32)
+    {
+      while (n1 > 0 && n2 > 0)
+	{
+	  __m256i u = _mm256_load_si256((__m256i*)up);   /* load 32 bytes */
+	  __m256i v = _mm256_load_si256((__m256i*)vp);
+
+	  int n = ((*cmp)(up, vp) <= 0) ? 1 : 0 ;
+
+	  _mm256_store_si256((__m256i*)wp, n ? u : v) ;
+	  wp += s;                                      /* s = sizeof(struct) / sizeof(int) usually 8 */
+	  up += n * s;
+	  vp += (1 - n) * s;
+	  n1 -= n;
+	  n2 -= 1 - n;
+	}
+      ok = TRUE;
+    }
+#endif  
+
   if (! ok) /* either we do not have _mm_store_si128, or size s is not 16 */
     { /* classic code */
       while (n1 > 0 && n2 > 0)
@@ -256,6 +318,9 @@ int saSort (BigArray aa, int type)
       break ;
     case 3:
       cmp = hitPairOrder ;
+      break ;
+    case 4:
+      cmp = seedMatchOrder ;
       break ;
     default:
       messcrash ("Wrong call to saSort typw = %dd>4", type) ;
