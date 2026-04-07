@@ -597,7 +597,7 @@ static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
 		    break ;
 		  /* create a match record */
 		  SEEDMATCH *smp = bigArrayp (sms, nSm++, SEEDMATCH) ;
-#ifdef VECTORIZED_MEM_CPY3
+#ifdef VECTORIZED_MEM_CPY
 		  
 		  __m128i u = _mm_load_si128((__m128i*)rw) ;
 		  __m128i v = _mm_load_si128((__m128i*)cw1) ;
@@ -831,7 +831,7 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
     }
 
   if (k)
-    saSort (bb->hits, 2) ;
+    saSort (bb->hits, 3) ;
   if (debug)
     fprintf (stderr, "..MatchSeedsDo found %ld matches for pair %u\n", k, pair) ;
 
@@ -1060,7 +1060,7 @@ static void exportDo (const PP *pp, BB *bb)
 	  aceOutf (ao, "%s/%s%s", run, dictName (dict, read >> 1), (pairedEnd ? ((read & 0x1 )? "<" : ">") : "")) ; 
 	  aceOutf (ao, "\t%d", ap->chainScore) ;
 	  aceOutf (ao, "\t%d", 1) ; /* ap->multiplicity */
-	  aceOutf (ao, "\t%d", ap->readLength) ;
+	  aceOutf (ao, "\t%d", ap->rightClip - ap->leftClip) ;
 	  aceOutf (ao, "\t%d\t%d\t%d", ap->chainAli, x1, x2) ;
 	  
 	  aceOutf (ao, "\t%c\t-", ap->targetClass) ;
@@ -1122,10 +1122,12 @@ static void export (const void *vp)
       t1 = clock () ;
       if (bb.aligns && bigArrayMax (bb.aligns))
 	{
-	  if (pp->sam || pp->bam || pp->hitsFormat)
+	  if (pp->sam || pp->bam || pp->hitsFormat || pp->tabular)
 	    bigArraySort (bb.aligns, saAlignOrder) ;
 	  if (pp->hitsFormat)
 	    exportDo (pp, &bb) ;
+	  if (pp->tabular)
+	    saExportTabular (pp, &bb) ;
 	  if (pp->sam || pp->bam)
 	    {
 	      ACEOUT ao = aos[bb.run] ;
@@ -1832,6 +1834,7 @@ int main (int argc, const char *argv[])
   p.introns = TRUE ; /* default */
   p.sam = getCmdLineBool (&argc, argv, "--sam") ;
   p.bam = getCmdLineBool (&argc, argv, "--bam") ;
+  p.tabular = getCmdLineBool (&argc, argv, "--tabular") ;
   p.qualityFactors = getCmdLineBool (&argc, argv, "--quality_factors") ;
   if (p.sam || p.bam)
     {
@@ -1842,10 +1845,10 @@ int main (int argc, const char *argv[])
     }
   /* we may wish both sam/bam and hits */
   /* we may cancel all the alignment files */
-  if (getCmdLineBool (&argc, argv, "--no_ali"))
-    p.sam = p.bam = p.hitsFormat = p.exportSamQuality = p.exportSamSequence = p.introns = FALSE ;
   if (getCmdLineBool (&argc, argv, "--hits"))
-    p.hitsFormat = TRUE ;  /* stay on previous value is not set */
+    p.hitsFormat = TRUE ;  /* keep previous value if not set */
+  if (getCmdLineBool (&argc, argv, "--no_ali"))
+    p.sam = p.bam = p.hitsFormat = p.exportSamQuality = p.exportSamSequence = p.tabular = p.introns = FALSE ;
   if (getCmdLineBool (&argc, argv, "--introns"))
     p.introns = TRUE ;  /* stay on previous value is not set */
   

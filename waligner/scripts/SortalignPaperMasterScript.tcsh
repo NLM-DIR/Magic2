@@ -1135,7 +1135,7 @@ end
 echo -n "### Quality control for all methods and datasets : $SV : "  > COMPARE/samStats.$SV.txt
 date  >> COMPARE/samStats.$SV.txt
 echo "### True error rates in Baruzzo datasets:   t1=0.543,  t2=1.186, t3=6.024" >> COMPARE/samStats.$SV.txt
-cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/UnalignedReads/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g'  > RESULTS/allSamStats
+cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAli 0 times/UnalignedReads/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g'  > RESULTS/allSamStats
 
 \mv RESULTS/allSamStats RESULTS/allSamStats.old
 cat RESULTS/allSamStats.old | sed -e 's/nAlignedReads/AlignedReads/' -e 's/nPerfectReads/Perfect_reads/' -e 's/nRawBases/RawBases/' -e 's/nRawReads/RawReads/' -e 's/nReads/Reads/' -e 's/nErrors/nMismatches_and_InDels/' -e 's/nMismaches_and_InDels/nMismatches_and_InDels/' > RESULTS/allSamStats
@@ -1204,9 +1204,9 @@ foreach tag (nMultiAligned)
       echo "$run\t$mm\tf\t0" >> toto.tag
     end
   end
-  echo "\nPercentaged of aligned read which are multi aligned\t$SV" >> COMPARE/samStats.$SV.txt
+  echo "\nPercentage of aligned read which are multi aligned\t$SV" >> COMPARE/samStats.$SV.txt
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {gsub("%","",$5);printf("%s\t%s\tf\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
-   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Average number of alignments" >> COMPARE/samStats.$SV.txt
+   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Percentage of aligned read which are multi aligned" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 

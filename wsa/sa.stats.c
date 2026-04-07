@@ -210,8 +210,6 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
   if (nClipped) aceOutf (ao, "\n%s\t%s\tClipped_Adaptors\t%ld\n", run, METHOD, nClipped) ;
   aceOutf (ao, "%s\t%s\tPerfect_reads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(s0->p.nReads + .000001)) ;
   aceOutf (ao, "%s\t%s\tAlignedReads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[0], (100.0 * s0->nMultiAligned[0])/(nRawReads + .000001)) ;
-  aceOutf (ao, "%s\t%s\tUnalignedReads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, nRawReads - s0->nMultiAligned[0], (100.0 * (nRawReads - s0->nMultiAligned[0]))/(nRawReads + .000001)) ;
-  
   aceOutf (ao, "\n%s\t%s\tnAlignments\t%ld\t%.2f\tper_aligned_read\n", run, METHOD, s0->nAlignments, (1.0 * s0->nAlignments)/(s0->nMultiAligned[0] + .000001)) ;
   aceOutf (ao, "%s\t%s\tnAlignedOnce\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[1], (100.0 * (s0->nMultiAligned[1]))/(nRawReads + .000001)) ;
   aceOutf (ao, "%s\t%s\tnMultiAligned\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[0] - s0->nMultiAligned[1], (100.0 * (s0->nMultiAligned[0] - s0->nMultiAligned[1]))/(nRawReads + .000001)) ;
@@ -243,7 +241,23 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
     }
   
   long int nUnaligned = nRawReads - s0->nMultiAligned[0] ;
-  for (int j = 1 ; j < 11 ; j++)
+  for (int j = 0 ; j < 1 ; j++)
+    if (s0->nMultiAligned[j])
+      {
+	aceOutf (ao, "%s\t%s\tnUnaligned\t%ld\t%.2f%%\tof_aligned_reads\n", run, METHOD
+		 , j, nUnaligned
+		 , 100.0 * nUnaligned / (s0->nMultiAligned[0] + .000001)
+		 ) ;
+      }
+  for (int j = 1 ; j < 2 ; j++)
+    if (s0->nMultiAligned[j])
+      {
+	aceOutf (ao, "%s\t%s\tnAlignedOnce\t%ld\t%.2f%%\tof_aligned_reads\n", run, METHOD
+		 , j, s0->nMultiAligned[j]
+		 , 100.0 * s0->nMultiAligned[j] / (s0->nMultiAligned[0] + .000001)
+		 ) ;
+      }
+  for (int j = 2 ; j < 11 ; j++)
     if (s0->nMultiAligned[j])
       {
 	aceOutf (ao, "%s\t%s\tnMultiAligned %d times\t%ld\t%.2f%%\tof_aligned_reads\n", run, METHOD
@@ -316,6 +330,7 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   up->nPerfectReads += vp->nPerfectReads ;
   up->nAlignments += vp->nAlignments ;
   up->nComplexReads += vp->nComplexReads ;
+  up->nPartialReads += vp->nPartialReads ;
   up->nBaseAligned1 += vp->nBaseAligned1 ;
   up->nBaseAligned2 += vp->nBaseAligned2 ;
   up->nSupportedIntrons = saSupportedIntrons (pp, run) ;
@@ -642,8 +657,8 @@ void saRunStatExport (const PP *pp, Array runStats)
 
 	  aceOutf (ao, "%s\tPartial_reads\tift\t%ld\t%.3f\tof_aligned_reads\n"
 		   , runNam
-		   , -100L
-		   , 100.0 * up->nComplexReads / (.000001 + up->nMultiAligned[0])
+		   , up->nPartialReads
+		   , 100.0 * up->nPartialReads / (.000001 + up->nMultiAligned[0])
 		   ) ;
 
 	  aceOutf (ao, "%s\tBases\tiii\t%ld\t%ld\t%ld\n"

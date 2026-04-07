@@ -102,6 +102,7 @@ typedef struct runStatStruct {
   long int nPairsAligned, nBaseAligned1, nBaseAligned2 ;
   long int cds, utr, intronic, intergenic ;
   long int nComplexReads ;
+  long int nPartialReads ;
   long int nMultiAligned[11] ;
   long int nReadsAlignedPerTargetClass[256] ;
   long int nBasesAlignedPerTargetClass[256] ;
@@ -277,7 +278,8 @@ typedef struct pStruct {
   Array confirmedIntrons ;
   Array doubleIntrons ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
-  BOOL sam, bam, hitsFormat, exportSamSequence, exportSamQuality, qualityFactors ;
+  BOOL sam, bam, hitsFormat, tabular ;
+  BOOL exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;
   int bonus[256] ;
@@ -534,6 +536,9 @@ void saUringSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb) ;
 /* sa.wiggle */
 void saWiggleCumulate (const PP *pp, BB *bb) ;
 void saWiggleExport (PP *pp, int nAgents) ;
+
+/* sa.tabular */
+void saExportTabular (const PP *pp, BB *bb) ;
 
 /* sa.stats */
 void saRunStatExport (const PP *pp, Array runStats) ;

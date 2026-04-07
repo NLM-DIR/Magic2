@@ -1913,7 +1913,7 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
   INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
   if (! jMax) return 0 ;
-  if (0) return 0 ;
+  if (1) return 0 ;
   if (jMax > 100)   return 0 ;
   AC_HANDLE h = ac_new_handle () ;
   BigArray e2d = bigArrayHandleCreate (2*iMax, HIT, h) ;
@@ -2045,7 +2045,7 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
 	}
     }
   
-  /* clean all hits on chromosomes with too few introns in the same zone */
+  /* clean all hits on chromosomes with too few introns in the same read zone */
   nc = 0 ;
   if (maxCount > 3)
     for (int ii = 0 ; ii < iMax ; ii++)  
@@ -3076,12 +3076,16 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	}
     }
 
-  /* format the errors, must come after register introns since here we desttroy the errors */
+  /* format the errors, must come after register introns since here we destroy the errors */
   iMax = arrayMax (aa) ;
   if (iMax)
     for (ii = 0, ap = arrp (aa, ii, ALIGN) ; ii < iMax ; ii++, ap++)
       if (read == ap->read)
 	{
+	  if (nChains == 1 && ap->chain == 1 && ap->x1 == ap->chainX1 && ap->x1 > ap->leftClip + 15)
+	    bb->runStat.nPartialReads++ ;
+	  if (nChains == 1 && ap->chain == 1 && ap->x2 == ap->chainX2 && ap->x2 < ap->rightClip - 15)
+	    bb->runStat.nPartialReads++ ;
 	  if (arrayExists (ap->errors))
 	    {
 	      unsigned int flip = 0 ;
@@ -3655,10 +3659,15 @@ void saAlignDo (const PP *pp, BB *bb)
 	  nn = iMax = bigArrayMax (bb->hits) ;
 	  hit = iMax ? bigArrp (bb->hits, 0, HIT) : 0 ;
 	  ii = 0 ;
+	  if (bb->intronHits && bigArrayMax (bb->intronHits) > 1)
+	    {
+	      bigArraySort (bb->intronHits, intronHitOrder) ; /* hitReadOrder */
+	      bigArrayCompress (bb->intronHits) ;
+	    }
 	}
       else
 	{
-	  hit = bigArrp (bb->hits, ii, HIT) ;
+	  hit = bigArrp (bb->hits, iii, HIT) ;
 	  iMax = iiiMax ;
 	  ii = iii ;
 
