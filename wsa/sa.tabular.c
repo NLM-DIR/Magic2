@@ -23,10 +23,11 @@
  * The tabular format has 25 columns
  */
 
-void saExportTabular (const PP *pp, BB *bb, Array aa)
+void saExportTabular (const PP *pp, BB *bb)
 {
-  int ii, iMax = arrayMax (aa) ;
-  ALIGN *up = iMax ? arrp (aa, 0, ALIGN) : 0 ;
+  BigArray aa = bb->aligns ;
+  long int ii, iMax = bigArrayMax (aa) ;
+  ALIGN *up = iMax ? bigArrp (aa, 0, ALIGN) : 0 ;
   ACEOUT ao = 0 ;
   
   for (ii = 0 ; ii < iMax ; ii++, up++)
