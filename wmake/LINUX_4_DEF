@@ -16,8 +16,9 @@
 #################################################################
 
 NAME = OPTERON
-COMPILER = gcc -g -Wall -DACEDB4 
-LINKER = g++ -g
+
+COMPILER = gcc -g -Wall -DACEDB4  
+LINKER = g++ -g  
 
 LIBS = -lm 
 Xt_LIBS = -L/usr/X11R6/lib -lXaw -lXt -lXmu -lXext -lX11

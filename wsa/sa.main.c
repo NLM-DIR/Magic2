@@ -86,7 +86,7 @@ static void showAli (Array aligns)
 	{
 	  ALIGN *ali = arrp (aligns, ii, ALIGN) ;
 	  if (ali->score)
-	    printf (".. chain %d\tchainScore %d\tchainErr %d chainAli %d\tscore %d\tr=%u : %d:%d/%d\tchr=%u : %d:%d/%d\tnErr %d\t %d::p %d n %d\tdonor %d acc %d  a1-x1=%d\n"
+	    printf (".. chain %d\tchainScore %d\tchainErr %d chainAli %d\tscore %d\tr=%u : %d:%d/%d\tchr=%u : %d:%d/%d\tnErr %d\t %d::p %d n %d\tDA %d:%d\tMates %d:%d  a1-x1=%d\n"
 		    , ali->chain, ali->chainScore
 		    , ali->chainErr, ali->chainAli
 		    , ali->score
@@ -95,6 +95,7 @@ static void showAli (Array aligns)
 		    , ali->nErr
 		    , ali->id, ali->previous, ali->next
 		    , ali->donor, ali->acceptor
+		    , ali->mateA1, ali->mateA2
 		    , ali->a1 - ali->x1
 		    ) ;
 	}
@@ -2345,10 +2346,10 @@ int main (int argc, const char *argv[])
   printf ("\tTarget %d sequences %ld bases\n", p.bbG.dnas ? arrayMax (p.bbG.dnas) - 1 : 0, p.bbG.length) ;
   if (1 || p.debug) printf ("Skips: 0=%ld, %d=%ld, %d=%ld, %d=%ld, %d=%ld, found=%ld, notFound=%ld\n",
 			    skips0, step1, skips1, step2, skips2, step3, skips3, step4, skips4, skipsFound, skipsNotFound);
-  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nAgents=%d nBlocks=%d NN=%d\n"
+  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nAgents=%d nBlocks=%d NN=%d BMAX=%d\n"
 			    , p.seedLength, p.tStep, p.iStep
 			    , p.maxTargetRepeats, p.tMaxTargetRepeats
-			    , nAgents, p.nBlocks, NN
+			    , nAgents, p.nBlocks, NN, p.BMAX
 			    ) ;
   if (p.gpu) printf ("GPU called %d times\n", p.gpu) ;
   if (arrayMax (p.runStats))

@@ -651,31 +651,46 @@ static void s2gParseOneSamFile (S2G *s2g, const char *fNam, int method, int gold
 	       , (100.0 * nAlignedReads) / (s2g->nRawReads + .0000001)
 	       ) ;
 
-      aceOutf (ao, "%s\t%s\tnPerfectReads\t%d\t%.2f%%\n"
+      aceOutf (ao, "%s\t%s\tnPerfectReads\t%ld\t%.2f%%\n"
 	       , s2g->run, s2g->method
 	       , nPerfectReads
 	       , (100.0 * nPerfectReads) / (s2g->nRawReads + .0000001)
 	       ) ;
 
       for (int i = 0 ; i < 1 ; i++)
-	aceOutf (ao, "%s\t%s\tnMultiAligned %ld times\t%ld\t%.2f%%\n"
+	aceOutf (ao, "%s\t%s\tnUnaligned\t%ld\t%.2f%%\n"
 		 , s2g->run, s2g->method
-		 , i
 		 ,  nUnalignedReads
 		 , (100.0 * nUnalignedReads) / (s2g->nRawReads + .0000001)
 		 ) ;
-      for (int i = 1 ; i <= 10 ; i++)
-	aceOutf (ao, "%s\t%s\tnMultiAligned %ld times\t%d\t%.2f%%\n"
+      for (int i = 1 ; i < 2 ; i++)
+	aceOutf (ao, "%s\t%s\tnAlignedOnce\t%ld\t%.2f%%\n"
 		 , s2g->run, s2g->method
-		 , i
 		 ,  s2g->nMultiAli[i]
 		 , (100.0 * s2g->nMultiAli[i]) / (s2g->nRawReads + .0000001)
+		 ) ;
+      long int several = 0 ;
+      for (int i = 2 ; i <= 10 ; i++)
+	{
+	  several += s2g->nMultiAli[i] ;
+	  aceOutf (ao, "%s\t%s\tnMultiAligned %d times\t%ld\t%.2f%%\n"
+		   , s2g->run, s2g->method
+		   , i
+		   ,  s2g->nMultiAli[i]
+		   , (100.0 * s2g->nMultiAli[i]) / (s2g->nRawReads + .0000001)
+		   ) ;
+	}
+      for (int i = 0 ; i < 1 ; i++)
+	aceOutf (ao, "%s\t%s\tnAlignedSeveralTimes\t%ld\t%.2f%%\n"
+		 , s2g->run, s2g->method
+		 ,  several
+		 , (100.0 * several) / (s2g->nRawReads + .0000001)
 		 ) ;
     }
       
   ac_free (h) ;
  
-  return  ;
+  return  ; 
 } /* s2gParseOneSamFile */
 
 /*************************************************************************************/

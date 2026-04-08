@@ -1902,7 +1902,7 @@ static void alignAdjustExons (const PP *pp, BB *bb, Array bestAp, Array aaa, int
  * and recompute its trimmed exact pattern of errors
  * before sending to alignSelectBestDynamicPath
  */
-static int findIntronMates (const PP *pp, Array aa, BigArray introns)
+static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 {
   int ii, iMax = arrayMax (aa) ;
   int ne2a = 0, ne2d = 0 ;
@@ -1912,8 +1912,9 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
   ALIGN *up, *up2 ;
   INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
+  alignCheckSize (bb, aa) ;
   if (! jMax) return 0 ;
-  if (1) return 0 ;
+  if (0) return 0 ;
   if (jMax > 100)   return 0 ;
   AC_HANDLE h = ac_new_handle () ;
   BigArray e2d = bigArrayHandleCreate (2*iMax, HIT, h) ;
@@ -1924,8 +1925,18 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
   /* clean negative scores */
   for (jj = ii = 0, up = up2 = arrp (aa, ii, ALIGN) ; ii < iMax ; ii++, up++)
     {
+      ALIGN *vp = up2 - 1 ;
       int ali = up->x2 - up->x1 + 1 ;
       up->score = ali - up->nErr * errCost ;
+      if (jj &&
+	  up->read == vp->read &&
+	  up->chrom == vp->chrom &&
+	  up->x1 == vp->x1 &&
+	  up->x2 == vp->x2 &&
+	  up->a1 == vp->a1 &&
+	  up->a2 == vp->a2
+	  )
+	continue ;
       if (up->score > 0)
 	{
 	  if (up2 < up) *up2 = *up ;
@@ -1934,7 +1945,7 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
     }
   iMax = arrayMax (aa) = jj ;
   while (nMask < 31 && (1 << nMask) <= iMax + 1) nMask++ ;
-
+  if (0) return 0 ;
   /* associate exons to donors and acceptors */
   for (ii = 0 ; ii < iMax ; ii++)
     {
@@ -2125,19 +2136,119 @@ static int findIntronMates (const PP *pp, Array aa, BigArray introns)
 		      int du = w1->x2 - wi->x1 ;
 		      w1->x2 += -du ;
 		      w1->a2 += (isDown ? -du : du) ;
+		      if (w1->nErr)
+			{
+			  A_ERR *ep = arrp (w1->errors, 0, A_ERR) ;
+			  int ie, newMax, ieMax = arrayMax (w1->errors) ;
+			  newMax = ieMax ;
+			  for (ie = 0 ; ie < ieMax ; ie++, ep++)
+			    {
+			      if (ep->iShort + 1 > w1->x2)
+				{ newMax = ie ; break ; }
+			    }
+			  if (newMax < ieMax)
+			    {
+			      for (ie = newMax, ep = arrp (w1->errors, ie, A_ERR) ; ie < ieMax ; ie++, ep++)
+				{  /* count clipped indels because the dx - da must be modified (we used same du) */
+				  switch (ep->type)
+				    {
+				    case TYPE80:
+				    case AMBIGUE:
+				    case ERREUR:
+				      break ;
+				    case TROU:
+				      w1->a2 += (isDown ? -1 : 1 ) ;
+				      break ;
+				    case TROU_DOUBLE:
+				      w1->a2 += (isDown ? -2 : 2) ;
+				      break ;
+				    case TROU_TRIPLE:
+				      w1->a2 += (isDown ? -3 : 3) ;
+				      break ;
+				    case INSERTION:
+				      w1->a2 += (isDown ? 1 : -1) ;
+				      break ;
+				    case INSERTION_DOUBLE:
+				      w1->a2 += (isDown ? 2 : -2) ;
+				      break ;
+				    case INSERTION_TRIPLE:
+				      w1->a2 += (isDown ? 3 : -3) ;
+				      break ;
+				    }
+				}
+			      w1->nErr = arrayMax (w1->errors) = newMax ;
+			    }
+			}
 		    }
 		  if (w2->x1 < wi->x2 && w2->x2 > wi->x2)
 		    {
 		      int du = wi->x2 - w2->x1 ;
 		      w2->x1 += du ;
 		      w2->a1 += (isDown ? du : -du) ;
+		      if (w2->nErr)
+			{ /* clip left errors, we assume there are no multiple indels in these positions DANGEROUS */
+			  A_ERR *ep = arrp (w2->errors, 0, A_ERR) ;
+			  int k = 0, ieMax = arrayMax (w2->errors) ;
+			  for (int ie = 0 ; ie < ieMax ; ie++, ep++)
+			    {
+			      switch (ep->type)
+				{
+				case TYPE80:
+				case AMBIGUE:
+				case ERREUR:
+				  if (ep->iShort + 1 < w1->x1)
+				    k++ ;
+				  break ;
+				default:  /* indels are reported on a correct base */
+				  if (ep->iShort + 1 <= w1->x1)
+				    {
+				      k++ ;
+				      switch (ep->type)
+					{
+					case TYPE80:
+					case AMBIGUE:
+					case ERREUR:
+					  break ;
+					case TROU:
+					  w2->a1 -= (isDown ? -1 : 1 ) ;
+					  break ;
+					case TROU_DOUBLE:
+					  w2->a1 -= (isDown ? -2 : 2) ;
+					  break ;
+					case TROU_TRIPLE:
+					  w2->a1 -= (isDown ? -3 : 3) ;
+					  break ;
+					case INSERTION:
+					  w2->a1 -= (isDown ? 1 : -1) ;
+					  break ;
+					case INSERTION_DOUBLE:
+					  w2->a1 -= (isDown ? 2 : -2) ;
+					  break ;
+					case INSERTION_TRIPLE:
+					  w2->a1 -= (isDown ? 3 : -3) ;
+					  break ;
+					}
+				      break ;
+				    }
+				}
+			    }
+			  if (k > 0)
+			    {
+			      ep = arrp (w2->errors, 0, A_ERR) ;
+			      for (int ie = 0 ; ie < ieMax - k ; ie++, ep++)
+				ep[0] = ep[k] ;
+			      w2->nErr -= k ;
+			      arrayMax (w2->errors) = w2->nErr ;
+			    }
+			}
 		    }
 		}
 	    }
 	}
     }
  done:
-  ac_free (h) ;
+  alignCheckSize (bb, aa) ;
+    ac_free (h) ;
   return nMask ;
 } /* findIntronMates */
 
@@ -2234,6 +2345,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	      if (!foundI2) i02 = i2 + 1 ;
 	      continue ;
 	    }  
+	  foundI2 = TRUE ;
 	  if (up->x2 > vp->x1 && up->mateA1 > 0)
 	    {
 	      unsigned int id = up->mateA1 ;
@@ -2247,7 +2359,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	      if (! ok)
 		continue ;
 	    }
-	  foundI2 = TRUE ;
+
 	  if (vp->chrom == chrom
 	      && vp->x2 >= x1 - 8 && vp->x2 < x2 && vp->x1 < x2
 	      &&
@@ -2847,7 +2959,18 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  bb->runStat.nReadsAlignedPerTargetClass[0]++ ;
 		  nChains = 1 ;
 		  if (ap->chainErr == 0 && ap->leftClip + ap->chainAli >= ap->rightClip)
-		    bb->runStat.nPerfectReads++ ;
+		    {
+		      bb->runStat.nPerfectReads++ ;
+		      if (0) printf("ISPERFECT chainErr %d chainAli %d left %d right %d %s\n"
+			     , ap->chainErr, ap->chainAli, ap->leftClip, ap->rightClip
+			     , dictName (bb->dict, ap->read >> 1)
+			     ) ;
+		    }
+		  else
+		    if (0) printf("NOTPERFECT chainErr %d chainAli %d left %d right %d %s\n"
+			   , ap->chainErr, ap->chainAli, ap->leftClip, ap->rightClip
+			   , dictName (bb->dict, ap->read >> 1)
+			   ) ;
 		}
 	      else if (vp->next)
 		{ nChains++ ; bb->runStat.nAlignments++ ; continue ; }
@@ -3183,7 +3306,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  if (kMax)
 	    { /* create chain scores */
 	      if (kMax > 1) arraySort (aa, saAlignOrder) ;
-	      int nMask = findIntronMates (pp, aa, bb->intronHits) ;
+	      int nMask = findIntronMates (pp, bb, aa, bb->intronHits) ;
 	      alignSelectBestDynamicPath (pp, bb, aaa, aa, dna, chromA, dnaG, dnaGR, bestAp, maxJump, maxJump2, nMask) ;
 	    }
 	  arrayMax (aa) = kMax = 0 ;
@@ -3308,7 +3431,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
   if (kMax)
     { /* create chain scores */
       if (kMax > 1) arraySort (aa, saAlignOrder) ;
-      int nMask = findIntronMates (pp, aa, bb->intronHits) ;
+      int nMask = findIntronMates (pp, bb, aa, bb->intronHits) ;
       alignSelectBestDynamicPath (pp, bb, aaa, aa, dna, chromA, dnaG, dnaGR, bestAp, maxJump, maxJump2, nMask) ;
     }
 

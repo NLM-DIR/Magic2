@@ -140,6 +140,8 @@ setenv SV     v89.81.18M.e4.apr1      # idem, without the mir edition in rafia
 setenv SVlast v89.81.18M.e4.apr1
 setenv SV     v90.81.18M.e4.apr6      # idem, matchSeeds ready for GPU
 setenv SVlast v90.81.18M.e4.apr6
+setenv SV     v91.81.18M.e4.apr7      # idem, edited findIntronMates to clip the clipped errors
+setenv SVlast v91.81.18M.e4.apr7
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -1135,7 +1137,8 @@ end
 echo -n "### Quality control for all methods and datasets : $SV : "  > COMPARE/samStats.$SV.txt
 date  >> COMPARE/samStats.$SV.txt
 echo "### True error rates in Baruzzo datasets:   t1=0.543,  t2=1.186, t3=6.024" >> COMPARE/samStats.$SV.txt
-cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAli 0 times/UnalignedReads/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g'  > RESULTS/allSamStats
+cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/nUnaligned/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g' -e 's/nMultiAligned any times/nAlignedSeveralTimes/g'  > RESULTS/allSamStats
+
 
 \mv RESULTS/allSamStats RESULTS/allSamStats.old
 cat RESULTS/allSamStats.old | sed -e 's/nAlignedReads/AlignedReads/' -e 's/nPerfectReads/Perfect_reads/' -e 's/nRawBases/RawBases/' -e 's/nRawReads/RawReads/' -e 's/nReads/Reads/' -e 's/nErrors/nMismatches_and_InDels/' -e 's/nMismaches_and_InDels/nMismatches_and_InDels/' > RESULTS/allSamStats
@@ -1151,7 +1154,7 @@ setenv runsN `echo "$runs" | gawk '{for(k=1;k<=NF;k++)printf("%2d_%s ",k,$k);}'`
 set tsfMethods=`echo $methods | gawk '{sep="";for(i=1;i<=NF;i++){printf("%s%s",sep,$i);if(substr($i,1,2)=="01")printf(".%s",SV);sep=",";}}END{printf("\n");}' SV=$SV`
 echo $tsfMethods
 
-foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads UnalignedReads nAlignedOnce nMultiAligned)
+foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads nUnaligned nAlignedOnce nAlignedSeveralTimes)
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
   if (-e  toto.tag) \rm toto.tag
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
@@ -1164,7 +1167,7 @@ foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads Una
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
-foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads RawBases RawReads UnalignedReads nAlignedOnce nMultiAligned)
+foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads RawBases RawReads nUnaligned nAlignedOnce nAlignedSeveralTimes)
   echo $tag
   if (-e  toto.tag) \rm toto.tag
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
@@ -1195,7 +1198,7 @@ foreach tag (nAlignments)
 end
 
 
-foreach tag (nMultiAligned)
+foreach tag (nAlignedSeveralTimes)
   echo $tag
   if (-e  toto.tag) \rm toto.tag
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
