@@ -2001,13 +2001,25 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	  if (vp->x1 > up->x2) break ;
 	  if (isDown)
 	    {
-	      if (vp->a1 <= up->a2  && vp->a1 > up->a1)
+	      if (vp->a1 <= up->a2  && vp->a1 > up->a1 && vp->a1 < vp->a2)
 		{
 		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
 		  keySet (chromCounts, chrom)++ ;
 		}
-	      if (vp->a2 < up->a2 && vp->a2 >= up->a1)
+	      if (vp->a2 <= up->a2  && vp->a2 > up->a1 && vp->a2 < vp->a1)
+		{
+		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
+		  hp->a1 = ii ; hp->x1 = (int)jj ;
+		  keySet (chromCounts, chrom)++ ;
+		}
+	      if (vp->a2 < up->a2 && vp->a2 >= up->a1  && vp->a1 < vp->a2)
+		{
+		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
+		  hp->a1 = ii ; hp->x1 = (int)jj ;
+		  keySet (chromCounts, chrom)++ ;
+		}
+	      if (vp->a1 < up->a2 && vp->a1 >= up->a1  && vp->a2 < vp->a1)
 		{
 		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
@@ -2016,13 +2028,19 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	    }
 	  else
 	    {
-	      if (vp->a2 >= up->a2 && vp->a2 < up->a1)
+	      if (vp->a1 >= up->a2 && vp->a1 < up->a1 && vp->a1 > vp->a2) a verifier
 		{
 		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
 		  keySet (chromCounts, chrom)++ ;
 		}
-	      if (vp->a1 > up->a2 && vp->a1 <= up->a1)
+	      if (vp->a2 >= up->a2 && vp->a2 < up->a1 && vp->a2 > vp->a1)
+		{
+		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
+		  hp->a1 = ii ; hp->x1 = (int)jj ;
+		  keySet (chromCounts, chrom)++ ;
+		}
+	      if (vp->a1 > up->a2 && vp->a1 <= up->a1 && vp->a2 > vp->a1)
 		{
 		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;

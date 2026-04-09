@@ -1,0 +1,44 @@
+# $Id: LINUX_4_DEF,v 1.12 2018/08/20 21:49:56 mieg Exp $ #
+
+#################################################################
+############### acedb: R.Durbin and J.Thierry-Mieg ##############
+############### ported to Linux by Ken Letovski    ##############
+############### wmake/LINUX_DEF    Feb-2-1993      ##############
+#################################################################
+
+#################################################################
+########## Machine dependant compiler modification ##############
+###########    for the PC-386, running LINUX   ##################
+#################################################################
+########### This file is included by wmake/truemake #############
+######  Edit this file to adapt the ACeDB to a new machine ######
+#####   following the explanations given in wmake/truemake  #####
+#################################################################
+
+NAME = OPTERON
+SANITIZE_FLAGS = -fsanitize=undefined -fsanitize=address \
+                 -fno-omit-frame-pointer -fno-optimize-sibling-calls
+
+
+COMPILER = gcc -g -Wall -DACEDB4  $(SANITIZE_FLAGS)
+LINKER = g++ -g  $(SANITIZE_FLAGS)
+
+LIBS = -lm 
+Xt_LIBS = -L/usr/X11R6/lib -lXaw -lXt -lXmu -lXext -lX11
+
+#################################################################
+###################### Lex Libraries ############################
+#################################################################
+# The acedb dependency on LEX/YACC/BISON
+# has been removed
+#################################################################
+
+RPCGEN_FLAGS = -b -I -K -1
+#RPCGEN_FLAGS = -Y /usr/local/gcc-3.4/bin/ -b -I -K -1
+
+#################################################################
+#################################################################
+ 
+ 
+ 
+ 

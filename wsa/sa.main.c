@@ -148,11 +148,10 @@ static void npCounter (const void *vp)
 
 static void loadRegulator (const void *vp)
 {
-  BB bb ;
+  BB bb = {0} ;
   const PP *pp = vp ;
   int nn = 0, nMax = pp->nBlocks ;
   
-  memset (&bb, 0, sizeof (BB)) ;
   while (channelGet (pp->plChan, &bb, BB))
     {
       nn++ ;
@@ -1089,7 +1088,7 @@ static void exportDo (const PP *pp, BB *bb)
 
 static void export (const void *vp)
 {
-  BB bb ;
+  BB bb = {0} ;
   const PP *pp = vp ;
   clock_t  t1, t2, dt = 50 * CLOCKS_PER_SEC ;
   
@@ -1106,7 +1105,6 @@ static void export (const void *vp)
   memset (aos, 0, sizeof (aos)) ;
   memset (aoes, 0, sizeof (aoes)) ;
 
-  memset (&bb, 0, sizeof (BB)) ;
   if (pp->sam || pp->bam)
     {
       for (int run = 1 ; run <= runMax ; run++)
@@ -1117,7 +1115,6 @@ static void export (const void *vp)
 	}
     }
 
-  memset (&bb, 0, sizeof (BB)) ;
   while (channelGet (pp->aeChan, &bb, BB))
     {
       t1 = clock () ;
@@ -1166,7 +1163,7 @@ static void export (const void *vp)
 
 static void wholeWork (const void *vp)
 {
-  BB bb ;
+  BB bb = {0} ;
   const PP *pp = vp ;
   BB bbG = pp->bbG;
   char tBuf[25] ;
@@ -1174,7 +1171,7 @@ static void wholeWork (const void *vp)
   clock_t  t1, t2, t01, t02 ;
 
   t01 = clock () ;
-  memset (&bb, 0, sizeof (BB)) ;
+
   while (channelGet (pp->lcChan, &bb, BB))
     {
       long int nn = 0 ;
