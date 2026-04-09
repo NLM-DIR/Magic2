@@ -181,6 +181,54 @@ GPUIndex* GPUIndexFree(GPUIndex* idx)
 }
 
 
+struct Pair
+{
+    CW index;
+    CW read;
+
+    __device__
+    Pair(CW& idx, CW& r) : index(idx), read(r) {}
+};
+
+__global__
+void EmitCartesianProduct(const CW* index,
+                          const std::uint32_t* idx_starts,
+                          const std::uint32_t* idx_counts,
+                          const CW* words,
+                          const std::uint32_t* w_starts,
+                          const std::uint32_t* w_counts,
+                          const std::uint32_t* idx_common,
+                          const std::uint32_t* w_common,
+                          const std::uint32_t* out_offsets,
+                          Pair* out_pairs,
+                          std::size_t num_common)
+{
+    std::size_t ind = static_cast<std::size_t>(blockIdx.x);
+    if (ind >= num_common) {
+        return;
+    }
+
+    std::uint32_t ind_idx = idx_common[ind];
+    std::uint32_t ind_w = w_common[ind];
+
+    std::uint32_t start_idx = idx_starts[ind_idx];
+    std::uint32_t start_w = w_starts[ind_w];
+    std::uint32_t num_idx = idx_counts[ind_idx];
+    std::uint32_t num_w = w_counts[ind_w];
+
+    std::size_t total = num_idx * num_w;
+    std::size_t start = out_offsets[ind];
+
+    for (std::size_t i=static_cast<std::size_t>(threadIdx.x);i < total;
+         i += static_cast<std::size_t>(blockDim.x)) {
+
+        std::size_t k_w = i / num_w;
+        std::size_t k_idx = i % num_w;
+        out_pairs[start + i] = Pair(index[start_idx + k_idx], words[start_w + k_w]);
+    }
+}
+
+
 struct diff_CW {
     __host__ __device__
     unsigned int operator()(const CW& a, const CW& b) {return b.seed - a.seed;}
@@ -221,6 +269,7 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         std::cerr << "Build runs for read partition " << i << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << ", " << w_unique_seeds.size() << " unique seeds" << std::endl;
 
 
+        // find common words
         std::size_t max_common_words = std::min(idx_unique_seeds.size(),
                                                 w_unique_seeds.size());
         if (max_common_words == 0) {
@@ -247,47 +296,50 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         }
 
 
+        // find locations of common words in the index and reads
+        thrust::device_vector<std::uint32_t> idx_common(num_common);
+        thrust::device_vector<std::uint32_t> w_common(num_common);
 
-        start = std::chrono::high_resolution_clock::now();
-        thrust::device_vector<std::size_t> upper_it(word_vec.size());
-        auto it = thrust::upper_bound(index_vecs[i].begin(), index_vecs[i].end(), word_vec.begin(), word_vec.end(), upper_it.begin(), compare_CW());
-        end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Found matching seeds " << i << " in "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+        thrust::lower_bound(idx_unique_seeds.begin(), idx_unique_seeds.end(),
+                            common_words.begin(), common_words.end(),
+                            idx_common.begin());
 
-        /* for debugging, make sure that upper_bound finds what we need */
-        auto word_it = word_vec.begin();
-	auto idx_it = upper_it.begin();
-	for (int kk=0;kk < 10;kk++,word_it+=20,idx_it+=20) {
-            if (idx_it != upper_it.end()) {
-		CW w = *word_it;
-		//auto ind = index_vecs[i].begin() + *idx_it;
-                CW d = index_vecs[i][*idx_it];
-		//CW dd = index_vecs[i][*idx_it - 1];
-                std::cerr << "seeds:\t" << w.seed << "\t"
-                          << d.seed << "\t"
-                          << *idx_it
-                          << std::endl;
-            }
-	}
+        thrust::lower_bound(w_unique_seeds.begin(), w_unique_seeds.end(),
+                            common_words.begin(), common_words.end(),
+                            w_common.begin());
 
 
+        // collect counts of common words in the index and reads
+        thrust::device_vector<std::uint32_t> idx_matched_counts(num_common);
+        thrust::device_vector<std::uint32_t> w_matched_counts(num_common);
+        thrust::gather(idx_common.begin(), idx_common.end(),
+                       idx_counts.begin(), idx_matched_counts.begin());
+        thrust::gather(w_common.begin(), w_common.end(),
+                       w_counts.begin(), w_matched_counts.begin());
 
-        /* these may come handy */
-        start = std::chrono::high_resolution_clock::now();
-        thrust::device_vector<CW> diffs(word_vec.size());
-        thrust::adjacent_difference(word_vec.begin(), word_vec.end(), diffs.begin(), [] __device__ (const CW& a, const CW& b) {CW r; r.seed = b.seed - a.seed; return r;});
-        end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Diffs in partition " << i << " in "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
-        thrust::device_vector<std::size_t> positions(diffs.size());
-        auto first = thrust::make_counting_iterator(0);
-        auto last = first + diffs.size();
-        auto last_pos = thrust::copy_if(first, last, diffs.begin(),
-                                        positions.begin(),
-                        [] __device__ (const CW& x) {return x.seed != 0;});
+        // find number of pairs for each matched word
+        thrust::device_vector<std::uint32_t> out_counts(num_common);
+        thrust::transform(idx_matched_counts.begin(), idx_matched_counts.end(),
+                          w_matched_counts.begin(),
+                          out_counts.begin(),
+                          thrust::multiplies<std::uint32_t>());
 
-        thrust::device_vector<CW> unique_hashes(last_pos - positions.begin());
-        thrust::gather(positions.begin(), last_pos, word_vec.begin(), unique_hashes.begin());
+
+        // compute prefix sums for matched words
+        thrust::device_vector<std::uint64_t> out_offsets(num_common);
+        thrust::exclusive_scan(out_counts.begin(), out_counts.end(),
+                               out_offsets.begin(), std::uint32_t{0});
+
+
+        // last_offset = out_offsets[num_common - 1] with explicit copy to host
+        std::uint32_t last_offset = 0, last_count = 0;
+        thrust::copy_n(out_offsets.begin() + (num_common - 1), 1, &last_offset);
+        thrust::copy_n(out_counts.begin() + (num_common - 1), 1, &last_count);
+
+        std::size_t total_out = last_offset + last_count;
+        std::cerr << "total " << total_out << std::endl;
+
 
 
 
