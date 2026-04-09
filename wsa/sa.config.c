@@ -484,7 +484,7 @@ BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run)
       int iss = 0 ;
       if (aa) 
 	{
-	  memset (aa, 0, sizeof (ADAPTORS)) ;
+	  aa = (ADAPTORS) {0} ;
 	  if (*isSet0p) /* user imposed gloablly */
 	    { iss++ ; memcpy (aa, a0, sizeof (ADAPTORS)) ; }
 	  else if (*isSetRp) /* run specific */

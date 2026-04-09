@@ -264,7 +264,7 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
 		 , 100.0 * s0->nMultiAligned[j] / (s0->nMultiAligned[0] + .000001)
 		 ) ;
       }
-  aceOutf (ao, "%s\t%s\tnMultiAlignedSeveralTimes\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[0] - s0->nMultiAligned[1], (100.0 * (s0->nMultiAligned[0] - s0->nMultiAligned[1]))/(nRawReads + .000001)) ;
+  aceOutf (ao, "%s\t%s\tnAlignedSeveralTimes\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[0] - s0->nMultiAligned[1], (100.0 * (s0->nMultiAligned[0] - s0->nMultiAligned[1]))/(nRawReads + .000001)) ;
 
   long int verif = nUnaligned ;
   for (int j = 1 ; j < 11 ; j++)

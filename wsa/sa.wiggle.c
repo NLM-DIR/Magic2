@@ -347,7 +347,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   char flip = (pp->antiStrand || (! pp->strand && nm > 3 && 100*nm > 80*(nm+np))) ? 0x1 : 0x0 ;  ;  
   char strand = ( nw & 0x1) ^ flip ? 'r' : 'f' ;
   long int ii, iMax = 0 ;
-  long int cumul = 0, cumuls[8] ;
+  long int cumul = 0, cumuls[8] = {0} ;
   unsigned int pos0 ;
   Array geneC = 0 ;
   Array geneB = 0 ;
@@ -355,7 +355,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   const int demiStep = (wiggle_step - 1)/2 ;
   const char *typeNam ;
   char wigStrand = (strand == 'f' ? 0x0 : 0x1) ;
-  memset (cumuls, 0, sizeof (cumuls)) ;
+
   if (0 && chrom != 2) return ;
   switch (type)
     {

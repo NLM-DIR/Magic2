@@ -142,6 +142,8 @@ setenv SV     v90.81.18M.e4.apr6      # idem, matchSeeds ready for GPU
 setenv SVlast v90.81.18M.e4.apr6
 setenv SV     v91.81.18M.e4.apr7      # idem, edited findIntronMates to clip the clipped errors
 setenv SVlast v91.81.18M.e4.apr7
+setenv SV     v92.81.18M.e4.apr7      # idem, us vp->x1 filter in find intron mates
+setenv SVlast v92.81.18M.e4.apr7
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -894,7 +896,6 @@ phase_Align:
 
 foreach run ($runs)
   foreach method ($methods)
-
     if (! -e Aligners/$method/align.tcsh) then
       echo "missing script Aligners/$method/align.tcsh"
       continue
@@ -917,7 +918,7 @@ foreach run ($runs)
     if (-e RESULTS/$method/$run/align.running) continue
     if (-e RESULTS/$method/$run/align.done) continue
     
-    if (-e RESULTS/$method/$run/sam) continue
+    if (-e RESULTS/$method/$run/sam3) continue
     if (-e RESULTS/$method/$run/sam.gz) continue
     if (-e RESULTS/$method/$run/sam_sorted) continue
     if (-e RESULTS/$method/$run/sam_sorted.gz) continue
@@ -931,7 +932,6 @@ foreach run ($runs)
       if (-e Fasta/$run/$run.reverse.fastq.gz) set read_2=Fasta/$run/$run.reverse.fastq.gz
       if (-e Fasta/$run/$run.forward.fasta.gz) set read_1=Fasta/$run/$run.forward.fasta.gz
       if (-e Fasta/$run/$run.reverse.fasta.gz) set read_2=Fasta/$run/$run.reverse.fasta.gz
-      if (-e Fasta/$run/$run.forward.fasta.gz) set read_1=Fasta/$run/$run.forward.fasta.gz
       if (-e Fasta/$run/$run'_R1.fasta.gz') set read_1=Fasta/$run/$run'_R1.fasta.gz'
       if (-e Fasta/$run/$run'_R2.fasta.gz') set read_2=Fasta/$run/$run'_R2.fasta.gz'
       if ($method == 011_SortAlignG6R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
@@ -940,7 +940,7 @@ foreach run ($runs)
       if ($method == 014_SortAlignG3R3.g && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($method == 015_SortAlignG3R1.g && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($read_1 == Fasta/$run/$run.sample_12.fasta.gz) set read_2=""
-      
+
       if (! -e $read_1) then
         echo "Run $run Missing read file $read_1"
 	ls -ls Fasta/$run/*fast*
@@ -1137,7 +1137,7 @@ end
 echo -n "### Quality control for all methods and datasets : $SV : "  > COMPARE/samStats.$SV.txt
 date  >> COMPARE/samStats.$SV.txt
 echo "### True error rates in Baruzzo datasets:   t1=0.543,  t2=1.186, t3=6.024" >> COMPARE/samStats.$SV.txt
-cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/nUnaligned/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g' -e 's/nMultiAligned any times/nAlignedSeveralTimes/g'  > RESULTS/allSamStats
+cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/nUnaligned/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g' -e 's/nMultiAlignedSeveralTimes/nAlignedSeveralTimes/g'  > RESULTS/allSamStats
 
 
 \mv RESULTS/allSamStats RESULTS/allSamStats.old

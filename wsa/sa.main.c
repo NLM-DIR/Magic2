@@ -536,6 +536,26 @@ static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
       const CW *restrict cw1;
       const CW *restrict cwMax = cw + iMax ;
 
+#ifdef JUNK
+      unsigned int seed = rw->seed ;
+      BOOL absent = TRUE ;
+      for (i = 0 ; i < iMax ; i++, cw++)
+	if (cw->seed == seed)
+	  {
+	    fprintf (stderr, "In kk=%d seed %u found at line %ld cwNam %d %d\n", kk, seed, i, cw->nam, cw->pos) ;
+	    invokeDebugger() ;
+	    absent = FALSE ;
+	  }
+
+      if (absent)
+	{
+	  fprintf (stderr, "In kk=%d seed %u not found iMax=%ld jMax =%ld\n", kk, seed, iMax, jMax) ;
+	  continue ;
+	}
+      i = 0 ;
+      cw = bigArrp(bbG->cwsN[kk], 0, CW) ;
+#endif
+      
       while  (i < iMax && j < jMax)
 	{
 	  if (0 && kk == 1 && rw->seed == 185667857)
@@ -783,8 +803,8 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 	      intronHit->read = smp->read >> 1 ;
 	      intronHit->x1 = x1 ;
 	      intronHit->x2 = x1 + 1 ;
-	      intronHit->a1 = a1 - 1 ; /* first base of intron */
-	      intronHit->a2 = a1 + da ; /* last base of intron */
+	      intronHit->a2 = a1 - 1 ; /* first base of intron */
+	      intronHit->a1 = a1 + da ; /* last base of intron */
 	      
 	      /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
 	      nn++ ;
@@ -1114,7 +1134,7 @@ static void export (const void *vp)
 	  aoes[bb.run] = saSamCreateFile (pp, &bb, TRUE, pp->bamHandle) ;
 	}
     }
-
+  bb = (BB) {0} ;
   while (channelGet (pp->aeChan, &bb, BB))
     {
       t1 = clock () ;

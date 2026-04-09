@@ -1946,6 +1946,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
   iMax = arrayMax (aa) = jj ;
   while (nMask < 31 && (1 << nMask) <= iMax + 1) nMask++ ;
   if (0) return 0 ;
+
   /* associate exons to donors and acceptors */
   for (ii = 0 ; ii < iMax ; ii++)
     {
@@ -2001,25 +2002,13 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	  if (vp->x1 > up->x2) break ;
 	  if (isDown)
 	    {
-	      if (vp->a1 <= up->a2  && vp->a1 > up->a1 && vp->a1 < vp->a2)
+	      if (vp->a1 <= up->a2  && vp->a1 > up->a1 && vp->x1 <= up->x2 && vp->x1 > up->x1 )
 		{
 		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
 		  keySet (chromCounts, chrom)++ ;
 		}
-	      if (vp->a2 <= up->a2  && vp->a2 > up->a1 && vp->a2 < vp->a1)
-		{
-		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
-		  hp->a1 = ii ; hp->x1 = (int)jj ;
-		  keySet (chromCounts, chrom)++ ;
-		}
-	      if (vp->a2 < up->a2 && vp->a2 >= up->a1  && vp->a1 < vp->a2)
-		{
-		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
-		  hp->a1 = ii ; hp->x1 = (int)jj ;
-		  keySet (chromCounts, chrom)++ ;
-		}
-	      if (vp->a1 < up->a2 && vp->a1 >= up->a1  && vp->a2 < vp->a1)
+	      if (vp->a2 < up->a2 && vp->a2 >= up->a1 && vp->x2 < up->x2 && vp->x2 >= up->x1)
 		{
 		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
@@ -2028,21 +2017,15 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	    }
 	  else
 	    {
-	      if (vp->a1 >= up->a2 && vp->a1 < up->a1 && vp->a1 > vp->a2) a verifier
+	      if (vp->a1 >= up->a2 && vp->a1 < up->a1 && vp->x1 <= up->x2 && vp->x1 > up->x1 )
 		{
 		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
 		  keySet (chromCounts, chrom)++ ;
 		}
-	      if (vp->a2 >= up->a2 && vp->a2 < up->a1 && vp->a2 > vp->a1)
+	      if (vp->a2 >= up->a2 && vp->a2 < up->a1 && vp->x2 < up->x2 && vp->x2 >= up->x1)
 		{
 		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
-		  hp->a1 = ii ; hp->x1 = (int)jj ;
-		  keySet (chromCounts, chrom)++ ;
-		}
-	      if (vp->a1 > up->a2 && vp->a1 <= up->a1 && vp->a2 > vp->a1)
-		{
-		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
 		  keySet (chromCounts, chrom)++ ;
 		}
@@ -3277,7 +3260,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 			    , Array aa, Array err, Array bestAp
 			    , int maxJump, int maxJump2)
 {   
-  BOOL debug = FALSE ;
+  BOOL debug = TRUE ;
   AC_HANDLE h = ac_new_handle () ;
   HIT * restrict hit ;
   ALIGN *ap = 0 ;

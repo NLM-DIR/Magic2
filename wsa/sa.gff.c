@@ -123,9 +123,18 @@ void saGffBinaryParser (PP *pp)
 	  pp->knownIntrons = bigArrayMapRead (cp, GBX, READONLY, pp->h) ;
 	  long int nnI = bigArrayMax (pp->knownIntrons) ;
 	  fprintf (stderr, "saGffParser found %ld introns coordinates in file %s\n", nnI, cp) ;
+	  if (0)
+	    for (long int i = 0 ; i < nnI ; i++)
+	      {
+		GBX *gbx = bigArrp (pp->knownIntrons, i, GBX) ;
+		printf ("INTRON %s %d %d %s\n"
+			, dictName (pp->bbG.dict, gbx->chrom >> 1)
+			, gbx->a1, gbx->a2
+			, dictName (pp->geneDict, gbx->gene)
+		      ) ;
+	      }
 	}
     }
-
   if (pp->wiggle)
     { /* gene expression records */
       long int nnE = 0 ;
