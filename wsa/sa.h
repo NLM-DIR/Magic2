@@ -391,9 +391,9 @@ typedef struct geneBoxStruct {
   int a1, a2 ; 
   int gene ; /* index in pp->geneDict */
   int mrna ;
-  char flag ;
-  char strand ;
-  char friends ;
+  int flag ;
+  int strand ;
+  int friends ;
 } __attribute__((aligned(32))) GBX ;
 		  
 typedef struct geneStruct {

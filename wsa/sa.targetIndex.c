@@ -462,7 +462,7 @@ static long int saTargetIndexCreateDo (PP *pp)
       if (tc->targetClass == 'S')
 	continue ; 
       ntc++ ;
-      
+
       memset (&rc, 0, sizeof (RC)) ;
       rc.fileName1 = tc->fileName ;
       rc.format = tc->format ;
@@ -493,7 +493,7 @@ static long int saTargetIndexCreateDo (PP *pp)
 	    saGffParser (pp, tc) ;
 	}
     }
-  
+
   for (int nn = 0 ; nn < nMax ; nn++)
     {
       tc = arrayp (tArray, nn, TC) ;

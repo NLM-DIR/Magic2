@@ -2279,9 +2279,9 @@ int main (int argc, const char *argv[])
 
 	  if (p.wiggle) saWiggleCumulate (&p, &bb) ;
 	}
-      
-      laneToDo = atomic_fetch_add (arrp (p.runLanes, bb.run, atomic_int), 0) + 0 ;
-      laneDone = atomic_fetch_add (arrp (p.runLanesDone, bb.run, atomic_int), 1) + 1 ;
+
+      laneToDo = atomic_fetch_add_explicit (arrp (p.runLanes, bb.run, atomic_int), 0, memory_order_relaxed) + 0 ;
+      laneDone = atomic_fetch_add_explicit (arrp (p.runLanesDone, bb.run, atomic_int), 1, memory_order_relaxed) + 1 ;
 
       if (laneToDo == laneDone)
 	{

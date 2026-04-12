@@ -144,6 +144,8 @@ setenv SV     v91.81.18M.e4.apr7      # idem, edited findIntronMates to clip the
 setenv SVlast v91.81.18M.e4.apr7
 setenv SV     v92.81.18M.e4.apr7      # idem, us vp->x1 filter in find intron mates
 setenv SVlast v92.81.18M.e4.apr7
+setenv SV     v93.81.18M.e4.apr10     # idem, fixed gtf intron parsing
+setenv SVlast v93.81.18M.e4.apr10
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV

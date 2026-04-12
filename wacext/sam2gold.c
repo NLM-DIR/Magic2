@@ -84,6 +84,7 @@ typedef struct s2g_struct {
   int goldMethod ;
   const char *run ;
   const char *method ;
+  long int nPairs,  nAlignedPairs,  nCompatiblePairs ;
   long int nRawReads, nRawBases ;
   long int nMultiAli[12] ;
   int nIns[32] ;
@@ -498,6 +499,14 @@ static void s2gParseOneSamFile (S2G *s2g, const char *fNam, int method, int gold
 	{ /* new read */
 	  nAlignedReads++ ;
 	  isNewPerfectCandidate = TRUE ;
+	  if ((flag & 0x1) && ! (flag & 0x80))
+	    { /* paired reads and not read2 */
+	      s2g->nPairs++ ;
+	      if (flag & 0x2)
+		s2g->nCompatiblePairs++ ;
+	      if (! (flag & 000000001100))
+		s2g->nAlignedPairs++ ;
+	    }
 	  if (0) printf ("XXXX\t%s\n", seqBuf) ;
 	}
       if (dictFind (unalignedDict, seqBuf, &seq2))
@@ -617,6 +626,28 @@ static void s2gParseOneSamFile (S2G *s2g, const char *fNam, int method, int gold
       ACEOUT ao = aceOutCreate (s2g->outFileName, ".samStats", 0, h) ;
 
       nUnalignedReads = s2g->nRawReads - nAlignedReads ;
+
+       if (s2g->nPairs)
+	aceOutf (ao, "%s\t%s\tPairs\t%ld\n"
+		 , s2g->run, s2g->method
+		 , s2g->nPairs
+		 ) ;
+       if (s2g->nAlignedPairs)
+	aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\n"
+		 , s2g->run, s2g->method
+		 , s2g->nAlignedPairs
+		 ) ;
+       if (s2g->nCompatiblePairs)
+	aceOutf (ao, "%s\t%s\tnCompatible_pairs\t%ld\n"
+		 , s2g->run, s2g->method
+		 , s2g->nCompatiblePairs
+		 ) ;
+       if (s2g->nAlignedPairs)
+	aceOutf (ao, "%s\t%s\tNon_compatible_pairs\t%ld\n"
+		 , s2g->run, s2g->method
+		 , s2g->nAlignedPairs - s2g->nCompatiblePairs
+		 ) ;
+
       
       if (s2g->nRawReads)
 	aceOutf (ao, "%s\t%s\tnRawReads\t%ld\n"

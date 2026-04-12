@@ -401,7 +401,12 @@ long int saGffParser (PP *pp, TC *tc)
   Array mrnaExons = 0 ;
   KEYSET borders = 0 ;
   char strand = 0 ;
-  
+
+  /* debug introns creation
+   *  if (! bbG->dict) bbG->dict = dictHandleCreate (256, pp->h) ; 
+   * chromDict = bbG->dict ;
+   * dictAdd (bbG->dict, hprintf (h, "G.%s", "toto"), &chrom) ;
+   */
   if (! geneDict) geneDict = pp->geneDict = dictHandleCreate (1 << 15, pp->h) ;
   if (! mrnaDict) mrnaDict = pp->mrnaDict = dictHandleCreate (1 << 15, pp->h) ;
 
@@ -455,7 +460,10 @@ long int saGffParser (PP *pp, TC *tc)
       if (! cp || *cp == '#' || *cp == '%' || *cp == '/')
 	continue ;
       chrom = 0 ; a1 = a2 = 0 ;
-      
+
+      /* debug introns creation
+       *      dictAdd (bbG->dict, hprintf (h, "G.%s", cp), &chrom) ;
+       */
       if (! dictFind (bbG->dict, hprintf (h, "G.%s", cp), &chrom))
 	messcrash ("\nUnknown chromosome name %s, not matching the G targets, at line %d of file %s\n"
 		   , cp
@@ -564,7 +572,7 @@ long int saGffParser (PP *pp, TC *tc)
 	  up->gene = gene ;
 	  up->mrna = mrna ;
 	  up->strand = strand ;
-	  up->flag = 2 ;	  
+	  up->flag = 2 * type ;	  
 	  up->chrom = (chrom << 1) | strand ; 
 	  up->a1 = a1 ;
 	  up->a2 = a2 ;
@@ -580,13 +588,18 @@ long int saGffParser (PP *pp, TC *tc)
       for (up = arrp (mrnaExons, 0, GBX), ii = 0 ; ii < nnME ; ii++, up++)
 	if (up->mrna)  
 	  {
+	    GBX *vpLast = up ;
 	    int n = 0 ;
 	    for (vp = up + 1, jj = ii + 1 ; jj < nnME && vp->gene == up->gene && vp->mrna == up->mrna && vp->strand == up->strand ; vp++, jj++) 
 	      {
 		int chrom = up->chrom ;
-		int a1 = vp[-1].a2 + 1 ;
-		int a2 = vp[0].a1 - 1 ;
+		int a1 = vpLast->a2 + 1 ;
+		int a2 = vp->a1 - 1 ;
 		int da = a2 - a1 + 1 ;
+
+		if (vpLast->flag != 2) da = 0 ;
+		if (vp->flag == 2) vpLast = vp ;
+		else continue ;
 		if (da < 10)
 		  continue ;
 		if (0)
@@ -626,6 +639,17 @@ long int saGffParser (PP *pp, TC *tc)
 	  char *fNam = hprintf (h, "%s/knownIntrons.sortali", pp->indexName) ;
 	  bigArrayMapWrite (pp->knownIntrons, fNam) ;
 	  fprintf (stderr, "saGffParser exported %ld knownIntrons\n", bigArrayMax (pp->knownIntrons)) ;
+	  if (0) /* debug introns creation */
+	    for (long int i = 0 ; i < nnI ; i++)
+	      {
+		GBX *gbx = bigArrp (pp->knownIntrons, i, GBX) ;
+		printf ("INTRON %s %d %d %s\n"
+			, dictName (pp->bbG.dict, gbx->chrom >> 1)
+			, gbx->a1, gbx->a2
+			, dictName (pp->geneDict, gbx->gene)
+		      ) ;
+	      }
+
 	}
       ac_free (mrnaExons) ;
     }

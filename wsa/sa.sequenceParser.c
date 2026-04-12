@@ -614,7 +614,7 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 	bb->lane = atomic_fetch_add (rc ? &(rc->lane) : &lane, 1) + 1 ;
       */
 
-      bb->lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 1) + 1 ;
+      bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
 
       bb->cpuStats = arrayHandleCreate (128, CpuSTAT, bb->h) ;
       bb->rc.fileName1 = fileName1 ;
@@ -965,7 +965,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  bb->readerAgent = pp->agent ;
 	  bb->run = rc ? rc->run : 0 ;
 	  bb->start = timeNow () ;
-	  bb->lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 1) + 1 ;
+	  bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
 	  bb->cpuStats = arrayHandleCreate (128, CpuSTAT, bb->h) ;
 	  bb->rc.fileName1 = sraID ;
 	  /* copy the buffer */
@@ -1057,7 +1057,7 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       memset (bb, 0, sizeof (BB)) ;
       bb->readerAgent = pp->agent ;
       bb->start = timeNow () ;
-      bb->lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 1) + 1 ;
+      bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
       chan = pp->plChan ;
       namBufX = namBuf ;
     }
@@ -1296,7 +1296,7 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 	  nn = 0 ;
 	  bb->readerAgent = pp->agent ;
 	  bb->start = timeNow () ;
-	  bb->lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 1) + 1 ;
+	  bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
 	  bb->h = ac_new_handle () ;
 	  bb->txt1 = vtxtHandleCreate (bb->h) ;
 	  bb->txt2 = vtxtHandleCreate (bb->h) ;
