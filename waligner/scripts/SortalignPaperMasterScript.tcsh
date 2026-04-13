@@ -146,6 +146,8 @@ setenv SV     v92.81.18M.e4.apr7      # idem, us vp->x1 filter in find intron ma
 setenv SVlast v92.81.18M.e4.apr7
 setenv SV     v93.81.18M.e4.apr10     # idem, fixed gtf intron parsing
 setenv SVlast v93.81.18M.e4.apr10
+setenv SV     v94.81.18M.e4.apr12     # idem, fixed adaptors (100 ->256 min count) edited sa.sort.c using claude
+setenv SVlast v94.81.18M.e4.apr12
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV

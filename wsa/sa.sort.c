@@ -329,7 +329,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 /* #endif // USEGPU */
 
 /**************************************************************/
-
+static int saRadixSortSeedMatch (BigArray aa) ;
 int saSort (BigArray aa, int type)
 {
   long int N = bigArrayMax (aa) ;
@@ -367,6 +367,10 @@ int saSort (BigArray aa, int type)
 	return FALSE ;  /* i did not use the GPU */
       cmp = seedMatchOrder ;
       break ;
+    case 5:
+      if (s != 32)
+	messcrash ("Wrong call to saSort type 5") ;
+      break ;
     default:
       messcrash ("Wrong call to saSort type = %d > 4", type) ;
     }
@@ -390,12 +394,17 @@ int saSort (BigArray aa, int type)
       else /* GPU threshold not met: fall through to CPU sort below */
 #endif
 	{
-	  size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
-	  char *buf = aligned_alloc(16, alloc_size) ;
-	   if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
-	   memcpy (buf, cp, N * s) ;
-	   saSortDo (cp, N, s, buf, TRUE, cmp) ;
-	   free (buf) ;
+	  if (type == 5)  /* 20260412 to be tested for speed against case 4 */
+	    saRadixSortSeedMatch (aa) ;
+	  else
+	    {
+	      size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
+	      char *buf = aligned_alloc(16, alloc_size) ;
+	      if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
+	      memcpy (buf, cp, N * s) ;
+	      saSortDo (cp, N, s, buf, TRUE, cmp) ;
+	      free (buf) ;
+	    }
 	}
       
       
@@ -430,7 +439,7 @@ int saSort (BigArray aa, int type)
 
 static int saRadixSortSeedMatch (BigArray aa)
 {
-  long int N = bigArrayMax (aa) ;
+  long int N = aa ? bigArrayMax (aa) : 0 ;
   SEEDMATCH *src = bigArrp (aa, 0, SEEDMATCH) ;
   SEEDMATCH *dst ;
   long int   counts[2][RADIX_SIZE] ;

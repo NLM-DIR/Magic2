@@ -1912,7 +1912,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
   ALIGN *up, *up2 ;
   INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
-  alignCheckSize (bb, aa) ;
+  if (0) alignCheckSize (bb, aa) ;
   if (! jMax) return 0 ;
   if (0) return 0 ;
   if (jMax > 100)   return 0 ;
@@ -2248,8 +2248,8 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	}
     }
  done:
-  alignCheckSize (bb, aa) ;
-    ac_free (h) ;
+  if (0) alignCheckSize (bb, aa) ;
+  ac_free (h) ;
   return nMask ;
 } /* findIntronMates */
 

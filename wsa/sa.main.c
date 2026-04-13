@@ -27,6 +27,7 @@
 
 
 #include "sa.h"
+#include "sa.hardware_info.h"
 
 #ifdef __SSE2__
 #define VECTORIZED_MEM_CPY
@@ -1644,25 +1645,26 @@ int main (int argc, const char *argv[])
       isExecutableInPath ("numactl")   /* see w1/utils.c */
       )
     {
+      SA_HardwareInfo hInfo = saGetHardwareInfo () ;
       vTXT txt = vtxtHandleCreate (h) ;
       BOOL mtIsSet = FALSE ;
       int maxThreads = 0 ;
-      
-      int nodes = saBestNumactlNode (&maxThreads) ;
+
+      int bestNode = hInfo.best_node ;
 
       fprintf (stderr, "mxth0 = %d\n", maxThreads) ;
-      vtxtPrintf (txt, "/usr/bin/numactl  --cpunodebind=%d --membind=%d ", nodes, nodes) ;
+      vtxtPrintf (txt, "/usr/bin/numactl  --cpunodebind=%d --membind=%d ", bestNode, bestNode) ;
       for (int i = 0 ; i < argc ; i++)
 	{
 	  if (! strcmp (argv[i], "--max_threads"))
 	    mtIsSet = TRUE ;
 	  vtxtPrintf (txt, " %s " , argv[i]) ;
 	}
-      if (! mtIsSet && maxThreads > 0 && maxThreads <= 1024)  /* do not override user's choice */
-	vtxtPrintf (txt, " --max_threads %d " , maxThreads/2) ;
+      if (! mtIsSet && hInfo.max_threads > 0 && hInfo.max_threads <= 1024)  /* do not override user's choice */
+	vtxtPrintf (txt, " --max_threads %d " , hInfo.max_threads/2) ;
       fprintf (stderr, "mxth = %d\n", maxThreads) ;
 
-      vtxtPrintf (txt, " --numactl ") ;
+      vtxtPrintf (txt, " --numactl --num_cpus %d", hInfo.node_cpus) ;
 
       fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 
@@ -1938,7 +1940,12 @@ int main (int argc, const char *argv[])
     messcrash ("The source code assumes that long unsigned ints use 64 bits not %d, sorry", 8 * sizeof (long unsigned int)) ;
 
   /***************** amount or parallelization **************************/
-  int nCPU = get_number_of_cpus () ;
+  int nCPU = -1 ;
+  if (!  getCmdLineInt (&argc, argv, "--num_cpus", &(nCPU)))
+    {
+      SA_HardwareInfo hInfo = saGetHardwareInfo () ;
+      nCPU = hInfo.node_cpus ;
+    }
 
   /* defaults */
   nAgents = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;   number of aligner agents */
