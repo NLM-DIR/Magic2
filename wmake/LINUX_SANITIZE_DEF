@@ -16,9 +16,12 @@
 #################################################################
 
 NAME = OPTERON
+SANITIZE_FLAGS = -fsanitize=undefined -fsanitize=address \
+                 -fno-omit-frame-pointer -fno-optimize-sibling-calls
 
-COMPILER = gcc -g -Wall -DACEDB4  
-LINKER = g++ -g  
+
+COMPILER = gcc -g -Wall -DACEDB4  $(SANITIZE_FLAGS)
+LINKER = g++ -g  $(SANITIZE_FLAGS)
 
 LIBS = -lm 
 Xt_LIBS = -L/usr/X11R6/lib -lXaw -lXt -lXmu -lXext -lX11

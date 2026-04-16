@@ -28,6 +28,13 @@
 
 #include "sa.h"
 
+#ifdef __SSE2__
+#define VECTORIZED_MEM_CPY
+#include <emmintrin.h> // SSE2
+#include <immintrin.h>
+#endif /* __SSE2__ */
+
+
 static int NN = 1 ;
 
 static void showHitsDo (HIT *hit, long int iMax) ;
@@ -79,7 +86,7 @@ static void showAli (Array aligns)
 	{
 	  ALIGN *ali = arrp (aligns, ii, ALIGN) ;
 	  if (ali->score)
-	    printf (".. chain %d\tchainScore %d\tchainErr %d chainAli %d\tscore %d\tr=%u : %d:%d/%d\tchr=%u : %d:%d/%d\tnErr %d\t %d::p %d n %d\tdonor %d acc %d  a1-x1=%d\n"
+	    printf (".. chain %d\tchainScore %d\tchainErr %d chainAli %d\tscore %d\tr=%u : %d:%d/%d\tchr=%u : %d:%d/%d\tnErr %d\t %d::p %d n %d\tDA %d:%d\tMates %d:%d  a1-x1=%d\n"
 		    , ali->chain, ali->chainScore
 		    , ali->chainErr, ali->chainAli
 		    , ali->score
@@ -88,6 +95,7 @@ static void showAli (Array aligns)
 		    , ali->nErr
 		    , ali->id, ali->previous, ali->next
 		    , ali->donor, ali->acceptor
+		    , ali->mateA1, ali->mateA2
 		    , ali->a1 - ali->x1
 		    ) ;
 	}
@@ -95,6 +103,20 @@ static void showAli (Array aligns)
     }
   return ;
 } /* showAli */
+
+/**************************************************************/
+/* a0 = a1 - x1 is the putative position of base 1 of the read 
+ * It also works for the negative strand (a1 < 0, x1 > 0).
+ */
+static int seedMatchOrder (const void *va, const void *vb)
+{
+  const SEEDMATCH *up = va ;
+  const SEEDMATCH *vp = vb ;
+  int n ;
+
+  n = ((up->read > vp->read) - (up->read < vp->read)) ; if (n) return n ;
+  return n ;
+} /* hitReadPosOrder */
 
 /**************************************************************/
 /**************************************************************/
@@ -126,11 +148,10 @@ static void npCounter (const void *vp)
 
 static void loadRegulator (const void *vp)
 {
-  BB bb ;
+  BB bb = {0} ;
   const PP *pp = vp ;
   int nn = 0, nMax = pp->nBlocks ;
   
-  memset (&bb, 0, sizeof (BB)) ;
   while (channelGet (pp->plChan, &bb, BB))
     {
       nn++ ;
@@ -196,97 +217,7 @@ void* f(void* arg) {
 
 /**************************************************************/
 
-#ifndef YANN
-static void codeWords (const void *vp)
-{
-  BB bb ;
-  const PP *pp = vp ;
-  char tBuf[25] ;
-  long int nnn = 0 ;
-  clock_t  t1, t2 ;
-  
-
-  memset (&bb, 0, sizeof (BB)) ;
-  while (channelGet (pp->lcChan, &bb, BB))
-    {
-      long int nn= 0 ;
-
-      if (pp->debug) printf ("+++ %s: Start code words\n", timeBufShowNow (tBuf)) ;
-
-      t1 = clock () ;
-      saSequenceParseGzBuffer (pp, &bb) ;
-      if (pp->deduplicate)
-	saSequenceDeduplicate (pp, &bb) ;
-      saCodeSequenceSeeds (pp, &bb, pp->iStep, FALSE) ;
-      t2 = clock () ;
-
-      for (int i = 0 ; i < NN ; i++)
-	nn += bigArrayMax (bb.cwsN[i]) ;
-      nnn += nn ;
-      saCpuStatRegister ("3.CodeWords", pp->agent, bb.cpuStats, t1, t2, nn) ;
-      if (pp->debug) printf ("--- %s: Stop code words %ld\n", timeBufShowNow (tBuf), bigArrayMax (bb.cwsN[0])) ;
-
-      channelPut (pp->csChan, &bb, BB) ;
-    }
-
-  int n = channelCount (pp->plChan) ;
-  if (pp->debug) printf ("..... close csChan at %d,  coded %ld words\n", n, nnn) ;
-  channelCloseSource (pp->csChan) ;
-
-  return ;
-} /* codeWords */
-#endif
-
-/**************************************************************/
-/**************************************************************/
-
-#ifndef YANN
-static void sortWords (const void *vp)
-{
-  BB bb ;
-  const PP *pp = vp ;
-  char tBuf[25] ;
-  long int nnn = 0 ;
-  clock_t  t1, t2 ;
-  int k ;
-  
-  memset (&bb, 0, sizeof (BB)) ;
-  while ((k = channelGet (pp->csChan, &bb, BB)))
-    {
-      if (k < 0)
-	sleep (1) ;
-      else
-	{
-	  long int nn = 0 ;
-	  if (pp->debug) printf ("+++ %s: Start sort words\n", timeBufShowNow (tBuf)) ;
-	  
-	  t1 = clock () ;
-	  for (int k = 0 ; k < NN ; k++)
-	    if (bb.cwsN[k])
-	      {
-		bb.gpu += saSort (bb.cwsN[k], 1) ; /* cwOrder */
-		nn += bigArrayMax (bb.cwsN[k]) ;
-	      }
-	  t2 = clock () ;
-	
-	  saCpuStatRegister ("4.SortWords", pp->agent, bb.cpuStats, t1, t2, nn) ;
-	  if (pp->debug) printf ("--- %s: Stop sort words %ld\n", timeBufShowNow (tBuf), bigArrayMax (bb.cwsN[0])) ;
-	  channelPut (pp->smChan, &bb, BB) ;
-	}
-    }
-
-  int n = channelCount (pp->plChan) ;
-  if (pp->debug) printf ("..... close smChan at %d,  sorted %ld words\n", n, nnn) ;
-  
-  channelCloseSource (pp->smChan) ;
-
-  return ;
-} /* sortWords */
-#endif
-
-/**************************************************************/
-
-static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
+static long int  matchSeedsOld (const PP *pp, BB *bbG, BB *bb)
 {
   BOOL useIntronSeeds = ! pp->ignoreIntronSeeds ;
   BigArray hitsArray = bigArrayHandleCreate(64, BigArray, bb->h);
@@ -320,19 +251,6 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
       const CW *restrict cwMax = cw + iMax ;
       HIT *restrict hit;
 
-#ifdef JUNK      
-      if (kk == 6)
-	{
-	  const CW *restrict zw = bigArrp(bb->cwsN[kk], 0, CW) ;
-	  for (long int i = 0 ; i < bigArrayMax (bb->cwsN[kk]) ; i++, zw++)
-		 fprintf (stderr, "SEED\t%u\t%u\t%u\t%u\n"
-			  , kk
-			  , zw->nam
-			  , zw->seed
-			  , zw->pos
-			  ) ;
-	}
-#endif      
 
       while  (i < iMax && j < jMax)
 	{
@@ -417,19 +335,6 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
 		      x1 = rw->pos ;
 		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
 		      readUp = 0 ;
-#ifdef JUNK      		    
-		      if (1)
-			{
-			  fprintf (stderr, "MATCH\t%d\t%d\t%d\t%d\t%d\t%d\n"
-				   , kk
-				   , rw->nam
-				   , rw->seed
-				   , rw->pos
-				   , cw->nam
-				   , cw->pos
-				   ) ;
-			}
-#endif		      
 		      if (! chromUp)  /* plus strand of the genome */
 			{
 			  hit->a1 =
@@ -599,19 +504,23 @@ static long int  matchHitsDo (const PP *pp, BB *bbG, BB *bb)
   bb->hits = hitsArray ;
 
   if (pp->debug)
-    fprintf (stderr, "..MatchHitsDo found %ld matches\n", kkk) ;
+    fprintf (stderr, "..MatchSeedsOld found %ld matches\n", kkk) ;
 
   return nn ;
-}  /* matchHitsDo */
+}  /* matchSeedsOld */
 
 /**************************************************************/
 /**************************************************************/
+/* join the readSeeds and the targetSeeds to create the matchedSeeds
+ * this code is duplicated on the GPU
+ */
 
-static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
+static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
 {
-  BigArray sms = bigArrayHandleCreate(pp->BMAX * (1 << 20)/pp->tStep, SEEDMATCH, bb->h);
+  BigArray sms = 0 ;
   long int nSm = 0 ;
 
+  sms = bb->sms = bigArrayHandleCreate(pp->BMAX * (1 << 20)/pp->tStep, SEEDMATCH, bb->h) ;
   for (int kk = 0; kk < NN ; kk++)
     {
       long int i = 0, iMax = bigArrayMax (bbG->cwsN[kk]);
@@ -627,6 +536,26 @@ static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
       const CW *restrict cw1;
       const CW *restrict cwMax = cw + iMax ;
 
+#ifdef JUNK
+      unsigned int seed = rw->seed ;
+      BOOL absent = TRUE ;
+      for (i = 0 ; i < iMax ; i++, cw++)
+	if (cw->seed == seed)
+	  {
+	    fprintf (stderr, "In kk=%d seed %u found at line %ld cwNam %d %d\n", kk, seed, i, cw->nam, cw->pos) ;
+	    invokeDebugger() ;
+	    absent = FALSE ;
+	  }
+
+      if (absent)
+	{
+	  fprintf (stderr, "In kk=%d seed %u not found iMax=%ld jMax =%ld\n", kk, seed, iMax, jMax) ;
+	  continue ;
+	}
+      i = 0 ;
+      cw = bigArrp(bbG->cwsN[kk], 0, CW) ;
+#endif
+      
       while  (i < iMax && j < jMax)
 	{
 	  if (0 && kk == 1 && rw->seed == 185667857)
@@ -688,12 +617,27 @@ static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
 		    break ;
 		  /* create a match record */
 		  SEEDMATCH *smp = bigArrayp (sms, nSm++, SEEDMATCH) ;
+#ifdef VECTORIZED_MEM_CPY
+		  
+		  __m128i u = _mm_load_si128((__m128i*)rw) ;
+		  __m128i v = _mm_load_si128((__m128i*)cw1) ;
+		  
+		  __m128i mask = _mm_set_epi32(~0, ~0, ~0, 0) ;
+		  
+		  _mm_store_si128((__m128i*)smp,   _mm_and_si128(u, mask)) ;
+		  _mm_store_si128((__m128i*)smp+1, _mm_and_si128(v, mask)) ;  
+
+#else		  
+		  smp->readSeed = smp->targetSeed = 0 ;
+		  
 		  smp->read = rw->nam ;
 		  smp->x1 = rw->pos ;
 		  smp->readFlags = rw->intron ;
-		  smp->read = cw1->nam ;
-		  smp->x1 = cw1->pos ;
+		  
+		  smp->target = cw1->nam ;
+		  smp->a1 = cw1->pos ;
 		  smp->targetFlags = cw1->intron ;
+#endif
 		}
 	      j++ ; rw++ ;
 	    }
@@ -702,376 +646,218 @@ static long int  matchHitsDo2 (const PP *pp, BB *bbG, BB *bb)
     }
 
   if (pp->debug)
-    fprintf (stderr, "..MatchHitsDo2 found %ld seed-matches\n", nSm) ;
+    fprintf (stderr, "..MatchSeedsDo2 found %ld seed-matches\n", nSm) ;
 
   return nSm ;
-}  /* matchHitsDo2 */
+}  /* matchSeeds */
 
 /**************************************************************/
-/**************************************************************/
 
-static long int  matchHitsDo3 (const PP *pp, BB *bbG, BB *bb)
+long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 {
   BOOL debug = FALSE ;
   BOOL useIntronSeeds = ! pp->ignoreIntronSeeds ;
-  BigArray hitsArray = bigArrayHandleCreate(64, BigArray, bb->h);
-  long int nn = 0, k = 0, kkk = 0 ;
-  int nHA = 0, hMax = 100000 ;
-  const long unsigned int mask26 = (1L << 26) - 1 ;
-  BigArray hits = bigArrayHandleCreate(hMax, HIT, bb->h);
-  bigArray (hitsArray, nHA++, BigArray) = hits ;
+  BigArray hits = 0 ;
   BigArray intronHits = 0 ;
+  long int nn = 0, k = 0, kk = 0 ;
+
+  const long unsigned int mask26 = (1L << 26) - 1 ;
   const int seedLength = pp->seedLength ;
   const int intronBonus = 1 ;
   int absoluteMax = 0x1 << NTARGETREPEATBITS ;
   int absoluteX1Max = 0x1 << ( 31 - 3 - NTARGETREPEATBITS) ;
   int maxTargetRepeats = pp->maxTargetRepeats  ;
   long int nIntronHits = 0 ;
-    
-  intronHits = bb->intronHits = bigArrayHandleCreate (10000, INTRONHIT, bb->h) ;
-  for (int kk = 0; kk < NN ; kk++)
+  long int kMax = bigArrayMax (bb->sms) ;
+  SEEDMATCH *smp = bigArrp (bb->sms, kk0, SEEDMATCH) ;
+  unsigned int pair = smp->read >> 2 ;
+
+  hits = bb->hits =  bigArrayReCreate(bb->hits, 256, HIT);
+  intronHits = bb->intronHits = bigArrayReCreate (bb->intronHits, 128, INTRONHIT) ;
+  
+  for (kk = kk0 ; kk < kMax && (smp->read >> 2) == pair ; kk++, smp++)
     {
-      long int i = 0, iMax = bigArrayMax (bbG->cwsN[kk]);
-      long int j = 0, jMax = bigArrayMax (bb->cwsN[kk]);
-
-
-      if (!iMax || !jMax)
+      long int a1, x1 ;
+      HIT *hit = 0 ;
+      
+      /* success, non intron case */
+      if (((smp->targetFlags >> 31) & 0x1) == 0x0)
+	{
+	  BOOL readUp = smp->read & 0x1 ;
+	  BOOL chromUp = smp->target & 0x1 ;
+	  int nTargetRepeats = smp->targetFlags ;
+	  
+	  if (1 && nTargetRepeats > maxTargetRepeats)
+			continue ;
+	  /* report at most absoluteMax (i.e. 31) */
+	  if (nTargetRepeats >= absoluteMax)
+	    nTargetRepeats = absoluteMax - 1 ; 
+	  if (0 && useIntronSeeds) continue ;
+	  nn++ ;
+	  hit = bigArrayp (hits, k++, HIT) ;
+	  hit->read = smp->read >> 1 ;
+	  a1 = smp->a1 ;
+	  x1 = smp->x1 ;
+	  chromUp ^= readUp ; /* we want to be on strand plus of the read */
+	  readUp = 0 ;
+	  if (! chromUp)  /* plus strand of the genome */
+	    {
+	      hit->a1 =
+		a1            /* position of the first base of the seed */
+		- x1          /* locate the virtual position of base 0 of the read */
+		+ 1 ;         /* avoid zero */
+	      hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
+	      hit->chrom = smp->target & 0xfffffffe ; /* to select plus strand, kill the last bit */
+	      if (hit->x1 > absoluteX1Max)
+		messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+	      hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
+	    }
+	  else    /* minus strand of the genome */
+	    {
+	      hit->a1 =
+		a1            /* position of the first base of the seed */
+		+ (seedLength - 1)  /* go the last base of the seed */
+		+ x1   /* locate the virtual position of base 0 of the read */
+		+ 1 ;  /* avoid zero */
+	      hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
+	      hit->chrom = smp->target | 0x1 ; /* to select minus strand, set the last bit */
+	      if (hit->x1 > absoluteX1Max)
+		messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+	      hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
+	    }
+	}
+      else  if (useIntronSeeds)  /* INTRON */
+	{
+	  BOOL readUp = smp->read & 0x1 ;
+	  BOOL chromUp = smp->target & 0x1 ; 
+	  INTRONHIT *intronHit = 0 ;
+	  unsigned int z = smp->targetFlags ;
+	  unsigned int isIntronDown = (z >> 28) & 0x4 ;
+	  int da1 =  z & 0xf ; /* nb of letters in first exon : 4....11 */
+	  int da  =  ((z >> 4) & mask26) ;  /* intron length < 32Mb */
+	  
+	  chromUp ^= readUp ; /* we want to be on strand plus of the read */
+	  readUp = 0 ;
+	  hit = 0 ;
+	  
+	  if (! chromUp)  /* plus strand on the read and on the genome */
+	    {
+	      a1 = smp->a1 ;       /* first base of intron in the genome, in bio coordinates */
+	      x1 = smp->x1 + da1 ;  /* matching base on the read */
+	      
+	      /* Create a hit to the last two bases of the donor exon (x1-2 / a1-2) */
+	      nn++ ;
+	      hit = bigArrayp (hits, k++, HIT) ;
+	      hit->read = smp->read >> 1 ;
+	      hit->chrom = smp->target & 0xfffffffe ; /* to select plus strand, kill the last bit */
+	      if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
+	      hit->x1 =
+		((x1 - 2) << 3)   /* reserve 3 bits for the intron seeds */
+		| isIntronDown    /* bit 3 gives the intron strand */
+		| 0x1             /* donor site */
+		;
+	      hit->a1 =
+		(a1 - 2)            /* position of the first base of the seed */
+		- (x1 - 2)          /* locate the virtual position of base 0 of the read */
+		- intronBonus       /* prefer intron match to exon match */
+		+ 1 ;               /* avoid zero */
+	      if (hit->x1 > absoluteX1Max)
+		messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+	      hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+	      
+	      intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
+	      intronHit->chrom =  smp->target & 0xfffffffe ; /* to select plus strand, kill the last bit */
+	      intronHit->read = smp->read >> 1 ;
+	      intronHit->a1 = a1 - 1 ;  /* last base of first exon */
+	      intronHit->a2 = a1 + da ; /* first base of second exon */
+	      intronHit->x1 = x1 - 1 ;  /* last base of first exon */
+	      intronHit->x2 = x1 ;      /* first base of second exon */
+	      /* Create a hit to the first two bases of the acceptor exon (x1/ a1 + da) */
+	      nn++ ;
+	      hit = bigArrayp (hits, k++, HIT) ;
+	      hit->read = smp->read >> 1 ;
+	      hit->chrom = smp->target & 0xfffffffe ; /* to select plus strand, kill the last bit */
+	      if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
+	      hit->x1 =
+		((x1) << 3)   /* reserve 3 bits for the intron seeds */
+		| isIntronDown    /* bit 3 gives the intron strand */
+		| 0x2             /* acceptor site */
+		;
+	      hit->a1 =
+		(a1 + da)            /* position of the first base of the seed */
+		- (x1)          /* locate the virtual position of base 0 of the read */
+		- intronBonus       /* prefer intron match to exon match */
+		+ 1 ;               /* avoid zero */
+	      if (hit->x1 > absoluteX1Max)
+		messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
+	      hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+	    }
+	  
+	  else  /* plus strand on the read and minus strand  on the genome */
+	    {
+	      a1 = smp->a1 ;       /* first base of intron in the genome, in bio coordinates */
+	      x1 = smp->x1 + (seedLength - da1) - 1 ;  /* matching base on the read */
+	      
+	      intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
+	      intronHit->chrom =  smp->target | 0x1 ; /* to select plus strand, kill the last bit */
+	      intronHit->read = smp->read >> 1 ;
+	      intronHit->x1 = x1 ;
+	      intronHit->x2 = x1 + 1 ;
+	      intronHit->a2 = a1 - 1 ; /* first base of intron */
+	      intronHit->a1 = a1 + da ; /* last base of intron */
+	      
+	      /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
+	      nn++ ;
+	      hit = bigArrayp (hits, k++, HIT) ;
+	      hit->read = smp->read >> 1 ;
+	      hit->chrom = smp->target | 0x1 ; /* to select minus strand, set the last bit */
+	      if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
+	      hit->x1 =
+		((x1 + 1) << 3)   /* reserve 3 bits for the intron seeds */
+		| isIntronDown    /* bit 3 gives the intron strand */
+		| 0x2             /* acceptor site */
+		;
+	      hit->a1 =
+		(a1 - 1)       /* position of the first base of the seed */
+		+ (x1 + 1)          /* locate the virtual position of base 0 of the read */
+		- intronBonus       /* prefer intron match to exon match */
+		+ 1 ;               /* avoid zero */
+	      hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+			  
+	      /* Create a hit to the last two bases of the donor exon (x1-1,x1/ a1 + da+1,a1+da) */
+	      nn++ ;
+	      hit = bigArrayp (hits, k++, HIT) ;
+	      hit->read = smp->read >> 1 ;
+	      hit->chrom = smp->target | 0x1 ; /* to select minus strand, set the last bit */
+	      if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
+	      hit->x1 =
+		((x1 - 1) << 3)   /* reserve 3 bits for the intron seeds */
+		| isIntronDown    /* bit 3 gives the intron strand */
+		| 0x1             /* donor site */
+		;
+	      hit->a1 =
+		(a1 + da + 1)            /* position of the first base of the seed */
+		+ (x1 - 1)          /* locate the virtual position of base 0 of the read */
+		- intronBonus       /* prefer intron match to exon match */
+		+ 1 ;               /* avoid zero */
+	      hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
+	    }
+	}
+      else
 	continue ;
       
-      unsigned int mask = step1 - 1 ;
-      const CW *restrict cw = bigArrp(bbG->cwsN[kk], 0, CW) ;
-      const CW *restrict rw = bigArrp(bb->cwsN[kk], 0, CW) ;
-      const CW *restrict cw1;
-      const CW *restrict cwMax = cw + iMax ;
-      HIT *restrict hit;
-
-#ifdef JUNK      
-      if (kk == 6)
-	{
-	  const CW *restrict zw = bigArrp(bb->cwsN[kk], 0, CW) ;
-	  for (long int i = 0 ; i < bigArrayMax (bb->cwsN[kk]) ; i++, zw++)
-		 fprintf (stderr, "SEED\t%u\t%u\t%u\t%u\n"
-			  , kk
-			  , zw->nam
-			  , zw->seed
-			  , zw->pos
-			  ) ;
-	}
-#endif      
-
-      while  (i < iMax && j < jMax)
-	{
-	  if (0 && kk == 1 && rw->seed == 185667857)
-	    printf("(rw->seed == 185667857)\n") ;
-	  if ((i & mask) == 0)
-	    {
-	      if (rw->seed <= (unsigned int) cw->seed)
-		{
-		  cw++ ;
-		  i++ ;
-		  bb->skips0++;
-		  continue;
-		}
-	      else if (rw->seed <= (unsigned int) cw->pos)
-		{
-		  cw += step1 ;
-		  i += step1 ;
-		  bb->skips1++;
-		  continue;
-		}
-	      else if (rw->seed <= (unsigned int) cw->nam)
-		{
-		  cw += step2 ;
-		  i += step2 ;
-		  bb->skips2++;
-		  continue;
-		}
-	      else if (rw->seed <= (unsigned int) cw->intron)
-		{
-		  cw += step3 ;
-		  i += step3 ;
-		  bb->skips3++;
-		  continue;
-		}
-	      else
-		{
-		  cw += step4 ;
-		  i += step4 ;
-		  bb->skips4++;
-		  continue;
-		}
-	    }
-	  if (cw->seed < rw->seed)
-	    /* { int di = ((i & 0xf) == 0 && (cw+16)->seed < rw->seed ? 16 : 1) ; i += di ; cw += di ; bb->skipsNotFound++ ;  } */
- 	    { i++; cw++; bb->skipsNotFound++ ; } 
-	  else if (cw->seed > rw->seed)
-	    /* { int dj = ((j & 0xf) == 0 && (rw+16)->seed < cw->seed ? 16 : 1) ; j += dj ; rw += dj ; } */
-	    { j++ ; rw++ ; }
-	  else
-	    {
-	      long int a1, x1, i1 = i ;
-	      bb->skipsFound++ ;
-	      int nTargetRepeats = cw->intron ;
-	      
-	      if (0 &&   /* avoid, this kills the intron seeds */
-		  nTargetRepeats > maxTargetRepeats)
-		{ j++ ; rw++ ; continue ; }
-	      if (nTargetRepeats >= absoluteMax)
-		nTargetRepeats = absoluteMax - 1 ; /* we will report absoluteMax (i.e. 31) even is value is higher */
-
-	      for (cw1 = cw ; cw1 < cwMax ; i1++, cw1++)
-		{
-		  if ((i1 & mask) == 0)
-		    continue ;
-		  if (cw1->seed != rw->seed)
-		    break ;
-		  /* success, non intron case */
-		  if (((cw1->intron >> 31) & 0x1) == 0x0)
-		    {
-		      BOOL readUp = rw->nam & 0x1 ;
-		      BOOL chromUp = cw1->nam & 0x1 ;
-		      int nTargetRepeats = cw1->intron ;
-		      
-		      if (1 && nTargetRepeats > maxTargetRepeats)
-			continue ; 
-		      if (0 && useIntronSeeds) continue ;
-		      nn++ ;
-		      hit = bigArrayp (hits, k++, HIT) ;
-		      hit->read = rw->nam >> 1 ;
-		      a1 = cw1->pos ;
-		      x1 = rw->pos ;
-		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
-		      readUp = 0 ;
-#ifdef JUNK      		    
-		      if (1)
-			{
-			  fprintf (stderr, "MATCH\t%d\t%d\t%d\t%d\t%d\t%d\n"
-				   , kk
-				   , rw->nam
-				   , rw->seed
-				   , rw->pos
-				   , cw->nam
-				   , cw->pos
-				   ) ;
-			}
-#endif		      
-		      if (! chromUp)  /* plus strand of the genome */
-			{
-			  hit->a1 =
-			    a1            /* position of the first base of the seed */
-			    - x1          /* locate the virtual position of base 0 of the read */
-			    + 1 ;         /* avoid zero */
-			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
-			}
-		      else    /* minus strand of the genome */
-			{
-			  hit->a1 =
-			    a1            /* position of the first base of the seed */
-			    + (seedLength - 1)  /* go the last base of the seed */
-			    + x1   /* locate the virtual position of base 0 of the read */
-			    + 1 ;  /* avoid zero */
-			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
-			}
-		    }
-		  else  if (useIntronSeeds)  /* INTRON */
-		    {
-		      BOOL readUp = rw->nam & 0x1 ;
-		      BOOL chromUp = cw1->nam & 0x1 ; 
-		      INTRONHIT *intronHit = 0 ;
-		      unsigned int z = cw1->intron ;
-		      unsigned int isIntronDown = (z >> 28) & 0x4 ;
-		      int da1 =  z & 0xf ; /* nb of letters in first exon : 4....11 */
-		      int da  =  ((z >> 4) & mask26) ;  /* intron length < 32Mb */
-
-		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
-		      readUp = 0 ;
-		      hit = 0 ;
-		      
-		      if (! chromUp)  /* plus strand on the read and on the genome */
-			{
-			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
-		          x1 = rw->pos + da1 ;  /* matching base on the read */
-			  
-			  /* Create a hit to the last two bases of the donor exon (x1-2 / a1-2) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 - 2) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x1             /* donor site */
-			    ;
-			  hit->a1 =
-			    (a1 - 2)            /* position of the first base of the seed */
-			    - (x1 - 2)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-
-			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
-			  intronHit->chrom =  cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->a1 = a1 - 1 ;  /* last base of first exon */
-			  intronHit->a2 = a1 + da ; /* first base of second exon */
-			  intronHit->x1 = x1 - 1 ;  /* last base of first exon */
-			  intronHit->x2 = x1 ;      /* first base of second exon */
-			  /* Create a hit to the first two bases of the acceptor exon (x1/ a1 + da) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x2             /* acceptor site */
-			    ;
-			  hit->a1 =
-			    (a1 + da)            /* position of the first base of the seed */
-			    - (x1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			}
-
-		     else  /* plus strand on the read and minus strand  on the genome */
-			{
-			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
-		          x1 = rw->pos + (seedLength - da1) - 1 ;  /* matching base on the read */
-			  
-			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
-			  intronHit->chrom =  cw1->nam | 0x1 ; /* to select plus strand, kill the last bit */
-			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->x1 = x1 ;
-			  intronHit->x2 = x1 + 1 ;
-			  intronHit->a1 = a1 - 1 ; /* first base of intron */
-			  intronHit->a2 = a1 + da ; /* last base of intron */
-			  
-			  /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 + 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x2             /* acceptor site */
-			    ;
-			  hit->a1 =
-			    (a1 - 1)       /* position of the first base of the seed */
-			    + (x1 + 1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			  
-			  /* Create a hit to the last two bases of the donor exon (x1-1,x1/ a1 + da+1,a1+da) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 - 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x1             /* donor site */
-			    ;
-			  hit->a1 =
-			    (a1 + da + 1)            /* position of the first base of the seed */
-			    + (x1 - 1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			}
-		    }
-		  else
-		    continue ;
-		  
-		  hit->chrom ^= (hit->read & 0x1) ; /* flip chrom for the second read of a pair */
-		  if (0 && rw->seed == 168430082)
-		    printf("(rw->seed == 168430082)\n") ;
-		
-		  if (k >= hMax)
-		    {
-		      bigArrayMax (hits) = k  ;
-		      hits = bigArrayHandleCreate(hMax, HIT, bb->h);
-		      bigArray (hitsArray, nHA++, BigArray) = hits ;
-		      kkk += k ;
-		      k = 0 ;
-		    }
-		}
-	      j++ ; rw++ ;
-	    }
-	}
-      bigArrayDestroy (bb->cwsN[kk]) ; /* the read words are no longer needed */
-      bigArrayMax (hits) = k ;
-      kkk += k ;
+      if (hit)
+	hit->chrom ^= (hit->read & 0x1) ; /* flip chrom for the second read of a pair */
     }
-  bb->hits = hitsArray ;
 
+  if (k)
+    saSort (bb->hits, 3) ;
   if (debug)
-    fprintf (stderr, "..MatchHitsDo found %ld matches\n", kkk) ;
+    fprintf (stderr, "..MatchSeedsDo found %ld matches for pair %u\n", k, pair) ;
 
-  return nn ;
-}  /* matchHitsDo3 */
+  return kk - kk0 ; /* number of records consumed */
+}  /* saGetPairHits */
 
-/**************************************************************/
-/**************************************************************/
-
-#ifndef YANN
-static void matchHits (const void *vp)
-{
-  const PP *pp = vp ;
-  BB bb ;
-  BB bbG = pp->bbG;
-  char tBuf[25] ;
-  long int nnn = 0 ;
-  
-  clock_t  t1, t2 ;
-	    
-  memset (&bb, 0, sizeof (BB)) ;
-  /* grab and match a block of reads */
-  while (channelGet (pp->smChan, &bb, BB))
-    {
-      if (bb.length)
-	{
-	  if (pp->debug) printf ("+++ %s: Start match %ld bases against %ld target bases\n", timeBufShowNow (tBuf), bb.length, bbG.length) ;
-
-
-	  t1 = clock () ;
-	  long int nn = matchHitsDo (pp, &bbG, &bb) ;
-	  if (pp->debug) printf ("--- %s: Stop match hits constructed %ld arrays\n", timeBufShowNow (tBuf), bigArrayMax (bb.hits)) ;
-	  t2 = clock () ;
-
-	  nnn += nn ;
-	  saCpuStatRegister ("5.MatchHits", pp->agent, bb.cpuStats, t1, t2, nn) ;
-	}
-      channelPut (pp->moChan, &bb, BB) ;
-    }
-
-  int n = channelCount (pp->plChan) ;
-  if (pp->debug) printf ("..... close moChan at %d,  found %ld hits\n", n, nnn) ;
-  channelCloseSource (pp->moChan) ;
-
-  return ;
-} /* matchHits */
-#endif
-
-/**************************************************************/
 /**************************************************************/
 /**************************************************************/
 
@@ -1116,51 +902,6 @@ static void sortHitsFuse (const PP *pp, BB *bb)
     }
   return ;
 } /* sortHitsFuse */
-
-/**************************************************************/
-/* sort the hits */
-#ifndef YANN
-static void sortHits (const void *vp)
-{
-  BB bb ;
-  const PP *pp = vp ;
-  char tBuf[25] ;
-  long int nnn = 0 ;
-  clock_t  t1, t2 ;
-
-  memset (&bb, 0, sizeof (BB)) ;
-  while (channelGet (pp->moChan, &bb, BB))
-    {
-      if (pp->align && bb.hits)
-	{
-	  t1 = clock () ;
-	  sortHitsFuse (pp, &bb) ;
-	  if (bb.hits)
-	    {
-	      bb.gpu += saSort (bb.hits, 3) ; /* hitPairOrder */
-	      t2 = clock () ;
-	      
-	      long int nn = bigArrayMax (bb.hits) ;
-	      nnn += nn ;
-	      saCpuStatRegister ("6.SortHits", pp->agent, bb.cpuStats, t1, t2, nn) ;
-	      if (pp->debug) printf ("--- %s: Stop sort hits %ld\n", timeBufShowNow (tBuf), bigArrayMax (bb.hits)) ;
-	    }
-	}
-      channelPut (pp->oaChan, &bb, BB) ;
-    }
-
-  if (1)
-    {
-      memset (&bb, 0, sizeof (BB)) ;
-      bb.isGenome = TRUE ;
-      channelPut (pp->doneChan, &bb, BB) ; /* destroy bbG.cws, all Matches are already computed */ 
-    }
-  channelCloseSource (pp->oaChan) ;
-  channelCloseSource (pp->doneChan) ;
-  
-  return ;
-} /* sortHits */
-#endif
 
 /**************************************************************/
 /**************************************************************/
@@ -1339,7 +1080,7 @@ static void exportDo (const PP *pp, BB *bb)
 	  aceOutf (ao, "%s/%s%s", run, dictName (dict, read >> 1), (pairedEnd ? ((read & 0x1 )? "<" : ">") : "")) ; 
 	  aceOutf (ao, "\t%d", ap->chainScore) ;
 	  aceOutf (ao, "\t%d", 1) ; /* ap->multiplicity */
-	  aceOutf (ao, "\t%d", ap->readLength) ;
+	  aceOutf (ao, "\t%d", ap->rightClip - ap->leftClip) ;
 	  aceOutf (ao, "\t%d\t%d\t%d", ap->chainAli, x1, x2) ;
 	  
 	  aceOutf (ao, "\t%c\t-", ap->targetClass) ;
@@ -1367,7 +1108,7 @@ static void exportDo (const PP *pp, BB *bb)
 
 static void export (const void *vp)
 {
-  BB bb ;
+  BB bb = {0} ;
   const PP *pp = vp ;
   clock_t  t1, t2, dt = 50 * CLOCKS_PER_SEC ;
   
@@ -1384,7 +1125,6 @@ static void export (const void *vp)
   memset (aos, 0, sizeof (aos)) ;
   memset (aoes, 0, sizeof (aoes)) ;
 
-  memset (&bb, 0, sizeof (BB)) ;
   if (pp->sam || pp->bam)
     {
       for (int run = 1 ; run <= runMax ; run++)
@@ -1394,17 +1134,18 @@ static void export (const void *vp)
 	  aoes[bb.run] = saSamCreateFile (pp, &bb, TRUE, pp->bamHandle) ;
 	}
     }
-
-  memset (&bb, 0, sizeof (BB)) ;
+  bb = (BB) {0} ;
   while (channelGet (pp->aeChan, &bb, BB))
     {
       t1 = clock () ;
       if (bb.aligns && bigArrayMax (bb.aligns))
 	{
-	  if (pp->sam || pp->bam || pp->hitsFormat)
+	  if (pp->sam || pp->bam || pp->hitsFormat || pp->tabular)
 	    bigArraySort (bb.aligns, saAlignOrder) ;
 	  if (pp->hitsFormat)
 	    exportDo (pp, &bb) ;
+	  if (pp->tabular)
+	    saExportTabular (pp, &bb) ;
 	  if (pp->sam || pp->bam)
 	    {
 	      ACEOUT ao = aos[bb.run] ;
@@ -1440,18 +1181,17 @@ static void export (const void *vp)
 
 /**************************************************************/
 
-#ifdef YANN
 static void wholeWork (const void *vp)
 {
-  BB bb ;
+  BB bb = {0} ;
   const PP *pp = vp ;
   BB bbG = pp->bbG;
   char tBuf[25] ;
-  long int nnn = 0 ;
+
   clock_t  t1, t2, t01, t02 ;
 
   t01 = clock () ;
-  memset (&bb, 0, sizeof (BB)) ;
+
   while (channelGet (pp->lcChan, &bb, BB))
     {
       long int nn = 0 ;
@@ -1470,48 +1210,37 @@ static void wholeWork (const void *vp)
 
       
       /* match hits */
-      if (bb.length)
-	nn = matchHitsDo (pp, &bbG, &bb) ;
-      nnn += nn ;
 
-      /* sorthits */
-      if (pp->align && bb.hits)
+      if (0) /* old code before 2026_04_05 */
 	{
-	  sortHitsFuse (pp, &bb) ;
-	  bb.gpu += saSort (bb.hits, 3) ; /* hitPairOrder */
-	  saAlignDo (pp, &bb) ;
-	}
-
-#ifdef JUNK      
-      /* export */
-      if (bb.aligns && bigArrayMax (bb.aligns))
-	{
-	  bigArraySort (bb.aligns, saAlignOrder) ;
-	  if (! pp->sam)
-	    { if (1) exportDo (pp, &bb) ; }
-	  else
+	  if (bb.length)
+	    nn = matchSeedsOld (pp, &bbG, &bb) ;
+	  
+	  /* sorthits */
+	  if (pp->align && bb.hits)
 	    {
-	      AC_HANDLE h = ac_new_handle () ;
-	      ACEOUT ao = bb.rc.aoSam  ;
-	      char *VERSION = "0.1.1" ;
-	      DICT *dictG = pp->bbG.dict ;
-	      ao = aceOutCreate (pp->outFileName, hprintf (h, ".%s.%d.sam", dictName (pp->runDict, bb.run), bb.lane), pp->gzo, h) ;
-	      aceOutf (ao, "@HD VN:1.5\tSO:queryname\n") ;
-	      aceOutf (ao, "@PG ID:1\tPN:Magic\tVN:%s\n", VERSION) ;
-	      
-	      for (int chrom = 1 ; chrom <= dictMax (dictG) ; chrom++)
-		{
-		  Array dna = arr (pp->bbG.dnas, chrom, Array) ;
-		  int ln = dna ? arrayMax (dna) : 0 ;
-		  aceOutf (ao, "@SQ\tSN:%s\tLN:%d\n", dictName (dictG, chrom), ln) ;
-		}
-	      /* aceOutf (ao, "\tCL:%s", commandBuf) ; */
-	      exportSamDo (ao, pp, &bb) ;
-	      ac_free (h) ;
+	      sortHitsFuse (pp, &bb) ;
+	      bb.gpu += saSort (bb.hits, 3) ; /* hitPairOrder */
 	    }
 	}
+      else /* new code */
+	{
+#ifndef USEGPU	  
+	  if (bb.length)
+	    nn = matchSeeds (pp, &bbG, &bb) ;
+	  if (nn)
+	    {
+	      if (1)
+		saSort (bb.sms, 4) ;
+	      else
+		bigArraySort (bb.sms, seedMatchOrder) ;
+	    }
+#else
+	  messcrash ("matchSeedsGPU not yet written, sorry") ;
 #endif
-      
+	}
+
+      saAlignDo (pp, &bb) ;
       t2 = clock () ;
       saCpuStatRegister ("5.WholeWork", pp->agent, bb.cpuStats, t1, t2, nn) ;
       channelPut (pp->aeChan, &bb, BB) ;
@@ -1523,7 +1252,6 @@ static void wholeWork (const void *vp)
   channelCloseSource (pp->aeChan) ;
   return ;
 } /* wholeWork */
-#endif
 
 /*************************************************************************************/
 
@@ -1942,7 +1670,7 @@ int main (int argc, const char *argv[])
     }
 
 #endif  
-  /**************************  debugging modules, ignore *********************************/
+  /************  debugging modules, ignore ****************/
 
   getCmdLineText (h, &argc, argv, "-o", &(p.outFileName)) ;
 
@@ -2124,6 +1852,7 @@ int main (int argc, const char *argv[])
   p.introns = TRUE ; /* default */
   p.sam = getCmdLineBool (&argc, argv, "--sam") ;
   p.bam = getCmdLineBool (&argc, argv, "--bam") ;
+  p.tabular = getCmdLineBool (&argc, argv, "--tabular") ;
   p.qualityFactors = getCmdLineBool (&argc, argv, "--quality_factors") ;
   if (p.sam || p.bam)
     {
@@ -2134,10 +1863,10 @@ int main (int argc, const char *argv[])
     }
   /* we may wish both sam/bam and hits */
   /* we may cancel all the alignment files */
-  if (getCmdLineBool (&argc, argv, "--no_ali"))
-    p.sam = p.bam = p.hitsFormat = p.exportSamQuality = p.exportSamSequence = p.introns = FALSE ;
   if (getCmdLineBool (&argc, argv, "--hits"))
-    p.hitsFormat = TRUE ;  /* stay on previous value is not set */
+    p.hitsFormat = TRUE ;  /* keep previous value if not set */
+  if (getCmdLineBool (&argc, argv, "--no_ali"))
+    p.sam = p.bam = p.hitsFormat = p.exportSamQuality = p.exportSamSequence = p.tabular = p.introns = FALSE ;
   if (getCmdLineBool (&argc, argv, "--introns"))
     p.introns = TRUE ;  /* stay on previous value is not set */
   
@@ -2256,7 +1985,7 @@ int main (int argc, const char *argv[])
   getCmdLineInt (&argc, argv, "--minEntropy", &(p.minEntropy)) ;
 
   p.minAli = p.minAliPerCent = p.minScore = -1 ;
-  p.errMax = 1000000 ; /* on negative values, extendHits stops on first error */
+  p.errMax = ERRMAXMAX ; /* on negative values, extendHits stops on first error */
   p.errRateMax = 10 ;
   p.OVLN = 30 ;
   p.splice = TRUE ;
@@ -2333,7 +2062,7 @@ int main (int argc, const char *argv[])
 
   /*******************  otherwise verify the existence of the indexes ********************/
   
-  NN = saConfigCheckTargetIndex (&p) ;
+  p.nIndex = NN = saConfigCheckTargetIndex (&p) ;
 
   /* check the existence of the input sequence files */
   inArray = saConfigGetRuns (&p, p.runStats) ;
@@ -2371,16 +2100,6 @@ int main (int argc, const char *argv[])
       channelDebug (p.plChan, debug, "plChan") ;
       p.lcChan = channelCreate (channelDepth, BB, p.h) ;
       channelDebug (p.lcChan, debug, "lcChan") ;
-#ifndef YANN
-      p.csChan = channelCreate (channelDepth, BB, p.h) ;
-      channelDebug (p.csChan, debug, "csChan") ;
-      p.smChan = channelCreate (channelDepth, BB, p.h) ;
-      channelDebug (p.smChan, debug, "smChan") ;
-      p.moChan = channelCreate (channelDepth, BB, p.h) ;
-      channelDebug (p.moChan, debug, "moChan") ;
-      p.oaChan = channelCreate (channelDepth, BB, p.h) ;
-      channelDebug (p.oaChan, debug, "oaChan") ;
-#endif
       p.aeChan = channelCreate (channelDepth, BB, p.h) ;
       channelDebug (p.aeChan, debug, "aeChan") ;
       p.doneChan = channelCreate (channelDepth, BB, p.h) ;
@@ -2429,10 +2148,6 @@ int main (int argc, const char *argv[])
 	  {
 	    p.agent = i ;
 	    
-#ifndef YANN
-	    if (pass) wego_go (codeWords, &p, PP) ; else channelAddSources (p.csChan, 1) ;
-	    if (pass) wego_go (sortWords, &p, PP) ; else channelAddSources (p.smChan, 1) ;
-#endif
 	  }
 
       
@@ -2453,7 +2168,7 @@ int main (int argc, const char *argv[])
       p.genomeLength = p.bbG.genomeLength ;
       
       if (! p.bbG.cwsN[0])
-	messcrash ("matchHits received no target words") ;
+	messcrash ("matchSeeds received no target words") ;
       saGffBinaryParser (&p) ;
       
       /* map the reads to the genome in parallel */
@@ -2467,44 +2182,14 @@ int main (int argc, const char *argv[])
 	for (int i = 0 ; i < nAgents && i < p.nBlocks ; i++)
 	  {
 	    p.agent = i ;
-#ifdef YANN
-	    if (pass)
-	      wego_go (wholeWork, &p, PP) ;
-	    else
-	      channelAddSources (p.aeChan, 1) ;
-#else
 
 	  if (pass)
-	    wego_go (matchHits, &p, PP) ;
+	    wego_go (wholeWork, &p, PP) ;
 	  else
-	    channelAddSources (p.moChan, 1) ;
+	    channelAddSources (p.aeChan, 1) ;
 		  
-	  if (pass)
-	    wego_go (sortHits, &p, PP) ;
-	  else
-	    {
-	      channelAddSources (p.oaChan, 1) ;
-	      channelAddSources (p.doneChan, 1) ;
-	    }
-	      
-	  if (!i || p.align) /* at least 1 agent */
-	    {
-	      if (pass)
-		{
-		  p.agent = 3*i ;
-		  wego_go (saAlign, &p, PP) ;
-		  p.agent = 3*i + 1 ;
-		  wego_go (saAlign, &p, PP) ;
-		  p.agent = 3*i + 2 ;
-		  wego_go (saAlign, &p, PP) ;
-		  p.agent = i ;
-		}
-	      else
-		channelAddSources (p.aeChan, 3) ;
-	    }
-#endif
-	  if ((! p.sam && ! p.bam)  || !i) /* only 1 export agent in sam case */
-	    {
+	  if ((! p.sam && ! p.bam)  || !i) 
+	    { /* only 1 export agent in sam case */
 	      if (pass)
 		wego_go (export, &p, PP) ;
 	      else
@@ -2594,9 +2279,9 @@ int main (int argc, const char *argv[])
 
 	  if (p.wiggle) saWiggleCumulate (&p, &bb) ;
 	}
-      
-      laneToDo = atomic_fetch_add (arrp (p.runLanes, bb.run, atomic_int), 0) + 0 ;
-      laneDone = atomic_fetch_add (arrp (p.runLanesDone, bb.run, atomic_int), 1) + 1 ;
+
+      laneToDo = atomic_fetch_add_explicit (arrp (p.runLanes, bb.run, atomic_int), 0, memory_order_relaxed) + 0 ;
+      laneDone = atomic_fetch_add_explicit (arrp (p.runLanesDone, bb.run, atomic_int), 1, memory_order_relaxed) + 1 ;
 
       if (laneToDo == laneDone)
 	{
@@ -2678,10 +2363,10 @@ int main (int argc, const char *argv[])
   printf ("\tTarget %d sequences %ld bases\n", p.bbG.dnas ? arrayMax (p.bbG.dnas) - 1 : 0, p.bbG.length) ;
   if (1 || p.debug) printf ("Skips: 0=%ld, %d=%ld, %d=%ld, %d=%ld, %d=%ld, found=%ld, notFound=%ld\n",
 			    skips0, step1, skips1, step2, skips2, step3, skips3, step4, skips4, skipsFound, skipsNotFound);
-  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nAgents=%d nBlocks=%d NN=%d\n"
+  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nAgents=%d nBlocks=%d NN=%d BMAX=%d\n"
 			    , p.seedLength, p.tStep, p.iStep
 			    , p.maxTargetRepeats, p.tMaxTargetRepeats
-			    , nAgents, p.nBlocks, NN
+			    , nAgents, p.nBlocks, NN, p.BMAX
 			    ) ;
   if (p.gpu) printf ("GPU called %d times\n", p.gpu) ;
   if (arrayMax (p.runStats))

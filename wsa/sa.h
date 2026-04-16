@@ -31,14 +31,8 @@
 
 /***********************************************************************************/
 
-#ifdef USEGPUzzzz
-  #define NAGENTS 12
-  #define NBLOCKS 12
-#else
-  #define YANN 
-  #define NAGENTS 40
-  #define NBLOCKS 40
-#endif
+#define NAGENTS 40
+#define NBLOCKS 40
 
 /***********************************************************************************/
 
@@ -50,7 +44,7 @@
 #include "../wsra/sra_read.h"
 #include "sa.common.h"
 
-
+#define ERRMAXMAX 1000000
 
 typedef struct nodeStruct { double x ; CHAN *cx, *cy, *cu, *cv, *done ; int k ; } NODE ;
 
@@ -108,6 +102,7 @@ typedef struct runStatStruct {
   long int nPairsAligned, nBaseAligned1, nBaseAligned2 ;
   long int cds, utr, intronic, intergenic ;
   long int nComplexReads ;
+  long int nPartialReads ;
   long int nMultiAligned[11] ;
   long int nReadsAlignedPerTargetClass[256] ;
   long int nBasesAlignedPerTargetClass[256] ;
@@ -175,6 +170,7 @@ typedef struct bStruct {
   char *gzBuffer ;
   
   /*   BitSet isAligned ; */
+  BigArray sms ;    /* seed matches, possibly computed on GPU */
   BigArray aligns ; /* final alignments */  
   RunSTAT runStat ;
   Array cpuStats ;
@@ -282,7 +278,8 @@ typedef struct pStruct {
   Array confirmedIntrons ;
   Array doubleIntrons ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
-  BOOL sam, bam, hitsFormat, exportSamSequence, exportSamQuality, qualityFactors ;
+  BOOL sam, bam, hitsFormat, tabular ;
+  BOOL exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;
   int bonus[256] ;
@@ -329,8 +326,8 @@ typedef struct pStruct {
 
 typedef struct codeWordsStruct {
   unsigned int seed ; /* 32 bits = 16 bases, 2 bits per base */
-  int nam ; /* index in readDict or chromDict << 1 | (0x1 for minus words) */
-  int pos ;  /* bio coordinate of first letter of seed */
+  unsigned int nam ; /* index in readDict or chromDict << 1 | (0x1 for minus words) */
+  unsigned int pos ;  /* bio coordinate of first letter of seed */
   unsigned int intron ;
 } __attribute__((aligned(16))) CW ;
 
@@ -343,15 +340,19 @@ typedef struct hitStruct {
 
 
 typedef struct seedMatchStruct {
-  int read ; /* index in bb->dict << 1 | (0x1 for minus words) */
-  int x1 ;   /* bio coordinate of first letter of seed in read */
-  unsigned int readFlags ; /* copy in these 3 fileds seed/nam/intron of the read CW */
-  int target ; /* index in pp->bbG.dict << 1 | (0x1 for minus chromosome strand) */
-  int a1 ;   /* bio coordinate of first letter of seed in target */
-  unsigned int targetFlags ; /* copy in these 3 fields seed/nam/intron of the read CW */
-} __attribute__((aligned(16))) SEEDMATCH ;
+  unsigned int readSeed ;    /* place holder, set to zero */
+  unsigned int read ;        /* index in bb->dict << 1 | (0x1 for minus words) */
+  unsigned int x1 ;          /* bio coordinate of first letter of seed in read */
+  unsigned int readFlags ;   /* copied from read index */
+  
+  unsigned int targetSeed ;  /* place holder, set to zero */
+  unsigned int target ;      /* index in pp->bbG.dict << 1 | (0x1 for minus chromosome strand) */
+  unsigned int a1 ;          /* bio coordinate of first letter of seed in target */
+  unsigned int targetFlags ; /* copied from target index */
+} __attribute__((aligned(32))) SEEDMATCH ;
 
 #endif
+
 typedef struct countChromStruct {
   float weight ;
   int seeds, chrom ;
@@ -390,9 +391,9 @@ typedef struct geneBoxStruct {
   int a1, a2 ; 
   int gene ; /* index in pp->geneDict */
   int mrna ;
-  char flag ;
-  char strand ;
-  char friends ;
+  int flag ;
+  int strand ;
+  int friends ;
 } __attribute__((aligned(32))) GBX ;
 		  
 typedef struct geneStruct {
@@ -471,7 +472,8 @@ typedef struct timespec TMS ;
 /* sa.main.c */
 void saUsage (char *message, int argc, const char **argv) ; 
 void saCpuStatRegister (const char *nam, int agent, Array cpuStats, clock_t t1, clock_t t2, long int n) ;
-  
+long int saGetPairHits (const PP *pp, BB *bb, long int kk0) ;
+
 /* sa.config.c */
 void saConfigIsIndexAccessible (PP *pp) ;
 void saConfigIsOutDirWritable (PP *pp) ;
@@ -534,6 +536,9 @@ void saUringSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb) ;
 /* sa.wiggle */
 void saWiggleCumulate (const PP *pp, BB *bb) ;
 void saWiggleExport (PP *pp, int nAgents) ;
+
+/* sa.tabular */
+void saExportTabular (const PP *pp, BB *bb) ;
 
 /* sa.stats */
 void saRunStatExport (const PP *pp, Array runStats) ;

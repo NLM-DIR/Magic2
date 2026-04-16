@@ -23,13 +23,22 @@
 #ifdef __SSE2__
 #define VECTORIZED_MEM_CPY
 #include <emmintrin.h> // SSE2
+#include <immintrin.h>
 #endif /* __SSE2__ */
 
-#ifdef USEGPU
+#ifdef TIME_EVAL      
 #include <time.h>
+#endif
+
+#ifdef USEGPU
 #include "sa.gpusort.h"
 #endif /* USEGPU */
 
+/**************************************************************/
+/**************************************************************/
+/* sort treating the full struct as a 256 bits unsigned int */
+
+/**************************************************************/
 /**************************************************************/
 
 static inline int cwOrder (const void *va, const void *vb)
@@ -38,10 +47,21 @@ static inline int cwOrder (const void *va, const void *vb)
   const CW *vp = vb ;
   int n ;
   n = (up->seed > vp->seed) - (up->seed < vp->seed) ; if (n) return n ;
-  n = up->nam - vp->nam ; if (n) return n ;
-  n = (up->pos > vp->pos) - (up->pos < vp->pos) ; if (n) return n ;
+
   return 0 ;
 } /* cwOrder */
+
+/**************************************************************/
+/* up->read is the second field in the struct which contains 8 unsigned ints */
+static inline int seedMatchOrder (const void *va, const void *vb)
+{
+  const SEEDMATCH *up = va ;
+  const SEEDMATCH *vp = vb ;
+  int n ;
+  n = (up->read > vp->read) - (up->read < vp->read) ; if (n) return n ;
+
+  return 0 ;
+} /* seedMatchOrder */
 
 /**************************************************************/
 /* a0 = a1 - x1 is the putative position of base 1 of the read 
@@ -68,17 +88,84 @@ static inline int hitPairOrder (const void *va, const void *vb)
 {
   const HIT *up = va ;
   const HIT *vp = vb ;
-  int n, n1, n2 ;
-  
+  int n ;
+  /*
+   * this line will be removed after a check on all test datasets, it is supposed to never occur 
+   *  if (up->a1 < 0) messcrash ("negative a1") ;
+   */
   n = ((up->read >> 1) > (vp->read >> 1)) -  ((up->read >> 1) < (vp->read >> 1)) ; if (n) return n ; 
   n = ((up->chrom > vp->chrom) - (up->chrom < vp->chrom)) ; if (n) return n ; 
-  n1 = up->a1 + (up->x1 >> NSHIFTEDTARGETREPEATBITS) ;
-  n2 = vp->a1 + (vp->x1 >> NSHIFTEDTARGETREPEATBITS) ;
-  n = n1 - n2 ; if (n) return n ;
+  long unsigned int n1 = (long unsigned int) up->a1 + (up->x1 >> NSHIFTEDTARGETREPEATBITS) ;
+  long unsigned int n2 = (long unsigned int) vp->a1 + (vp->x1 >> NSHIFTEDTARGETREPEATBITS) ;
+  n = (n1 > n2) - (n1 < n2) ; if (n) return n ;
   n = ((up->x1 > vp->x1) - (up->x1 < vp->x1)) ; 
 
   return n ;
 } /* hitPairOrder */
+
+/**************************************************************/
+/**************************************************************/
+/* cwOrder specialized version, sort of first uint out of 4 */
+static BOOL checkClean1 (const char *b, mysize_t n)
+{
+  const unsigned int *up  = (const unsigned int *) b ;
+  const unsigned int *end = up + 4 * (n - 1) ;
+
+  while (up < end)
+    {
+      if (*(up + 4) < *up)
+        return FALSE ;
+      up += 4 ;
+    }
+  return TRUE ;
+} /* checkClean1 */
+
+/**************************************************************/
+/* hitReadOrder specialized version */
+static BOOL checkClean2 (const char *b, mysize_t n)
+{
+  const HIT *up  = (const HIT *) b ;
+  const HIT *end = up + (n - 1) ;
+
+  while (up < end)
+    {
+      if (hitReadOrder (up+1, up) < 0)
+        return FALSE ;
+      up++ ;
+    }
+  return TRUE ;
+} /* checkClean2 */
+
+/**************************************************************/
+/* hitPairOrder specialized version */
+static BOOL checkClean3 (const char *b, mysize_t n)
+{
+  const HIT *up  = (const HIT *) b ;
+  const HIT *end = up + (n - 1) ;
+
+  while (up < end)
+    {
+      if (hitPairOrder (up+1, up) < 0)
+        return FALSE ;
+      up++ ;
+    }
+  return TRUE ;
+} /* checkClean3 */
+
+/**************************************************************/
+/* seedMatchOrder specialized version, sort on second uint out of 8 */
+static BOOL checkClean4 (const char *b, mysize_t n)
+{
+  const unsigned int *up = (const unsigned int *) b + 1 ;  /* start at field 1 */
+  const unsigned int *end = up + 8 * (n - 1) ;
+  while (up < end)
+    {
+      if (*(up + 8) < *up)
+	return FALSE ;
+      up += 8 ;
+    }
+  return TRUE ;
+} /* checkClean4 */
 
 /**************************************************************/
 /**************************************************************/
@@ -109,7 +196,7 @@ static BOOL newInsertionSort (char *b, mysize_t n, int s, int (*cmp)(const void 
       memcpy (b + j*s, buf, s) ;
     }
   return clean ;
-} /* insertionSort */
+} /* newInsertionSort */
 
 /* #ifndef USEGPU */
 /* recursivelly split the table
@@ -121,6 +208,7 @@ static BOOL newInsertionSort (char *b, mysize_t n, int s, int (*cmp)(const void 
  * but n=8,16,32 are equivalent speeds
  */
 
+/* __attribute__((target("avx2"))) */
 static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, int (*cmp)(const void *va, const void *vb))
 {
  char *up, *vp, *wp ;
@@ -130,13 +218,12 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
   char *b2 = b + n1 * s ;
   char *b01 = buf ;
   char *b02 = buf + n1 * s ;
-  int n = 0 ;
   BOOL ok = FALSE ;
   BOOL clean1, clean2, clean = TRUE ;
   /* for small n,
    * sort en place using the insertion algorithm (game of taquin)
    */
-  if (hitIsTarget && nn < 8)
+  if (hitIsTarget && nn <= 16)
     {
       clean = newInsertionSort (b, nn, s, cmp) ;
       return clean ;
@@ -171,7 +258,6 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
   clean = FALSE ;
   
 #ifdef VECTORIZED_MEM_CPY
-  /* code generated by Grok, loads and stores 16bytes (128 bits) */
   if (cmp == cwOrder)
     {
       while (n1 > 0 && n2 > 0)
@@ -179,48 +265,54 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 	  __m128i u = _mm_load_si128((__m128i*)up) ;
 	  __m128i v = _mm_load_si128((__m128i*)vp) ;
 
-	  int n = (*(unsigned int*)up <= *(unsigned int*)vp) ;
+	  int n = (*(unsigned int*)up <= *(unsigned int*)vp) ? 1 : 0 ;
 	  
 	  _mm_store_si128((__m128i*)wp, n  ? u : v) ;
 	  wp += s ;
-	  up += n * s ;
-	  vp += (1 - n) * s ;
+	  up = n ? up + s : up ;
+	  vp = n ? vp : vp + s ;
 	  n1 -= n ;
-	  n2 -= 1 - n ;
+	  n2 -= ! n ;
 	}
       ok = TRUE ;
     }
-  else if (s == 16)
+  
+  else if (cmp == seedMatchOrder) 
     {
       while (n1 > 0 && n2 > 0)
 	{
-	  __m128i u = _mm_load_si128((__m128i*)up) ;
-	  __m128i v = _mm_load_si128((__m128i*)vp) ;
+	  __m128i u1 = _mm_load_si128((__m128i*)up) ;
+	  __m128i v1 = _mm_load_si128((__m128i*)vp) ;
+	  __m128i u2 = _mm_load_si128((__m128i*)up+1) ;
+	  __m128i v2 = _mm_load_si128((__m128i*)vp+1) ;
 	  
-	  int n = ((*cmp)(up, vp) <= 0) ? 1 : 0 ;
+	  int n = (*((unsigned int*)up + 1) <= *((unsigned int*)vp + 1)) ? 1 : 0 ;
 	  
-	  _mm_store_si128((__m128i*)wp, n  ? u : v) ;
+	  _mm_store_si128((__m128i*)wp, n  ? u1 : v1) ;
+	  _mm_store_si128((__m128i*)wp+1, n  ? u2 : v2) ;
 	  wp += s ;
-	  up += n * s ;
-	  vp += (1 - n) * s ;
+	  up = n ? up + s : up ;
+	  vp = n ? vp : vp + s ;
 	  n1 -= n ;
-	  n2 -= 1 - n ;
+	  n2 -= ! n ;
 	}
-      ok = TRUE ;
+      ok = TRUE;
     }
-#endif
+
+#endif  
+
   if (! ok) /* either we do not have _mm_store_si128, or size s is not 16 */
     { /* classic code */
       while (n1 > 0 && n2 > 0)
 	{
-	  n = ((*cmp) (up, vp) <= 0) ? 1 : 0 ;
+	  int n = ((*cmp) (up, vp) <= 0) ? 1 : 0 ;
 
-	  memcpy (wp, (n<=0) ? up : vp, s) ;
+	  memcpy (wp, (n ? up : vp), s) ;
 	  wp += s ;
-	  up += n * s ;
-	  vp += (1 - n) * s ;
+	  up = n ? up + s : up ;
+	  vp = n ? vp : vp + s ;
 	  n1 -= n ;
-	  n2 -= 1 - n ;
+	  n2 -= ! n ;
 	}
     }
 
@@ -230,7 +322,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 
   /* bulk copy the reminders */
     if (n1 > 0) memcpy(wp, up, n1 * s);
-    if (n2 > 0) memcpy(wp, vp, n2 * s);
+    else if (n2 > 0) memcpy(wp, vp, n2 * s);
 
     return clean ;
 } /* saSortDo */
@@ -246,59 +338,172 @@ int saSort (BigArray aa, int type)
   int (*cmp)(const void *va, const void *vb) = NULL ;
   int usedGPU = 0 ;
   
+  if (N < 2) return FALSE ;
+
   switch (type)
     {
     case 1:
+      if (s != 16) messcrash ("Wrong call to saSort type 1") ;
+      if (checkClean1 (cp, N))
+	return FALSE ;  /* i did not use the GPU */
       cmp = cwOrder ;
       break ;
     case 2:
+      if (s != sizeof(HIT)) messcrash ("Wrong call to saSort type 2") ;      
+      if (checkClean2 (cp, N))
+	return FALSE ;  /* i did not use the GPU */
       cmp = hitReadOrder ;
       break ;
     case 3:
+      if (s != sizeof(HIT)) messcrash ("Wrong call to saSort type 3") ;      
+      if (checkClean3 (cp, N))
+	return FALSE ;  /* i did not use the GPU */
       cmp = hitPairOrder ;
       break ;
+    case 4:
+      if (s != 32)
+	messcrash ("Wrong call to saSort type 4") ;
+      if (checkClean4 (cp, N))
+	return FALSE ;  /* i did not use the GPU */
+      cmp = seedMatchOrder ;
+      break ;
     default:
-      messcrash ("Wrong call to saSort typw = %dd>4", type) ;
+      messcrash ("Wrong call to saSort type = %d > 4", type) ;
     }
-  if (N <= 1) return 0 ;
-  else if (N < 128)
+  if (N < 128)
     newInsertionSort (cp, N, s, cmp) ;
   else
     {
-
-        struct timespec start, end;
-        double ellapsed;
-        timespec_get(&start, TIME_UTC);
-
-
-#ifdef USEGPU
-	if (type < 3 && N > (1<<12))
-	  {
-	    usedGPU = 1 ;
-	    saGPUSort (cp, N, type) ;
-	  }
-	else
-	  {
-	    char *buf = malloc (N * s) ;
-	    memcpy (buf, cp, N * s) ;
-	    saSortDo (cp, N, s, buf, TRUE, cmp) ;
-	    free (buf) ;
-	  }
-#else
-      char *buf = malloc (N * s) ;
-      memcpy (buf, cp, N * s) ;
-      saSortDo (cp, N, s, buf, TRUE, cmp) ;
-      free (buf) ;
+      
+#ifdef TIME_EVAL
+      struct timespec start, end;
+      double ellapsed;
+      timespec_get(&start, TIME_UTC);
 #endif
-
+      
+#ifdef USEGPU
+      if (type < 3 && (size_t)N * s > (1 << 20))
+	{
+	  usedGPU = 1 ;
+	   saGPUSort (cp, N, type) ;
+	}
+      else /* GPU threshold not met: fall through to CPU sort below */
+#endif
+	{
+	  size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
+	  char *buf = aligned_alloc(16, alloc_size) ;
+	   if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
+	   memcpy (buf, cp, N * s) ;
+	   saSortDo (cp, N, s, buf, TRUE, cmp) ;
+	   free (buf) ;
+	}
+      
+      
+#ifdef TIME_EVAL      
       timespec_get(&end, TIME_UTC);
       ellapsed = (double)(end.tv_sec - start.tv_sec) +
-          (double)(end.tv_nsec - start.tv_nsec) / 1000000000.0;
-      if (0) fprintf(stderr, "Sorted %ld elements in %f seconds (type: %d)\n", N, ellapsed, type);
+	(double)(end.tv_nsec - start.tv_nsec) / 1000000000.0;
+      fprintf(stderr, "Sorted %ld elements in %f seconds (type: %d)\n", N, ellapsed, type);
+#endif      
     }
   return usedGPU ;
-}/* saSsort */
+}/* saSort */
 
 /**************************************************************/
 /**************************************************************/
+/**************************************************************/
+/* Two-pass LSB radix sort on SEEDMATCH.read (unsigned int key at offset 0)
+ * vp  : pointer to SEEDMATCH array, must be 64-byte aligned
+ * N   : number of records
+ * The sort is stable and out-of-place internally (allocates one scratch buffer).
+ * Returns 0 on success, -1 on allocation failure.
+ 
+ 
+ * Two-pass LSB radix sort, 16 bits per pass, key = first unsigned int (read) 
+ * Pass 1: sort on bits  0..15 (low  half of read)
+ * Pass 2: sort on bits 16..31 (high half of read)
+ */
+
+#define RADIX_BITS  16
+#define RADIX_SIZE  (1 << RADIX_BITS)   /* 65536 buckets */
+#define RADIX_MASK  (RADIX_SIZE - 1)
+
+static int saRadixSortSeedMatch (BigArray aa)
+{
+  long int N = bigArrayMax (aa) ;
+  SEEDMATCH *src = bigArrp (aa, 0, SEEDMATCH) ;
+  SEEDMATCH *dst ;
+  long int   counts[2][RADIX_SIZE] ;
+  long int   offsets[RADIX_SIZE] ;
+  long int   i, bucket ;
+  unsigned int key ;
+  
+  if (N <= 1)
+    return 0 ;
+  
+  /* allocate scratch buffer, same alignment guarantee as input */
+  dst = (SEEDMATCH *) aligned_alloc (64, (size_t) N * sizeof (SEEDMATCH)) ;
+  if (!dst)
+    return -1 ;
+  
+  /* --- histogram pass: count both 16-bit halves in one sequential scan --- */
+  memset (counts, 0, sizeof (counts)) ;
+  for (i = 0 ; i < N ; i++)
+    {
+      key = src[i].read ;
+      counts[0][ key        & RADIX_MASK]++ ;   /* low  16 bits */
+      counts[1][(key >> 16) & RADIX_MASK]++ ;   /* high 16 bits */
+    }
+  
+  /* --- pass 1: sort on low 16 bits, src -> dst --- */
+  offsets[0] = 0 ;
+  for (i = 1 ; i < RADIX_SIZE ; i++)
+    offsets[i] = offsets[i-1] + counts[0][i-1] ;
+  
+  for (i = 0 ; i < N ; i++)
+    {
+      bucket = src[i].read & RADIX_MASK ;
+      dst[offsets[bucket]++] = src[i] ;
+    }
+  
+  /* --- pass 2: sort on high 16 bits, dst -> src --- */
+  offsets[0] = 0 ;
+  for (i = 1 ; i < RADIX_SIZE ; i++)
+    offsets[i] = offsets[i-1] + counts[1][i-1] ;
+  
+  for (i = 0 ; i < N ; i++)
+    {
+      bucket = (dst[i].read >> 16) & RADIX_MASK ;
+      src[offsets[bucket]++] = dst[i] ;
+    }
+  
+  /* result is back in src (original vp), dst is scratch only */
+  free (dst) ;
+  return 0 ;
+}
+
+/**************************************************************/
+/**************************************************************/
+/**************************************************************/
+/**************************************************************/
+/**************************************************************/
+
+#ifdef JUNK
+# AI prompt to analyze the code
+
+This code module is part of the sortalign package (RNA aligner, NCBI/NLM/NIH).
+  Key context:
+  - C code targeting portability, SSE2 available, AVX2 avoided
+  - USEGPU and TIME_EVAL are compile-time flags
+  - BigArray, HIT, CW, SEEDMATCH, BOOL, messcrash() are defined in sa.h
+  - aligned_alloc(16, ...) is used for SSE2-aligned buffers
+  - mysize_t is the array size type
+  
+  This code runs on very large dataset (Tera bases of dna) and will be distributed
+  and recompiled in many places
+  
+  The pupose of this chat is to analyze this module against any code weakness
+  and suggesting any speed optimization
+#endif
+  
 /**************************************************************/

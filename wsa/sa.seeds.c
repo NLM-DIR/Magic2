@@ -14,7 +14,7 @@
 */
 
 #include "sa.h"
-
+#include "sa.seedEncoder.h"
 /**************************************************************/
 
 static void showCws (const PP *pp, BB *bb, BigArray cws)
@@ -113,7 +113,6 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
   const int wLen = pp->seedLength ;
   const int nHidden = wLen > 16 ? wLen - 16 : 0 ;
   const int nHidden2 = nHidden << 1 ;
-  const int nShift = 62 ;
   int NN = pp->nIndex ;
   const long unsigned int maskN = NN - 1 ;
   const long unsigned int mask32 = 0xffffffff ; /* 4 bytes integer */
@@ -213,16 +212,11 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
 		{
 		  w <<= 2 ; wr >>= 2 ;
 		  p++ ;
-		  switch ((int)*cp)
-		    {  /* alphabetic order and XOR complement */
-		    case 0: p = 0 ; break ;
-		    case A_:             wr |= 0x3L << nShift ; break ;
-		    case C_: w |= 0x1L ; wr |= 0x2L << nShift ; break ;
-		    case G_: w |= 0x2L ; wr |= 0x1L << nShift ; break ;
-		    case T_: w |= 0x3L ;                   break ;
-		      
-		    default: p = 0 ;
-		    }
+		  unsigned int base = (*cp & 0x0F) ;
+		  
+		  w  |= w_table[base] ;    /* construct the shifted seed */
+		  wr |= wr_table[base] ;    /* construct the shifted reversed seed */
+		  p   = p & valid_base[base] ;
 		}
 	    }
 	  
@@ -232,16 +226,11 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
 	    {
 	      w <<= 2 ; wr >>= 2 ;
 	      p++ ;
-	      switch ((int)*cp)
-		{  /* alphabetic order and XOR complement */
-		case 0: p = 0 ; break ;
-		case A_:             wr |= 0x3L << nShift ; break ;
-		case C_: w |= 0x1L ; wr |= 0x2L << nShift ; break ;
-		case G_: w |= 0x2L ; wr |= 0x1L << nShift ; break ;
-		case T_: w |= 0x3L ;                   break ;
-		  
-		default: p = 0 ;
-		}
+	      unsigned int base = (*cp & 0x0F) ;
+	      
+	      w  |= w_table[base] ;    /* construct the shifted seed */
+	      wr |= wr_table[base] ;    /* construct the shifted reversed seed */
+	      p   = p & valid_base[base] ;
 	    }
 	  
 	  /* import dw bases from the right exon */
@@ -250,16 +239,11 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
 	    {
 	      w <<= 2 ; wr >>= 2 ;
 	      p++ ;
-	      switch ((int)*cp)
-		{  /* alphabetic order and XOR complement */
-		case 0: p = 0 ; break ;
-		case A_:             wr |= 0x3L << nShift ; break ;
-		case C_: w |= 0x1L ; wr |= 0x2L << nShift ; break ;
-		case G_: w |= 0x2L ; wr |= 0x1L << nShift ; break ;
-		case T_: w |= 0x3L ;                   break ;
-		  
-		default: p = 0 ;
-		}
+	      unsigned int base = (*cp & 0x0F) ;
+	      
+	      w  |= w_table[base] ;    /* construct the shifted seed */
+	      wr |= wr_table[base] ;    /* construct the shifted reversed seed */
+	      p   = p & valid_base[base] ;
 	    }
 	  /* import 16 - dw  bases from the following exon */
 	  if (dw < 16)
@@ -269,16 +253,11 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
 		{
 		  w <<= 2 ; wr >>= 2 ;
 		  p++ ;
-		  switch ((int)*cp)
-		    {  /* alphabetic order and XOR complement */
-		    case 0: p = 0 ; break ;
-		    case A_:             wr |= 0x3L << nShift ; break ;
-		    case C_: w |= 0x1L ; wr |= 0x2L << nShift ; break ;
-		    case G_: w |= 0x2L ; wr |= 0x1L << nShift ; break ;
-		    case T_: w |= 0x3L ;                   break ;
-		      
-		    default: p = 0 ;
-		    }
+		  unsigned int base = (*cp & 0x0F) ;
+		  
+		  w  |= w_table[base] ;    /* construct the shifted seed */
+		  wr |= wr_table[base] ;    /* construct the shifted reversed seed */
+		  p   = p & valid_base[base] ;
 		}
 	    }
 	  
@@ -387,9 +366,8 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
       int ii, jj, p = 0, cStep, robin ;
       int iMax = arrayMax (dna) ;
       long unsigned int w, wr ;
-      const int nShift = 62 ;
       if (1) step = iMax < 60 ? 1 : bb->step ;
-      if (iMax < minLength)
+      if (iMax < minLength) 
 	{
 	  bb->runStat.tooShort++ ;
 	  bb->runStat.tooShortBases += iMax ;
@@ -420,16 +398,12 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
 	  /* construct a 2*wLen bits long integer representing wLen bases (A_, T_, G_, C_) using 2 bits per base */
 	  w <<= 2 ; wr >>= 2 ;
 	  p++ ;
-	  switch ((int)*cp)
-	    {  /* alphabetic order and XOR complement */
-	    case 0: p = 0 ; break ;
-	    case A_:             wr |= 0x3L << nShift ; break ;
-	    case C_: w |= 0x1L ; wr |= 0x2L << nShift ; break ;
-	    case G_: w |= 0x2L ; wr |= 0x1L << nShift ; break ;
-	    case T_: w |= 0x3L ;                   break ;
-	      
-	    default: p = 0 ;
-	    }
+
+	  unsigned int base = (*cp & 0x0F) ;
+	  
+	  w  |= w_table[base] ;    /* construct the shifted seed */
+	  wr |= wr_table[base] ;    /* construct the shifted reversed seed */
+	  p   = p & valid_base[base] ;
 
 	  qw[robin] = w ;
 	  qwr[robin] = wr ;
@@ -445,7 +419,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
 	      )
 	    qz[robin] = 0 ;
 
-	  
+	   
 	  if (cStep == step) cStep = 0 ;
 	  if (!cStep)
 	    {

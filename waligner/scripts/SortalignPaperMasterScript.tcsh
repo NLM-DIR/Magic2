@@ -138,6 +138,14 @@ setenv SV     v88.81.18M.e4.mars31    # idem, elephant: call adjustExons >= rath
 setenv SVlast v88.81.18M.e4.mars31
 setenv SV     v89.81.18M.e4.apr1      # idem, without the mir edition in rafia
 setenv SVlast v89.81.18M.e4.apr1
+setenv SV     v90.81.18M.e4.apr6      # idem, matchSeeds ready for GPU
+setenv SVlast v90.81.18M.e4.apr6
+setenv SV     v91.81.18M.e4.apr7      # idem, edited findIntronMates to clip the clipped errors
+setenv SVlast v91.81.18M.e4.apr7
+setenv SV     v92.81.18M.e4.apr7      # idem, us vp->x1 filter in find intron mates
+setenv SVlast v92.81.18M.e4.apr7
+setenv SV     v93.81.18M.e4.apr10     # idem, fixed gtf intron parsing
+setenv SVlast v93.81.18M.e4.apr10
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -890,7 +898,6 @@ phase_Align:
 
 foreach run ($runs)
   foreach method ($methods)
-
     if (! -e Aligners/$method/align.tcsh) then
       echo "missing script Aligners/$method/align.tcsh"
       continue
@@ -913,7 +920,7 @@ foreach run ($runs)
     if (-e RESULTS/$method/$run/align.running) continue
     if (-e RESULTS/$method/$run/align.done) continue
     
-    if (-e RESULTS/$method/$run/sam) continue
+    if (-e RESULTS/$method/$run/sam3) continue
     if (-e RESULTS/$method/$run/sam.gz) continue
     if (-e RESULTS/$method/$run/sam_sorted) continue
     if (-e RESULTS/$method/$run/sam_sorted.gz) continue
@@ -927,7 +934,6 @@ foreach run ($runs)
       if (-e Fasta/$run/$run.reverse.fastq.gz) set read_2=Fasta/$run/$run.reverse.fastq.gz
       if (-e Fasta/$run/$run.forward.fasta.gz) set read_1=Fasta/$run/$run.forward.fasta.gz
       if (-e Fasta/$run/$run.reverse.fasta.gz) set read_2=Fasta/$run/$run.reverse.fasta.gz
-      if (-e Fasta/$run/$run.forward.fasta.gz) set read_1=Fasta/$run/$run.forward.fasta.gz
       if (-e Fasta/$run/$run'_R1.fasta.gz') set read_1=Fasta/$run/$run'_R1.fasta.gz'
       if (-e Fasta/$run/$run'_R2.fasta.gz') set read_2=Fasta/$run/$run'_R2.fasta.gz'
       if ($method == 011_SortAlignG6R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
@@ -936,7 +942,7 @@ foreach run ($runs)
       if ($method == 014_SortAlignG3R3.g && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($method == 015_SortAlignG3R1.g && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($read_1 == Fasta/$run/$run.sample_12.fasta.gz) set read_2=""
-      
+
       if (! -e $read_1) then
         echo "Run $run Missing read file $read_1"
 	ls -ls Fasta/$run/*fast*
@@ -1133,7 +1139,8 @@ end
 echo -n "### Quality control for all methods and datasets : $SV : "  > COMPARE/samStats.$SV.txt
 date  >> COMPARE/samStats.$SV.txt
 echo "### True error rates in Baruzzo datasets:   t1=0.543,  t2=1.186, t3=6.024" >> COMPARE/samStats.$SV.txt
-cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/UnalignedReads/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g'  > RESULTS/allSamStats
+cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/nUnaligned/g' -e 's/nMultiAligned 1 times/nAlignedOnce/g' -e 's/nMultiAlignedSeveralTimes/nAlignedSeveralTimes/g'  > RESULTS/allSamStats
+
 
 \mv RESULTS/allSamStats RESULTS/allSamStats.old
 cat RESULTS/allSamStats.old | sed -e 's/nAlignedReads/AlignedReads/' -e 's/nPerfectReads/Perfect_reads/' -e 's/nRawBases/RawBases/' -e 's/nRawReads/RawReads/' -e 's/nReads/Reads/' -e 's/nErrors/nMismatches_and_InDels/' -e 's/nMismaches_and_InDels/nMismatches_and_InDels/' > RESULTS/allSamStats
@@ -1149,7 +1156,7 @@ setenv runsN `echo "$runs" | gawk '{for(k=1;k<=NF;k++)printf("%2d_%s ",k,$k);}'`
 set tsfMethods=`echo $methods | gawk '{sep="";for(i=1;i<=NF;i++){printf("%s%s",sep,$i);if(substr($i,1,2)=="01")printf(".%s",SV);sep=",";}}END{printf("\n");}' SV=$SV`
 echo $tsfMethods
 
-foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads UnalignedReads nAlignedOnce nMultiAligned)
+foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads nUnaligned nAlignedOnce nAlignedSeveralTimes)
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
   if (-e  toto.tag) \rm toto.tag
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
@@ -1162,7 +1169,7 @@ foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads Una
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
-foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads RawBases RawReads UnalignedReads nAlignedOnce nMultiAligned)
+foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads RawBases RawReads nUnaligned nAlignedOnce nAlignedSeveralTimes)
   echo $tag
   if (-e  toto.tag) \rm toto.tag
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
@@ -1193,7 +1200,7 @@ foreach tag (nAlignments)
 end
 
 
-foreach tag (nMultiAligned)
+foreach tag (nAlignedSeveralTimes)
   echo $tag
   if (-e  toto.tag) \rm toto.tag
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
@@ -1202,9 +1209,9 @@ foreach tag (nMultiAligned)
       echo "$run\t$mm\tf\t0" >> toto.tag
     end
   end
-  echo "\nPercentaged of aligned read which are multi aligned\t$SV" >> COMPARE/samStats.$SV.txt
+  echo "\nPercentage of aligned read which are multi aligned\t$SV" >> COMPARE/samStats.$SV.txt
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {gsub("%","",$5);printf("%s\t%s\tf\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
-   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Average number of alignments" >> COMPARE/samStats.$SV.txt
+   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Percentage of aligned read which are multi aligned" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
@@ -1995,7 +2002,7 @@ if (! -e  HG19.INTRON_DB/known_introns.ace2) then
   cat HG19.INTRON_DB/known_introns.txt | sort -u  >  HG19.INTRON_DB/known_introns.u.txt
 
   wc HG19.INTRON_DB/known_introns.txt HG19.INTRON_DB/known_introns.u.txt
-  cat  HG19.INTRON_DB/known_introns.u.txt | gawk -F '\t' '/^#/{next}{c=$1;x=$2;y=$3;ln=$4;t=$5;printf("Intron %s__%d_%d\nIntMap %s %d %d\nLength %d\nIn_mRNA %s\nIntron\n\n",c,y,x,c,y,x,ln,t);}}'  > HG19.INTRON_DB/known_introns.ace
+  cat  HG19.INTRON_DB/known_introns.u.txt | gawk -F '\t' '/^#/{next}{c=$1;x=$2;y=$3;ln=$4;t=$5;printf("Intron %s__%d_%d\nIntMap %s %d %d\nLength %d\nIn_mRNA %s\nIntron\n\n",c,y,x,c,y,x,ln,t);}'  > HG19.INTRON_DB/known_introns.ace
 endif
 
 
