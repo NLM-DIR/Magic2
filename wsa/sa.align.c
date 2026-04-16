@@ -2537,12 +2537,12 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
     {
       int dnaLn = arrayMax (dna) ;
       /* adjust introns */
-      if (0) alignCheckSize (bb, aa) ;
+      if (1) alignCheckSize (bb, aa) ;
       if (1) alignAdjustIntrons (pp, bb, bestAp, aa, myRead) ;
-      if (0) alignCheckSize (bb, aa) ;
+      if (1) alignCheckSize (bb, aa) ;
       /* adjust exons */
       if (1) alignAdjustExons (pp, bb, bestAp, aa, myRead, dna, maxJump, maxJump2) ;
-      if (0) alignCheckSize (bb, aa) ;
+      if (1) alignCheckSize (bb, aa) ;
       iMax = alignLocateChains (bestAp, aa, myRead) ;
       
       /* Compute the clean chain score */

@@ -310,13 +310,127 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
  * using N index also accelerates sorting and searching
  * and consumes less memory for the sorting
  */
-/*
-actctatcacccaggctggagtgcagtggtgccatctcggctcactgcaacctccacctcccaggttcaatcgattctcctgcctcagcctcccgagtagctgggattataggcacccgccaccatgcccggctaatttttatattt
- actctatcacccaggctggagtgcagtggtgccatctcggctcactgcaacctccacctcccaggttcaatcgattctcctgcctcagcctcccgagtagctgggattataggcacccgccaccatgcccggctaatttttatattt
-  actctatcacccaggctggagtgcagtggtgccatctcggctcactgcaacctccacctcccaggttcaatcgattctcctgcctcagcctcccgagtagctgggattataggcacccgccaccatgcccggctaatttttatattt
-*/
-void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget) 
+
+static void saCodeSequenceSeedsStep1 (const PP *pp, BB *bb)
 {
+  int NN = pp->nIndex ;
+  BigArray cwsN[NN] ;
+  CW *restrict cw  ;  
+  const unsigned char *restrict cp ;
+  Array dnas = bb->dnas ;
+  int k, ia, iaMax = arrayMax (dnas), nSeeds = 0 ;
+  long int dMax = bigArrayMax (bb->globalDna) / NN ;
+  const int wLen = pp->seedLength ;
+  const int nHidden = wLen > 16 ? wLen - 16 : 0 ;
+  const int nHidden2 = nHidden << 1 ;
+  const int shiftB = 64 - 2 * wLen ;
+  const long unsigned int maskN = NN - 1 ;
+  const long unsigned int mask32 = 0xffffffff ;
+  const long unsigned int maskSeedLn = (1L << 2*wLen) - 1 ;
+  int minEntropy = pp->minEntropy ;
+  int minLength = pp->minLength ;
+
+  memset (cwsN, 0, sizeof (cwsN)) ;
+  if (minEntropy < 0)
+    {
+      minEntropy = -minEntropy ;
+      if (minEntropy > bb->runStat.p.maxReadLength / 2)
+        minEntropy = bb->runStat.p.maxReadLength / 2 ;
+    }
+  if (minLength < 0)
+    {
+      minLength = -minLength ;
+      if (minLength > bb->runStat.p.maxReadLength / 2)
+        minLength = bb->runStat.p.maxReadLength / 2 ;
+    }
+  if (dMax >> 31)
+    messcrash ("saCodeSequenceSeedsStep1 ln=%ld > 2G", dMax) ;
+
+  dMax *= 1.2 ;  /* avoid reallocation of marginal size fluctuations */
+  for (k = 0 ; k < NN ; k++)
+    cwsN[k] = bigArrayHandleCreate (dMax, CW, bb->h) ;
+
+  bb->step = 1 ;
+  for (ia = 1 ; ia < iaMax ; ia++)
+    {
+      Array dna = arr (dnas, ia, Array) ;
+      if (! dna)
+        continue ;
+      int ii, jj, p = 0 ;
+      int iMax = arrayMax (dna) ;
+      long unsigned int w = 0, wr = 0 ;
+
+      if (iMax < minLength)
+        {
+          bb->runStat.tooShort++ ;
+          bb->runStat.tooShortBases += iMax ;
+          continue ;
+        }
+      if (minEntropy > 0 && oligoEntropy (arrp (dna, 0, unsigned char), iMax, minEntropy) < minEntropy)
+        {
+          bb->runStat.lowEntropy++ ;
+          bb->runStat.lowEntropyBases += iMax ;
+          continue ;
+        }
+
+      cp = arrp (dna, 0, unsigned char) ;
+
+      for (ii = 0, jj = -wLen + 1 ; ii < iMax ; ii++, jj++, cp++)
+        {
+          w <<= 2 ; wr >>= 2 ;
+          p++ ;
+
+          __builtin_prefetch(cp + 64, 0, 1) ;
+          unsigned int base = (*cp & 0x0F) ;
+
+          w  |= w_table[base] ;
+          wr |= wr_table[base] ;
+          p   = p & valid_base[base] ;
+
+          if (p < wLen)
+            continue ;
+
+          long unsigned int x  =  w & maskSeedLn ;
+          long unsigned int xr = (wr >> shiftB) & maskSeedLn ;
+          BOOL minus = (x > xr) ;
+          long unsigned int z  = minus ? xr : x ;
+
+          /* skip homopolymers and homodimers */
+          if (
+              (((w >> 2) << 2) == (w << 2)) ||
+              (((w >> 4) << 4) == (w << 4))
+             )
+            continue ;
+
+          k = z & maskN ;
+          z >>= nHidden2 ;
+          z &= mask32 ;
+
+          cw = bigArrayp (cwsN[k], bigArrayMax(cwsN[k]), CW) ;
+          cw->nam    = (ia << 1) | (minus ? 0x1 : 0) ;
+          cw->seed   = z ;
+          cw->pos    = jj + 1 ;   /* bio coordinates of first base of seed */
+          cw->intron = 0 ;
+          nSeeds++ ;
+        }
+    }
+
+  bb->cwsN = halloc (NN * sizeof(BigArray), bb->h) ;
+
+  if (pp->debug)
+    fprintf (stderr, "Agent %d lane %d allocated %d seeds\n", bb->readerAgent, bb->lane, nSeeds) ;
+  for (k = 0 ; k < NN ; k++)
+    bb->cwsN[k] = cwsN[k] ;
+
+  return ;
+}  /* saCodeSequenceSeedsStep1 */
+
+/**************************************************************/
+
+void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
+{
+  if (step == -1)  /* the new code is slower in Elapsed  and User time (/usr/bin/time -f 'E %E U %U' */
+    return  saCodeSequenceSeedsStep1 (pp, bb) ;
   int NN = pp->nIndex ;
   BigArray cwsN[NN] ;
   CW *restrict cw  ;  
@@ -393,12 +507,13 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
 
       cp = arrp (dna, 0, unsigned char) ;
 
-      for (ii = 0, jj = -wLen + 1, cStep = -wLen + 1, p = 0, robin = 0 ; ii < iMax ; ii++, jj++, cp++, cStep++, robin = (robin + 1) % step) 
+      for (ii = 0, jj = -wLen + 1, cStep = -wLen + 1, p = 0, robin = 0 ; ii < iMax ; ii++, jj++, cp++, cStep++, robin = (robin + 1 < step ? robin + 1 : 0))
 	{
 	  /* construct a 2*wLen bits long integer representing wLen bases (A_, T_, G_, C_) using 2 bits per base */
 	  w <<= 2 ; wr >>= 2 ;
 	  p++ ;
 
+	  __builtin_prefetch(cp + 64, 0, 1) ;
 	  unsigned int base = (*cp & 0x0F) ;
 	  
 	  w  |= w_table[base] ;    /* construct the shifted seed */
@@ -411,11 +526,16 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
 	  qxr[robin] =  (qwr[robin] >> shiftB) & maskSeedLn ;
 	  qminus[robin]  = (qx[robin] > qxr[robin]) ;
 	  qz[robin] = qminus[robin] ? qxr[robin] : qx[robin] ;
-	  qhz[robin] = (qz[robin] ^ (qz[robin] << 14)) ^ (qz[robin] << 23) ; 
+	  qhz[robin] = (qz[robin] ^ (qz[robin] << 14)) ^ (qz[robin] << 23) ;
+	  /*  possibly better but incompatible: try
+	    long unsigned int h = qz[robin] ;
+	    h ^= h << 14 ; h ^= h >> 7 ; h ^= h << 23 ;
+	    qhz[robin] = h ;
+	  */
 	  if (
 	      p < wLen ||
 	      (((  w >> 2) << 2) == (w << 2) ) || /* avoid homopolymers */
-	      (((  w >> 2) << 2) == (w << 2) )    /* avoid homodimers */
+	      (((  w >> 4) << 4) == (w << 4) )    /* avoid homodimers */
 	      )
 	    qz[robin] = 0 ;
 
@@ -424,12 +544,11 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
 	  if (!cStep)
 	    {
 	      long int word = 0 ;
-	      BOOL minus, qok = FALSE ;
 	      int dx = 0 ;
+	      BOOL minus, qok = FALSE ;
 	      
-	      for (int i = step - 1 ; !qok && i >= 0 ; i--)
-		if (qz[robin])
-		  qok = TRUE ;
+	      for (int i = 0 ; !qok && i < step ; i++)
+		qok = (qz[i] != 0) ;
 	      if (! qok)
 		{ cStep = -1 ; continue ; } /* we hope to export the next word */
 	      long int besthz = qhz[robin] ;
@@ -437,7 +556,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget)
 	      int myMax = (step > jj ? jj : step) ;
 	      for (int i = 1 ; i < myMax ; i++)
 		{
-		  int k = (robin - i + step ) % step ;
+		  int k = robin - i ; k = (k < 0 ? k + step : k) ; /* was:  k = (robin - i + step) % step ; */
 		  if (qz[k] && qhz[k] < besthz)
 		    { besthz = qhz[k]; bestk = k ; dx = i ; }
 		}

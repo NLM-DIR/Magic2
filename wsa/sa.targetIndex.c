@@ -534,7 +534,7 @@ static long int saTargetIndexCreateDo (PP *pp)
     NN = 4 ;
   pp->nIndex = NN ;
   
-  saCodeSequenceSeeds (pp, bbG, pp->tStep, TRUE) ;
+  saCodeSequenceSeeds (pp, bbG, pp->tStep) ;
   if (pp->knownIntrons)
     saCodeIntronSeeds (pp, bbG) ;
 

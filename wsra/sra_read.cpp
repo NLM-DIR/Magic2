@@ -221,7 +221,7 @@ size_t SraReadFastq(ngs::ReadIterator& it, size_t max_bases, stringstream& ss,
                 is_paired = true;
             }
             else {
-                ss << ">" << it.getReadId().data() << endl;
+                ss << "@" << it.getReadId().data() << endl;
                 string bases(std::move(it.getFragmentBases().toString()));
                 ss << bases << endl;
                 num_bases += bases.length();

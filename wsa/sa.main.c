@@ -1200,7 +1200,7 @@ static void wholeWork (const void *vp)
       t1 = clock () ;
       /* code words */
       saSequenceParseGzBuffer (pp, &bb) ;
-      saCodeSequenceSeeds (pp, &bb, pp->iStep, FALSE) ;
+      saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
 
       if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
 
@@ -1525,7 +1525,6 @@ int main (int argc, const char *argv[])
   Array cpuStats = 0 ;
   Array runErrors = 0 ;
   Array inArray = 0 ;
-  int maxThreads = 128 ;
   long unsigned int nHits = 0, nSeqs = 0, nBaseAligned = 0 ;
   long unsigned int nerr = 0 ;   /* cumulated number of errors */
   long unsigned int aliDx = 0 ; /* cumulated aligned read length */
@@ -1645,33 +1644,28 @@ int main (int argc, const char *argv[])
       isExecutableInPath ("numactl")   /* see w1/utils.c */
       )
     {
-      SA_HardwareInfo hInfo = saGetHardwareInfo () ;
-      vTXT txt = vtxtHandleCreate (h) ;
-      BOOL mtIsSet = FALSE ;
-      int maxThreads = 0 ;
-
-      int bestNode = hInfo.best_node ;
-
-      fprintf (stderr, "mxth0 = %d\n", maxThreads) ;
-      vtxtPrintf (txt, "/usr/bin/numactl  --cpunodebind=%d --membind=%d ", bestNode, bestNode) ;
-      for (int i = 0 ; i < argc ; i++)
+      int node = saGetBestNumaNode () ;   // ~100 ms
+      if (node >= 0) /* else single-node machine, fall through */
 	{
-	  if (! strcmp (argv[i], "--max_threads"))
-	    mtIsSet = TRUE ;
-	  vtxtPrintf (txt, " %s " , argv[i]) ;
+	  // build "numactl --cpunodebind=N --membind=N ./prog ..." 
+	  // and re-exec via system() or execv()
+
+	  vTXT txt = vtxtHandleCreate (h) ;
+	  vtxtPrintf (txt, "/usr/bin/numactl  --cpunodebind=%d --membind=%d ", node, node) ;
+	  /* echo all args */
+	  for (int i = 0 ; i < argc ; i++)
+	    vtxtPrintf (txt, " %s " , argv[i]) ;
+	  /* avoid recursion */
+	  vtxtPrintf (txt, " --numactl ") ;
+
+	  /* launch */
+	  fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
+	  return system (vtxtPtr (txt)) ;
 	}
-      if (! mtIsSet && hInfo.max_threads > 0 && hInfo.max_threads <= 1024)  /* do not override user's choice */
-	vtxtPrintf (txt, " --max_threads %d " , hInfo.max_threads/2) ;
-      fprintf (stderr, "mxth = %d\n", maxThreads) ;
-
-      vtxtPrintf (txt, " --numactl --num_cpus %d", hInfo.node_cpus) ;
-
-      fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
-
-      return system (vtxtPtr (txt)) ;
-    }
-
-#endif  
+      }
+#endif  /* __linux__ */
+  /* This part will always execute */
+  
   /************  debugging modules, ignore ****************/
 
   getCmdLineText (h, &argc, argv, "-o", &(p.outFileName)) ;
@@ -1940,12 +1934,18 @@ int main (int argc, const char *argv[])
     messcrash ("The source code assumes that long unsigned ints use 64 bits not %d, sorry", 8 * sizeof (long unsigned int)) ;
 
   /***************** amount or parallelization **************************/
-  int nCPU = -1 ;
-  if (!  getCmdLineInt (&argc, argv, "--num_cpus", &(nCPU)))
-    {
-      SA_HardwareInfo hInfo = saGetHardwareInfo () ;
-      nCPU = hInfo.node_cpus ;
-    }
+
+  int   nCPU      = saGetNodeCpus () ;       // immediate
+  int   maxThreads = saGetMaxThreads () ;    // immediate
+
+  if (maxThreads <= 0)
+    maxThreads = 128 ;  /* UNIX  max on lmem12 machine */
+  maxThreads /= 2 ;
+  getCmdLineInt (&argc, argv, "--max_threads", &maxThreads) ;
+  if (maxThreads < 24)
+    maxThreads = 24 ;
+  if (nCPU > maxThreads) /* happens on direct calls with --numactl on lmem12 */
+    nCPU = maxThreads ;
 
   /* defaults */
   nAgents = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;   number of aligner agents */
@@ -1961,10 +1961,7 @@ int main (int argc, const char *argv[])
     getCmdLineInt (&argc, argv, "--nB", &(p.nBlocks));
   if (p.nBlocks == 1)
     { nAgents = 1 ; }
-  maxThreads = 128 ;  /* UNIX  max on lmem12 machine */
-  getCmdLineInt (&argc, argv, "--max_threads", &maxThreads) ;
-  if (maxThreads < 24)
-    maxThreads = 24 ;
+
   if (p.nBlocks == 1)
     maxThreads = 16 ;  /* if maxThreads == 8 and the single fasta file is split in 3 parts, the code stalls */
   if (p.createIndex)
@@ -2329,8 +2326,9 @@ int main (int argc, const char *argv[])
 	  char tBuf[25], tBuf2[25] ;
 	  bb.stop = timeNow () ;
 	  timeDiffSecs (bb.start, bb.stop, &ns) ;
-	  fprintf (stderr, "%s: run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.1g strategy %d\n"
-		   ,  timeBufShowNow (tBuf), bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.isRna) ; 
+	  if (1)
+	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.1g strategy %d\n"
+		   ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.isRna) ; 
 	}
       ac_free (bb.h) ;
     }
@@ -2370,7 +2368,8 @@ int main (int argc, const char *argv[])
   printf ("\tTarget %d sequences %ld bases\n", p.bbG.dnas ? arrayMax (p.bbG.dnas) - 1 : 0, p.bbG.length) ;
   if (1 || p.debug) printf ("Skips: 0=%ld, %d=%ld, %d=%ld, %d=%ld, %d=%ld, found=%ld, notFound=%ld\n",
 			    skips0, step1, skips1, step2, skips2, step3, skips3, step4, skips4, skipsFound, skipsNotFound);
-  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nAgents=%d nBlocks=%d NN=%d BMAX=%d\n"
+  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nCPU=%d nAgents=%d nBlocks=%d NN=%d BMAX=%d\n"
+			    , nCPU
 			    , p.seedLength, p.tStep, p.iStep
 			    , p.maxTargetRepeats, p.tMaxTargetRepeats
 			    , nAgents, p.nBlocks, NN, p.BMAX

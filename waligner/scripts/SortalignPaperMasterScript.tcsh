@@ -146,8 +146,10 @@ setenv SV     v92.81.18M.e4.apr7      # idem, us vp->x1 filter in find intron ma
 setenv SVlast v92.81.18M.e4.apr7
 setenv SV     v93.81.18M.e4.apr10     # idem, fixed gtf intron parsing
 setenv SVlast v93.81.18M.e4.apr10
-setenv SV     v94.81.18M.e4.apr12     # idem, fixed adaptors (100 ->256 min count) edited sa.sort.c using claude
+setenv SV     v94.81.18M.e4.apr12     # EXCELLENT CODE idem, fixed adaptors (100 ->256 min count) edited sa.sort.c using claude
 setenv SVlast v94.81.18M.e4.apr12
+setenv SV     v95.81.18M.e4.apr12     # idem, fixed adaptors (100 ->256 min count) edited sa.sort.c using claude
+setenv SVlast v95.81.18M.e4.apr12
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -732,6 +734,10 @@ foreach run ($runs)
     bin/dna2dna -i  Fasta/$run/$run.forward.fasta.gz -I fasta -count -o Fasta/$run/$run.forward 
     bin/dna2dna -i  Fasta/$run/$run.reverse.fasta.gz -I fasta -count -o Fasta/$run/$run.reverse 
   endif
+  if (-e Fasta/$run/$run.sample_12.fasta.gz && ! -e Fasta/$run/$run.sample_12.count) then
+    echo "counting $run, please wait"
+    bin/dna2dna -i  Fasta/$run/$run.sample_12.fasta.gz -I fasta -count -o Fasta/$run/$run.sample_12
+  endif
   set nreads=`cat Fasta/$run/*.count  | gawk '/^Fragment_kept/{n+=$2}END{print n}'`
   echo "$run contains $nreads reads"
 end
@@ -938,6 +944,13 @@ foreach run ($runs)
       if (-e Fasta/$run/$run.reverse.fasta.gz) set read_2=Fasta/$run/$run.reverse.fasta.gz
       if (-e Fasta/$run/$run'_R1.fasta.gz') set read_1=Fasta/$run/$run'_R1.fasta.gz'
       if (-e Fasta/$run/$run'_R2.fasta.gz') set read_2=Fasta/$run/$run'_R2.fasta.gz'
+      if (-e Fasta/$run/$run'_R1.fastq.gz') set read_1=Fasta/$run/$run'_R1.fastq.gz'
+      if (-e Fasta/$run/$run'_R2.fastq.gz') set read_2=Fasta/$run/$run'_R2.fastq.gz'
+      if ($method == 011_SortAlignG6R3 && -e Fasta/$run/$run.fasta.gz) set read_1=Fasta/$run/$run.fasta.gz
+      if ($method == 012_SortAlignG3R3 && -e Fasta/$run/$run.fasta.gz) set read_1=Fasta/$run/$run.fasta.gz
+      if ($method == 013_SortAlignG3R1 && -e Fasta/$run/$run.fasta.gz) set read_1=Fasta/$run/$run.fasta.gz
+      if ($method == 014_SortAlignG3R3.g && -e Fasta/$run/$run.fasta.gz) set read_1=Fasta/$run/$run.fasta.gz
+      if ($method == 015_SortAlignG3R1.g && -e Fasta/$run/$run.fasta.gz) set read_1=Fasta/$run/$run.fasta.gz
       if ($method == 011_SortAlignG6R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($method == 012_SortAlignG3R3 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
       if ($method == 013_SortAlignG3R1 && -e Fasta/$run/$run.sample_12.fasta.gz) set read_1=Fasta/$run/$run.sample_12.fasta.gz
@@ -1271,7 +1284,7 @@ foreach tag (Non_compatible_pairs)
       echo "$run\t$mm\tf\t0" >> toto.tag
     end
   end
-  echo "\nNon compatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
+  echo "\n%% Non compatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
    cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "%% Non compatible pairs" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
@@ -1283,11 +1296,11 @@ foreach tag (Non_compatible_pairs)
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
   foreach run ($runsN)
     foreach mm ($allMethods)
-      echo "$run\t$mm\tf\t0" >> toto.tag
+      echo "$run\t$mm\ti\t0" >> toto.tag
     end
   end
-  echo "\nIncompatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
-  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($4) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$4);}}' tag=$tag >> toto.tag
+  echo "\nNon compatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
+  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($4) >= 1 && $3 == tag) {printf("%s\t%s\ti\t%s\n", $1,$2,$4);}}' tag=$tag >> toto.tag
    cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Non compatible pairs" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
