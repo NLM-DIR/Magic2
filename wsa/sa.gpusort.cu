@@ -185,9 +185,6 @@ struct Pair
 {
     CW index;
     CW read;
-
-    __device__
-    Pair(CW& idx, CW& r) : index(idx), read(r) {}
 };
 
 __global__
@@ -222,9 +219,9 @@ void EmitCartesianProduct(const CW* index,
     for (std::size_t i=static_cast<std::size_t>(threadIdx.x);i < total;
          i += static_cast<std::size_t>(blockDim.x)) {
 
-        std::size_t k_w = i / num_w;
-        std::size_t k_idx = i % num_w;
-        out_pairs[start + i] = Pair(index[start_idx + k_idx], words[start_w + k_w]);
+        std::size_t k_w = i / num_idx;
+        std::size_t k_idx = i % num_idx;
+        out_pairs[start + i] = Pair {index[start_idx + k_idx], words[start_w + k_w]};
     }
 }
 
@@ -238,7 +235,6 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                     unsigned int num_parts)
 {
     GPUIndexType* index = static_cast<GPUIndexType*>(idx);
-    auto& index_vecs = index->d_vecs;
 
     for (unsigned int i=0;i < num_parts;i++) {
         auto start = std::chrono::high_resolution_clock::now();
@@ -327,7 +323,7 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
 
 
         // compute prefix sums for matched words
-        thrust::device_vector<std::uint64_t> out_offsets(num_common);
+        thrust::device_vector<std::uint32_t> out_offsets(num_common);
         thrust::exclusive_scan(out_counts.begin(), out_counts.end(),
                                out_offsets.begin(), std::uint32_t{0});
 
@@ -340,6 +336,35 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         std::size_t total_out = last_offset + last_count;
         std::cerr << "total " << total_out << std::endl;
 
+        // generate matches
+        thrust::device_vector<Pair> out_pairs(total_out);
+
+        const CW* d_idx = thrust::raw_pointer_cast(index->d_vecs[i].data());
+        const CW* d_w = thrust::raw_pointer_cast(word_vec.data());
+
+        const std::uint32_t* d_idx_starts = thrust::raw_pointer_cast(idx_starts.data());
+        const std::uint32_t* d_idx_counts = thrust::raw_pointer_cast(idx_counts.data());
+
+        const std::uint32_t* d_w_starts = thrust::raw_pointer_cast(w_starts.data());
+        const std::uint32_t* d_w_counts = thrust::raw_pointer_cast(w_counts.data());
+
+        const std::uint32_t* d_idx_common = thrust::raw_pointer_cast(idx_common.data());
+        const std::uint32_t* d_w_common = thrust::raw_pointer_cast(w_common.data());
+
+        const std::uint32_t* d_out_offsets = thrust::raw_pointer_cast(out_offsets.data());
+
+        Pair* d_pairs = thrust::raw_pointer_cast(out_pairs.data());
+
+        int threads = 256;
+        int blocks = static_cast<int>(num_common);
+
+        EmitCartesianProduct<<<blocks, threads>>>(
+                                        d_idx, d_idx_starts, d_idx_counts,
+                                        d_w, d_w_starts, d_w_counts,
+                                        d_idx_common, d_w_common,
+                                        d_out_offsets,
+                                        d_pairs,
+                                        num_common);
 
 
 
