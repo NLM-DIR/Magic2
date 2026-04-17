@@ -27,6 +27,7 @@
 
 
 #include "sa.h"
+#include "sa.gpusort.h"
 #include "sa.hardware_info.h"
 
 #ifdef __SSE2__
@@ -1180,6 +1181,32 @@ static void export (const void *vp)
   return ;
 } /* export */
 
+
+GPUIndex* GPUIndexNew(const PP* p, BB* bbG)
+{
+    int i;
+    CW** index_parts = (CW**)malloc(NN * sizeof(CW*));
+    long int* sizes = (long int*)malloc(NN * sizeof(long int));
+
+    for (i=0;i < NN;i++) {
+        index_parts[i] = bigArrayp(bbG->cwsN[i], 0, CW);
+        sizes[i] = bigArrayMax(bbG->cwsN[i]);
+    }
+
+    GPUIndex* result = GPUIndexCreate(index_parts, sizes, NN);
+
+    if (index_parts) {
+        free(index_parts);
+    }
+    if (sizes) {
+        free(sizes);
+    }
+
+    return result;
+}
+
+
+
 /**************************************************************/
 
 static void wholeWork (const void *vp)
@@ -1191,11 +1218,16 @@ static void wholeWork (const void *vp)
 
   clock_t  t1, t2, t01, t02 ;
 
+  GPUIndex* gpu_idx = GPUIndexNew(pp, &bbG);
+  CW** words = (CW**)malloc(NN * sizeof(CW*));
+  long int* sizes = (long int*)malloc(NN * sizeof(long int));
+
   t01 = clock () ;
 
   while (channelGet (pp->lcChan, &bb, BB))
     {
       long int nn = 0 ;
+      int ii;
 
       t1 = clock () ;
       /* code words */
@@ -1203,6 +1235,15 @@ static void wholeWork (const void *vp)
       saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
 
       if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
+
+      for (ii=0;ii < NN;ii++) {
+          words[ii] = bigArrayp(bb.cwsN[ii], 0, CW);
+          sizes[ii] = bigArrayMax(bb.cwsN[ii]);
+      }
+
+      saGPUMatchHits(gpu_idx, words, sizes, NN);
+
+
 
       /* sort words */
       for (int k = 0 ; k < NN ; k++)
@@ -1242,6 +1283,7 @@ static void wholeWork (const void *vp)
 	}
 
       saAlignDo (pp, &bb) ;
+
       t2 = clock () ;
       saCpuStatRegister ("5.WholeWork", pp->agent, bb.cpuStats, t1, t2, nn) ;
       channelPut (pp->aeChan, &bb, BB) ;
@@ -1249,6 +1291,18 @@ static void wholeWork (const void *vp)
       saCpuStatRegister ("5.WholeWorkE", pp->agent, bb.cpuStats, t01, t02, nn) ;
       t01 = t02 ;
     }
+
+    GPUIndexFree(gpu_idx);
+    if (words) {
+        free(words);
+        words = NULL;
+    }
+    if (sizes) {
+        free(sizes);
+        sizes = NULL;
+    }
+
+
 
   channelCloseSource (pp->aeChan) ;
   return ;
