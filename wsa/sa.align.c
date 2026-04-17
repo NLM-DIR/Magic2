@@ -2775,7 +2775,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	}
 
   /* create rafias == merge colinear chains as a  single chain with bubbles */
-  arraySort (aa, saAlignOrder) ;
+  arraySort (aa, saRafiaOrder) ;
   iMax = alignLocateChains (bestAp, aa, read) ;
   BOOL clean = TRUE ;
   if (arrayMax (bestAp) > 2)
@@ -2783,7 +2783,6 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
       int di1 = 1, di2 = 0 ;
       iMax = arrayMax (aa) ;
       clean = FALSE ;
-      arraySort (aa, saRafiaOrder) ;
       for (int i1 = 0 ; i1 < iMax ; i1 += di1)
 	{
 	  ALIGN *ap1 = arrp (aa, i1, ALIGN) ;
@@ -2867,11 +2866,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
     }
   
   /* eliminate major overlaps  */
-  if (! clean)
-    {
-      arraySort (aa, saAlignOrder) ;
-      iMax = alignLocateChains (bestAp, aa, read) ;
-    }
+  arraySort (aa, saAlignOrder) ;
+  iMax = alignLocateChains (bestAp, aa, read) ;
   
   if (arrayMax (bestAp) > 2)
     for (int ic1 = 0 ; ic1 < arrayMax (bestAp) ; ic1++)
