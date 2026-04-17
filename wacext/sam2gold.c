@@ -504,7 +504,7 @@ static void s2gParseOneSamFile (S2G *s2g, const char *fNam, int method, int gold
 	      s2g->nPairs++ ;
 	      if (flag & 0x2)
 		s2g->nCompatiblePairs++ ;
-	      if (! (flag & 000000001100))
+	      if (! (flag & 0x000000001100))
 		s2g->nAlignedPairs++ ;
 	    }
 	  if (0) printf ("XXXX\t%s\n", seqBuf) ;

@@ -34,9 +34,13 @@
 
 #define channelGetmaxWait(_chan,_vp,_type,_maxSeconds) (uChannelGetMaxWait((_chan),(_vp),sizeof(_type),_maxSeconds)) 
 
- /*   please do not call these functions directly, they are private but in C they
- *   need to be exposed to allow the compiler to understand the public macros.
- */
+
+/**********************************************************************************/
+/******************** End of the publicinterface **********************************/
+/**********************************************************************************/
+ /*   please do not call the functions below directly, they are private but in C they
+  *   need to be exposed to allow the compiler to understand the public macros.
+  */
 
 CHAN *uChannelCreate (int cMax, int size, AC_HANDLE h) ;
 
@@ -54,9 +58,10 @@ int uChannelMultiPut (CHAN *c, void *vp, int size, int max, BOOL wait) ;
 
 /*************************************************************************/
 /*************************************************************************/
-/* Private details of the Channel struture, 
- * please do not use these variables directly, only use the public interface in channel.h
-*/
+/* Private details of the remote channel struture, 
+ * please do not use these variables directly, only use the public interface in
+ *     remote_channel.h
+ */
 
 typedef struct taskStruct TASK ;
 typedef struct channelStruct1 CHAN1 ;

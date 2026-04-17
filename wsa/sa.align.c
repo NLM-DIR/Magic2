@@ -1567,7 +1567,8 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
   /* align the read on the genomic image of the transcript */
   int x1 = zp.x1 ;
   int x2 = zp.x2,  a2 = zp.a2 ;
-
+  BOOL failed = FALSE ;
+  
   zp.errors = errors ;
   arrayMax (zp.errors) = 0 ;
   
@@ -1583,12 +1584,12 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 			       , 0, zp.errors, maxJump2, -1, FALSE, 0) ; /* bio coordinates, jump 8 but do not extend */
     }
   zp.nErr = arrayMax (zp.errors) ;
+  alignClipErrorLeft (&zp, pp->errCost) ;
+  alignClipErrorRight (&zp, pp->errCost) ;
   
   /* remap the fixed alignment in the alignment array */
-  if (1 && zp.x1 < x1 + 10 && zp.x2 > x2 - 10 && zp.nErr <= oldnErr+3)
+  if (1 && ( zp.x1 < x1 + 10 && zp.x2 > x2 - 10 ))
     { /* success, otherwise stay on previous results */
-      alignClipErrorLeft (&zp, pp->errCost) ;
-      alignClipErrorRight (&zp, pp->errCost) ;
       /* remap */
       int ii, iMax = arrayMax (aa) ;
       int ja, dda = 0 ;
@@ -1671,6 +1672,7 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
       for (ii = 0 ; ii < iMax ; ii++)
 	array (aa, ii, ALIGN) = array (original, ii, ALIGN) ;
       arrayMax (aa) = iMax ;
+      failed = TRUE ;
     }
 
   /* merge */
@@ -1733,17 +1735,31 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 	  vp->nErr = vp->nMID = 0 ;
 	  if(vp->errors)
 	    {
-	      A_ERR *ep = arrp (vp->errors, 0, A_ERR) ;
+	      A_ERR *ep = 0 ;
 	      int ieMax = arrayMax (vp->errors) ;
 	      vp->nErr = vp->nMID = ieMax ;
-	      for (int ie = 0 ; ie < ieMax ; ie++, ep++)
+	      if (failed && ! isDown) 
 		{
-		  if (0 && ! isDown)
-		    {
-		      ep->baseShort = complementBase(ep->baseShort & 0xf) ;
-		      ep->iShort = lnShort - ep->iShort - 1 ;
-		      ep->iLong = lnLong - ep->iLong - 1 ;
+		  if (0)
+		    for (int ie = 0 ; ie < ieMax ; ie++)
+		      { /* flip coordinates */
+			ep = arrp (vp->errors, ie, A_ERR) ;
+			ep->baseShort = complementBase(ep->baseShort & 0xf) ;
+			ep->iShort = lnShort - ep->iShort - 1 ;
+			ep->iLong = lnLong - ep->iLong - 1 ;
+		      }
+		  ep = arrp (vp->errors, 0, A_ERR) ;
+		  for (int ie = 0 ; ie < ieMax/2 ; ie++)
+		    { /* flip ordering */
+
+		      A_ERR ee = ep[ie] ;
+		      ep[ie] = ep[ieMax - ie - 1] ;
+		      ep[ieMax - ie - 1]  = ee ;
 		    }
+		}
+	      for (int ie = 0 ; ie < ieMax ; ie++)
+		{
+		  ep = arrp (vp->errors, ie, A_ERR) ;
 		  switch (ep->type)
 		    {
 		    case TROU_DOUBLE:
@@ -1912,7 +1928,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
   ALIGN *up, *up2 ;
   INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
-  alignCheckSize (bb, aa) ;
+  if (0) alignCheckSize (bb, aa) ;
   if (! jMax) return 0 ;
   if (0) return 0 ;
   if (jMax > 100)   return 0 ;
@@ -2248,8 +2264,8 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	}
     }
  done:
-  alignCheckSize (bb, aa) ;
-    ac_free (h) ;
+  if (0) alignCheckSize (bb, aa) ;
+  ac_free (h) ;
   return nMask ;
 } /* findIntronMates */
 
@@ -2537,12 +2553,12 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
     {
       int dnaLn = arrayMax (dna) ;
       /* adjust introns */
-      if (0) alignCheckSize (bb, aa) ;
+      if (1) alignCheckSize (bb, aa) ;
       if (1) alignAdjustIntrons (pp, bb, bestAp, aa, myRead) ;
-      if (0) alignCheckSize (bb, aa) ;
+      if (1) alignCheckSize (bb, aa) ;
       /* adjust exons */
       if (1) alignAdjustExons (pp, bb, bestAp, aa, myRead, dna, maxJump, maxJump2) ;
-      if (0) alignCheckSize (bb, aa) ;
+      if (1) alignCheckSize (bb, aa) ;
       iMax = alignLocateChains (bestAp, aa, myRead) ;
       
       /* Compute the clean chain score */
@@ -2759,7 +2775,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	}
 
   /* create rafias == merge colinear chains as a  single chain with bubbles */
-  arraySort (aa, saAlignOrder) ;
+  arraySort (aa, saRafiaOrder) ;
   iMax = alignLocateChains (bestAp, aa, read) ;
   BOOL clean = TRUE ;
   if (arrayMax (bestAp) > 2)
@@ -2767,7 +2783,6 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
       int di1 = 1, di2 = 0 ;
       iMax = arrayMax (aa) ;
       clean = FALSE ;
-      arraySort (aa, saRafiaOrder) ;
       for (int i1 = 0 ; i1 < iMax ; i1 += di1)
 	{
 	  ALIGN *ap1 = arrp (aa, i1, ALIGN) ;
@@ -2786,10 +2801,13 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  for (di2 = 1 ; i1 + di1 + di2 < iMax && ap2[di2].chain == chain2 ; di2++)
 	    ;
 	  BOOL isDown = ap1->chainA2 > ap1->chainA1 ? TRUE : FALSE ;
-	  
+	  BOOL isDown2 = ap2->chainA2 > ap2->chainA1 ? TRUE : FALSE ;
+	  if (isDown != isDown2)
+	    continue ;
 	  int du = ap1->chainX2 - ap2->chainX1 + 1 ;  /* if > 0, there is a double cover */
 	  int da = isDown ? ap1->chainA2 - ap2->chainA1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
-
+	  int da = isDown ? ap2->chainX2 - ap1->chainX1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
+	  
 	  if (1)
 	    {  /* without this code, we have errors with the miRs */
 	      if (da > 0 && du >= ap1->chainAli)
@@ -2849,11 +2867,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
     }
   
   /* eliminate major overlaps  */
-  if (! clean)
-    {
-      arraySort (aa, saAlignOrder) ;
-      iMax = alignLocateChains (bestAp, aa, read) ;
-    }
+  arraySort (aa, saAlignOrder) ;
+  iMax = alignLocateChains (bestAp, aa, read) ;
   
   if (arrayMax (bestAp) > 2)
     for (int ic1 = 0 ; ic1 < arrayMax (bestAp) ; ic1++)

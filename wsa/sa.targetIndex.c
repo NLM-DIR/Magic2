@@ -314,7 +314,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 	      nI = nR = 0 ;
 	      for (wp = up, m = 0 ; m < n ; wp++, m++)
 		{
-		  int tc = *dictName(pp->bbG.dict,up->nam >> 1) ;
+		  int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
 		  nR += (tc == 'R' || tc == 'M' || tc == 'C' ? 1 : 0) ;
 		  nI += ((wp->intron & intronMask) ? 1 : 0) ;
 		}
@@ -323,7 +323,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 		{
 		  for (wp = up, m = 0 ; m < n ; wp++, m++)
 		    {
-		      int tc = *dictName(pp->bbG.dict,up->nam >> 1) ;
+		      int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
 		      if (nI < maxRepeats && (wp->intron & intronMask))
 			{
 			  if (vp < wp)
@@ -534,7 +534,7 @@ static long int saTargetIndexCreateDo (PP *pp)
     NN = 4 ;
   pp->nIndex = NN ;
   
-  saCodeSequenceSeeds (pp, bbG, pp->tStep, TRUE) ;
+  saCodeSequenceSeeds (pp, bbG, pp->tStep) ;
   if (pp->knownIntrons)
     saCodeIntronSeeds (pp, bbG) ;
 

@@ -329,7 +329,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 /* #endif // USEGPU */
 
 /**************************************************************/
-
+static int saRadixSortSeedMatch (BigArray aa) ;
 int saSort (BigArray aa, int type)
 {
   long int N = bigArrayMax (aa) ;
@@ -367,6 +367,10 @@ int saSort (BigArray aa, int type)
 	return FALSE ;  /* i did not use the GPU */
       cmp = seedMatchOrder ;
       break ;
+    case 5:
+      if (s != 32)
+	messcrash ("Wrong call to saSort type 5") ;
+      break ;
     default:
       messcrash ("Wrong call to saSort type = %d > 4", type) ;
     }
@@ -390,12 +394,17 @@ int saSort (BigArray aa, int type)
       else /* GPU threshold not met: fall through to CPU sort below */
 #endif
 	{
-	  size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
-	  char *buf = aligned_alloc(16, alloc_size) ;
-	   if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
-	   memcpy (buf, cp, N * s) ;
-	   saSortDo (cp, N, s, buf, TRUE, cmp) ;
-	   free (buf) ;
+	  if (type == 5)  /* 20260412 to be tested for speed against case 4 */
+	    saRadixSortSeedMatch (aa) ;
+	  else
+	    {
+	      size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
+	      char *buf = aligned_alloc(16, alloc_size) ;
+	      if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
+	      memcpy (buf, cp, N * s) ;
+	      saSortDo (cp, N, s, buf, TRUE, cmp) ;
+	      free (buf) ;
+	    }
 	}
       
       
@@ -430,9 +439,11 @@ int saSort (BigArray aa, int type)
 
 static int saRadixSortSeedMatch (BigArray aa)
 {
-  long int N = bigArrayMax (aa) ;
-  SEEDMATCH *src = bigArrp (aa, 0, SEEDMATCH) ;
-  SEEDMATCH *dst ;
+  int s = aa->size ;
+  int nUINT = s / sizeof (unsigned int) ;
+  long int N = aa ? bigArrayMax (aa) : 0 ;
+  unsigned int *src = (unsigned int *) aa->base ;
+  unsigned int *dst ;
   long int   counts[2][RADIX_SIZE] ;
   long int   offsets[RADIX_SIZE] ;
   long int   i, bucket ;
@@ -442,7 +453,7 @@ static int saRadixSortSeedMatch (BigArray aa)
     return 0 ;
   
   /* allocate scratch buffer, same alignment guarantee as input */
-  dst = (SEEDMATCH *) aligned_alloc (64, (size_t) N * sizeof (SEEDMATCH)) ;
+  dst = (unsigned int *) aligned_alloc (64, (size_t) N * s) ;
   if (!dst)
     return -1 ;
   
@@ -450,7 +461,7 @@ static int saRadixSortSeedMatch (BigArray aa)
   memset (counts, 0, sizeof (counts)) ;
   for (i = 0 ; i < N ; i++)
     {
-      key = src[i].read ;
+      key = src[i * nUINT] ;
       counts[0][ key        & RADIX_MASK]++ ;   /* low  16 bits */
       counts[1][(key >> 16) & RADIX_MASK]++ ;   /* high 16 bits */
     }
@@ -462,8 +473,8 @@ static int saRadixSortSeedMatch (BigArray aa)
   
   for (i = 0 ; i < N ; i++)
     {
-      bucket = src[i].read & RADIX_MASK ;
-      dst[offsets[bucket]++] = src[i] ;
+      bucket = src[i * nUINT] & RADIX_MASK ;
+      dst[offsets[bucket]++] = src[i * nUINT] ;
     }
   
   /* --- pass 2: sort on high 16 bits, dst -> src --- */
@@ -473,7 +484,7 @@ static int saRadixSortSeedMatch (BigArray aa)
   
   for (i = 0 ; i < N ; i++)
     {
-      bucket = (dst[i].read >> 16) & RADIX_MASK ;
+      bucket = (dst[i] >> 16) & RADIX_MASK ;
       src[offsets[bucket]++] = dst[i] ;
     }
   
@@ -494,16 +505,27 @@ static int saRadixSortSeedMatch (BigArray aa)
 This code module is part of the sortalign package (RNA aligner, NCBI/NLM/NIH).
   Key context:
   - C code targeting portability, SSE2 available, AVX2 avoided
-  - USEGPU and TIME_EVAL are compile-time flags
   - BigArray, HIT, CW, SEEDMATCH, BOOL, messcrash() are defined in sa.h
-  - aligned_alloc(16, ...) is used for SSE2-aligned buffers
-  - mysize_t is the array size type
+  - Arrays are elastic tables, possibly reallocated when accessed with a large i index as bigArrayp(a,i,type)
+     but accessed via macro as bigArrp(a,i,type) )(checked in debugged mode, unchecked in production mode)
+     - DNA is coded on the 4 low bits of an unsigned char  A_=0x1, T_=0x2, C_=0x4, G_=Ox8
   
   This code runs on very large dataset (Tera bases of dna) and will be distributed
   and recompiled in many places
   
-  The pupose of this chat is to analyze this module against any code weakness
+  The purpose of this chat is to analyze this module against any code weakness
   and suggesting any speed optimization
+
+  the function i wish to analyze  loops on an array of dnas.
+       for each one we wish to extract a seed of length seedLength (18)
+       and store the best canditate among the next 'step' seeds
+       also the best between the seed w and its complement wr.
+
+	 this is performed on the reads and on the target genome
+	 a joint between these 2 tables will recover the coordinates of the matching seeds
+
+	 Can we optimize this function better. For example using restric pointers, or
+	 removing branch points or any other suggestion
 #endif
   
 /**************************************************************/

@@ -7,7 +7,7 @@
 *** header to the full wego library as developped by mark Sienkiewicz
 *** some headers are already defined in wego.h
 ************************************************************************
-* $Header: /home/mieg/aa/CVS_ACEVIEW/ace/wh/wego.h,v 1.12 2015/10/24 03:01:08 mieg Exp $
+* $Header: /home/mieg/aa/CVS_ACEVIEW/ace/wh/wego_.h,v 1.1 2017/01/23 21:46:58 mieg Exp $
 */
 #include <wego.h>
 
@@ -64,7 +64,7 @@ extern WEGO_TASK *wego_run (WEGO_GROUP *group,
 	);
 
 /* we copy the structure to respect the paradigm: aliased or mutable */
-WEGO_TASK *wego_go_size (void(*f)(void *vp), void *vp, int size, WEGO_GROUP *group) ;
+WEGO_TASK *wego_go_size (void(*f)(const void *vp), const void *vp, int size, WEGO_GROUP *group) ;
 
 #define wego_group_go(_group,_f,_vp,type) wego_go_size((_f),(_vp),sizeof(type),(_group))
 
