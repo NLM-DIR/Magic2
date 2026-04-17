@@ -1567,7 +1567,8 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
   /* align the read on the genomic image of the transcript */
   int x1 = zp.x1 ;
   int x2 = zp.x2,  a2 = zp.a2 ;
-
+  BOOL failed = FALSE ;
+  
   zp.errors = errors ;
   arrayMax (zp.errors) = 0 ;
   
@@ -1583,12 +1584,12 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 			       , 0, zp.errors, maxJump2, -1, FALSE, 0) ; /* bio coordinates, jump 8 but do not extend */
     }
   zp.nErr = arrayMax (zp.errors) ;
+  alignClipErrorLeft (&zp, pp->errCost) ;
+  alignClipErrorRight (&zp, pp->errCost) ;
   
   /* remap the fixed alignment in the alignment array */
-  if (1 && zp.x1 < x1 + 10 && zp.x2 > x2 - 10 && zp.nErr <= oldnErr+3)
+  if (1 && ( zp.x1 < x1 + 10 && zp.x2 > x2 - 10 ))
     { /* success, otherwise stay on previous results */
-      alignClipErrorLeft (&zp, pp->errCost) ;
-      alignClipErrorRight (&zp, pp->errCost) ;
       /* remap */
       int ii, iMax = arrayMax (aa) ;
       int ja, dda = 0 ;
@@ -1671,6 +1672,7 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
       for (ii = 0 ; ii < iMax ; ii++)
 	array (aa, ii, ALIGN) = array (original, ii, ALIGN) ;
       arrayMax (aa) = iMax ;
+      failed = TRUE ;
     }
 
   /* merge */
@@ -1733,17 +1735,31 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 	  vp->nErr = vp->nMID = 0 ;
 	  if(vp->errors)
 	    {
-	      A_ERR *ep = arrp (vp->errors, 0, A_ERR) ;
+	      A_ERR *ep = 0 ;
 	      int ieMax = arrayMax (vp->errors) ;
 	      vp->nErr = vp->nMID = ieMax ;
-	      for (int ie = 0 ; ie < ieMax ; ie++, ep++)
+	      if (failed && ! isDown) 
 		{
-		  if (0 && ! isDown)
-		    {
-		      ep->baseShort = complementBase(ep->baseShort & 0xf) ;
-		      ep->iShort = lnShort - ep->iShort - 1 ;
-		      ep->iLong = lnLong - ep->iLong - 1 ;
+		  if (0)
+		    for (int ie = 0 ; ie < ieMax ; ie++)
+		      { /* flip coordinates */
+			ep = arrp (vp->errors, ie, A_ERR) ;
+			ep->baseShort = complementBase(ep->baseShort & 0xf) ;
+			ep->iShort = lnShort - ep->iShort - 1 ;
+			ep->iLong = lnLong - ep->iLong - 1 ;
+		      }
+		  ep = arrp (vp->errors, 0, A_ERR) ;
+		  for (int ie = 0 ; ie < ieMax/2 ; ie++)
+		    { /* flip ordering */
+
+		      A_ERR ee = ep[ie] ;
+		      ep[ie] = ep[ieMax - ie - 1] ;
+		      ep[ieMax - ie - 1]  = ee ;
 		    }
+		}
+	      for (int ie = 0 ; ie < ieMax ; ie++)
+		{
+		  ep = arrp (vp->errors, ie, A_ERR) ;
 		  switch (ep->type)
 		    {
 		    case TROU_DOUBLE:
@@ -2786,7 +2802,9 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  for (di2 = 1 ; i1 + di1 + di2 < iMax && ap2[di2].chain == chain2 ; di2++)
 	    ;
 	  BOOL isDown = ap1->chainA2 > ap1->chainA1 ? TRUE : FALSE ;
-	  
+	  BOOL isDown2 = ap2->chainA2 > ap2->chainA1 ? TRUE : FALSE ;
+	  if (isDown != isDown2)
+	    continue ;
 	  int du = ap1->chainX2 - ap2->chainX1 + 1 ;  /* if > 0, there is a double cover */
 	  int da = isDown ? ap1->chainA2 - ap2->chainA1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
 
