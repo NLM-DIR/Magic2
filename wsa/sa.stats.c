@@ -500,7 +500,7 @@ static BOOL readOneAdaptor (char adaptor[32], RunSTAT *up, BOOL isLeft, int pass
 	  for (j = 0, nn = 0 ; j < 5 ; j++)
 	    nn += aa[i5 + j] ;
 	  for (j = 0 ; j < 4 ; j++)
-	    if (100 * aa[i5 + j] > 52 * nn && nn > 1000)
+	    if (100 * aa[i5 + j] > 52 * nn && nn > 256)
 	      {
 		if (j > 0) good++ ;
 		nL += nn ;
@@ -558,7 +558,7 @@ static void saOverhangExport (const PP *pp, int run, RunSTAT *up, BOOL isLeft)
 
       best = 0 ;
       readOneAdaptor (adaptor, up, isLeft, pass, &best, FALSE) ;
-      aceOutf (ao, "## Adaptor %s\n", adaptor) ;
+      aceOutf (ao, "## Adaptor%s %s\n", suffix, adaptor) ;
       
       aceOutf (ao, "# Run.f\tPosition\tiiiiiifffff\tAny\tA\tT\tG\tC\tN\t%%A\t%%T\t%%G\t%%C\t%%N\n") ;
       for (i = 0 ; i < 30 ; i++)
@@ -716,7 +716,7 @@ void saRunStatExport (const PP *pp, Array runStats)
 		      aceOutf (ao, "%s\tClipped_5prime_Adaptor_read1\tit\t%ld\t%s\n"
 			       , runNam
 			       , up->nClippedAdaptor1L
-			       , cp 
+			       , cp ? cp : ""
 			       ) ;
 		    }
 		  
@@ -726,7 +726,7 @@ void saRunStatExport (const PP *pp, Array runStats)
 		      aceOutf (ao, "%s\tClipped_3prime_Adaptor_read1\tit\t%ld\t%s\n"
 			       , runNam
 			       , up->nClippedAdaptor1R
-			       , cp
+			       , cp ? cp : ""
 			       ) ;
 		    }
 		  
@@ -736,7 +736,7 @@ void saRunStatExport (const PP *pp, Array runStats)
 		      aceOutf (ao, "%s\tClipped_5prime_Adaptor_read1\tit\t%ld\t%s\n"
 			       , runNam
 			       , up->nClippedAdaptor2L
-			       , cp
+			       , cp ? cp : ""
 			       ) ;
 		    }
 		  
@@ -746,7 +746,7 @@ void saRunStatExport (const PP *pp, Array runStats)
 		      aceOutf (ao, "%s\tClipped_3prime_Adaptor_read2\tit\t%ld\t%s\n"
 			       , runNam
 			       , up->nClippedAdaptor2R
-			       , cp
+			       , cp ? cp : ""
 			       ) ;
 		    }
 		}

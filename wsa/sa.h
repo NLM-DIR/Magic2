@@ -522,7 +522,7 @@ void saDictMapWrite (DICT *dict, const char *fNam) ;
 
 /* sa.seeds.c */
 int saCodeIntronSeeds (PP *pp, BB *bbG) ;
-void saCodeSequenceSeeds (const PP *pp, BB *bb, int step, BOOL isTarget) ;
+void saCodeSequenceSeeds (const PP *pp, BB *bb, int step) ;
   
 /* sa.sequenceParser.c */
 void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;

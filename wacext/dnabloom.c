@@ -908,7 +908,7 @@ int main (int argc, const char **argv)
   }
 
   /* create the genome communication channel */
-     struct wego_task * task[ii] = 
+
  if (p.max_threads)
    {
      p.genomeChan = channelCreate (10, SHORT_READ, h) ;

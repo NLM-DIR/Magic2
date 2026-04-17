@@ -54,7 +54,7 @@ lao:
     set nn=`gawk '{print $1;}' toto.$$`
     \rm toto.$$ 
     echo "$nn running tasks waiting"
-    if ($x >= 30) pan_df .
+    if ($x >= 30) df .
 #    qhost
   endif
 

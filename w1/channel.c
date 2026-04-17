@@ -89,12 +89,13 @@ void channelClose (CHAN *c)
   if (c)
     {
       pthread_mutex_lock (&(c->c.mutex)) ;
-      if (c && ! c->c.isClosed /* && ! c->c.nLocks */ )
+      if (! c->c.isClosed /* && ! c->c.nLocks */ )
 	{
 	  c->c.isClosed = TRUE ;
 	  if (c->c.debug)
 	    fprintf (stderr, " - Closing channel %s\n", c->c.title[0] ? c->c.title : "no-name") ;
-	  pthread_cond_signal(&(c->c.notEmpty)) ;
+	  pthread_cond_broadcast(&(c->c.notEmpty)) ; /* pthread_cond_signal 20260415 */
+	  pthread_cond_broadcast(&(c->c.notFull)) ;  /* wake any blocked writers */
 	}
       pthread_mutex_unlock (&(c->c.mutex)) ;
     }
@@ -153,6 +154,7 @@ void channelCloseSource (CHAN *c)
 		     , c->c.title[0] ? c->c.title : "no-name"
 		     ) ;
 	  pthread_cond_signal(&(c->c.notEmpty)) ;
+	  pthread_cond_broadcast(&(c->c.notFull));  /* wake any blocked writers */
 	}
       pthread_mutex_unlock (&(c->c.mutex)) ;
     }
@@ -189,7 +191,7 @@ static void uChannelDestroy (void *vp)
 CHAN *uChannelCreate (int cMax, int size, AC_HANDLE h0)
 {
   AC_HANDLE h = handleCreate () ;
-  int nn = sizeof (CHAN1) + sizeof (CHANR) + (cMax+1) * size ;
+  int nn = sizeof (CHAN) ; /* + (cMax+1) * size   : useless */
   CHAN *c = (CHAN *) halloc (nn, h0) ;
 
   if (cMax <= 0)
@@ -200,8 +202,14 @@ CHAN *uChannelCreate (int cMax, int size, AC_HANDLE h0)
   c->c.magic = uChannelDestroy ;
   c->c.in = c->c.out = 0 ;
   pthread_mutex_init (&(c->c.mutex), NULL);
-  pthread_cond_init (&(c->c.notFull), NULL);
-  pthread_cond_init (&(c->c.notEmpty), NULL);
+
+  pthread_condattr_t cattr;
+  pthread_condattr_init(&cattr);
+  pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+  pthread_cond_init(&(c->c.notFull),  &cattr);
+  pthread_cond_init(&(c->c.notEmpty), &cattr);
+  pthread_condattr_destroy(&cattr);
+  
   c->vp = halloc ((cMax + 1) * size, h) ;
   /* register destroy */
   blockSetFinalise (c, uChannelDestroy) ;
@@ -214,7 +222,7 @@ CHAN *uChannelCreate (int cMax, int size, AC_HANDLE h0)
  */
 CHAN *channelLockCreate (AC_HANDLE h0)
 {
-  int nn = sizeof (CHAN1) + sizeof (CHANR) ;
+  int nn = sizeof (CHAN) ;
   CHAN *c = (CHAN *) halloc (nn, h0) ;
 
   c->c.magic = channelLockCreate ;
@@ -294,11 +302,11 @@ int uChannelMultiGet (CHAN *c, void *vp, int size, int max, BOOL wait)
     }
   c->c.nGet += nn ;  /* global counter */
   if (c->c.debug) 
-    fprintf (stderr, " ---  uChannelMultiGet %s %ld  now %d in cache int:%d float:%f double:%g void:%p \n"
+    fprintf (stderr, " ---  uChannelMultiGet %s %ld  now %d in cache void:%p \n"
 	     , c->c.title 
 	     , (char *)c - (char *)0
 	     , (c->c.in - c->c.out + 3* c->c.cMax) % c->c.cMax
-	     , *(int*)vp, *(float*)vp, *(double*)vp, vp
+	     , vp
 	     ) ; 
  
   if (! 
@@ -338,7 +346,8 @@ int uChannelGetMaxWait(CHAN *c, void *vp, int size, double maxSeconds)
     messcrash ("Invalid channel passed to uChannelGetMaxWait") ;
 
   struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+ 
   time_t sec = (time_t)maxSeconds;
   long nsec = (long)((maxSeconds - sec) * 1e9) ;
   ts.tv_sec += sec;
@@ -470,11 +479,6 @@ int uChannelMultiPut (CHAN *c, void *vp, int size, int max, BOOL wait)
     messcrash ("Invalid channel passed to uChannelGet") ;
   if (c->c.size != size)
     messcrash ("Invalid type passed to uChannelPut, received size=%d expected size=%d", size, c->c.size) ;
-  if (c->c.isClosed)
-    { 
-      pthread_cond_signal(&(c->c.notEmpty)) ;
-      return 0  ;  /* one cannot write on a close channel */
-    }
 
   if (! wait) /* non blocking */
     {
@@ -484,9 +488,21 @@ int uChannelMultiPut (CHAN *c, void *vp, int size, int max, BOOL wait)
   else
     pthread_mutex_lock (&(c->c.mutex)) ;
 
+  if (c->c.isClosed)
+    { 
+      pthread_cond_signal(&(c->c.notEmpty)) ;
+      pthread_mutex_unlock (&(c->c.mutex)) ;
+      return 0  ;  /* one cannot write on a close channel */
+    }
+
   /* we always keep one slot empty in the circle otherwise at init time we would not be able to put */ 
-  while (((c->c.in + 1) % c->c.cMax) == c->c.out && rc == 0)  /* the chammel is full */
+  while (((c->c.in + 1) % c->c.cMax) == c->c.out && rc == 0)  /* the channel is full */
     {
+      if (c->c.isClosed)   /* channel was closed while we waited */
+	{
+	  pthread_mutex_unlock (&(c->c.mutex)) ;
+	  return 0 ;
+	}
       if (! wait)  /* return FALSE immediatly */
 	{
 	  pthread_mutex_unlock (&(c->c.mutex)) ;
@@ -502,20 +518,21 @@ int uChannelMultiPut (CHAN *c, void *vp, int size, int max, BOOL wait)
     }
 
   	  /* actual work */
-  c->c.nPut1 += max ;
+  
   while (max-- && ((c->c.in + 1) % c->c.cMax) != c->c.out)
      {
        memcpy (c->vp + c->c.size * c->c.in, vp + nn * c->c.size, size) ;
        c->c.in = (c->c.in + 1) % c->c.cMax ;
        nn++ ;
      }
+  c->c.nPut1 += nn ;
   c->c.nPut2 += nn ; /* global counter */
   if (c->c.debug) 
-    fprintf (stderr, " ---  uChannelPut %s %ld now %d in cache int:%d float:%f double:%g  void*:%p\n"
+    fprintf (stderr, " ---  uChannelPut %s %ld now %d in cache void*:%p\n"
 	     , c->c.title 
 	     , (char *)c - (char *)0
 	     , (c->c.in - c->c.out + 3* c->c.cMax) % c->c.cMax 
-	     , *(int*)vp, *(float*)vp, *(double*)vp, vp
+	     , vp
 	     ) ; 
    
   if (c->c.in != c->c.out)  
@@ -533,7 +550,7 @@ void channelTest (int nn)
   AC_HANDLE h = handleCreate () ;
   CHAN *c = channelCreate (10, int, h) ;
   int i ;
-  BOOL g ;
+  int g = 0 ;
 
   for (i = nn ; i >= 0 ; i--)
     channelTryPut (c, &i, int) ; /* this will stop putting after 10 loops */

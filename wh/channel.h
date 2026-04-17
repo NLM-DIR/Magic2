@@ -70,7 +70,7 @@
  *               X3 x3 ; // allocate an instance of struct x3Struct 
  *               printf("%f\n", sinus(channelGive(cx3, &x3, X3).y) ; // blocking 
  *        In thread 2 : // may happen before or after the request from thread 1 
- *               X3 aa = { 0, pi/3, 0 } ; // allocate and initialise an instance of X3
+ *               X3 aa = { 0, pi/6, 0 } ; // allocate and initialise an instance of X3
  *               channelPut (cx3, &aa, X3) ; // write a record on the channel.
  *          At that point, thread 1 will resume and print the value 1/2.
  *             
@@ -237,15 +237,15 @@ typedef struct channelStruct CHAN ;
 
  CHAN *channelCreate (int cMax, TYPE, AC_HANDLE h) ;
 
- TYPE channelGive(CHAN *chan, TYPE *vp, TYPE) ;  // blocking, returns the value, updates *vp
+ TYPE channelGive(CHAN *chan, TYPE *vp, TYPE) ; // blocking, returns the value, updates *vp
  BOOL channelGet(CHAN *chan, TYPE *vp, TYPE)  ; // blocking, updates vp and returns TRUE, or FALSE if the channel is closed 
  int  channelPut(CHAN *chan, TYPE *vp, TYPE) ;  // blocking, returns 1  if success, 0 if channel is closed
 
  int channelMultiGet(CHAN *chan, TYPE *vp, int max, TYPE) ;  // blocking, returns number of records read, 0 if channel is closed
  int channelMultiPut(CHAN *chan,_chan, TYPE *vp, int max, TYPE) ; // blocking, returns number of records written, 0 if channel is closed
 
- int channelTryGet(CHAN *chan,  TYPE *vp, TYPE) ; // non-blocking, returns number read, 0 if channel is closed, -1 if empty
- int channelTryPut(CHAN *chan,  TYPE *vp, TYPE) ; // non-blocking, returns number written, 0 if channel is closed, -1 if full
+ int channelTryGet(CHAN *chan,  TYPE *vp, TYPE) ; // non-blocking, returns 1 if read, 0 if channel is closed, -1 if empty
+ int channelTryPut(CHAN *chan,  TYPE *vp, TYPE) ; // non-blocking, returns 1 if written, 0 if channel is closed, -1 if full
 
  * Notice that these pseudo-prototypes are commented out
  * They are actually implemented by macros defined in channel_.h

@@ -30,7 +30,7 @@
  *   Client tasks  are launched via a call to system()
           system ("submit task ....") ;
      The submit script, available in wchannels/submit is self documented, and should be
-     configured to fit your hardware (multicore machine, Sun Grid Engine compute farm... 
+     configured to fit your hardware (multicore machine, Sun Grid Engine compute farm...) 
      
  * INITIALISATION:
  *   Initialisation is mandatory and must preceed any other remote_channel calls. 
@@ -39,7 +39,8 @@
  *   where the arguments of taskClientInit are those received by
  *                   main (int argc, const char *argv[]).
  *
- *   On the server side, the program name argv[0] will be  used below to construct robust remote client calls
+ *   On the server side, the program name argv[0] will be  used below to construct
+ *   robust remote client calls
  *   On the client side, taskClientInit will consume the arguments added implicitely by 
  *   taskDispatch (see below) and used by the remote_channel library to communicate with
  *   the server, and leave untouched the parameters specific to the application 
@@ -58,7 +59,7 @@
  * the name is not modified, otherwise the executable is searched first in the same directory 
  * where the server executable resides, then elsewhere on the path. Finally, is the executable 
  * is not found, the server stops and reports a FATAL ERROR.
- * These conventions may appear unusual, but the allows robust portable programming. Indeed, 
+ * These conventions may appear unusual, but they allows robust portable programming. Indeed, 
  * it is very likely that the server and the client program were developped at the same time 
  * and reside in the same directory, or have a known relative path, but once the program is
  * put in production, the absolute location of the executables cannot be known in advance. 
@@ -103,7 +104,7 @@
   * pointer types.
   * Latency may be highly variable, and it is probably a good idea to transmit rather 
   * large structure. On the other hand, on a large hardware architecture
-  * like a Sun Grid Engine, it may be reasonable to expect hundreds of tasks
+  * like a Grid Engine, it may be reasonable to expect hundreds of tasks
   * to run simultaneously without contention.
   *
   * CAVEAT:
@@ -137,8 +138,22 @@
   * and when this phase is over, kill all these children tasks and start new ones.
   * A favorable side effect will be to end all the threads of the server
   * program which were waiting on readind these remote channels.
-
-
+  *
+  * Because of the very variable delays in a multitasking environment
+  * the server side listening channel cannot reliably counts its closed providers.
+  * The best strategy is probably to close the listening channel when the correct
+  * number of data packets have been received. This will automatically
+  * kill the the client writers.
+  *
+  *   for (i = 0 ; i < nn ; i++)
+  *     channelPut (writer, &z, TYPE) ; // write nn packets
+  *   n = 0 ;
+  *   while (channelGet (reader, &z, TYPE))
+  *      {  // do something with z
+  *         if (++n == nn) break ;
+  *       }
+  *   channelClose (reader) ;  // indirectly kills all clients writing on reader
+  *   // or more explicitly switchContext() 							     *
   */
 
 /*************************************************************************/
@@ -162,7 +177,7 @@ CHAN*  taskCreateWriterChannel (TASK *task, char *name, int max, TYPE) ;
 
 */
 /*************************************************************************/
-/* Private implementation of the uChannel functions */
+/* Private implementation of the remote uChannel functions */
 
 #include "remote_channel_.h"
 

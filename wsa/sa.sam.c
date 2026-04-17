@@ -34,10 +34,12 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
   const int L = 16 ;
   char segs[2*iMax + 4][L] ;
   int iSeg = 0 ;
-  
+  int iii ;
   if (iMax)
-    for (ii = 0 ; ii < iMax ; ii++)
+    for (iii = 0 ; iii < iMax ; iii++)
       {
+	ii = isDown ? iii : iMax - iii - 1 ;
+	ii= iii ; 
 	ep = arrp (errors, ii, A_ERR)  ;
 	int xShort = ep->iShort + 1 ;
 	int xLong = isDown ? ep->iLong + 1 : arrayMax (dnaG) - ep->iLong ;
@@ -358,9 +360,8 @@ if (1)
     invokeDebugger () ;
   /* a chain [i0, iMax[, is reported as a single CIGAR */
   chainA1 = ap->chainA1 ;
-  for (ii = i0, ap = ap0 ; ii < aMax && ap->chain == chain && ap->read == read ; ii++, ap++)
-    chainA2 = ap->chainA2 ;
-  
+  chainA2 = ap->chainA2 ;
+    
   vtxtPrintf (record, "\t%d", chainA1 < chainA2 ? chainA1 : chainA2) ;    
   ap = ap0 ;
   if (1)
