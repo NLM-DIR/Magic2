@@ -1275,6 +1275,18 @@ static void wholeWork (const void *vp)
 	    }
 #else
 	  messcrash ("matchSeedsGPU not yet written, sorry") ;
+	  /*
+	    grab from GPU N, number of records
+	  */
+	  bb->sms = bigArrayHandleCreate (N, SMS, bb->h) ;
+	  /*
+	     grab pointer vp from GPU
+	  */
+	  memcpy (bigArrayp (bb->sms, 0, SMS), vp, N * sizeof (SMS)) ;
+	  bigArrayMax (bb->sms) = N ;
+	  /*
+	    free vp
+	  */
 	  saGPUMatchHits(gpu_idx, words, sizes, NN);
 #endif
 	}
