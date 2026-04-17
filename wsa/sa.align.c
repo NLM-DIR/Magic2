@@ -2806,7 +2806,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    continue ;
 	  int du = ap1->chainX2 - ap2->chainX1 + 1 ;  /* if > 0, there is a double cover */
 	  int da = isDown ? ap1->chainA2 - ap2->chainA1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
-
+	  int da = isDown ? ap2->chainX2 - ap1->chainX1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
+	  
 	  if (1)
 	    {  /* without this code, we have errors with the miRs */
 	      if (da > 0 && du >= ap1->chainAli)
