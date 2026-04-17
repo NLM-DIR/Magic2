@@ -181,12 +181,6 @@ GPUIndex* GPUIndexFree(GPUIndex* idx)
 }
 
 
-struct Pair
-{
-    CW index;
-    CW read;
-};
-
 __global__
 void EmitCartesianProduct(const CW* index,
                           const std::uint32_t* idx_starts,
@@ -197,7 +191,7 @@ void EmitCartesianProduct(const CW* index,
                           const std::uint32_t* idx_common,
                           const std::uint32_t* w_common,
                           const std::uint32_t* out_offsets,
-                          Pair* out_pairs,
+                          SEEDMATCH* out_pairs,
                           std::size_t num_common)
 {
     std::size_t ind = static_cast<std::size_t>(blockIdx.x);
@@ -221,7 +215,12 @@ void EmitCartesianProduct(const CW* index,
 
         std::size_t k_w = i / num_idx;
         std::size_t k_idx = i % num_idx;
-        out_pairs[start + i] = Pair {index[start_idx + k_idx], words[start_w + k_w]};
+
+        const CW& idx = index[start_idx + k_idx];
+        const CW& w = words[start_w + k_w];
+
+        out_pairs[start + i] = SEEDMATCH {0, w.nam, w.pos, w.intron,
+                                          0, idx.nam, idx.pos, idx.intron};
     }
 }
 
@@ -337,7 +336,7 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         std::cerr << "total " << total_out << std::endl;
 
         // generate matches
-        thrust::device_vector<Pair> out_pairs(total_out);
+        thrust::device_vector<SEEDMATCH> out_pairs(total_out);
 
         const CW* d_idx = thrust::raw_pointer_cast(index->d_vecs[i].data());
         const CW* d_w = thrust::raw_pointer_cast(word_vec.data());
@@ -353,7 +352,7 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
 
         const std::uint32_t* d_out_offsets = thrust::raw_pointer_cast(out_offsets.data());
 
-        Pair* d_pairs = thrust::raw_pointer_cast(out_pairs.data());
+        SEEDMATCH* d_pairs = thrust::raw_pointer_cast(out_pairs.data());
 
         int threads = 256;
         int blocks = static_cast<int>(num_common);
@@ -367,6 +366,10 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                                         num_common);
 
 
+        // sort
+        thrust::sort(out_pairs.begin(), out_pairs.end(), [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b) {return a.read < b.read;});
+
+        // copy to host
 
     }
 
