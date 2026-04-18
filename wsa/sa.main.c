@@ -1181,7 +1181,7 @@ static void export (const void *vp)
   return ;
 } /* export */
 
-
+#ifdef USEGPU	  
 GPUIndex* GPUIndexNew(const PP* p, BB* bbG)
 {
     int i;
@@ -1204,7 +1204,7 @@ GPUIndex* GPUIndexNew(const PP* p, BB* bbG)
 
     return result;
 }
-
+#endif
 
 
 /**************************************************************/
@@ -1218,7 +1218,10 @@ static void wholeWork (const void *vp)
 
   clock_t  t1, t2, t01, t02 ;
 
+#ifdef USEGPU
   GPUIndex* gpu_idx = GPUIndexNew(pp, &bbG);
+#endif
+  
   CW** words = (CW**)malloc(NN * sizeof(CW*));
   long int* sizes = (long int*)malloc(NN * sizeof(long int));
 
@@ -1301,7 +1304,10 @@ static void wholeWork (const void *vp)
       t01 = t02 ;
     }
 
-    GPUIndexFree(gpu_idx);
+#ifdef USEGPU
+  GPUIndexFree(gpu_idx);
+#endif
+  
     if (words) {
         free(words);
         words = NULL;
