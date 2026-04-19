@@ -329,7 +329,8 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 /* #endif // USEGPU */
 
 /**************************************************************/
-static int saRadixSortSeedMatch (BigArray aa) ;
+static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex) ;
+
 int saSort (BigArray aa, int type)
 {
   long int N = bigArrayMax (aa) ;
@@ -343,6 +344,8 @@ int saSort (BigArray aa, int type)
   switch (type)
     {
     case 1:
+      saRadixSort (bigArrp (aa, 0, CW), bigArrayMax (aa), sizeof (CW), 0) ;
+      return 0 ;	
       if (s != 16) messcrash ("Wrong call to saSort type 1") ;
       if (checkClean1 (cp, N))
 	return FALSE ;  /* i did not use the GPU */
@@ -394,18 +397,14 @@ int saSort (BigArray aa, int type)
       else /* GPU threshold not met: fall through to CPU sort below */
 #endif
 	{
-	  if (type == 5)  /* 20260412 to be tested for speed against case 4 */
-	    saRadixSortSeedMatch (aa) ;
-	  else
-	    {
-	      size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
-	      char *buf = aligned_alloc(16, alloc_size) ;
-	      if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
-	      memcpy (buf, cp, N * s) ;
-	      saSortDo (cp, N, s, buf, TRUE, cmp) ;
-	      free (buf) ;
-	    }
+	  size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
+	  char *buf = aligned_alloc(16, alloc_size) ;
+	  if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
+	  memcpy (buf, cp, N * s) ;
+	  saSortDo (cp, N, s, buf, TRUE, cmp) ;
+	  free (buf) ;
 	}
+	
       
       
 #ifdef TIME_EVAL      
@@ -418,158 +417,6 @@ int saSort (BigArray aa, int type)
   return usedGPU ;
 }/* saSort */
 
-/**************************************************************/
-/**************************************************************/
-/**************************************************************/
-/* Two-pass LSB radix sort on SEEDMATCH.read (unsigned int key at offset 0)
- * vp  : pointer to SEEDMATCH array, must be 64-byte aligned
- * N   : number of records
- * The sort is stable and out-of-place internally (allocates one scratch buffer).
- * Returns 0 on success, -1 on allocation failure.
- 
- 
- * Two-pass LSB radix sort, 16 bits per pass, key = first unsigned int (read) 
- * Pass 1: sort on bits  0..15 (low  half of read)
- * Pass 2: sort on bits 16..31 (high half of read)
- */
-
-#define RADIX_BITS  16
-#define RADIX_SIZE  (1 << RADIX_BITS)   /* 65536 buckets */
-#define RADIX_MASK  (RADIX_SIZE - 1)
-
-static int saRadixSortSeedMatch (BigArray aa)
-{
-  int s = aa->size ;
-  int nUINT = s / sizeof (unsigned int) ;
-  long int N = aa ? bigArrayMax (aa) : 0 ;
-  unsigned int *src = (unsigned int *) aa->base ;
-  unsigned int *dst ;
-  long int   counts[2][RADIX_SIZE] ;
-  long int   offsets[RADIX_SIZE] ;
-  long int   i, bucket ;
-  unsigned int key ;
-  
-  if (N <= 1)
-    return 0 ;
-  
-  /* allocate scratch buffer, same alignment guarantee as input */
-  dst = (unsigned int *) aligned_alloc (64, (size_t) N * s) ;
-  if (!dst)
-    return -1 ;
-  
-  /* --- histogram pass: count both 16-bit halves in one sequential scan --- */
-  memset (counts, 0, sizeof (counts)) ;
-  for (i = 0 ; i < N ; i++)
-    {
-      key = src[i * nUINT] ;
-      counts[0][ key        & RADIX_MASK]++ ;   /* low  16 bits */
-      counts[1][(key >> 16) & RADIX_MASK]++ ;   /* high 16 bits */
-    }
-  
-  /* --- pass 1: sort on low 16 bits, src -> dst --- */
-  offsets[0] = 0 ;
-  for (i = 1 ; i < RADIX_SIZE ; i++)
-    offsets[i] = offsets[i-1] + counts[0][i-1] ;
-  
-  for (i = 0 ; i < N ; i++)
-    {
-      bucket = src[i * nUINT] & RADIX_MASK ;
-      dst[offsets[bucket]++] = src[i * nUINT] ;
-    }
-  
-  /* --- pass 2: sort on high 16 bits, dst -> src --- */
-  offsets[0] = 0 ;
-  for (i = 1 ; i < RADIX_SIZE ; i++)
-    offsets[i] = offsets[i-1] + counts[1][i-1] ;
-  
-  for (i = 0 ; i < N ; i++)
-    {
-      bucket = (dst[i] >> 16) & RADIX_MASK ;
-      src[offsets[bucket]++] = dst[i] ;
-    }
-  
-  /* result is back in src (original vp), dst is scratch only */
-  free (dst) ;
-  return 0 ;
-}
-
-/**************************************************************/
-/**************************************************************/
-/**************************************************************/
-/**************************************************************/
-/**************************************************************/
-/**************************************************************/
-/* Two-pass LSB radix sort on SEEDMATCH.read (unsigned int key at offset 0)
- * vp  : pointer to SEEDMATCH array, must be 64-byte aligned
- * N   : number of records
- * The sort is stable and out-of-place internally (allocates one scratch buffer).
- * Returns 0 on success, -1 on allocation failure.
- 
- 
- * Two-pass LSB radix sort, 16 bits per pass, key = first unsigned int (read) 
- * Pass 1: sort on bits  0..15 (low  half of read)
- * Pass 2: sort on bits 16..31 (high half of read)
- */
-
-#define RADIX_BITS  16
-#define RADIX_SIZE  (1 << RADIX_BITS)   /* 65536 buckets */
-#define RADIX_MASK  (RADIX_SIZE - 1)
-
-static int saRadixSortSeedMatch (BigArray aa)
-{
-  int s = aa->size ;
-  int nUINT = s / sizeof (unsigned int) ;
-  long int N = aa ? bigArrayMax (aa) : 0 ;
-  unsigned int *src = (unsigned int *) aa->base ;
-  unsigned int *dst ;
-  long int   counts[2][RADIX_SIZE] ;
-  long int   offsets[RADIX_SIZE] ;
-  long int   i, bucket ;
-  unsigned int key ;
-  
-  if (N <= 1)
-    return 0 ;
-  
-  /* allocate scratch buffer, same alignment guarantee as input */
-  dst = (unsigned int *) aligned_alloc (64, (size_t) N * s) ;
-  if (!dst)
-    return -1 ;
-  
-  /* --- histogram pass: count both 16-bit halves in one sequential scan --- */
-  memset (counts, 0, sizeof (counts)) ;
-  for (i = 0 ; i < N ; i++)
-    {
-      key = src[i * nUINT] ;
-      counts[0][ key        & RADIX_MASK]++ ;   /* low  16 bits */
-      counts[1][(key >> 16) & RADIX_MASK]++ ;   /* high 16 bits */
-    }
-  
-  /* --- pass 1: sort on low 16 bits, src -> dst --- */
-  offsets[0] = 0 ;
-  for (i = 1 ; i < RADIX_SIZE ; i++)
-    offsets[i] = offsets[i-1] + counts[0][i-1] ;
-  
-  for (i = 0 ; i < N ; i++)
-    {
-      bucket = src[i * nUINT] & RADIX_MASK ;
-      dst[offsets[bucket]++] = src[i * nUINT] ;
-    }
-  
-  /* --- pass 2: sort on high 16 bits, dst -> src --- */
-  offsets[0] = 0 ;
-  for (i = 1 ; i < RADIX_SIZE ; i++)
-    offsets[i] = offsets[i-1] + counts[1][i-1] ;
-  
-  for (i = 0 ; i < N ; i++)
-    {
-      bucket = (dst[i] >> 16) & RADIX_MASK ;
-      src[offsets[bucket]++] = dst[i] ;
-    }
-  
-  /* result is back in src (original vp), dst is scratch only */
-  free (dst) ;
-  return 0 ;
-}
 
 /**************************************************************/
 /**************************************************************/
@@ -594,14 +441,32 @@ static int saRadixSortSeedMatch (BigArray aa)
  * The result is left in base[].
  * Returns 0 on success, -1 on allocation failure.
  *
+ * Fast paths (compiled only when VECTORIZED_MEM_CPY is defined):
+ *   stride == 16 : one _mm_load/store_si128  per record (1 x 128-bit op)
+ *   stride == 32 : two _mm_load/store_si128  per record (2 x 128-bit ops)
+ *   Requires SSE2 only (-msse2), available on all x86-64 targets.
+ *   Key extraction uses a direct unsigned int* read from the aligned
+ *   pointer — no SSE4.1 (_mm_extract_epi32) needed.
+ *
  *  N==0 guard made explicit (bigArrayMax can return 0 with null aa).
- *  All VLAs removed; counts/offsets are static-sized on the stack —
- *     safe because RADIX_SIZE*sizeof(long int) is only 512 kB total.
+ *  All VLAs removed; counts/offsets are static-sized on the stack.
  **************************************************************/
 
 #define RADIX_BITS  16
 #define RADIX_SIZE  (1u << RADIX_BITS)   /* 65 536 buckets */
 #define RADIX_MASK  (RADIX_SIZE - 1u)
+
+#ifdef VECTORIZED_MEM_CPY
+#include <emmintrin.h>   /* SSE2 only — _mm_load/store_si128 */
+
+/* Read the sort key from an aligned struct pointer.
+ * keyOff is 0 (k1) or 4 (k2).
+ * Casting through unsigned int* is valid in C: the struct is aligned
+ * and unsigned char* -> unsigned int* aliasing is well-defined here
+ * because the underlying object really is an unsigned int.            */
+#define SA_KEY_FROM_PTR(ptr)  (*(unsigned int *)((ptr) + keyOff))
+
+#endif  /* VECTORIZED_MEM_CPY */
 
 static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
 {
@@ -619,7 +484,7 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
   /* scratch buffer: N records of stride bytes, 128-byte aligned */
   dst = (unsigned char *) aligned_alloc (128, N * stride) ;
   if (!dst)
-    messcrash ("malloc failure is saRadixSort") ;
+    messcrash ("malloc failure in saRadixSort") ;
 
   /* ------------------------------------------------------------------ */
   /* Histogram pass: count low-16 and high-16 bits in one linear scan   */
@@ -627,7 +492,6 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
   memset (counts, 0, sizeof (counts)) ;
   for (i = 0 ; i < (long int) N ; i++)
     {
-      /* read the chosen key word from the i-th struct */
       memcpy (&key, src + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
       counts[0][ key         & RADIX_MASK]++ ;   /* low  16 bits */
       counts[1][(key >> 16u) & RADIX_MASK]++ ;   /* high 16 bits */
@@ -640,16 +504,45 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
   for (i = 1 ; i < (long int) RADIX_SIZE ; i++)
     offsets[i] = offsets[i - 1] + counts[0][i - 1] ;
 
-  for (i = 0 ; i < (long int) N ; i++)
+#ifdef VECTORIZED_MEM_CPY
+  if (stride == 16)
     {
-      unsigned int bucket ;
-      memcpy (&key, src + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
-      bucket = key & RADIX_MASK ;
-      /* copy the entire struct into its output position */
-      memcpy (dst + (size_t) offsets[bucket] * stride,
-              src + (size_t) i              * stride,
-              stride) ;
-      offsets[bucket]++ ;
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned char  *sp     = src + (size_t) i * stride ;
+          unsigned int    bucket = SA_KEY_FROM_PTR (sp) & RADIX_MASK ;
+          __m128i         rec    = _mm_load_si128 ((__m128i *) sp) ;
+          _mm_store_si128 ((__m128i *)(dst + (size_t) offsets[bucket] * stride), rec) ;
+          offsets[bucket]++ ;
+        }
+    }
+  else if (stride == 32)
+    {
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned char  *sp     = src + (size_t) i * stride ;
+          unsigned int    bucket = SA_KEY_FROM_PTR (sp) & RADIX_MASK ;
+          __m128i         lo     = _mm_load_si128 ((__m128i *) sp) ;
+          __m128i         hi     = _mm_load_si128 ((__m128i *)(sp + 16)) ;
+          unsigned char  *dp     = dst + (size_t) offsets[bucket] * stride ;
+          _mm_store_si128 ((__m128i *) dp,       lo) ;
+          _mm_store_si128 ((__m128i *)(dp + 16), hi) ;
+          offsets[bucket]++ ;
+        }
+    }
+  else
+#endif  /* VECTORIZED_MEM_CPY */
+    {
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned int bucket ;
+          memcpy (&key, src + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
+          bucket = key & RADIX_MASK ;
+          memcpy (dst + (size_t) offsets[bucket] * stride,
+                  src + (size_t) i              * stride,
+                  stride) ;
+          offsets[bucket]++ ;
+        }
     }
 
   /* ------------------------------------------------------------------ */
@@ -659,16 +552,45 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
   for (i = 1 ; i < (long int) RADIX_SIZE ; i++)
     offsets[i] = offsets[i - 1] + counts[1][i - 1] ;
 
-  for (i = 0 ; i < (long int) N ; i++)
+#ifdef VECTORIZED_MEM_CPY
+  if (stride == 16)
     {
-      unsigned int bucket ;
-      /* key is now in dst[], addressed as the i-th struct  */
-      memcpy (&key, dst + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
-      bucket = (key >> 16u) & RADIX_MASK ;
-      memcpy (src + (size_t) offsets[bucket] * stride,
-              dst + (size_t) i              * stride,
-              stride) ;
-      offsets[bucket]++ ;
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned char  *dp     = dst + (size_t) i * stride ;
+          unsigned int    bucket = (SA_KEY_FROM_PTR (dp) >> 16u) & RADIX_MASK ;
+          __m128i         rec    = _mm_load_si128 ((__m128i *) dp) ;
+          _mm_store_si128 ((__m128i *)(src + (size_t) offsets[bucket] * stride), rec) ;
+          offsets[bucket]++ ;
+        }
+    }
+  else if (stride == 32)
+    {
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned char  *dp     = dst + (size_t) i * stride ;
+          unsigned int    bucket = (SA_KEY_FROM_PTR (dp) >> 16u) & RADIX_MASK ;
+          __m128i         lo     = _mm_load_si128 ((__m128i *) dp) ;
+          __m128i         hi     = _mm_load_si128 ((__m128i *)(dp + 16)) ;
+          unsigned char  *sp     = src + (size_t) offsets[bucket] * stride ;
+          _mm_store_si128 ((__m128i *) sp,       lo) ;
+          _mm_store_si128 ((__m128i *)(sp + 16), hi) ;
+          offsets[bucket]++ ;
+        }
+    }
+  else
+#endif  /* VECTORIZED_MEM_CPY */
+    {
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned int bucket ;
+          memcpy (&key, dst + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
+          bucket = (key >> 16u) & RADIX_MASK ;
+          memcpy (src + (size_t) offsets[bucket] * stride,
+                  dst + (size_t) i              * stride,
+                  stride) ;
+          offsets[bucket]++ ;
+        }
     }
 
   /* result is back in src (== base); dst was scratch only */
@@ -679,6 +601,9 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
 /**************************************************************/
 /**************************************************************/
 /**************************************************************/
+
+
+
 
 #ifdef JUNK
 # AI prompt to analyze the code

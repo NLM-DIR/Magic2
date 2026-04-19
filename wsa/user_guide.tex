@@ -63,12 +63,12 @@
 %\begin{center}
 \noindent
 {\Large \bf
-The ACeDB Object Oriented Database Query Language.
+The Magic2 deep RNA-sequenecing analyser\\User Guide
 }\\
 \\
+{\bf G.~Boratyn}\\[2mm]
 {\bf D.~Thierry-Mieg}\\[2mm]
 {\bf J.~Thierry-Mieg}\\[2mm]
-National Center for Biotechnology Information,\\
 National Library of Medicine, National Institutes of Health,\\
 8600 Rockville Pike, Bethesda MD20894, USA.\\
  E-mail: mieg@ncbi.nlm.nih.gov \\[2mm]
@@ -89,22 +89,15 @@ National Library of Medicine, National Institutes of Health,\\
 %PACS numbers: 03.67.Hk, 02.30.Gp
 
 \begin{abstract}
-  Magic2 is a long and short reads RNA deep-sequencing analyser.
-  The program is easy to use because it analyses the first 10 mebabases of the data to select by itself the best alignemnt strategy and parameters.
-  It is fast because in addition to the alignments, it exports the introns, the coverage plots and the gene expression profiles and other results in a single pass.
-  The target, say a given version of the human genome, is constructed in a few minutes by providing a genome fasta file and the corresponding gff/gtf annotations.
-  The reads can be private fasta/fastq files or downloaded on the fly from the NCBI short read archive (SRA) by just providing a set of SRR identifiers.
-  The program analyses the hardware to tune its level of parallelisation. For the human genome, it needs 32 Gb of RAM, and will already work on a 4 CPU machine,
-  but it runs faster on a more CPUs and, if available, it will use a GPU.
-  As a becnhmark, we have compared Magic2 to Magic-Blast, HISAT, Star, and Minimap on 20 different datasets. each of size 2 Gigabases.
-  We chose 12 Illumina paired en samples, 5 PacBio, 4 Nanopore, and 2 Roche runs. 17 are RNA-seq and 3 are DNA-seq. 12 are human samples, 6 are
-  from different primates aligned to the T2T human genome, one is C.elegans and 3 are artificial baruzzo controls.
-  A truth control is provided by also aligning the RefSeq full length mRNAs
-  We ran all programs on the NCBI compute farm and measured the elapsed time, the CPU time, and percentages or pairs. reads and bases aligned ; the number
-  of perfect reads and of compatible pairs ; and the number of mismatches and ambiguous alignments. Magic2 outperforms all the other codes
-  on nearly all metrics, while exporting more results at no additional cost (alignments, expression, coverage plots, etc).
-  The code is open-source and freely-available from git@github.com:NLM-DIR/Magic2.
+  Magic2 is an accurate and sensitive long and short reads RNA deep-sequencing analyser.
+  It can read local fasta/fastq files or import data-sets on the fly from the NCBI short-read-archive (SRA).
+  It can export in a signle pass the alignment files, the coverage plots, the gene expression and many metrics.
+  It is very easy to use because it analyzes in a dry run the top of the sequence files and the hardware
+  to select the optimal strategy. This guide explains how to use this program.
+
   
+  Magic2 is freely avaliable from
+  git@github.com:NLM-DIR/Magic2
 \end{abstract}
 
 %\vfill\eject
@@ -119,7 +112,7 @@ National Library of Medicine, National Institutes of Health,\\
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}
 Considering the fast evolution of the sequencing technologies, we need to
-accuratelly aligned an ever greater number of short piared-end Illumina reads
+accuratelly aligned an ever greater number of short paired-end Illumina reads
 and ever longer reads from PacBio, Nanopore, Roche and other manufacturers.
 The files are very large and it is important to minimize the number of steps
 and intermediate formats.
@@ -131,6 +124,139 @@ Optionally, these data can be cached on the local computer as new fastq files, b
 if you have a fast network connection to NCBI, this
 is not mandatory. Converselly, Magic2 is convenient just to download the data
 that you wish to analyze with other programs.
+
+The program recognizes the eventual adaptors and reports very detailled quality control metrics,
+It is fast because, in a single pass,
+it can export the alignments, the gene expression counts,
+the known and new introns and their support, 
+the polyA addition sites.
+and a collection of coverage plots indicating the gene expression,
+the probable breakpoints and the candidate transcriptions starts and stops.
+
+Section 1 gives simple examples of how to use Magic2.
+Section 2 explains how to download and recompile the program.
+Section 3 gives all the details on the recognized sequence formats and the way
+to download the runs from SRA.
+Section 4 explains the contruction of the target index.
+The remaining section present the various output files and how to use them.
+
+If available, the code will delegate parts of the calculations to a GPU.
+
+\section {Simple examples}
+
+First download the code on a Linux or Mac machine with at least 32 Giga bases or RAM.
+The code will already run if you have 4 processors, and will run faster
+on a larger machine because it automatically adapts its level of paralellism to the
+host computer.
+
+\subsection {Align data on a raw genome}
+
+To just align a set of reads just on a genome, you need to type
+two successive commands
+
+\BL
+magic2 --createIndex IDX.test  -t genome.fasta.gz
+magic2 -x IDX.test -i read.fasta.gz -o out 
+\end{lstlisting}
+
+where 'genome.fasta.gz' is a single fasta file containing the sequence of all the chromosomes
+and 'read.fasta.gz' contains the reads. The results will be visible in the
+output directory 'out'. The data files can be gzip compressed or not, the sequences
+can be given in fasta or fastq format.
+
+To align paired end reads, the pairs can be given in two fasta/fastq files
+separated by a plus sign, 
+or in interleaved format
+\BL
+magic2 -x IDX.test -i read_R1.fastq.gz+read_R2.fastq.gz -o out2a
+magic2 -x IDX.test -i read.sample_12.fastq.gz -o out2b
+\end{lstlisting}
+
+Finally, the data can be downloaded on the fly from the NCBI Short-Read-Archives (SRA)
+and analyzed simply by providing a set of SRR identifiers
+
+\BL
+magic2 -x IDX.test -srr SRR1234,SRR1235,SRR1236 -o out23
+\end{lstlisting}
+
+Notice that you not need to say if the sequences are DNA or RNA, long or short, or if they
+contain adaptors. All these properties are automatically recognized by the code by performing a dry
+run on the first 10 Mega bases, the realigning everything with the propoer strategy.
+
+\subsection {Align data on an annotated genome}
+
+More accurate and more detailled result will be obtained if you provide a known annotation.
+Magic2 will favaorize jumping the known introns, and will report the gene expression counts.
+It will also report the fraction of the sequences mapping on the ribosomal RNA (sometimes as high as 80\%)
+and on the mitochondria. This is important because a complete genome, like the human T2T project,
+contains very many repetitions of the ribosomal RNAs and echos of parts of the mitochondria,
+and many programs, including Magic2, would not report highly repetitive alignments.
+
+To provide an annotation, you need to create a small target configuration file
+called for example T2T.tConfig  containing 2 tab separated columns
+\BL
+G        T2T.chromosomes.fasta.gz
+M        T2T.mitochondria.fasta.gz
+R        T2T.rRNA.fasta.gz
+I        T2T.gtf.gz
+\end{lstlisting}
+where T2T.gff.gz is the T2T annotation file, available for example from
+NCBI or EBI in gtf or gff format.
+
+Then, create an annotated index by using the parameter (-T) rather then (-t), and align
+\BL
+magic2 --createIndex IDX.T2T  -T  T2T.tConfig
+
+magic2 -x IDX.T2T -srr SRR1234,SRR1235,SRR1236 --full -o out5
+\end{lstlisting}
+If you have a very large machine, you could process the 3 runs in parallel,
+the memory needed by the index will be shared, but still you will consume larger ressources
+\BL
+magic2 -x IDX.T2T -srr SRR1234 --full -o out5a &
+magic2 -x IDX.T2T -srr SRR1234 --full -o out5b &
+magic2 -x IDX.T2T -srr SRR1236 --full -o out5c &
+\end{lstlisting}
+In the ouput directory, you will find the alignemnt files, the polyAs, the intron counts
+and if you used the --full parameter, yo will also find the gene expression counts
+the canditate transcription starts and ends and a collection of coverage plots.
+
+
+\section {Downloading and installing Magic2}
+
+\subsection {Simply download the executables}
+
+The precompiled executable files can be found at
+\BL
+where are the binaries
+\end{lstlisting}
+select your machine (Mac or Linux) and eventually also download the GPU enabled code
+
+\subsection{Download the source code and recompile}
+
+The code is open-source and freely available from github.
+\BL
+git clone git@github.com:NLM-DIR/Magic2
+\end{lstlisting}
+
+In case of very intensive use,
+the precompiled executables may be slightly slower than the programs recompiled locally
+because the latter may be better taylored to the instruction sets of your actual hardware.
+To recompile the C code. stay in the download directory and type
+\BL
+tcsh
+cd ./Magic2
+setenv ACEDB_MACHINE LINUX_4_OPT
+make libs
+cd wsa
+make
+\end{lstlisting}
+The executable will be the file ./Magic2/bin.LINUX\_4\_OPT/magic2
+
+//
+//
+
+
+
 
 In this project, our main goal is completeness and accuracy. We hope to align
 the highest possible percentage of reads and of bases in each read, even in
