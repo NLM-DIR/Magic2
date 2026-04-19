@@ -98,7 +98,11 @@ void    bigArrayReport (mysize_t j) ;	/* write stderr about all arrays since j *
 #define bigArrayMax(ar)            ((ar)->max)
 #define bigArrayForceFeed(ar,j) (uBigArray(ar,j), (ar)->max = (j))
 #define bigArrayExists(ar)		((ar) && (ar)->magic == BIG_ARRAY_MAGIC ? (ar)->id : 0 ) 
-            /* JTM's package to hold sorted arrays of ANY TYPE */
+
+/* force feed a new base in a big array, vpmust be 64-bytes aligned, used for example in sa.sort.c */
+void bigArraySwitchBase (BigArray aa, long int N, void *vp) ;
+
+/* JTM's package to hold sorted arrays of ANY TYPE */
 /*
 BOOL    arrayInsert(BigArray a, void * s, int (*order)(const void*, const void*));
 BOOL    arrayRemove(BigArray a, void * s, int (*order)(const void*, const void*));

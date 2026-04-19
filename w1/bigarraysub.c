@@ -108,6 +108,20 @@ BigArray   uBigArrayCreate_dbg (long int n, int size, AC_HANDLE handle,
 }
 
 /**************/
+/* force feed a new base in a big array, vpmust be 64-bytes aligned, used for example in sa.sort.c */
+ void bigArraySwitchBase (BigArray aa, long int N, void *vp)
+ {
+    uintptr_t a = (uintptr_t)ap;
+    uintptr_t aligned = (a + 63) & ~63ULL;
+
+    *shift = (int)(aligned - a);          // 0..63
+    if (shift) messcrash ("bigArraySwitchBase must be provided a pointer 64bytes aligned, not %d bytes off", shift) ; 
+   free (aa->trueBase ;
+   aa->base = aa->trueBase = vp ;
+   aa->max = N ;   
+ } /* bigArraySwitchBase */
+
+ /**************/
 
 mysize_t bigArrayReportMark (void)
 {

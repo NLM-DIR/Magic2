@@ -330,7 +330,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 
 /**************************************************************/
 static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex) ;
-
+static int saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex) ;
 int saSort (BigArray aa, int type)
 {
   long int N = bigArrayMax (aa) ;
@@ -338,14 +338,14 @@ int saSort (BigArray aa, int type)
   int s = aa->size ;
   int (*cmp)(const void *va, const void *vb) = NULL ;
   int usedGPU = 0 ;
+  int useRadix = 1 ;
+  BOOL done = FALSE ;
   
-  if (N < 2) return FALSE ;
+  if (N < 2) return FALSE ;   /* i did not use the GPU */
 
   switch (type)
     {
     case 1:
-      saRadixSort (bigArrp (aa, 0, CW), bigArrayMax (aa), sizeof (CW), 0) ;
-      return 0 ;	
       if (s != 16) messcrash ("Wrong call to saSort type 1") ;
       if (checkClean1 (cp, N))
 	return FALSE ;  /* i did not use the GPU */
@@ -378,42 +378,59 @@ int saSort (BigArray aa, int type)
       messcrash ("Wrong call to saSort type = %d > 4", type) ;
     }
   if (N < 128)
-    newInsertionSort (cp, N, s, cmp) ;
-  else
     {
-      
-#ifdef TIME_EVAL
-      struct timespec start, end;
-      double ellapsed;
-      timespec_get(&start, TIME_UTC);
-#endif
-      
-#ifdef USEGPU
-      if (type < 3 && (size_t)N * s > (1 << 20))
-	{
-	  usedGPU = 1 ;
-	   saGPUSort (cp, N, type) ;
-	}
-      else /* GPU threshold not met: fall through to CPU sort below */
-#endif
-	{
-	  size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
-	  char *buf = aligned_alloc(16, alloc_size) ;
-	  if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
-	  memcpy (buf, cp, N * s) ;
-	  saSortDo (cp, N, s, buf, TRUE, cmp) ;
-	  free (buf) ;
-	}
-	
-      
-      
-#ifdef TIME_EVAL      
-      timespec_get(&end, TIME_UTC);
-      ellapsed = (double)(end.tv_sec - start.tv_sec) +
-	(double)(end.tv_nsec - start.tv_nsec) / 1000000000.0;
-      fprintf(stderr, "Sorted %ld elements in %f seconds (type: %d)\n", N, ellapsed, type);
-#endif      
+      newInsertionSort (cp, N, s, cmp) ;
+      done = TRUE ;
     }
+
+#ifdef TIME_EVAL
+  struct timespec start, end;
+  double ellapsed;
+  timespec_get(&start, TIME_UTC);
+#endif
+  
+#ifdef USEGPU
+  if (! done && type < 3 && (size_t)N * s > (1 << 20))
+    {
+      usedGPU = 1 ;
+      saGPUSort (cp, N, type) ;
+      done = TRUE ;
+    }
+#endif
+
+  /* GPU threshold not met: fall through to CPU sort below */
+  if (! done && useRadix)
+    {
+      switch (type)
+	{
+	case 1:
+	  saRadixSort3 (bigArrp (aa, 0, CW), bigArrayMax (aa), sizeof (CW), 0) ;
+	  done = TRUE ;
+	  break ;
+	case 4:
+	  saRadixSort3 (bigArrp (aa, 0, SEEDMATCH), bigArrayMax (aa), sizeof (SEEDMATCH), 1) ;
+	  done = TRUE ;
+	  break ;
+	}
+    }
+
+  if (! done)
+    {
+      size_t alloc_size = ((size_t)N * s + 15) & ~15 ;
+      char *buf = aligned_alloc(16, alloc_size) ;
+      if (! buf) messcrash ("\nsa.sort.c alloc failure, consider lowering --bMax\n") ;
+      memcpy (buf, cp, N * s) ;
+      saSortDo (cp, N, s, buf, TRUE, cmp) ;
+      free (buf) ;
+    }
+  
+#ifdef TIME_EVAL      
+  timespec_get(&end, TIME_UTC);
+  ellapsed = (double)(end.tv_sec - start.tv_sec) +
+    (double)(end.tv_nsec - start.tv_nsec) / 1000000000.0;
+  fprintf(stderr, "Sorted %ld elements in %f seconds (type: %d)\n", N, ellapsed, type);
+#endif      
+
   return usedGPU ;
 }/* saSort */
 
@@ -457,7 +474,6 @@ int saSort (BigArray aa, int type)
 #define RADIX_MASK  (RADIX_SIZE - 1u)
 
 #ifdef VECTORIZED_MEM_CPY
-#include <emmintrin.h>   /* SSE2 only — _mm_load/store_si128 */
 
 /* Read the sort key from an aligned struct pointer.
  * keyOff is 0 (k1) or 4 (k2).
@@ -505,6 +521,7 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
     offsets[i] = offsets[i - 1] + counts[0][i - 1] ;
 
 #ifdef VECTORIZED_MEM_CPY
+
   if (stride == 16)
     {
       for (i = 0 ; i < (long int) N ; i++)
@@ -602,6 +619,228 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
 /**************************************************************/
 /**************************************************************/
 
+/**************************************************************/
+/**************************************************************/
+/**************************************************************/
+
+/* Three-pass LSB radix sort on an array of fixed-size structs.
+ *
+ * Prototype:
+ *   saRadixSort3(void *base, size_t N, size_t stride, int keyIndex)
+ *
+ *   base      : pointer to the array, guaranteed 128-byte aligned
+ *   N         : number of records
+ *   stride    : size in bytes of each struct (must be a multiple of
+ *               sizeof(unsigned int) and >= 2*sizeof(unsigned int))
+ *   keyIndex  : 0 => sort on first  unsigned int (k1, offset 0)
+ *               1 => sort on second unsigned int (k2, offset 4)
+ *
+ * The sort is a stable, three-pass LSB radix sort:
+ *   Pass 1: bits  0..10  (11 bits, 2048 buckets)
+ *   Pass 2: bits 11..21  (11 bits, 2048 buckets)
+ *   Pass 3: bits 22..31  (10 bits, 1024 buckets)
+ *
+ * Working set per pass: 2048 * sizeof(long int) = 16 kB — fits in L1.
+ * This eliminates the LLC cache-miss thrashing that made the 2-pass
+ * 65536-bucket version memory-bound.
+ *
+ * The result is left in base[].
+ * After an odd number of passes the final result must be copied back;
+ * this is done with the same SIMD path used for scatter, so the extra
+ * copy is cheap.
+ *
+ * Fast paths (compiled only when VECTORIZED_MEM_CPY is defined):
+ *   stride == 16 : one _mm_load/store_si128  per record
+ *   stride == 32 : two _mm_load/store_si128  per record
+ *   Requires SSE2 only (-msse2).
+ *
+ * Returns 0 on success, -1 on allocation failure.
+ **************************************************************/
+
+#define R3_BITS_A   11
+#define R3_BITS_B   11
+#define R3_BITS_C   10
+
+#define R3_SIZE_A   (1u << R3_BITS_A)   /* 2048 */
+#define R3_SIZE_B   (1u << R3_BITS_B)   /* 2048 */
+#define R3_SIZE_C   (1u << R3_BITS_C)   /* 1024 */
+
+#define R3_MASK_A   (R3_SIZE_A - 1u)
+#define R3_MASK_B   (R3_SIZE_B - 1u)
+#define R3_MASK_C   (R3_SIZE_C - 1u)
+
+#define R3_SHIFT_A   0
+#define R3_SHIFT_B   R3_BITS_A                     /* 11 */
+#define R3_SHIFT_C   (R3_BITS_A + R3_BITS_B)       /* 22 */
+
+#ifdef VECTORIZED_MEM_CPY
+#ifndef _EMMINTRIN_H_INCLUDED   /* guard against double-include */
+#include <emmintrin.h>
+#endif
+
+#define SA3_KEY_FROM_PTR(ptr)  (*(unsigned int *)((ptr) + keyOff))
+
+/* scatter one 16-byte record from sp into dp */
+#define SA3_SCATTER_16(dp, sp)                                  \
+  do {                                                          \
+    __m128i _r = _mm_load_si128  ((__m128i *)(sp)) ;           \
+    _mm_store_si128 ((__m128i *)(dp), _r) ;                     \
+  } while (0)
+
+/* scatter one 32-byte record from sp into dp */
+#define SA3_SCATTER_32(dp, sp)                                  \
+  do {                                                          \
+    __m128i _lo = _mm_load_si128 ((__m128i *)(sp)) ;           \
+    __m128i _hi = _mm_load_si128 ((__m128i *)((sp) + 16)) ;    \
+    _mm_store_si128 ((__m128i *)(dp),        _lo) ;             \
+    _mm_store_si128 ((__m128i *)((dp) + 16), _hi) ;             \
+  } while (0)
+
+#endif  /* VECTORIZED_MEM_CPY */
+
+/* ------------------------------------------------------------------ */
+/* Internal helper: one scatter pass                                   */
+/*   from[0..N-1] -> to[0..N-1]                                       */
+/*   key bits selected by (key >> shift) & mask                        */
+/*   counts[] is the already-computed histogram for this pass          */
+/* ------------------------------------------------------------------ */
+static void saR3Pass (unsigned char *from,
+                      unsigned char *to,
+                      size_t         N,
+                      size_t         stride,
+                      size_t         keyOff,
+                      unsigned int   shift,
+                      unsigned int   mask,
+                      long int       counts[],   /* R3_SIZE_A >= all sizes */
+                      long int       offsets[])
+{
+  long int      i ;
+  unsigned int  sz = mask + 1u ;   /* number of buckets for this pass */
+
+  /* prefix sum */
+  offsets[0] = 0 ;
+  for (i = 1 ; i < (long int) sz ; i++)
+    offsets[i] = offsets[i - 1] + counts[i - 1] ;
+
+  /* scatter */
+#ifdef VECTORIZED_MEM_CPY
+  if (stride == 16)
+    {
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned char *sp     = from + (size_t) i * stride ;
+          unsigned int   bucket = (SA3_KEY_FROM_PTR (sp) >> shift) & mask ;
+          SA3_SCATTER_16 (to + (size_t) offsets[bucket] * stride, sp) ;
+          offsets[bucket]++ ;
+        }
+      return ;
+    }
+  if (stride == 32)
+    {
+      for (i = 0 ; i < (long int) N ; i++)
+        {
+          unsigned char *sp     = from + (size_t) i * stride ;
+          unsigned int   bucket = (SA3_KEY_FROM_PTR (sp) >> shift) & mask ;
+          SA3_SCATTER_32 (to + (size_t) offsets[bucket] * stride, sp) ;
+          offsets[bucket]++ ;
+        }
+      return ;
+    }
+#endif  /* VECTORIZED_MEM_CPY */
+  /* generic fallback */
+  {
+    unsigned int key ;
+    for (i = 0 ; i < (long int) N ; i++)
+      {
+        unsigned int bucket ;
+        memcpy (&key, from + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
+        bucket = (key >> shift) & mask ;
+        memcpy (to   + (size_t) offsets[bucket] * stride,
+                from + (size_t) i              * stride,
+                stride) ;
+        offsets[bucket]++ ;
+      }
+  }
+}  /* saR3Pass */
+
+/* ------------------------------------------------------------------ */
+/* Copy-back helper: dst -> src, full array, same SIMD paths           */
+/* ------------------------------------------------------------------ */
+static void saR3CopyBack (unsigned char *dst,
+                          unsigned char *src,
+                          size_t         N,
+                          size_t         stride)
+{
+#ifdef VECTORIZED_MEM_CPY
+  size_t i ;
+  if (stride == 16)
+    {
+      for (i = 0 ; i < N ; i++)
+        SA3_SCATTER_16 (src + i * stride, dst + i * stride) ;
+      return ;
+    }
+  if (stride == 32)
+    {
+      for (i = 0 ; i < N ; i++)
+        SA3_SCATTER_32 (src + i * stride, dst + i * stride) ;
+      return ;
+    }
+#endif
+  memcpy (src, dst, N * stride) ;
+}  /* saR3CopyBack */
+
+/* ------------------------------------------------------------------ */
+/* Main entry point                                                     */
+/* ------------------------------------------------------------------ */
+static int saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex)
+{
+  unsigned char  *src = (unsigned char *) base ;
+  unsigned char  *dst ;
+  /* largest pass has R3_SIZE_A == 2048 buckets */
+  long int        counts[3][R3_SIZE_A] ;
+  long int        offsets[R3_SIZE_A] ;
+  long int        i ;
+  unsigned int    key ;
+  const size_t    keyOff = (size_t) keyIndex * sizeof (unsigned int) ;
+
+  if (!base || N <= 1)
+    return 0 ;
+
+  /* scratch buffer: N records, 128-byte aligned */
+  dst = (unsigned char *) aligned_alloc (128, N * stride) ;
+  if (!dst)
+    messcrash ("malloc failure in saRadixSort3") ;
+
+  /* ------------------------------------------------------------------ */
+  /* Histogram pass: fill all three count arrays in one linear scan     */
+  /* ------------------------------------------------------------------ */
+  memset (counts, 0, sizeof (counts)) ;
+  for (i = 0 ; i < (long int) N ; i++)
+    {
+      memcpy (&key, src + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
+      counts[0][(key >> R3_SHIFT_A) & R3_MASK_A]++ ;
+      counts[1][(key >> R3_SHIFT_B) & R3_MASK_B]++ ;
+      counts[2][(key >> R3_SHIFT_C) & R3_MASK_C]++ ;
+    }
+
+  /* ------------------------------------------------------------------ */
+  /* Pass 1: bits  0..10,  src -> dst                                   */
+  /* Pass 2: bits 11..21,  dst -> src                                   */
+  /* Pass 3: bits 22..31,  src -> dst                                   */
+  /* After pass 3 the sorted data is in dst; copy back to src (base).   */
+  /* ------------------------------------------------------------------ */
+  saR3Pass (src, dst, N, stride, keyOff, R3_SHIFT_A, R3_MASK_A, counts[0], offsets) ;
+  saR3Pass (dst, src, N, stride, keyOff, R3_SHIFT_B, R3_MASK_B, counts[1], offsets) ;
+  saR3Pass (src, dst, N, stride, keyOff, R3_SHIFT_C, R3_MASK_C, counts[2], offsets) ;
+  saR3CopyBack (dst, src, N, stride) ;
+
+  free (dst) ;
+  return 0 ;
+}  /* saRadixSort3 */
+
+/**************************************************************/
+/**************************************************************/
+/**************************************************************/
 
 
 
