@@ -1,0 +1,951 @@
+\documentclass[11pt]{article}
+\pdfoutput=1
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mdframed}
+
+\geometry{
+  letterpaper,
+  top=25mm, bottom=25mm,
+  left=25mm, right=25mm
+}
+
+% ---------------------------------------------------------------
+% Code listing style
+% ---------------------------------------------------------------
+\definecolor{codebg}{rgb}{0.95,0.95,0.95}
+\definecolor{codeframe}{rgb}{0.7,0.7,0.7}
+\definecolor{commentcolor}{rgb}{0.4,0.4,0.4}
+\definecolor{keywordcolor}{rgb}{0.1,0.3,0.7}
+
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{codeframe},
+  tabsize=4,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  commentstyle=\color{commentcolor}\itshape,
+  keywordstyle=\color{keywordcolor},
+  numbers=none,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=8pt
+}
+
+% Convenience macro for inline code
+\newcommand{\code}[1]{\texttt{#1}}
+
+% ---------------------------------------------------------------
+% Note / Warning boxes
+% ---------------------------------------------------------------
+\newmdenv[
+%  backgroundcolor=yellow!12,
+%  linecolor=orange!60,
+  linewidth=1pt,
+  leftmargin=0pt, rightmargin=0pt,
+  innerleftmargin=8pt, innerrightmargin=8pt,
+  innertopmargin=6pt, innerbottommargin=6pt,
+  skipabove=8pt, skipbelow=8pt
+]{notebox}
+
+\newmdenv[
+  backgroundcolor=red!8,
+%  linecolor=red!60,
+  linewidth=1pt,
+  leftmargin=0pt, rightmargin=0pt,
+  innerleftmargin=8pt, innerrightmargin=8pt,
+  innertopmargin=6pt, innerbottommargin=6pt,
+  skipabove=8pt, skipbelow=8pt
+]{warnbox}
+
+% ---------------------------------------------------------------
+% Headers / footers
+% ---------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Magic2 User Guide}
+\fancyhead[R]{\small v1.0}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---------------------------------------------------------------
+% Section formatting
+% ---------------------------------------------------------------
+\titleformat{\section}{\large\bfseries}{{\thesection}}{0.8em}{}[\vspace{2pt}\hrule\vspace{4pt}]
+\titleformat{\subsection}{\normalsize\bfseries}{{\thesubsection}}{0.8em}{}
+\titleformat{\subsubsection}{\normalsize\itshape\bfseries}{{\thesubsubsection}}{0.8em}{}
+
+% ---------------------------------------------------------------
+\begin{document}
+
+% ---------------------------------------------------------------
+% Title page
+% ---------------------------------------------------------------
+\begin{titlepage}
+\vspace*{20mm}
+{\Huge \textbf{Magic2}}\\[4mm]
+{\Large Deep RNA-Sequencing Analyser}\\[2mm]
+{\large User Guide}
+\vspace{8mm}
+\hrule
+\vspace{8mm}
+{\large Jean ~Thierry-Mieg, Danielle ~Thierry-Mieg, Greg ~Boratyn}\\[2mm]
+National Library of Medicine, National Institutes of Health\\
+8600 Rockville Pike, Bethesda MD 20894, USA\\[2mm]
+\href{mailto:mieg@ncbi.nlm.nih.gov}{\texttt{mieg@ncbi.nlm.nih.gov}}
+\href{mailto:boratyng@ncbi.nlm.nih.gov}{\texttt{boratyng@ncbi.nlm.nih.gov}}
+\vspace{8mm}
+
+\noindent Source code: \href{https://github.com/NLM-DIR/Magic2}{\texttt{https://github.com/NLM-DIR/Magic2}}
+
+\vfill
+\small National Library of Medicine $\cdot$ National Institutes of Health
+\end{titlepage}
+
+% ---------------------------------------------------------------
+\newpage
+\tableofcontents
+\newpage
+
+% ===============================================================
+\section{Overview}
+% ===============================================================
+
+Magic2 is an accurate, sensitive RNA deep-sequencing aligner designed for
+both short reads (Illumina paired-end) and long reads (PacBio, Nanopore,
+Roche).  In a single pass it produces alignment files, gene expression
+counts, intron support tables, poly-A addition sites, coverage plots, and
+quality-control metrics.
+
+\textbf{Key capabilities:}
+\begin{itemize}
+  \item Aligns reads against a raw genome or an annotated genome (GTF/GFF).
+  \item Reads local FASTA/FASTQ files (gzip-compressed or plain) or streams
+        data on the fly from the NCBI Short Read Archive (SRA).
+  \item Automatically recognises paired-end vs.\ single-end reads, adaptor
+        sequences, sequencing technology, and read length---no strategy
+        parameters required.
+  \item Adapts its parallelism to the available hardware; offloads work to
+        a GPU when one is present.
+  \item Exports alignments in BAM, Magic \code{.hits}, or tabular format.
+\end{itemize}
+
+\begin{notebox}
+\textbf{Note:} Magic2 runs a dry run on the first 10~Megabases to detect
+read characteristics before committing to a full alignment strategy.
+You do not need to specify whether reads are DNA or RNA, short or long,
+or whether they contain adaptors.
+\end{notebox}
+
+% ===============================================================
+\section{System Requirements}
+% ===============================================================
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Minimum / Recommended} \\
+\midrule
+Operating system & Linux (x86-64) or macOS \\
+RAM              & 32 GB minimum; 64+ GB recommended for human genome \\
+CPU cores        & 4 minimum; performance scales linearly with core count \\
+Disk             & Varies with genome size; \(\sim\)30 GB for a human index \\
+GPU (optional)   & Any CUDA-capable GPU accelerates seed extension \\
+Network          & Fast connection to NCBI recommended for SRA streaming \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ===============================================================
+\section{Installation}
+% ===============================================================
+
+\subsection{Using pre-built executables}
+
+Pre-compiled binaries for Linux and macOS are available from:
+\begin{lstlisting}
+https://github.com/NLM-DIR/Magic2/releases
+\end{lstlisting}
+
+Download the archive for your platform, extract it, and add the
+\code{bin/} directory to your \code{PATH}, or copy the \code{magic2}
+executable to \code{/usr/local/bin}.
+
+To verify the installation:
+\begin{lstlisting}
+magic2 --help
+\end{lstlisting}
+
+\subsection{Building from source}
+
+The source code is available on GitHub under an open-source licence.
+
+\begin{lstlisting}
+git clone git@github.com:NLM-DIR/Magic2
+\end{lstlisting}
+
+Then compile:
+\begin{lstlisting}
+tcsh
+cd Magic2
+setenv ACEDB_MACHINE LINUX_4_OPT
+make libs
+cd wsa
+make
+\end{lstlisting}
+
+The executable is created at \code{Magic2/bin.LINUX\_4\_OPT/magic2}.
+Add this directory to your \code{PATH}:
+\begin{lstlisting}
+export PATH=$PATH:/path/to/Magic2/bin.LINUX_4_OPT
+\end{lstlisting}
+
+\begin{notebox}
+\textbf{Note:} Locally compiled binaries may outperform the pre-built
+releases because the compiler can target the specific instruction sets
+of your hardware.
+\end{notebox}
+
+% ===============================================================
+\section{Quick Start}
+% ===============================================================
+
+This section shows three minimal end-to-end examples to get you started
+immediately.  Full details for each step are in the sections that follow.
+
+\subsection{Example 1: Align reads against a raw genome}
+
+\begin{lstlisting}
+# Step 1: Build the index (one time only)
+magic2 --createIndex IDX.genome -t genome.fasta.gz
+
+# Step 2: Align reads
+magic2 -x IDX.genome -i reads.fasta.gz -o results/
+\end{lstlisting}
+
+\code{genome.fasta.gz} must contain all chromosomes in a single FASTA
+file.  Results appear in the \code{results/} directory.
+
+\subsection{Example 2: Align reads against an annotated genome}
+
+\begin{lstlisting}
+# Step 1: Create a target configuration file  (tConfig)
+#   Format: one tab-separated type/filename pair per line
+#   G = genomic sequence   I = annotation (GTF/GFF)
+#   M = mitochondria       R = ribosomal RNA
+cat > human.tConfig << 'EOF'
+G	T2T.chromosomes.fasta.gz
+M	T2T.mitochondria.fasta.gz
+R	T2T.rRNA.fasta.gz
+I	T2T.annotation.gtf.gz
+EOF
+
+# Step 2: Build the annotated index
+magic2 --createIndex IDX.T2T -T human.tConfig
+
+# Step 3: Align and produce the full output suite
+magic2 -x IDX.T2T -i reads.fastq.gz -o results/ --full
+\end{lstlisting}
+
+\subsection{Example 3: Stream and align SRA data}
+
+\begin{lstlisting}
+# Align three SRA runs on the fly, no local download required
+magic2 -x IDX.T2T --srr SRR1234,SRR1235,SRR1236 -o results/ --full
+\end{lstlisting}
+
+% ===============================================================
+\section{Input Data}
+% ===============================================================
+
+\subsection{Local FASTA/FASTQ files}
+
+Magic2 accepts both FASTA and FASTQ files, gzip-compressed or
+uncompressed.  The format is detected automatically.
+
+\textbf{Single-end reads:}
+\begin{lstlisting}
+magic2 -x IDX -i reads.fasta.gz -o out/
+\end{lstlisting}
+
+\textbf{Paired-end reads in two separate files} (joined with \code{+}):
+\begin{lstlisting}
+magic2 -x IDX -i reads_R1.fastq.gz+reads_R2.fastq.gz -o out/
+\end{lstlisting}
+
+\textbf{Paired-end reads in interleaved format:}\\
+The file must be named with the \code{.sample\_12.} suffix:
+\begin{lstlisting}
+magic2 -x IDX -i sample.sample_12.fastq.gz -o out/
+\end{lstlisting}
+
+In interleaved format, each pair occupies four successive lines and read
+identifiers end in \code{/1} and \code{/2}.
+
+\subsection{Downloading SRA runs}
+
+Use \code{--sraDownload} to download one or more SRA runs as local files
+before alignment.  The files are placed in the \code{./SRA/} subdirectory.
+
+\textbf{Basic download (interleaved FASTA):}
+\begin{lstlisting}
+magic2 --sraDownload SRR24511885
+# Output: SRA/SRR24511885.sample_12.fasta.gz
+\end{lstlisting}
+
+\textbf{Download as split FASTQ files, limiting to 2 GB:}
+\begin{lstlisting}
+magic2 --sraDownload SRR24511885 --fastq --split_pairs --maxGB 2
+# Output: SRA/SRR24511885_R1.fastq.gz
+#         SRA/SRR24511885_R2.fastq.gz
+\end{lstlisting}
+
+\textbf{Full syntax:}
+\begin{lstlisting}
+magic2 --sraDownload SRR1,SRR2,... [--fastq] [--split_pairs] [--maxGB <n>]
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Option} & \textbf{Description} \\
+\midrule
+\code{--fastq}       & Download in FASTQ format (preserves quality scores).
+                        Default is FASTA. \\
+\code{--split\_pairs} & Write paired-end reads to separate \code{\_R1} and
+                        \code{\_R2} files instead of interleaved. \\
+\code{--maxGB <n>}   & Stop after downloading \code{n} gigabases.
+                        By default the entire run is downloaded. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Single-end runs are automatically exported as a single file
+(\code{SRRn.fastq.gz}).  The number of SRR identifiers in a single
+command is not limited.
+
+\subsection{Streaming SRA runs on the fly}
+
+If you have a fast connection to NCBI, you can align without storing the
+raw reads locally.  Use \code{--srr} instead of \code{-i}:
+\begin{lstlisting}
+magic2 -x IDX --srr SRR1,SRR2,SRR3 -o out/
+\end{lstlisting}
+
+Magic2 distinguishes single-end from paired-end automatically and begins
+aligning as soon as the first megabases arrive.  In practice, alignment
+finishes within seconds of the download completing.
+
+\begin{notebox}
+\textbf{Note:} If the files already exist in the local \code{./SRA/}
+cache directory (from a previous \code{--sraDownload}), they are used
+instead of re-downloading.
+\end{notebox}
+
+To evaluate quality-control metrics across several SRA runs quickly,
+without storing the reads or alignment files:
+\begin{lstlisting}
+magic2 -x IDX --srr SRR1,SRR2,SRR3 --no_ali -o out/
+\end{lstlisting}
+
+\subsection{Streaming and caching simultaneously}
+
+You can align on the fly and cache the reads in one command:
+\begin{lstlisting}
+magic2 -x IDX.T2T --srr SRR24511885 --fastq --sraCaching -o out/ --full
+# Produces: SRA/SRR24511885.sample_12.fastq.gz  (cached copy)
+#           Full analysis output in out/
+\end{lstlisting}
+
+If the run is already cached, it will not be downloaded again.
+
+\subsection{Processing multiple runs in parallel}
+
+On large machines the index is memory-mapped and shared between
+concurrent Magic2 processes.  To analyse three runs in parallel:
+\begin{lstlisting}
+magic2 -x IDX.T2T --srr SRR1234 --full -o out_SRR1234 &
+magic2 -x IDX.T2T --srr SRR1235 --full -o out_SRR1235 &
+magic2 -x IDX.T2T --srr SRR1236 --full -o out_SRR1236 &
+\end{lstlisting}
+
+\begin{notebox}
+\textbf{Note:} Each parallel instance reads the shared index but uses
+independent output directories.  Total RAM usage is the index size plus
+per-run working memory.
+\end{notebox}
+
+% ===============================================================
+\section{Building a Target Index}
+% ===============================================================
+
+\subsection{Overview}
+
+Magic2 is a seed-and-extend aligner.  Before aligning any reads you must
+build an index from your reference genome (and optionally annotation
+files).  The index is written to a directory and reused for all subsequent
+alignment runs against the same reference.
+
+\subsection{The target configuration file (\code{tConfig})}
+
+Create a plain-text configuration file with two tab-separated columns:
+a single-letter type code and a file path.  Multiple lines with the
+same type are allowed.
+
+\begin{lstlisting}
+G	genome.chromosomes.fasta.gz
+M	genome.mitochondria.fasta.gz
+R	genome.rRNA.fasta.gz
+I	genome.annotation.gtf.gz
+\end{lstlisting}
+
+\textbf{Type codes:}
+
+\begin{center}
+\begin{tabular}{clp{8.5cm}}
+\toprule
+\textbf{Code} & \textbf{Label} & \textbf{Description} \\
+\midrule
+\code{G} & Genome
+  & Genomic sequence.  Each chromosome may be on a separate \code{G} line. \\
+\code{M} & Mitochondria
+  & Mitochondrial sequence.  Reported separately because many protocols
+    show high mitochondrial read fractions. \\
+\code{C} & Chloroplast
+  & Chloroplast sequence (plant genomes). \\
+\code{R} & Ribosomal RNA
+  & rRNA precursor sequences.  \textbf{Strongly recommended}: rRNA can
+    constitute up to 80\% of a sample and is repeated many times in the
+    genome, causing multi-mapping confusion if not handled explicitly. \\
+\code{E} & Controls
+  & ERCC spike-in or other sequencing controls. \\
+\code{A} & Adaptors
+  & Optional.  Adaptor sequences in FASTA format; if omitted, adaptors
+    are detected automatically. \\
+\code{B} & Bacteria
+  & Potential bacterial contamination sequences. \\
+\code{V} & Virus
+  & Potential viral contamination sequences. \\
+\code{I} & Annotation
+  & Gene annotation in GTF or GFF format, or a \code{.introns} file
+    (see below). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{notebox}
+\textbf{Note:} Chromosome names in \code{G} files must match those
+used in the \code{I} annotation file.
+\end{notebox}
+
+\subsubsection{Annotation file formats}
+
+Magic2 accepts GTF, GFF, or a custom \code{.introns} format.
+
+\textbf{GTF/GFF:} Magic2 expects at least 7 columns:
+\begin{lstlisting}
+chrom  method  tag  a1  a2  .  strand
+\end{lstlisting}
+Only \code{exon} and \code{CDS} lines are used; all others are ignored.
+Coordinates are 1-based; \code{a1 < a2}; strand is \code{+} or \code{-}.
+
+\textbf{.introns format:} If no GTF/GFF is available, provide a
+3-column introns file:
+\begin{lstlisting}
+chrom  a1  a2
+\end{lstlisting}
+\code{a1} and \code{a2} give the positions of the two \texttt{G} bases
+of the GT-AG motif.  On the top strand \code{a1 < a2}; on the bottom
+strand \code{a1 > a2}. Coordinates are 1-based.
+
+\subsection{Creating the index}
+
+\textbf{From a raw genome (FASTA only):}
+\begin{lstlisting}
+magic2 --createIndex IDX.genome -t genome.fasta.gz
+\end{lstlisting}
+
+\textbf{From a full configuration file:}
+\begin{lstlisting}
+magic2 --createIndex IDX.target -T target.tConfig
+\end{lstlisting}
+
+\textbf{With custom seed parameters:}
+\begin{lstlisting}
+magic2 --createIndex IDX.target -T target.tConfig \
+       --seedLength 18 --step 6
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{lll p{6.5cm}}
+\toprule
+\textbf{Option} & \textbf{Argument} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\code{-t}            & file & ---  & Single FASTA genome file (raw genome). \\
+\code{-T}            & file & ---  & Target configuration file (annotated genome). \\
+\code{--seedLength}  & int  & 16 (\(\leq\)200 Mb) or 18 (human)
+                     & Seed length in bases.  Not recommended to change for
+                       metazoan genomes; shorter seeds may help for
+                       bacterial projects. \\
+\code{--step}        & int  & 6
+                     & Seed stepping interval.  The best seed among the next
+                       \code{step} words is selected.  Larger values (8--10)
+                       reduce RAM and speed up indexing and alignments
+                       at some cost to sensitivity. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ===============================================================
+\section{Running an Alignment}
+% ===============================================================
+
+\subsection{Basic usage}
+
+\begin{lstlisting}
+magic2 -x IDX -i reads.fasta.gz -o out/
+magic2 -x IDX -i R1.fastq.gz+R2.fastq.gz -o out/
+magic2 -x IDX --srr SRR1234 -o out/
+\end{lstlisting}
+
+\subsection{Output format options}
+
+By default, alignments are written in the standard \code{.bam} format.
+You can request other formats with:
+\begin{lstlisting}
+magic2 -x IDX -i reads.fasta.gz -o out/ --hits --tabular --bam
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Flag} & \textbf{Description} \\
+\midrule
+\code{--bam}     & Standard BAM format.  Required for tools such as
+                   IGV, Samtools, and most genome browsers. Default.\\
+\code{--hits}    & Magic \code{.hits} format.  Describes mismatches,
+                   introns, and read overhangs explicitly. \\
+\code{--tabular} & Magic-BLAST tabular format.  Similar to \code{.hits}\\
+\code{--no\_ali} & Suppress all alignment output.  Useful when only
+                   quality metrics or expression counts are needed. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Multiple format flags may be combined; one output file per format is
+written to the output directory.
+
+\subsection{Requesting the full output suite}
+
+Adding \code{--full} produces every available output in a single pass:
+\begin{lstlisting}
+magic2 -x IDX.T2T --srr SRR1234 -o out/ --full
+\end{lstlisting}
+This is equivalent to passing \code{--genes --wiggles --wiggle\_ends}
+together.  See Sections~\ref{sec:genecounts}--\ref{sec:tss} for
+descriptions of each output type.
+
+% ===============================================================
+\section{Output Files}
+% ===============================================================
+
+All output files are written to the directory specified with \code{-o}.
+The subsections below describe each file type.
+
+\subsection{Alignment files}
+
+\begin{center}
+\begin{tabular}{ll p{7.5cm}}
+\toprule
+\textbf{File pattern} & \textbf{Format} & \textbf{Notes} \\
+\midrule
+\code{*.hits}         & Magic hits      & Full mismatch and intron detail. \\
+\code{*.tab}          & Tabular         & Tab-separated; easy to parse. \\
+\code{*.bam}          & BAM             & Standard; index with \code{samtools index}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The \code{.hits} and tabular formats provide more detail than BAM,
+including explicit descriptions of mismatches, intron coordinates, and
+read overhangs.  BAM is the appropriate choice when interoperating with
+third-party tools.
+
+\subsection{Intron support table}
+
+Magic2 reports all introns observed in the alignment, classified as
+\emph{known} (present in the \code{I} annotation used during index
+construction) or \emph{novel}.
+
+Output is in the \textbf{tag-sample format (TSF)}, a compact
+tab-separated format in which each column corresponds to one run.
+A utility command merges TSF files from multiple runs and produces a
+human-readable summary table:
+\begin{lstlisting}
+magic2 --mergeTSF run1/introns.tsf run2/introns.tsf \
+       -o merged_introns.txt
+\end{lstlisting}
+
+Each intron entry records: run, chromosome, donor position, acceptor position,
+strand, GT-AG motif support, and read count per run.
+
+\subsection{Poly-A addition sites}
+
+An addition site is called when at least 8 terminal bases of a read
+(12 if they contain a non-A/T letter) match a poly-A extension in the
+3$'$ end of forward reads or a poly-T extension in the 5$'$ end of
+reverse reads, and these bases do not align to the genome.  This
+evidence is accumulated per genomic position and reported per run in
+TSF format, analogous to the intron support table.
+
+\subsection{Gene expression counts}
+\label{sec:genecounts}
+
+Activated by \code{--full}, \code{--wiggles}, or \code{--genes}.
+
+Magic2 builds a 1-base-resolution coverage map internally during
+alignment (at no additional I/O cost) and, if annotation was provided,
+accumulates read counts per gene.
+
+\textbf{How overlapping genes are resolved:}
+The annotation is projected onto the genome and sliced into
+non-overlapping regions, each classified as intergenic, intronic,
+exonic (sense), exonic (antisense), or CDS.  For reads falling in
+ambiguous regions (for example, two overlapping genes on opposite
+strands sharing a 3$'$ UTR), attribution is deferred and distributed
+between the two genes in proportion to their non-ambiguous exon support.
+
+\textbf{Strand detection:}
+The strandedness of the library is inferred from the fraction of intron
+reads exhibiting GT-AG (forward) vs.\ CT-AC (reverse) motifs.  Modern
+stranded protocols produce values below 1\% or above 99\%; unstranded
+protocols fall in the 40--60\% range.
+
+\textbf{Expression index:}
+A preliminary expression index is computed by subtracting the
+contribution of super-expressed genes (those capturing $>$1\% of all
+counts), which would otherwise distort comparisons.
+
+Counts are exported in TSF format and can be merged across runs with
+the same utility used for intron tables. The merged file contains
+all the counts necessary to study differential expression.
+
+\subsection{Coverage plots}
+\label{sec:wiggles}
+
+Activated by \code{--wiggles} or \code{--full}.
+
+Coverage plots are exported in the \textbf{BF format} (a UCSC Genome
+Browser compatible wiggle format) at 10-base resolution by default.
+
+\begin{lstlisting}
+magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles
+magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles --wiggle_step 1
+\end{lstlisting}
+
+\begin{center}
+\begin{tabular}{lll p{5.5cm}}
+\toprule
+\textbf{Option} & \textbf{Argument} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\code{--wiggles}      & ---  & off & Enable coverage plot output. \\
+\code{--wiggle\_step} & int  & 10  & Resolution in bases.  Use 1 for
+                                     single-base resolution. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+BF files can be loaded directly into the UCSC Genome Browser, IGV, or
+converted to BigWig for large-scale display.
+
+\subsection{Transcription start and end sites}
+\label{sec:tss}
+
+Activated by \code{--full} or \code{--wiggle\_ends}.
+
+Magic2 exports special coverage tracks representing the first 20 bases
+and final 20 bases of fully aligned reads.  Because sequencing of an
+mRNA template is always oriented inward, an accumulation of read
+endpoints at a particular genomic position indicates a transcription
+start or termination site.  These tracks are useful for refining genome
+annotations, particularly to extend or correct 5$'$ and 3$'$ UTR
+boundaries.
+
+\subsection{Quality-control metrics}
+
+Magic2 measures and reports the following metrics for each run:
+
+\begin{center}
+\begin{longtable}{p{4.5cm} p{9cm}}
+\toprule
+\textbf{Metric} & \textbf{Description} \\
+\midrule
+\endhead
+Total reads              & Total number of reads (or read pairs) in the input. \\
+Aligned reads (\%)       & Fraction of reads with at least one alignment. \\
+Uniquely aligned (\%)    & Fraction of reads with exactly one alignment. \\
+Multi-mapping (\%)       & Fraction of reads aligning to more than one locus. \\
+Unmapped (\%)            & Fraction of reads with no alignment. \\
+rRNA fraction (\%)       & Fraction of reads mapping to ribosomal RNA sequences.
+                           Values above 30\% may indicate inadequate rRNA depletion. \\
+Mitochondrial fraction (\%) & Fraction of reads mapping to the mitochondrial sequence. \\
+Adaptor rate (\%)        & Fraction of reads in which an adaptor sequence was
+                           detected and clipped. \\
+Library strandedness (\%)& Percentage of intron reads exhibiting GT-AG motifs
+                           (vs.\ CT-AC).  Values near 0\% or 100\% indicate a
+                           stranded library; values near 50\% indicate unstranded. \\
+Read length distribution & Histogram of aligned read lengths (especially
+                           informative for long-read data). \\
+Mismatch rate (\%)       & Per-base substitution rate in aligned reads. \\
+Insertion rate (\%)      & Per-base insertion rate in aligned reads. \\
+Deletion rate (\%)       & Per-base deletion rate in aligned reads. \\
+Soft-clip rate (\%)      & Fraction of read bases that are soft-clipped at either end. \\
+Exonic fraction (\%)     & Fraction of aligned bases falling in annotated exons. \\
+Intronic fraction (\%)   & Fraction of aligned bases falling in annotated introns. \\
+Intergenic fraction (\%) & Fraction of aligned bases in intergenic regions. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+All metrics are written to a summary text file in the output directory
+and also included in the TSF-format tables for multi-run comparison.
+
+% ===============================================================
+\section{Command-Line Reference}
+\label{sec:cmdref}
+% ===============================================================
+
+This section lists all recognised options.  Options are grouped by
+function.
+
+\subsection{Index construction}
+
+\begin{center}
+\begin{longtable}{p{4cm} p{2.2cm} p{2cm} p{6cm}}
+\toprule
+\textbf{Option} & \textbf{Argument} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endhead
+\code{--createIndex} & \textit{dir}  & required & Directory to write the index into. \\
+\code{-t}            & \textit{file} & ---       & Single FASTA genome file (no annotation). \\
+\code{-T}            & \textit{file} & ---       & Target configuration file (with annotation). \\
+\code{--seedLength}  & \textit{int}  & 16 or 18  & Seed length in bases. \\
+\code{--step}        & \textit{int}  & 6         & Seed stepping interval. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Input}
+
+\begin{center}
+\begin{longtable}{p{4cm} p{2.2cm} p{2cm} p{6cm}}
+\toprule
+\textbf{Option} & \textbf{Argument} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endhead
+\code{-x}            & \textit{dir}    & required & Index directory (from \code{--createIndex}). \\
+\code{-i}            & \textit{file}   & ---      & Input FASTA/FASTQ file.  Use \code{f1+f2}
+                                                    for paired-end reads in two files. \\
+\code{--srr}         & \textit{list}   & ---      & Comma-separated SRA run identifiers.
+                                                    Streamed from NCBI or read from cache. \\
+\code{--sraDownload} & \textit{list}   & ---      & Download SRA runs to \code{./SRA/} and exit. \\
+\code{--fastq}       & ---             & off      & (With \code{--sraDownload}) download in
+                                                    FASTQ format. \\
+\code{--split\_pairs}& ---             & off      & (With \code{--sraDownload}) write pairs to
+                                                    separate \code{\_R1}/\code{\_R2} files. \\
+\code{--maxGB}       & \textit{int}    & unlimited& Limit download or processing to \textit{n} gigabases. \\
+\code{--sraCaching}  & ---             & off      & Cache SRA data locally while aligning on the fly. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Output}
+
+\begin{center}
+\begin{longtable}{p{4cm} p{2.2cm} p{2cm} p{6cm}}
+\toprule
+\textbf{Option} & \textbf{Argument} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\endhead
+\code{-o}             & \textit{dir}  & required & Output directory.  Created if it does not exist. \\
+\code{--hits}         & ---           & on       & Export in Magic \code{.hits} format. \\
+\code{--tabular}      & ---           & off      & Export in tabular (Magic-BLAST) format. \\
+\code{--bam}          & ---           & off      & Export in BAM format. \\
+\code{--no\_ali}      & ---           & off      & Suppress alignment output (metrics and counts only). \\
+\code{--full}         & ---           & off      & Enable all outputs: genes, wiggles, wiggle ends. \\
+\code{--genes}        & ---           & off      & Export gene expression count tables. \\
+\code{--wiggles}      & ---           & off      & Export coverage plots (BF/wiggle format). \\
+\code{--wiggle\_ends} & ---           & off      & Export transcription-start/end coverage tracks. \\
+\code{--wiggle\_step} & \textit{int}  & 10       & Coverage plot resolution in bases. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+% ===============================================================
+\section{Worked Examples}
+% ===============================================================
+
+\subsection{Quality survey of SRA runs without storing data}
+
+You want to assess library quality across six SRA runs before deciding
+which to analyse further, without consuming disk space.
+
+\begin{lstlisting}
+magic2 -x IDX.T2T \
+       --srr SRR24511880,SRR24511881,SRR24511882,\
+             SRR24511883,SRR24511884,SRR24511885 \
+       --no_ali -o qc_survey/
+\end{lstlisting}
+
+This streams each run from NCBI, produces quality-control metrics
+(rRNA fraction, strandedness, adaptor rate, alignment rate), and
+writes nothing to disk except the metric summary files.  No alignment
+or coverage files are produced.
+
+\subsection{Full analysis of a paired-end Illumina run}
+
+\begin{lstlisting}
+# Build index once (reuse for all subsequent runs)
+magic2 --createIndex IDX.hg38 -T hg38.tConfig
+
+# Analyse a local paired-end dataset
+magic2 -x IDX.hg38 \
+       -i sample_R1.fastq.gz+sample_R2.fastq.gz \
+       -o sample_out/ \
+       --bam --full
+
+# Output directory will contain:
+#   sample.bam           -- alignments (BAM)
+#   introns.tsf          -- known and novel introns with support counts
+#   polyA.tsf            -- poly-A addition sites
+#   genes.tsf            -- gene expression counts
+#   *.BF                 -- coverage wiggle tracks
+#   tss.tsf / tes.tsf    -- transcription start/end site tracks
+#   qc_metrics.tsf       -- quality-control summary
+\end{lstlisting}
+
+\subsection{Parallel processing of multiple SRA runs}
+
+On a 64-core machine you can process three runs simultaneously.  The
+index is memory-mapped and shared; only per-run working memory is
+duplicated.
+
+\begin{lstlisting}
+magic2 -x IDX.T2T --srr SRR100001 --full -o out_SRR100001 &
+magic2 -x IDX.T2T --srr SRR100002 --full -o out_SRR100002 &
+magic2 -x IDX.T2T --srr SRR100003 --full -o out_SRR100003 &
+wait
+echo "All runs complete."
+\end{lstlisting}
+
+\subsection{Merging multi-run output tables}
+
+After analysing several runs, merge the per-run TSF tables into a
+single comparison table:
+\begin{lstlisting}
+magic2 --mergeTSF out_*/introns.tsf -o all_introns.txt
+magic2 --mergeTSF out_*/genes.tsf   -o all_gene_counts.txt
+\end{lstlisting}
+
+% ===============================================================
+\section{Troubleshooting}
+% ===============================================================
+
+\begin{center}
+\begin{longtable}{p{5.5cm} p{9cm}}
+\toprule
+\textbf{Problem} & \textbf{Solution} \\
+\midrule
+\endhead
+
+\code{magic2: command not found}
+  & Ensure the directory containing the \code{magic2} binary is on your
+    \code{PATH}.  Run \code{which magic2} to check. \\[4pt]
+
+Index creation fails with out-of-memory error
+  & Increase available RAM, or use a larger \code{--step} value (e.g.\
+    8 or 10) to reduce index size at a some cost to sensitivity. \\[4pt]
+
+Very low alignment rate ($<$20\%)
+  & Check that the correct genome was indexed.  For RNA-seq data,
+    ensure an annotation file (\code{I} line) was included in the
+    tConfig, so that known splice junctions are used during alignment. \\[4pt]
+
+Zero rRNA fraction ($>$50\%)
+  & In RNA-seq experiments, this is unusual.  Ensure that an
+    \code{R} line pointing to rRNA sequences was included in the
+    tConfig so they are counted correctly. \\[4pt]
+
+High rRNA fraction ($>$50\%)
+  & This is a library quality issue, not an error. \\[4pt]
+
+SRA download stalls or times out
+  & Check your network connection to NCBI.  Use \code{--maxGB} to
+    limit the transfer size, or pre-download with \code{--sraDownload}
+    before aligning. \\[4pt]
+
+Chromosome names don't match between genome and GTF
+  & This is a fatal error reported during index creation.
+    Ensure that the chromosome identifiers in your FASTA \code{G} file
+    exactly match those in the \code{I} annotation file (including
+    \code{chr} prefix vs.\ no prefix). \\[4pt]
+
+BAM file not produced despite \code{--bam} flag
+  & Confirm that the output directory is writable and has sufficient
+    disk space.  BAM files for a human-scale genome typically require
+    3--10 GB per run. \\[4pt]
+
+Low gene count output despite \code{--full}
+  & Confirm that the index was built with \code{-T} (tConfig including
+    an \code{I} annotation line) rather than \code{-t} (raw genome only).
+    The actual tConfig file used during index creation is copied in the
+    IDX directory. Please check that file.\\
+
+\bottomrule
+\end{longtable}
+\end{center}
+
+% ===============================================================
+\section*{Acknowledgements}
+% ===============================================================
+
+We thank David Landsman and Tom Madden for their support.
+This work was supported by the Intramural Research Program of the
+National Library of Medicine, National Institutes of Health.
+
+% ===============================================================
+\begin{thebibliography}{9}
+
+\bibitem{cDNA}
+D.~Thierry-Mieg and J.~Thierry-Mieg.
+AceView: a comprehensive cDNA-supported gene and transcripts annotation.
+\emph{Genome Biology}, 7(Suppl 1):S12, 2006.
+
+\bibitem{acedb94}
+R.~Durbin and J.~Thierry-Mieg.
+The ACEDB genome database.
+In S.~Suhai, editor, \emph{Computational Methods in Genome Research},
+pages 45--55. Plenum Press, New York, 1994.
+
+\bibitem{Code}
+J.~Thierry-Mieg, D.~Thierry-Mieg, and G.~Boratyn.
+Magic2 source code and documentation.
+\url{https://github.com/NLM-DIR/Magic2}.
+
+\end{thebibliography}
+
+\end{document}
