@@ -1429,7 +1429,7 @@ void saUsage (char *message, int argc, const char **argv)
 	       "//            In each case the the chromosome name (column 1) must match the G fasta file(s).\n"
 	       "//            In gtf/gff format the code expects (at least) 7  columns chrom/method/tag/a1/a2/./[+|-]\n"
 	       "//               tag : [exon] other lines are ignored,\n"
-	       "//               a1 a2 : the positions of the first and last base of t5he exon.\n"
+	       "//               a1 a2 : the positions of the first and last base of the exon.\n"
 	       "//               strand : [+|-] indicates the strand, a1 < a2, and the coordinates are 1-based.\n" 
 	       "//            In .introns format the code expects 3 columns chrom/a1/a2\n"
 	       "//               a1 a2 : give the positions of the 2 G of the Gt_aG motif,\n"
@@ -2018,7 +2018,7 @@ int main (int argc, const char *argv[])
 
   /* defaults */
   nAgents = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;   number of aligner agents */
-  p.nBlocks = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
+  p.nBlocks = 4 * nCPU/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;

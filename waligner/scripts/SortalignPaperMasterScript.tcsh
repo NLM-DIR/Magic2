@@ -150,6 +150,10 @@ setenv SV     v94.81.18M.e4.apr12     # EXCELLENT CODE idem, fixed adaptors (100
 setenv SVlast v94.81.18M.e4.apr12
 setenv SV     v95.81.18M.e4.apr12     # idem, fixed adaptors (100 ->256 min count) edited sa.sort.c using claude
 setenv SVlast v95.81.18M.e4.apr12
+setenv SV     v96.81.18M.e4.apr19     # idem, +radix sorting and use --nB = 2*nCPU --nA=3/2 nCPU
+setenv SVlast v96.81.18M.e4.apr19
+#setenv SV     v97.81.18M.e4.apr20     # all ali seen as positive strand
+#setenv SVlast v97.81.18M.e4.apr20
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
@@ -2090,7 +2094,7 @@ foreach target (T2T GRCh38 HG19)
         set target2=`cat Fasta/$run/target`
         echo "$run $target $target2"
         if ($target != $target2) continue
-	# sortalign -> introns.trsf
+	# sortalign -> introns.tsf
         set ff=RESULTS/$mm/$run/$run/introns.tsf
         if (-e $ff) then
           wc $ff

@@ -251,19 +251,186 @@ cd wsa
 make
 \end{lstlisting}
 The executable will be the file ./Magic2/bin.LINUX\_4\_OPT/magic2
-
+Add this directory to your path or copy magic2 in /usr/local/bin
+so that the command will be always found. You can test if the code run
+by typing 'magic2 --help'
 //
 //
+\section {Using sequence data available in SRA}
+\subsection {Magic2 can download files from SRA}
+
+Magic2 is a convenient tool to download runs from the NCBI short read archives
+in a format recognized by most bioinformatics program.
+
+Suppose that you are interested in the human paired-end Illumina run SRR24511885.
+The command
+\BL
+magic2  --sraDownload SRR24511885     // creates SRA/SRR24511885.sample_12.fasta.gz
+\end{lstlisting}
+will download an interleaved fasta file, in which each pair occupies 4 successive lines
+and the read identifiers will be s.number/1 and s.number/2.
+If you are interested in the quality factors, add a parameter --fastq, and if you
+want to split the pairs into 2 separate files use --split\_pairs.
+
+The full syntax of the command is
+\BL
+magic2  --sraDownload SRR1,SRR2,SRR3,... [--fastq] [--split_pairs] --maxGB <int>
+\end{lstlisting}
+ and for example
+\BL
+magic2  --sraDownload SRR24511885 --fastq --split_pairs --maxGB 2
+ // creates SRA/SRR24511885_R1.fastq.gz and SRA/SRR24511885_R2.fastq.gz  
+\end{lstlisting}
+downloads the first 2 Gigabases of run SRR24511885 and stores it as 2 fastq files.
+By default, in the absence of the --maxGB parameter, the whole file is downloaded.
+The number of SRR identifier in the list is not limited.
+The code will automatically export a single file SRRn.fastq.gz for the single end runs.
+
+\subsection {Magic2 can process on the fly SRA runs}
+
+If you have a good connection to the NCBI servers, you do not need to store the files
+locally on your computer. You can align them on the fly with the command
+\BL
+magic2  -x IDX --srr SRR1,SRR2,SRR3 -o out_directory 
+\end{lstlisting}
+magic2 will recognize single-end versus paired end runs and will start aligning
+as soon as the first few magabases start flowing in.
+Often, the download may be the limiting factor
+and all the sequences will be aligned a few seconds after the end of the transfer.
+
+An interesting way to use this command is to evaluate the quality cotrl metrics
+on the first 2 Gigabases of a number of SRR runs without downloading the files and
+without exporting the alignments
+\BL
+magic2  -x IDX --srr SRR1,SRR2,SRR3 --no_ali -o out_directory 
+\end{lstlisting}
+This will produce quite fast a detailled portrait of all these runs without
+consuming any appreciable disk space on your computer.
+
+If the files are already present in the directory ./SRA, for example if they
+were explicitly downloaded by the previous commands, these cached files will
+be used rather than accessing the network.
+
+\subsection {Magic2 can align and cache the data at the same time}
+
+You can combine the previous commands by giving at the same time a list of SRR identifiers
+a caching request and a target index. For example
+\BL
+magic2  --srr SRR24511885 --fastq --sraCaching -x IDX.T2T -o out_dir --full
+// creates SRA/SRR24511885.sample_12.fastq.gz
+// produces the complete analysis of the run in directory out_dir
+\end{lstlisting}
+If the SRR run is already in the ./SRA cache directory  in any of the recognized formats,
+it will not be downloaded a second time.
+
+\section {Creation of a target index}
+
+As explained in the introduction, a given run can be aligned on a raw genome,
+but it is often more interesting to compared the reads to an annotated genome.
+The first step is to construct a taget configuration file
+
+\subsection {The target configuration file tConfig}
+
+Using a text editor, construct a configuration file describing your target.
+The format is simple. There are 2 tab separated columns. The first
+column contains a single letter giving the type, the second column contains a file name.
+
+The recognized types are G, M, C, R, E, A, I, B, V. Several lines can start with the same letter.
+
+G: genome, the fasta file give the genomic sequence of the target,
+but if more convenient, you can provide each chromosome fasta file on a separate line starting with G
+
+M: Mitochondria, the fasta file of the mitochondria
+
+C: In plants, the sequence of the chloroplast
+
+R: the sequence of the ribosomal RNA precursors. Giving these sequences this is very important because
+ribosomal RNA may sometimes represent a very high fraction (80%) of a sample
+and the sequence is repeated many times in the chromosome creating confusion
+
+
+E: ERCC and other control sequences. Also give the DNA control
+
+A: Adaptors fasta sequence, this file is optional, adaptors can be recognized on the fly
+
+B:  bacteria, possible contamination 
+
+V: virus, possible contamination 
+
+I: Annotation file in gtf or gff format, or a list of introns
+
+In each case the the chromosome name (column 1) must match the G fasta file(s).
+
+\BL
+In gtf/gff format the code expects (at least) 7  columns chrom/method/tag/a1/a2/./[+|-]\n"
+tag : [exon] other lines are ignored
+a1 a2 : the positions of the first and last base of the exon.
+strand : [+|-] indicates the strand, a1 < a2, and the coordinates are 1-based.
+
+In .introns format the code expects 3 columns chrom/a1/a2
+a1 a2 : give the positions of the 2 G of the Gt_aG motif
+on the top strand a1 < a2, on the bottom strand a1 > a2.
+\end{lstlisting}
+
+Please create the .introns file if the gff/gtf file is not available
+
+\subsection {Creating the index}
+
+Magic2 belongs to the seed/extend class of aligners.
+In a first pass, magic2 extract from the genome a set of seeds of fixed length
+and then searches these seeds in the reads. The length and the density of the genome seeds
+may be adjusted. By default, magic2 use 16-mers up to 200 Megabases (drosophila)
+and 18-mers for longer genomes (human). The default stepping is s=6, meaning we choose the
+'best' seed among the next s words. As a result, the maximal distance between seeds is s,
+and the average distance is s/2, exactly as when using the special seeds refered by Durbin,
+but in a much simpler way.
+
+The binary files containing the collected seeds are stored in the index directory, together with
+a summary of the annotaton files. To contruct the index please run the command
+
+\BL
+magic2 --createIndex IDX.target -T tConfig.target [--seedLength <int>] [--step <int>]
+\end{lstlisting}
+Changing the default seed length is not recommanded in metazoaires, 
+but it may possibly be interesting
+to choose shorter seed in a bacteria project.
+Using a longer stepping like 8 or 10  will produce a faster code, consuming less RAM,
+but will reduce the sensitivity of the aligner.
 
 
 
+\section {Alignments}
 
 In this project, our main goal is completeness and accuracy. We hope to align
 the highest possible percentage of reads and of bases in each read, even in
-the presence of sequencing noise. To simulate a high noise level, we aligned
-primatesequences, from Chimpanzee to Marmoset against the T2T human genome.
-As a truth control for accurate splicing, we aligned the full length RefSeq mRNAs
-and a contrario several DNA sample which a priori  should not skip introns.
+the presence of sequencing noise.
+
+To align a run, provide an SRR identifier (it will be downloaded automatically
+as explained above), or give a fasta or a fastq file. For paired end runs,
+if they are downloaded from SRA, they are recogbized automatically,
+other wise you can provide either a pairs of fasta/fastq files separated by a plus sign or
+provide an interleaved fasta/fastq file which must be called xxx.sample\_12.fasta[aq][.gz]
+
+\BL
+magic2 -x IDX.target -i f1.fasta.gz+f2.fasta.gz -o out_dir
+\end{lstlisting}
+
+By default, the alignments are exported in the magic .hits format, but they can also be 
+exported in the magic-blast tabular format or in bam format by providing the parameters
+
+\BL
+magic2 -x IDX.target -i f1.fasta.gz+f2.fasta.gz -o out_dir --hits --tabular --bam
+\end{lstlisting}
+If several formats are requested, several files will be exported. The bam format is well known,
+the .hits and .tabular format give more details, in particular they discribe the
+mismatches and the introns, and the overhangs more explicitely.
+
+One may also block the exportation of the alignments with the parameter --no\_ali
+\BL
+magic2 -x IDX.target -i f1.fasta.gz+f2.fasta.gz -o out_dir --no_ali
+\end{lstlisting}
+
+\section {Intron support}
 
 Our secondary goal is to simplify the user's experience. The program
 does not require any cost or strategy parameters. It evaluate by itself, via
@@ -285,948 +452,8 @@ and access the large mamory (the RAM in giga bytes) via several level of caches 
 Considering that memory access is the bottle neck, we designed the Magic2 algotrithms to priviledge
 sequential memory access. For example
 
-
-
-\label{sec1}
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Presentation of the Query language}
-\subsection{Overview}
-
-The first aim of our query language is to allow the systematic exploration of the database
-by the construction of large tables that can join the data contained in families of objects,
-subject to textual and arithmetic filtering. In other words, the query language
-allows to give a relational view of our object oriented database. 
-The syntax of a complex query is reminiscent of SQL, it takes the form
-\BL
-   select x, z from x in ..., y in ..., z in ... where .... order ...
-\end{lstlisting}
-
-In SQL, the variables would iterate through tables. In an object oriented database, the first variable $x$ 
-typically iterates across all the members of a given class, then $y$ is derived $from$ $x$, then $z$ is
-derived $from$ $x$ and/or $y$. The resulting $(x, y, z)$ tuples are filtered by the $where$ condition. 
-Finally, only the $(x,z)$ columns specified in the $select$ clause, with lines sorted according to the $order$
-clause, are exported. The resulting syntax is very natural because in our normal life, we are more accustomed
-to reason about objects than about relations. For example, the meaning of the rather complex query
-\BL
-  select A, P                    // select 2 variables: A and P
-    from A in class Person,      // A scans the whole class Person
-      P in A->papers             // P scans the papers of A           
-        where count { A->papers } >= 5   // limit to at least 5 papers
-\end{lstlisting}
-should not be too difficult to grasp. In this first query, the variable $A$ iterates across all members of class Person,
-the variable $P$ through all the papers of each author and finally only the authors having at least 5 papers
-are selected. 
-
-Calculations can be performed on numerical values:
-\BL
-  select p, bmi                  // Report persons with high body mass index
-    from p in class Person,      // p scans all persons
-      h in p->height,            // h is the height in meters
-      w in p->weight,            // w is the weight in kilograms   
-      bmi = w / h^2              // bodymass index in kg/m^2
-        where bmi > 25           // select overweight persons
-\end{lstlisting}
-In this second query, using the classical definition of the
-bodymass index, we select people who are heavy relative to their height. 
-The intermediate variables $h$ and $w$ are not exported, but if they are not available
-in the database, the $bmi$ will not be computed.
-By combining more variables, and using arithmetics and \{\} protected embedded subqueries,
-as in these examples, one can construct large tables which remain relatively easy to develop and maintain.
-The details on the exploration of the database are explained in section 2, the $where$ clause in sections 3,
-the dates, DNA and protein formats in sections 4, ordering in section 5.
-
-The second aim of the query language is to allow to express very simple things in a very simple way,
-as in the following examples
-
-\BL
-  Find author    // list all members of class author
-  select K*      // limit to names starting with K
-  follow papers  // list their papers
-  select ?Person k* ; >papers    // idem on a single line
-  select ?sequence kinesin* ; DNA      // export a set of DNA sequences
-\end{lstlisting}
-
-The simplifications (detailed in section 2.5) are obtained in two ways. 
-On the one hand, the queries are implicitly chained, either by being issued
-in succession, or by being separated by a semi-column. This allow to write only very short query pieces
-and try them one after the other. On the other hand,  the computer is in charge of
-interpolating the syntactic sugar. For example, the computer expands the second line $select$ $K*$ into
- $select$ $p$ $from$ $p$ $in$ $@$ $where$ $p$ $like$ $'K*'$, where $@$ (the active set) refers to the results 
-of the previous query. The short form contains all the information but is
-simpler, easier to grasp, easier to type, and less prone to clerical mistakes. 
-
-The details of the implementatin of the query language
-within the acedb system are described in the annex.
-The lists of all the keywords is presented in A.1.
-The history of the development is summarized in A.2.
-The way to download, compile and test 
-the latest version of acedb is explained in A.3. 
-A complete interactive query session is detailled in A.4.
-Finally annex A.5 presents the C-language API used in client programs.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Introduction to the acedb schema}
-
-In acedb, each object belongs to a class, with a known schema defined in the file 
-wspec/models.wrm. A simple schema for a bibliography database can be
-
-\BL
-?Paper Title UNIQUE ?Text           // Class Text is fast searchable
-       Author ?Person XREF Papers   // by default, tags are multivalued
-       Journal UNIQUE Text          // except if UNIQUE is specified
-       Submitted UNIQUE DateType    // Dates have a special format
-       Published UNIQUE DateType    // 
-       Pages Int UNIQUE Int         // several linked values are allowed
-
-?Person Papers ?Paper XREF Author   // XREF maintains the reverse relation 
-        Affiliation  Text           // Multivalued by default
-        Professor                   // Boolean tag, present or absent
-\end{lstlisting}
-
-A few instances of these classes can be
- 
-\BL
-Person Tom
-  Professor
-  Papers p1  // Tom has published several papers
-         p2
-  Affiliation Paris
-              Tokyo
-
-Person Jim
-  Papers p1
-  Affiliation London
-     
-Paper p1
-  Title "Quantum computers"
-  Author Tom
-         Jim
-  Journal "Nature"
-  Published 2001-04
-  Submitted 2000-11
-  Pages 1   23
-        100 107
-
-Paper p2
-  Author Jim
-  Published 2004-06
-  Pages 17 19
-\end{lstlisting}
-
-A simple biometric and filiation schema can be specified as
-\BL
-?Person Filiation Parent  ?Person XREF Child
-                  Brother ?Person XREF Brother
-                  Child   ?Person XREF Parent
-        Biometrics   Height UNIQUE Float         // Height in meters
-                     Weight UNIQUE Float         // Weight in kilograms
-\end{lstlisting}
-
-The cross referencings (XREF) in the schema guarantee that the author/paper,
-the parent/child and the brother/brother relations remain synchronized.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Navigating through the acedb schema}
-
-As explained previously, one can list all existing papers using
-\BL
-   select ?Paper
-\end{lstlisting}
-resulting in a 1 column table
-\BL
-   p1
-   p2
-\end{lstlisting}
-One can also directly access a single object using
-\BL
-  select OBJECT('Paper', 'p1')
-\end{lstlisting}
-
-Each object in the database has a name, belongs to a class
-and is time-stamped to the last time a value was modified.
-These fields can be accessed as methods
-\BL
-  select p in ?Paper, p.name, p.class, p.timestamp
-\end{lstlisting}
- 
-
-We can get to a tag using $\#$, and get the value behind a tag using $-$$>$. For example the following query
-\BL
-   select p in ?Paper, a in p->Author,prof in a#Professor, z in a->Affiliation
-\end{lstlisting}
-will produce the 4 column table
-\BL
-   p1  Jim      NULL            London
-   p1  Tom	Professor	Paris
-   p1  Tom	Professor	Tokyo
-   p2  Jim      NULL            London
-\end{lstlisting}
-
-Reporting the pages creates a new challenge. According to the schema, the pages tag supports a two columns table of integers.
- To access the two columns, one must use square brackets.
-\BL
-  select P in ?Paper, p1 in P->pages, p2 in p1[1] where p2
-\end{lstlisting}
-or the equivalent query, in which p sits on the pages tag of the object
-\BL
-  select P,p1,p2 from P in ?Paper,p in P#pages,p1 in p[1],p2 in p[2] where p2
-\end{lstlisting}
-or the equivalent query, in which the bracket is associated directly to the tag name
-\BL
-  select P,p1,p2 from P in ?Paper,p1 in P->pages[1],p2 in P->Pages[2] where p2
-\end{lstlisting}
-
-In each case, one obtains
-\BL
-  p1 1   23
-  p1 100 107
-  p2 17  19
-\end{lstlisting}
-
-Several details in the second form of the query should be noticed.
-  a) The variable names are case sensitive, $p$ and $P$ are distinct. 
-  b) In principle $p[2]$ should iterate through each number in column 2 behind $p$
-\BL
- select P,'last page',p2 from P in ?Paper,p in P#pages,p2 in p[2] where p2
-\end{lstlisting}
-gives
-\BL
-   p1 last page 23
-   p1 last page 107
-   p2 last page 19
-\end{lstlisting}
-but when we have 2 bracketings of the same variable, they remain synchronized so $p[1]$ 
-and $p[2]$ always refer to the same line of the table behind the tag $pages$.
-This synchronization is very important when a tag is multivalued. Consider a schema
-where each chromosome contains the position of all its genes
-\BL
-
-Chromosome chr_18
-Gene A  1000 2000
-Gene B  4000 6000
-\end{lstlisting}
-
-The 3 equivalent queries
-\BL
-  select c,g,a1,a2 from c in ?chromosome,g in c->Gene,a1 in g[1],a2 in g[2]
-  select c,g,a1,a2 from c in ?chromosome,g in c->Gene,a1 in g[1],a2 in a1[1]
-  select c in ?chromosome, g in c->Gene, a1 in g[1], a2 in a1[1]
-\end{lstlisting}
-gives the expected answer, with one line per gene, with the correct coordinates
-\BL
-    chr_18  A 1000 2000
-    chr_18  B 4000 6000
-\end{lstlisting}
-because on each line the coordinates $a1$ and $a2$ are derived from, and therefore are associated to, the gene $g$.
-But if we write the following more complex query where we reinitialize the definition 
-of the 2 coordinates $a1$, $a2$ at the root of the object
-\BL
-  select c, g, a1, a2 
-         from c in ?chromosome,
-         g in c->Gene, a1 in c->Gene[2], a2 in c->Gene[3]
-\end{lstlisting}
-$a1$, $a2$ are no longer associated to the variable $g$ and 
-we obtain the silly combinatorial answer
-\BL
-    chr_18  A 1000 2000
-    chr_18  A 1000 6000
-    chr_18  A 4000 2000
-    chr_18  A 4000 6000
-    chr_18  B 1000 2000
-    chr_18  B 1000 6000
-    chr_18  B 4000 2000
-    chr_18  B 4000 6000
-\end{lstlisting}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{COUNT, MIN, MAX, SUM, AVERAGE, STDDEV}
-
-The MIN, MAX, SUM, AVERAGE or STDDEV of any numerical variable,
-for example a multi-valued numerical field, can be evaluated
-by interpolating in capitals the desired operator in front of its definition
-\BL
-  select p,x from p in ?Paper , x in MAX p->pages
-  select cc,x from cc in ?chromosome, x in AVERAGE cc->gene[2]
-\end{lstlisting}
-Rather than giving in x the list of all values associated to the query, one per line,
-one obtains for each object the required result as a single value.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Multi-valued data cells and transitive closure}
-
-In an object oriented database, tags are often multivalued.
-As already explained, the expand operator $->$ gives access to
-the values behind a tag, one value per line. But in a table with several
-columns, if several tags are developed, this leads to
-a combinatorial number of lines. Suppose $tag1$ has 4 values and $tag2$ 
-has 6 values,
-the query $select$ $@-$$>tag1,$ $@-$$>tag2$ would give 24 lines.
-To limit this proliferation, it is sometimes more convenient
-to export all the values in a single data cell. The
-parallel-expand operator $=>$ provides this possibility.
-\BL
-      // => gives the parallel expansion, unsorted
-      // The results appear in the same order as in the object
-      // as desired when listing the authors of a paper
-   select ?paper p1; =>author
-     Tom; Jim // all authors come on a single line
-
-      // Genealogy example
-   select m,'is the mother of', m=>child from m in ?Person where m == eva 
-     Eva is the mother of Cain; Abel; Seth
-\end{lstlisting}
-
-Another modification is the transitive-expand operator $>>$
-which gives the transitive closure of a tag, meaning that 
-the $>>$ operator is used iteratively. 
-For example $grand\_ma$ $->$ $child$ 
-lists all the direct children of grand\_ma, 
-but $grand\_ma$ $>>$ $child$ gives 
-her children, grand-children, great-grand-children ... 
-For example, if the first two biblical generations
-are known in the database
-\BL
-   select p, 'is a parent of', from p  in ?Person, c in p->child where c
-      Enosh	is a parent of Baraki
-      Enosh	is a parent of Keman
-      Eva	is a parent of Abel
-      Eva	is a parent of Cain
-      Eva	is a parent of Seth
-      Seth	is a parent of Enosh
-\end{lstlisting}
-The whole progeny of Eva is given by the $child$ transitive closure
-\BL
-   select ?Person Eva ; @ >> child // whole progeny
-     Abel
-     Baraki
-     Cain
-     Enosh
-     Keman
-     Seth
-\end{lstlisting}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Simplification rules}
-
- The most frequent way to define the first variable is to iterate through a class. To list
-all members of the class sequence known in the database, one may write
-\BL
-  select x from x in class "sequence"  // full syntax, or equivalently
-  select x in class "sequence"  // drop from since x is exported
-  select x in class  sequence   // drop the quotes
-  select class sequence         // drop the name of the variable
-  select ?sequence              // use ? as a shortcut for class
-  find sequence                 // intuitive equivalent syntax
-\end{lstlisting}
-The successive short cuts are all acceptable, because the original syntactic sugar
-was not bringing any information. First, 
-the purpose of the $select$ ... $from$ ... syntax is to export only some of the arguments that are needed to compute,
- or to order, the exported columns in a specific way. If all columns should be exported the '.... $from$ ' clause 
-is no longer needed. Then, the doubles quotes around the class names 
-are optional, as class names in acedb never contain spaces or non alphanumeric characters. 
-The variable name $x$ is redundant since $x$ was not reused. The very frequent keyword $class$
-can be abbreviated as a leading question mark. Finally $find$, at the beginning of a query,
-is used as an alias of $select$ $class$. The general idea is to allow the most concise syntax
-and remap it into a full query which is executed by the database.
-
-Suppose we want to find all the members of $class$ $Person$ called $King$. Again this name does not
-contain any blank space, so starting from the full syntax, we can write any of the following 
-equivalent queries
-\BL
-    select x from x in class "Person"  where x like "king"  // full syntax
-    select ?Person like "king"   // drop x  and the where keyword
-\end{lstlisting}
-
-When the variable is not named, everything to the right of the class name is interpreted
-as being part of the $where$ clause. 
-One can replace the $like$ by \~{}  (tilde), or replace it by
-one of the usual comparators $< \;\;\; <= \;\;\; == \;\;\; >= \;\;\; >$
-
-\BL
-    select ?Person < kj          // select Abel to King, but not Kong
-\end{lstlisting}
-
-Finally, if there is nothing else in the query we can eliminate the operator symbol
-\BL
-    select ?Person King    // which is interpreted as 
-    select a in ?Person where ( a#King  or a like "King" )
-\end{lstlisting}
-we select at the same time the persons named 'King' or containing the tag $King$,
-In most situations, this is not ambiguous but using this simplified syntax to select a person
-with the meaningful name King may also select the current $King$ of the kingdom !
-
-The double quotes are not always needed. Indeed the comparison operators
-expect a declared variable, a number or a string on the right hand side. We do need to protect 
-strings containing spaces or special characters, like slash or minus. We must also protect 
-strings matching the reserved word, i.e. "select", "from"  or strings  matching the name of 
-the declared variables, or tag names like in the previous example distinguishing
- the name $"king"$ and the tag $King$. 
-Attention, variable names are case sensitive, $x$ and $X$ are distinct, 
-but reserved words ($select$, $Select$, $SELECT$) are not. Consider these 2 examples
-\BL
-    select x in ?Person, y in x->Brother where y > x    // x is a variable
-    select x in ?Person, y in x->Brother where y > "x"  // "x" is letter x
-\end{lstlisting}
-The first query will select pairs of persons $(x, y)$ where the name of $brother$ $y$
-if alphabetically behind the name of $brother$ $x$, for example (Abel, Cain), but
-not (Cain, Abel). Whereas the second query requests that $y$ starts with x, y or z
-and would accept (Zachary, Xavier), but reject (Abel, Seth).
-
-There is a special issue concerning the naming of the instances of a class. By default
-the instance names are not case sensitive, but the first typography encountered when parsing
-the data is always preserved. For example if in the datafiles the first spelling is $"Eva"$, then
-the query $Find\; person\; eva$ will return $Eva$. However, one may specify in acedb that the
-instance names of a particular class are case sentitive, this is specified in the
-self documented configuration file $wspec/options.wrm$. This option is used for example
-in the class $Gene$ for the model organism $Drosophila\;melanogaster$ which, according
-to tradition, has two distinct genes, one called $A$ and the other called $a$.
-
-
-Finallly, on the command line, the leading keyword $select$ can be abbreviated as $s$,
-\BL
-    select ?Person  k*            // full form
-    s ?Person  k*                 // s   is a short form for select
-\end{lstlisting}
-
-All these shortcuts allow to type quickly terse queries on the command line interface, 
-which are first mapped in a well defined way into a full fledged query language,
-then evaluated.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Chaining queries using the active list}
-The second most frequent way to derive the first variable of a query is to iterate 
-through the active list. This concept was inspired by the Unix pipe. 
-The active list is called @. It is a mathematical set, always sorted,
-and with no duplicates. It starts empty. It is then populated 
-or modified by each successive $select$ statement. This allows to chain the queries like in:
-\BL
-    select a from a in class "Person"          // populate the active list @
-    select a from a in @ where a like "king"   // derive a from the list
-
-       // which can be simplified into:
-    find person
-    select king
-\end{lstlisting}
-
-If a query exports several columns, the active list corresponds to the first exported column. For example
-\BL
-    select p, j from p in class paper, j in p->journal  // case PJ
-    select ?paper, >journal    // equivalent short form of case PJ
-    select j, p from p in class paper, j in p->journal  // case JP
-    select j    from p in class paper, j in p->journal  // case J
-\end{lstlisting}
-Case PJ will export a list of (paper, journal) tuples and the active list contains 
-papers. Whereas case JP will export (journal, paper) tuples and the active list 
-will contain journals, and case J will only export journals  and the active list will also contain journals.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Silent queries}
-
-In many situations, one may want to run a query to know the number 
-of objects satisfying the query without wishing to
-see the resulting table. As in mathematica and other interactive
-languages, the output can be suppressed simply by adding 
-a semi-column at the end of the query.
-\BL
-    select ?Person ;   // silent query endding with semi-column
-\end{lstlisting}
-
-Capitalizing on the concept of an active list
-and on the syntax shortcuts explained in the two previous sections,
-the semi-column can be used to chain queries:
-\BL
-    select ?Person ;   // all persons, silent
-    select Tom ;       // restrict to Tom, silent
-    select >papers     // export papers of author Tom
-\end{lstlisting}
-The result of the first query, in this case the set of all persons,
-is not exported, but is used as input to the second query,
-which selects author Tom, then to the third query. In fine
-this chained query exports the list of papers authored by Tom.
-
-The same query can be presented on a single line:
-\BL
-    select ?Person ; tom ; >papers // export Tom's papers
-\end{lstlisting}
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Filtering on arithmetic and textual conditions}
-\subsection{Comparators}
-
-The $where$ clause is used to filter the results. The simplest form is to search for the specific name of an object
-\BL
-   select ?Person Tim
-\end{lstlisting}
-which expands as
-\BL
-   select p in class "Person" where p == "Tim" // select a single person
-\end{lstlisting}
-
-The usual comparators: 
-$< \;\;\; <= \;\;\;  ==  \;\;\; >=  \;\;\; >$
-can act on names, dates and numbers. In addition, a numeric variable is interpreted as a real number  
-and numerical comparisons can involve arithmetics: additions, subtractions, multiplications, divisions, 
-modulo, power.  Parenthesis are recognized in the usual way:
-\BL
-     select p in ?Person, 
-       h in p->height,                 // assume h is given in meters
-       w in p->weight                  // assume w is given in kilograms
-         where 2 * (h - 100) < 1.7 * w  // select relatively heavy people
-\end{lstlisting}
-
-In text comparisons, the value of a variable is its name, with the caveat that acedb interprets 
-embedded numbers as numbers, implying the ordering
-\BL
-     a < a7b < a11c < b
-\end{lstlisting}
-
-String matching comes in 2 flavors. Using the syntax $a$ like $b$, or equivalently
-$a$ \~{} $b$, one can invoke a simple system 
-with 2 kinds of jokers: 
-question mark (?) to represent a single character or star (*) to represent an arbitrary string. 
-\BL
-     p ~ "T?m"     // selects Tam, Tim and Tom, 
-                   // but not Attim which does not start with T
-     p ~ "T*m"     // also selects Theotym, 
-                   // but not Thomas which does not end with m
-     p ~ "*T?m*"   // also selects Attim"
-     p ~ "*T*m*"   // selects Tam,  Tim, Tom, Theotym, Thomas and  Attim
-\end{lstlisting}
-Single quotes prevents the expansion of the (*) and (?) symbols
-\BL
-     p == '*'      // select person actually named *
-\end{lstlisting}
-
-\subsection{Regular expressions}
-Alternatively, one may write $a$ equal-tilde $b$ to invoke the full C regular expression matching 
-\BL
-     p =~ 't[io]m'    // selects Tim, Tom and Attim but not Tam
-     p =~ '^t[io]m'   // selects Tim and Tom, 
-                      // but not Attim which does not start with T
-     p =~ 't.*m'      // selects Tam,  Tim, Tom, Theotym, Thomas and  Attim
-     p =~ 't.*m$'     // rejects Thomas which does not ends with m
-\end{lstlisting}
-The regular expressions must be protected by single quotes to prevent premature evaluation.
-
-\subsection {Automatic classification using dynamic subclasses}
-In most situations, the class of a variable is known from the schema. Requesting $paper$$-$$>$$author$
-would be known in our examples as yielding an author, i.e. an instance of $class$ $Person$.
-However, acedb allows dynamic classification into sub-classes. For example, one can define
-in acedb a subclass $Prolific\_author$ as all authors of at least 5 papers
-known in the database. Whenever an $Person$ exceeds this threshold, 
-it belongs at the same time to the $class$ $Person$ and to the subclass Prolific\_author. 
-To get the full list of prolific authors one may directly list the subclass. 
-But it may be necessary to check the status of
-a given set of authors, this is done using the operator $ISA$ (is an instance of a class)
-as follows
-
-\BL
-       // if Prolific_author is a subclass of class Person one may 
-     select PA in class Prolific_author       // list the subclass
-                      // or select objects belonging to a subclass
-     select A ...         // select persons to populate the @ list
-     select PA from PA in @ where PA ISA Prolific_author // filter
-\end{lstlisting}
-The subsclasses are defined in acedb in the configuration file $wspec/subclasses.wrm$
-
-\subsection{Combining Boolean conditions: AND, OR, XOR and NOT}
-
-As in nearly all query systems, conditions can be combined using $(OR, XOR, AND, NOT)$ 
-in that order of precedence and parentheses. The names of the operators 
-are not case sensitive: (XOR, Xor, xor) are equivalent.
-$(OR, XOR, AND, NOT)$ can be abbreviated as ($||$ \^{ }\^{ }  $\&\&$ $!$).
-Remember that the single caret is reserved for arithmetic power $2$\^{ }$3 \; = \;8$.
-For example, one may write
-\BL
-      ... where (a <= x && x <= b) || (b < x && x < a) 
-\end{lstlisting}
-to specify that $x$ is either in the segment [a,b] or in the segment ]b,a[.
-However, as discussed below, missing data and multivalued variables
-slightly complicate the semantics of the Boolean operators. 
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Dealing with missing data: TRUE, FALSE, NULL and NaN}
-
-In a standard programming language, like C, it is standard practice to
-assume that the numerical value zero matches the Boolean value FALSE.
-For example a looping instruction $while(x)$ is equivalent
-to $while(x\;!=\;0)$. A standard error, however is to evaluate
-a non initialized value, but this can be detected at compile time and fixed
-before running the program. Apart from zero, non-zero and non initialized values,
-a 4th type of number occurs in a program, the infamous NaN (Not A Number), which is generated
-as the results of an invalid arithmetic operation like $1/0$ or $log(0)$.
-Unfortunately, these are only detected at run time, and may occur very frequently for
-example in $Deep\;Learning$ programs (a branch of artificial intelligence).
-
-In a database query, it is the rule, rather than the exception, to stumble
-upon a non initialized value. Indeed, all fields start empty. For this
-reason, the logical tests in the query language are not binary but ternary,
-the 3 allowed values being TRUE, FALSE and NULL. 
-
-Boolean tags, $p\#tag$ evaluate as NULL if $p$ is not defined, otherwise as TRUE
-if the object $p$ contains the $tag$, or FALSE if it does not.
-
-Values, e.g. ($p$$-$$>$$weight$), evaluate as NULL if undefined, i.e. if the object $p$ is not defined, 
-or if the tag $weight$ is not present in the object, or if the tag does not point to a value in the object.
-Otherwise they evaluate as TRUE even if the value happens to be zero.
-
-In numerical calculations, the NaN value is sticky. Any calculation involving one NaN
-evaluates to NaN, for example $log(0) + 4$. Similarly, any calculation
-involving a missing data evaluates to NULL, for example ($p$ $-$$>$ $weight$ $+$ $p$ $-$$>$ $height$)
-evaluate as NULL
-if either $weight$ or $height$ is not specified in the object $p$.
-
-Any string comparison involving a NULL value (missing data) and any number comparison
-involving a NaN or a NULL evaluates to FALSE.
-
-Count operations always evaluate to a valid number.
-
-In Boolean operations (AND, OR, XOR, NOT), NULL and NaN evaluate as FALSE.
-
-This may seem a little abstract, but is easy to understand on examples, and important
-because, in a database query, undocumented values are very frequent.
-
-\BL
-   select A from A in ?Person where A                     //   Always true
-   select A from A in ?Person where A#Professor     //  Tom is a Professor
-   select A from A in ?Person where A->Professor    //     False, no value
-   select P from P in ?Person where P->weight       //    Is there a value
-   select P from P in ?Person where P->weight > 80  //     Check the value
-   select  1,x from x = (-1)^0.5 where x            // False: not a number
-   select  1,x from x = (-1)^0.5 where 1 OR x       //  True: T or NaN = T
-\end{lstlisting}
-
-Combining the filters, one can for example quality check the data and export all cases
-where the values are either missing or out of range, for example a weight shoud never
-be negative:
-\BL
-   select p,w from p in ?Person, w in p->weight where w <= 0 OR NOT w 
-\end{lstlisting}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{The meaning of NOT in a multivalued universe}
-
-In standard arithmetics, the two conditions $(a$ $!$$=$ $b)$ and $! (a == b)$, 
-i.e. (a NOT EQUAL b) versus (NOT (a EQUAL b)),
-are equivalent, they are FALSE if ($a == b$) and TRUE otherwise. But in
-the context of a database query, the situation is more involved.
-In general, the variables are multivalued, and the meaning of NOT depends
-on a choice of strategy. Consider the case of two
-papers, $p1$ with authors $Tom$ and $Jim$, and $p2$ just with author $Tom$.
-We certainly expect Paper $p1$ to answer TRUE to the query $(author == Tom)$.
-Therefore it should answer FALSE to the query $(! (Author == Tom))$.
-But what about $(Author$ $!$$=$ $Tom)$. Scanning through the author list of $p1$
-we get 2 answers \{TRUE, FALSE\} and we need a strategy to reduce this list 
-to a single answer. We chose to favor TRUE, i.e. the OR value of
-all individual answers. Therefore $p1$ (but not $p2$) answers TRUE to 
-$(Author$ $!$$=$ $Tom)$
-because $p1$ has at least one other author.
-
-In conclusion, if the variables are multi-valued, the following queries are
-not equivalent
-\BL
-  select p from p in class Paper where p->author != Tom
-  select p from p in class Paper where NOT p->author == Tom
-\end{lstlisting}
-With our choice of strategy: TRUE wins over FALSE.
-So in the first case, one find all papers where Tom is not the only author
-in the second case one finds all papers where Tom is not an author,.
-In addition, according to the previous section discussing missing data,
-the papers without a known list of authors
-are also selected in the second query, but not in the first query.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Counting elements in embedded subqueries}
-
-A very useful constraint is counting. For example, prolific authors can be found by
-either by counting the number of values of a tag, or the number of lines of an embedded 
-subquery delimited by curly brackets \{\}, i.e. they can be found by the 2 equivalent queries
-\BL
-   select a in ?Person where count a->papers > 5
-   select a in class author where count {select p in a->papers} >= 5
-\end{lstlisting}
-but in the latter case, we can become very specific  and only count papers published in a given journal
-\BL
-   select a in class "Person" where 
-     count {select p in a->papers where p->journal == "nature"} >= 2
-\end{lstlisting}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Basic data types}
-\subsection{Constants and numerical calculations}
-
-A constant is declared using the equal symbol. The constant may be  a number of a string.
-These constants can then be used in calculations and filters
-\BL
-  select x, y, z from x = 2 , y = "hello", z = 2 * 3 + 4
-  select L from L in class line , pi = 3.14 where L->length > 2 * pi / 3
-
-  select d from  d = 2 where d == 5 - 3   // correct filter
-  select d from  d = 2 where d = 5 - 3    // error, please use == 
-\end{lstlisting}
-As usual in C and many other languages, setting the value of a constant 
-uses the $=$ sign, but assessing an
-equality in a $where$ clause uses the $==$ symbol.
-Looking closely, we may notice that since all the variables $x$, $y$, $z$, $L$, $d$ 
-are exported, the $select$ - $from$ is redundant, moreover the x
-variable is never reused, so its declaration is redundant. This
-lead us to the simplified forms:
-
-\BL  
-  select x from x = 2 // full form
-  select x = 2        // short form
-  select 2            // shortest form
-\end{lstlisting}
-
-Since the system understands the parenthesis and the  standard arithmetic operators
-(plus, minus, multiply, divide, power, modulo) 
-we actually have a (multi dimensional) calculator
-
-\BL
-  select  (1 + 2) * (3 - ( 4 + 5))  // returns  (3) * (-6) = -18
-  select  8 modulo 3      // returns 2
-  select  -1 modulo 3     // returns  2 (math convention) 
-                          // rather than  -1
-  select  2 * 5 modulo 3  // returns  1 
-  select  9 ^ 2           // returns square(9) = 9 * 9 = 81
-  select  9 ^ (1/2)       // returns sqrt(9) = 3
-  select  (-1) ^ .5       // sqrt(-1)returns NULL, arithmetic exception
-  select  3*2 , (5+1)/2   // returns 6,3
-\end{lstlisting}
-
-When computing $-1$ $modulo\; 3$, we prefer the mathematical convention $2$ 
-because  the C language convention $-1$  breaks the periodicity of the modulo
-function and introduces complications when translating DNA codon triplets.
-All numerical calculations are performed using 64-bits floating numbers (C doubles).
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Loose and strict date comparisons, date differences}
-
-Dates are special, because they may be specified with a very variable precision,
-sometimes just a year is provided, sometimes down to the second.
-To allow more meaningful comparisons we introduce two kinds of
-comparators, using either the lower or the higher precision.
-
-A constant date is declared by enclosing the numbers using the back-quote sign:
-\BL
-  select d = `2016-01-30_22:47:15`
-\end{lstlisting}
-The successive numbers represent Y:year, M:month (1 to 12), D:day (1 to 31), h:hour (0 to 24), n:minute (0 to 60) and s:seconds (0 to 60).
-
-In a user provided date, the leading zeroes may be dropped, they are reinstated in the answer:
-\BL
-query::   select d = `2016-1-17_3:7`   // No leading zeroes
-answer::  2016-01-17_03:07             // standardized date format
-query::   select d = `20160321`    // No minus signs
-answer::  2016-03-21               // standardized date format
-\end{lstlisting}
-
-In a database, the objects are usually dated with a certain granularity. For example
-the submission date of papers often gives the day, but for books, we often only know the year.
-Also a frequent query would be to retrieve the papers of a  given year or a given month.
-To satisfy these needs, we introduce 2 kinds of date comparisons, strict and loose.
-In a strict comparison, using the comparators $<=  \;\;\;  == \;\;\;  >=$  the 2 dates
-are compared at the  highest available precision, just like one would compare real numbers.
-In the loose mode, using the tilde comparators $<$\~{} ,  \~{} , $=$\~{} , $>$\~{} ,  the 2 dates
-are compared at the  lowest precision, if one date is given in years, the
-other is rounded in years. As a result, we have
-\BL
-   `2016-2`  == `2016`       // ---> false
-   `2016-2`  >= `2016`       // ---> true
-   `2016-2`  <= `2016`       // ---> false
-
-   `2016-2`  =~ `2016`       // ---> true
-   `2016-2`  >~ `2016`       // ---> true
-   `2016-2`  <~ `2016`       // ---> true
-
-   `2016-2`  == `2016-2-17`  // ---> false
-   `2016-2`  == `2016-3`     // ---> false
-
-   `2016-2`  =~ `2016-2-17`  // ---> true
-   `2016-2`  =~ `2016-3`     // ---> false
-\end{lstlisting}
-
-Notice that a date must always be protected by a pair of back-quotes. This need is obvious if you want to specify the month, 
-since the date `2016-3`, meaning march 2016, is not the same thing as the subtraction $ 2016 - 3 = 2013$,
-but it is also needed even when you just give a year like `2013` to trigger the interpretation
-of 2013 as a date.
-
-Finally, like in SQL, it is possible to compute a date difference at a desired pecision using
-DATEDIFF (unit, date\_1, date\_2) where unit can be one of
-(year, month, day, hour, minute, second), or abbreviated as (y,m,d,h,n,s),
-notice the n for miNute. The result is an integer number.
-
-In all cases, be very careful when using dates and always check the validity of the query on a few known cases
-since it is very easy, when dates are involved, to mean something and write something else.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{DNA and proteins, motif searches}
-
-A specificity of acedb is that it understands the genetic code. If the database 
-contains sequences, or mRNAs, 
-or any object with a DNA tag, one can obtain its DNA using
-\BL
-   select s in class sequence, d in DNA(s)
-// yields the full DNA of each sequence in the database. 
-// To obtain a specific part use
-   select x = 3, y = 8, s in ?sequence, d in DNA(s,x,y)   
-// The reserved word DNA must be written in upper case, this
-// allows to use dna as a variable name or to access 
-// the DNA tag. If x > y, one obtains the reverse complement
-   select s, dna, adn, from s in ?sequence, 
-      dna in DNA(s,1,6), adn in DNA(s,6,1)
-// gives
-   my_sequence  atgttg    caacat
-// PEPTIDE will translate the sequence, including the UTR, in frame 1
-   select PEPTIDE (@,1,2)
-// gives Methionine-Leucine (atg codes for Met, ttg for Leu)
-   ML
-// CODING will translate only sequences with tag CDS, up to the stop 
-// To get all proteins encoded in messenger RNA, try
-   select ?sequence CDS      // the CDS tag means the sequence is coding
-   select -o f ?sequence ; CODING // all proteins are written to file f
-\end{lstlisting}
-Notice that acedb will translate nuclear DNA using the standard genetic code, 
-but if the relevant standardized information has been provided in the database,
-it will translate some sequences using a different genetic code,
-for example the human mitochondrial code to translate human mitochondrial mRNAS.
-
-In some cases, one may have the name of a chromosome, say '12', exists in 2 different classes,
-say class 'Map' and class 'Sequence', or simply is a number, 
-we can 'reclass' the  variable 'm' using OBJECT before extracting the DNA:
-\BL
- select x,s,dna from x=11+1, s in OBJECT('Sequence',x), dna in DNA(s,101,112)
- select m,s,dna from m in ?Map where m == `12',
-        s in OBJECT('Sequence',m), dna in DNA(s,101,112)
-\end{lstlisting}
-
-
-In principle, one can select all DNA sequences coding for a particulat motif
-or coding for a particular peptide motif
-say MLR or MIR (Methionine (Iso)Leucine aRginine) using
-simple text comparison (like) of full UNIX
-regular expressions (equal tide)
-\BL
-  select s,dna from s in class sequence, dna in DNA(s) where dna like '*taag*'
-  select s,p from s in class sequence, p in PEPTIDE(s) where p  =~ '^M[IL]R'
-\end{lstlisting}
-However, the content of the sequences is not indexed, and dedicated tools
-like BLAT or BLAST would be much faster for large scale searches
-of multiple motifs.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Column titles and row order}
-
-The result of a query is a tab delimited table. 
-The order of the columns is specified by the order of the variables in the $select$ clause.
-If the option $-$$t$ is provided, the first line, prefixed by a \#, will contain the title of the columns.
-By default, the title of the columns are the names of the variables, but a more 
-complete title can be provided for some columns using the $TITLE$ field (in capitals)  as in:
-\BL
-   select -t x, y, z from ... where ... TITLE x:this is x, z:this is z
-\end{lstlisting}
-Using the expanded options $-o$ file\_name --$title$ my\_title, as in 
-\BL
-   select -o foobar.txt --title ``Hello World''
-     x, y, z from ... where ... TITLE x:this is x, z:this is z
-\end{lstlisting}
-adds at the top of the output file 'foobar.txt'
-a first line prefixed by $\#\#\#$ with the current date, the chosen title, and the name of the output file.
-
-The order of the rows is by default the alpha-numeric ordering.
-But this order can be modified using the following syntax.
-
-\BL
-     // By default the lines are sorted alphanumerically
-  select x, y, z from ... where ...                 // default order
-
-     // The order can be modified using order_by
-  select x, y, z from ... where ... order_by 1+2+3  // default order
-     // to order by y increasing, then x decreasing, then z increasing
-     // these 2 constructions are equivalent
-  select x, y, z from ... where ... order_by 2-1+3  // use column numbers
-  select x, y, z from ... where ... order_by y-x+z  // use variable names
-\end{lstlisting}
-In the leading column, or the following ones in case of a tie,
-numbers are sorted numerically : ( -5 -2.7 -2.6 0 3 7 11 11.1 12) 
-and names are sorted alphabetically. However, we found\cite {DTM94} that it is much nicer to
-order names containing embedded number numerically as in (a9 b7 b7.1a b11). 
-The rule is to order numerically on successive groups on contiguous numbers.
-Notice that this method also works well for times and dates
-'9:20' will come before '10:2'.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% SECTION
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
 
-As from 2018, the official site for the acedb object oriented database system 
-has been transfered from the Sanger centre to the NCBI.
-We presented here the new
-query language developped to allow 
-a faster and more fluid access to the data,
-while maintaining a good compatibility with the previous systems.
-
-The main idea was to clearly define a full fledge syntax
-while at the same time developing a set of simplification rules
-which allow in the simple cases to write very terse queries
-and let the computer interpolate the syntactic sugar.
-This double strategy allows an integrated support
-for easy to read verbose scripts and for
-easy to type terse interactive commands. All queries
-are analyzed by the same machinery which interprets the query,
-checks the syntax, and executes the search in C
-while taking advantage of current state of the acedb data caches.
- 
-Some aspects of this presentation may be interesting to a broader audience 
-not necesseraly using the acedb system. For example the implicit handling of multivalued
-fields is much simpler and more natural than in relational databases.
-The ternary logic: True, False, Null presented 
-in section 3.5 is important in any situation where the information is often incomplete. The distinction between
-'A not equal B' and 'not A equal B', detailled in section 3.6, is critical whenever the variables are multivalued.
-The native support for DNA and proteins is handy in biological applications. 
-Finally. the strict and loose date comparisons of section 4.2 can be appreciated as the cherry on the cake.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % SECTION
@@ -1234,10 +461,7 @@ Finally. the strict and loose date comparisons of section 4.2 can be appreciated
 
 \section*{Acknowledgments}
 
-We would like to thank Sam Cartinhour, Michel Potdevin, Mark Sienkiewicz and Richard Durbin
-for many discussion on the best way to query an object oriented database
-and all acedb users for a continuous flow of interesting complex queries
-with unexpected answers.
+We would like to thank David Landsman and Tom Madden.
 This research was supported by the Intramural Research Program of the National Library of Medicine, National Institute of Heath.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1268,12 +492,6 @@ In Databases and Systems, 2001
 DOI: 10.1007/0-306-46903-0\_23
 
 
-\bibitem{Sulston}
-J Sulston, Zijin Du, K Thomas, R Wilson, L Hillier, R Staden, N Halloran, P Green, J Thierry-Mieg, L Qiu, S Dear, A Coulson, M Craxton, R Durbin, M Berks, M Metzstein, T Hawkins, R Ainscough, R Waterston
-The C. elegans genome sequencing project: a beginning
-Nature, 356, 6364, pp 37-41, 1992
-
-
 \bibitem{cDNA}
 Danielle Thierry-Mieg and Jean Thierry-Mieg
 AceView: a comprehensive cDNA-supported gene and transcripts annotation.
@@ -1281,10 +499,7 @@ Genome Biology 2006, 7(Suppl 1):S12.
 
 \bibitem{Code}
 Code and documentation are available from  
-$https://www.aceview.org/Software/$ 
-$https://github.com/ncbi/AceView$ 
-$https://github.com/jtmieg/AceView$ 
-
+git clone git@github.com:NLM-DIR/Magic2
 
 \end{thebibliography}
 
