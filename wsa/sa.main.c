@@ -1626,7 +1626,7 @@ int main (int argc, const char *argv[])
       getCmdLineBool (&argc, argv, "--help") ||
       getCmdLineBool (&argc, argv, "-h")
       )
-    saUsage (0, 0, argv) ;
+    saHelp () ; /*    saUsage (0, 0, argv) ; */
 
   if (getCmdLineBool (&argc, argv, "--version"))
     {

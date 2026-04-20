@@ -100,7 +100,7 @@ SA_OBJS = sa.main.o sa.config.o sa.targetIndex.o \
 	sa.sequenceParser.o sa.seeds.o sa.sort.o sa.align.o \
 	sa.introns.o sa.wiggle.o sa.gff.o \
 	sa.stats.o sa.sam.o sa.tabular.o \
-	sa.tests.o sa.hardware_info.o
+	sa.tests.o sa.hardware_info.o sa.help.o
 
 # sa.uringSequenceParser.o
 

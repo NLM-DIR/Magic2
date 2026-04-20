@@ -557,6 +557,9 @@ int saBestNumactlNode (int *maxThreadsp) ;
 int get_number_of_cpus (void) ;
 int get_number_of_cpus_per_node (void) ;
 
+/* sa.help */
+void saHelp (void) ;
+
 /* sa.tests */
 void saCreateRandomGenome (PP *pp, int nMb) ;
 
