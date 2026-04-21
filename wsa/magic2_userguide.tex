@@ -405,8 +405,7 @@ The recogized keyword are:
 
 \subsubsection{Example}
 
-A manifest with only a filename column is valid.  Magic2 will infer the
-format from the file suffix and auto-detect all other properties:
+Here is an exampl with 5 files and 3 run names:
 
 \begin{lstlisting}
 # my_project.rConfig
@@ -420,12 +419,15 @@ lib4.fastq.gz                          sample_C       DNA,Adaptor1=AGATCGGAAG
 In this example, \code{lib1} and \code{lib2} are technical sub-libraries
 for the same biological sample.  Because they share the run name
 \code{sample\_A}, Magic2 aligns both files and merges their output into
-a single BAM, gene count table, and coverage track for \code{sample\_A}.
-\code{sample\_B} and \code{sample\_C} are independent runs.
+a single BAM, gene count table, and coverage track for \code{sample\_A},
+whereas \code{sample\_B} and \code{sample\_C} are independent runs.
 The adaptors will be auto-detected in samples A and B, imposed in C.
-RNA/DNA will be auto-detected in A, and is imposed in B and C. 
+RNA/DNA will be auto-detected in A, imposed in B and C. 
 All three runs are processed simultaneously.
 
+
+A manifest with only a filename column is also valid.  Magic2 will infer the
+format from the file suffix and auto-detect all other properties:
 
 \begin{lstlisting}
 sample_A_R1.fastq.gz+sample_A_R2.fastq.gz
