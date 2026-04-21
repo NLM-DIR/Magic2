@@ -1530,7 +1530,7 @@ void saUsage (char *message, int argc, const char **argv)
 	       "//   --minScore <int> : [default 30] minimal score  of the alignment\n"
 	       "//   --errCost <int> : [default 8] cost of substitition, or short indel up to 3 bases\n"
 	       "//   --errMax <int> : [default NA] maximal number of mismatches in any (partial) alignment\n"
-	       "//   --errRateMax <int> : [default 10] maximal percentage of mismatches in any (partial) alignment\n"
+	       "//   --errRateMax <int> : [default 12] maximal percentage of mismatches in any (partial) alignment\n"
 	       "//   --no_splice : only accept comtinuous alignments, [by default search also spliced alignments]\n"
 	       "//   --maxIntron [default 1000000] : max intron size\n"
 	       "//   --ignoreIntronSeeds [default FALSE] : do not use the known intron provided in class I in the -T config file\n"
@@ -1566,8 +1566,6 @@ void saUsage (char *message, int argc, const char **argv)
 	       "//    If no message is emited within the first minute, the computer is overloaded,\n"
 	       "//    please try to increase --max_threads to 256 or 512. alternativelly lower --nAgents and --nBlocks\n"
 	       "//      The code is using virtual threads, at least one by agent and by communication channels.\n"
-	       "// --noJump : Do not insert jumper in the index, valid for future GPU version\n"
-	       "// --verbose : all kinds of details, mostly usefull for debugging, are reported\n"
 	       "//\n\n"
 	       ) ;
     }
@@ -1626,17 +1624,19 @@ int main (int argc, const char *argv[])
       getCmdLineBool (&argc, argv, "--help") ||
       getCmdLineBool (&argc, argv, "-h")
       )
-    saHelp () ; /*    saUsage (0, 0, argv) ; */
+    saUsage (0, 0, argv) ; 
+  if (getCmdLineBool (&argc, argv, "--newhelp"))
+    saHelp () ;    
+  if (getCmdLineBool (&argc, argv, "--devhelp"))
+    saDevHelp () ; 
 
   if (getCmdLineBool (&argc, argv, "--version"))
     {
-      fprintf (stderr, "sortalign version 0.1.56, jan 2027") ;
+      fprintf (stderr, "sortalign version 0.1.96, apr 2027") ;
       exit (0) ;
     }     
 
   p.debug  = getCmdLineBool (&argc, argv, "--debug") ;
-  p.debug |= getCmdLineBool (&argc, argv, "--verbose") ;
-  
   
   /**************************  SRA downloader *********************************/
   
@@ -2059,7 +2059,7 @@ int main (int argc, const char *argv[])
 
   p.minAli = p.minAliPerCent = p.minScore = -1 ;
   p.errMax = ERRMAXMAX ; /* on negative values, extendHits stops on first error */
-  p.errRateMax = 10 ;
+  p.errRateMax = 12 ;
   p.OVLN = 30 ;
   p.splice = TRUE ;
   if (getCmdLineBool (&argc, argv, "--no_splice"))

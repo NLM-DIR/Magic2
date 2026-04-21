@@ -4,7 +4,8 @@
 \usepackage{hyperref}
 \usepackage{geometry}
 \usepackage{listings}
-\usepackage{color}
+%\usepackage{color}
+\usepackage[dvipsnames]{xcolor}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
@@ -162,9 +163,9 @@ or whether they contain adaptors.
 \midrule
 Operating system & Linux (x86-64) or macOS \\
 RAM              & 32 GB minimum; 64+ GB recommended for human genome \\
-CPU cores        & 4 minimum; performance scales linearly with core count \\
-Disk             & Varies with genome size; \(\sim\)30 GB for a human index \\
-GPU (optional)   & Any CUDA-capable GPU accelerates seed extension \\
+CPU cores        & 4 minimum; performance scales up with core count \\
+Disk             & Varies with genome size; \(\sim\)22 GB for the human T2T index \\
+GPU (optional)   & Any CUDA-capable GPU accelerates the analysis \\
 Network          & Fast connection to NCBI recommended for SRA streaming \\
 \bottomrule
 \end{tabular}
@@ -202,7 +203,7 @@ Then compile:
 \begin{lstlisting}
 tcsh
 cd Magic2
-setenv ACEDB_MACHINE LINUX_4_OPT
+setenv ACEDB_MACHINE LINUX_4_OPT   or  MAC_X_64_OPT
 make libs
 cd wsa
 make
@@ -272,14 +273,15 @@ magic2 -x IDX.T2T --srr SRR1234,SRR1235,SRR1236 -o results/ --full
 \section{Input Data}
 % ===============================================================
 
-\subsection{Local FASTA/FASTQ files}
+\subsection{Single-file input (\code{-i})}
 
-Magic2 accepts both FASTA and FASTQ files, gzip-compressed or
-uncompressed.  The format is detected automatically.
+For a single sequencing file or paired-end pair, use \code{-i}.
+The file format is detected automatically from the extension
+(\code{.fasta}, \code{.fastq}, \code{.fastc}, \code{.gz}).
 
 \textbf{Single-end reads:}
 \begin{lstlisting}
-magic2 -x IDX -i reads.fasta.gz -o out/
+magic2 -x IDX -i reads.fastq.gz -o out/
 \end{lstlisting}
 
 \textbf{Paired-end reads in two separate files} (joined with \code{+}):
@@ -287,19 +289,182 @@ magic2 -x IDX -i reads.fasta.gz -o out/
 magic2 -x IDX -i reads_R1.fastq.gz+reads_R2.fastq.gz -o out/
 \end{lstlisting}
 
-\textbf{Paired-end reads in interleaved format:}\\
-The file must be named with the \code{.sample\_12.} suffix:
+\textbf{Paired-end reads in interleaved format:}
 \begin{lstlisting}
 magic2 -x IDX -i sample.sample_12.fastq.gz -o out/
 \end{lstlisting}
 
-In interleaved format, each pair occupies four successive lines and read
-identifiers end in \code{/1} and \code{/2}.
+In interleaved format, each pair occupies consecutive records with
+identifiers ending in \code{/1} and \code{/2}: four lines per pair
+in FASTA (two records of header\,+\,sequence), eight lines per pair
+in FASTQ (two records of header\,+\,sequence\,+\,\code{+}\,+\,quality).
+
+\textbf{Reading from a pipe:}
+\begin{lstlisting}
+zcat *.fastq.gz | magic2 -x IDX -i - --fastq -o out/
+\end{lstlisting}
+
+\code{-i} accepts exactly one file or one paired-end pair.
+To process multiple files or samples, use \code{-I} (Section~\ref{sec:rconfig}).
+
+\begin{notebox}
+\textbf{Note:} Adaptor sequences, run labels, and strandedness overrides
+for a \code{-i} run are supplied as command-line flags
+(\code{--adaptor1}, \code{--adaptor2}, \code{--run}, \code{--strand}).
+These flags are ignored when \code{-I} is used; in that case the
+same information is provided per sample inside the manifest file.
+\end{notebox}
+
+
+% ---------------------------------------------------------------
+% NEW subsection 5.2  "Run manifest (-I)"
+% ---------------------------------------------------------------
+\subsection{Run manifest (\code{-I})}
+\label{sec:rconfig}
+
+When a project involves multiple sequencing files or samples, describe
+them in a plain-text run manifest file and pass it with \code{-I}.
+This is the recommended approach for any analysis beyond a single test run.
+
+\code{-i} and \code{-I} are mutually exclusive, mirroring the
+\code{-t} / \code{-T} distinction for index construction.
+
+\subsubsection{Format}
+
+The manifest is a tab-separated text file with up to three columns and
+one row per input file.  Lines beginning with \code{\#} are ignored.
+The third column is fully optional, all these properties can be auto-detected
+by the code by performing a dry run on the first 10 Megabases, and the file formats
+are usually implied by the file names.
+But the third column can be used to override the auto detection.
+
+\begin{center}
+\begin{tabular}{clp{8.5cm}}
+\toprule
+\textbf{Column} & \textbf{Content} & \textbf{Notes} \\
+\midrule
+1 & Filename & Path to a FASTA or FASTQ file, plain or gzip-compressed.
+               For paired-end reads in two files, join the two paths with
+               \code{+}, e.g.\ \code{R1.fastq.gz+R2.fastq.gz}. \\
+2 & Run name & An alphanumeric identifier (\code{[A-Za-z0-9\_]} only).
+               Used as a component of output file and directory names.
+               Multiple rows sharing the same run name are merged into
+               a single output (BAM, gene counts, coverage tracks). \\
+3 & Properties & Optional comma-separated list of descriptors
+                 (see Table~\ref{tab:rconfig-props}). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{table}[ht]
+\caption{Recognised property keywords in column 3 of the run manifest.}
+\label{tab:rconfig-props}
+\begin{center}
+\begin{tabular}{lp{9.5cm}}
+\toprule
+\textbf{Keyword} & \textbf{Effect} \\
+\midrule
+\code{RNA}              & Align in RNA mode (intron-aware, poly-A detection).
+                          Overrides auto-detection. \\
+\code{DNA}              & Align in DNA mode (continuous alignments only). \\
+                          Overrides auto-detection. \\
+\code{fasta}            & Treat the file as FASTA regardless of suffix. \\
+\code{fastq}            & Treat the file as FASTQ regardless of suffix. \\
+\code{fastc}            & Treat the file as FASTC format. \\
+\code{interleaved}      & Paired reads are in a single interleaved file
+                          (consecutive records ending in \code{/1} and \code{/2}).
+                          Use when the filename does not carry the
+                          \code{.sample\_12.} suffix. \\
+\code{Adaptor1=\textit{seq}} & Read-1 exit adaptor sequence.
+                          Overrides auto-detection for this sample only. \\
+\code{Adaptor2=\textit{seq}} & Read-2 exit adaptor sequence.
+                          Overrides auto-detection for this sample only. \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\subsubsection{Example}
+
+\begin{lstlisting}
+# my_project.rConfig
+# Col 1: file(s)                      Col 2: run      Col 3: properties
+lib1_R1.fastq.gz+lib1_R2.fastq.gz     sample_A        
+lib2.fasta.gz                          sample_A       
+lib3_R1.fastq.gz+lib3_R2.fastq.gz     sample_B        RNA
+lib4.fastq.gz                          sample_C       DNA,Adaptor1=AGATCGGAAG
+\end{lstlisting}
+
+In this example, \code{lib1} and \code{lib2} are technical sub-libraries
+for the same biological sample.  Because they share the run name
+\code{sample\_A}, Magic2 aligns both files and merges their output into
+a single BAM, gene count table, and coverage track for \code{sample\_A}.
+\code{sample\_B} and \code{sample\_C} are independent runs.
+The adaptors will be auto-detected in samples A and B, imposed in C.
+RNA/DNA will be auto-detected in A, and is imposed in B and C. 
+All three runs are processed simultaneously.
+
+\subsubsection{Parallelism across runs}
+
+All runs described in the manifest are processed concurrently.
+Magic2 mixes data packets from different runs through the same pipeline,
+fully utilising available hardware regardless of how reads are distributed
+across files.  There is no practical limit on the total number of reads:
+the pipeline's flow-control mechanism prevents RAM exhaustion by
+regulating the rate at which new data blocks enter the pipeline.
+
+\subsubsection{Run naming rules}
+
+\begin{warnbox}
+Run names (column 2) must consist of letters, digits, and underscores
+only (\code{[A-Za-z0-9\_]}).  Spaces, slashes, and special characters
+will cause errors because run names are used directly as components of
+output file and directory names.
+\end{warnbox}
+
+\subsubsection{Column 3 is optional}
+
+A manifest with only a filename column is valid.  Magic2 will infer the
+format from the file suffix and auto-detect all other properties:
+
+\begin{lstlisting}
+sample_A_R1.fastq.gz+sample_A_R2.fastq.gz
+sample_B_R1.fastq.gz+sample_B_R2.fastq.gz
+sample_C.fasta.gz
+\end{lstlisting}
+
+In this minimal case each file is treated as its own run; the run name
+defaults to the filename without path or extension.
+
+\subsection{Streaming SRA runs on the fly}
+
+If you have a fast connection to NCBI, you can align without storing the
+raw reads locally.  Use \code{--srr} instead of \code{-i}:
+\begin{lstlisting}
+magic2 -x IDX --srr SRR1,SRR2,SRR3 -o out/
+\end{lstlisting}
+
+Magic2 distinguishes single-end from paired-end automatically and begins
+aligning as soon as the first megabases arrive.  In practice, alignment
+finishes within seconds of the download completing.
+
+\begin{notebox}
+\textbf{Note:} If the files already exist in the local \code{./SRA/}
+cache directory (from a previous \code{--sraDownload}), they are used
+instead of re-downloading.
+\end{notebox}
+
+To evaluate quality-control metrics across several SRA runs quickly,
+without storing the reads or alignment files:
+\begin{lstlisting}
+magic2 -x IDX --srr SRR1,SRR2,SRR3 --no_ali -o out/
+\end{lstlisting}
 
 \subsection{Downloading SRA runs}
 
 Use \code{--sraDownload} to download one or more SRA runs as local files
 before alignment.  The files are placed in the \code{./SRA/} subdirectory.
+This may even be useful to prepare data for other bioinformatics pipelines.
 
 \textbf{Basic download (interleaved FASTA):}
 \begin{lstlisting}
@@ -338,30 +503,6 @@ Single-end runs are automatically exported as a single file
 (\code{SRRn.fastq.gz}).  The number of SRR identifiers in a single
 command is not limited.
 
-\subsection{Streaming SRA runs on the fly}
-
-If you have a fast connection to NCBI, you can align without storing the
-raw reads locally.  Use \code{--srr} instead of \code{-i}:
-\begin{lstlisting}
-magic2 -x IDX --srr SRR1,SRR2,SRR3 -o out/
-\end{lstlisting}
-
-Magic2 distinguishes single-end from paired-end automatically and begins
-aligning as soon as the first megabases arrive.  In practice, alignment
-finishes within seconds of the download completing.
-
-\begin{notebox}
-\textbf{Note:} If the files already exist in the local \code{./SRA/}
-cache directory (from a previous \code{--sraDownload}), they are used
-instead of re-downloading.
-\end{notebox}
-
-To evaluate quality-control metrics across several SRA runs quickly,
-without storing the reads or alignment files:
-\begin{lstlisting}
-magic2 -x IDX --srr SRR1,SRR2,SRR3 --no_ali -o out/
-\end{lstlisting}
-
 \subsection{Streaming and caching simultaneously}
 
 You can align on the fly and cache the reads in one command:
@@ -375,18 +516,22 @@ If the run is already cached, it will not be downloaded again.
 
 \subsection{Processing multiple runs in parallel}
 
-On large machines the index is memory-mapped and shared between
-concurrent Magic2 processes.  To analyse three runs in parallel:
+On large multi-core machines the index is memory-mapped and shared between
+concurrent Magic2 processes.  To analyse three runs in parallel on a 4 core machine
+(which probably has 96 CPUs) :
 \begin{lstlisting}
 magic2 -x IDX.T2T --srr SRR1234 --full -o out_SRR1234 &
-magic2 -x IDX.T2T --srr SRR1235 --full -o out_SRR1235 &
-magic2 -x IDX.T2T --srr SRR1236 --full -o out_SRR1236 &
+sleep 1 ; magic2 -x IDX.T2T --srr SRR1235 --full -o out_SRR1235 &
+sleep 1 ; magic2 -x IDX.T2T --srr SRR1236 --full -o out_SRR1236 &
+sleep 1 ; magic2 -x IDX.T2T --srr SRR1237 --full -o out_SRR1237 &
 \end{lstlisting}
 
 \begin{notebox}
 \textbf{Note:} Each parallel instance reads the shared index but uses
 independent output directories.  Total RAM usage is the index size plus
 per-run working memory.
+Thanks to the 1 second launching delays, each process will
+automatically run on a different (multi-CPU) core.
 \end{notebox}
 
 % ===============================================================
@@ -407,10 +552,12 @@ a single-letter type code and a file path.  Multiple lines with the
 same type are allowed.
 
 \begin{lstlisting}
+cat > target.tConfig << EOF
 G	genome.chromosomes.fasta.gz
 M	genome.mitochondria.fasta.gz
 R	genome.rRNA.fasta.gz
 I	genome.annotation.gtf.gz
+EOF
 \end{lstlisting}
 
 \textbf{Type codes:}
@@ -433,9 +580,6 @@ I	genome.annotation.gtf.gz
     genome, causing multi-mapping confusion if not handled explicitly. \\
 \code{E} & Controls
   & ERCC spike-in or other sequencing controls. \\
-\code{A} & Adaptors
-  & Optional.  Adaptor sequences in FASTA format; if omitted, adaptors
-    are detected automatically. \\
 \code{B} & Bacteria
   & Potential bacterial contamination sequences. \\
 \code{V} & Virus
@@ -506,9 +650,11 @@ magic2 --createIndex IDX.target -T target.tConfig \
                        \code{step} words is selected.  Larger values (8--10)
                        reduce RAM and speed up indexing and alignments
                        at some cost to sensitivity. \\
+\code{--maxtargetRepeats}  &int & 81 & Seeds repeated more often in the genome are not indexed effectivelly masking the highly repetitive regions.\\                        
 \bottomrule
 \end{tabular}
 \end{center}
+Step is the maximal distance between seed, the average distance is step/2.
 
 % ===============================================================
 \section{Running an Alignment}
@@ -524,7 +670,7 @@ magic2 -x IDX --srr SRR1234 -o out/
 
 \subsection{Output format options}
 
-By default, alignments are written in the standard \code{.bam} format.
+By default, alignments are written in the custom \code{.hits} format.
 You can request other formats with:
 \begin{lstlisting}
 magic2 -x IDX -i reads.fasta.gz -o out/ --hits --tabular --bam
@@ -535,11 +681,11 @@ magic2 -x IDX -i reads.fasta.gz -o out/ --hits --tabular --bam
 \toprule
 \textbf{Flag} & \textbf{Description} \\
 \midrule
-\code{--bam}     & Standard BAM format.  Required for tools such as
-                   IGV, Samtools, and most genome browsers. Default.\\
 \code{--hits}    & Magic \code{.hits} format.  Describes mismatches,
-                   introns, and read overhangs explicitly. \\
+                   introns, and read overhangs explicitly. Default. \\
 \code{--tabular} & Magic-BLAST tabular format.  Similar to \code{.hits}\\
+\code{--bam}     & Standard BAM format.  Required for tools such as
+                   IGV, Samtools, and most genome browsers.\\
 \code{--no\_ali} & Suppress all alignment output.  Useful when only
                    quality metrics or expression counts are needed. \\
 \bottomrule
@@ -573,8 +719,8 @@ The subsections below describe each file type.
 \toprule
 \textbf{File pattern} & \textbf{Format} & \textbf{Notes} \\
 \midrule
-\code{*.hits}         & Magic hits      & Full mismatch and intron detail. \\
-\code{*.tab}          & Tabular         & Tab-separated; easy to parse. \\
+\code{*.hits}         & Magic hits      & Magic1 format, with full mismatch and intron detail. \\
+\code{*.tab}          & Tabular         & Magic-BLAST format; easy to parse. \\
 \code{*.bam}          & BAM             & Standard; index with \code{samtools index}. \\
 \bottomrule
 \end{tabular}
@@ -592,12 +738,11 @@ Magic2 reports all introns observed in the alignment, classified as
 construction) or \emph{novel}.
 
 Output is in the \textbf{tag-sample format (TSF)}, a compact
-tab-separated format in which each column corresponds to one run.
+tab-separated format in which each line the support of a given intron in a given run.
 A utility command merges TSF files from multiple runs and produces a
 human-readable summary table:
 \begin{lstlisting}
-magic2 --mergeTSF run1/introns.tsf run2/introns.tsf \
-       -o merged_introns.txt
+cat out_dir/*/introns.tsf | bin/tsf -I tsf -O table > human_readable_intron_table.txt
 \end{lstlisting}
 
 Each intron entry records: run, chromosome, donor position, acceptor position,
@@ -612,8 +757,7 @@ reverse reads, and these bases do not align to the genome.  This
 evidence is accumulated per genomic position and reported per run in
 TSF format, analogous to the intron support table.
 
-\subsection{Gene expression counts}
-\label{sec:genecounts}
+\subsection{Gene expression counts}\label{sec:genecounts}
 
 Activated by \code{--full}, \code{--wiggles}, or \code{--genes}.
 
@@ -672,7 +816,7 @@ magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles --wiggle_step 1
 BF files can be loaded directly into the UCSC Genome Browser, IGV, or
 converted to BigWig for large-scale display.
 
-\subsection{Transcription start and end sites}
+\subsection{Transcription start and end sites, repetitions, breakpoints}
 \label{sec:tss}
 
 Activated by \code{--full} or \code{--wiggle\_ends}.
@@ -684,6 +828,10 @@ endpoints at a particular genomic position indicates a transcription
 start or termination site.  These tracks are useful for refining genome
 annotations, particularly to extend or correct 5$'$ and 3$'$ UTR
 boundaries.
+
+Magic2 also export a track of non-unique alignements, showing the
+expressed repetitive regions. Also a track of incomplete alignemnts, indicating
+the candidate break-points.
 
 \subsection{Quality-control metrics}
 
@@ -721,8 +869,14 @@ Intergenic fraction (\%) & Fraction of aligned bases in intergenic regions. \\
 \end{longtable}
 \end{center}
 
-All metrics are written to a summary text file in the output directory
-and also included in the TSF-format tables for multi-run comparison.
+All metrics are written in the output directory
+in the human readable TSF-format
+allowing easy production of tables per property
+
+\begin{lstlisting}
+cat out_dir/*/runStats.tsf | grep Perfect | bin/tsf -I tsf -O table --title 'Perfect reads' > perfect_reads.table.txt
+\end{lstlisting}
+
 
 % ===============================================================
 \section{Command-Line Reference}
@@ -774,6 +928,21 @@ function.
 \end{center}
 
 \subsection{Output}
+
+\textbf{Output directory (\code{-o}):}
+The full directory path is created automatically if it does not exist,
+including all intermediate directories
+(equivalent to \code{mkdir -p} in Unix).
+Relative paths are anchored to the current working directory;
+absolute paths beginning with \code{/} are used as given.
+
+\begin{lstlisting}
+# Relative path: creates ./results/human/run1/ if needed
+magic2 -x IDX -i reads.fastq.gz -o results/human/run1/
+
+# Absolute path
+magic2 -x IDX -i reads.fastq.gz -o /tmp/magic2_test/
+\end{lstlisting}
 
 \begin{center}
 \begin{longtable}{p{4cm} p{2.2cm} p{2cm} p{6cm}}
@@ -840,14 +1009,15 @@ magic2 -x IDX.hg38 \
 
 \subsection{Parallel processing of multiple SRA runs}
 
-On a 64-core machine you can process three runs simultaneously.  The
+On a 4-core machine (probably 96 CPUs) you can process four runs simultaneously.  The
 index is memory-mapped and shared; only per-run working memory is
 duplicated.
 
 \begin{lstlisting}
 magic2 -x IDX.T2T --srr SRR100001 --full -o out_SRR100001 &
-magic2 -x IDX.T2T --srr SRR100002 --full -o out_SRR100002 &
-magic2 -x IDX.T2T --srr SRR100003 --full -o out_SRR100003 &
+sleep 1 ; magic2 -x IDX.T2T --srr SRR100002 --full -o out_SRR100002 &
+sleep 1 ; magic2 -x IDX.T2T --srr SRR100003 --full -o out_SRR100003 &
+sleep 1 ; magic2 -x IDX.T2T --srr SRR100004 --full -o out_SRR100004 &
 wait
 echo "All runs complete."
 \end{lstlisting}
@@ -857,8 +1027,8 @@ echo "All runs complete."
 After analysing several runs, merge the per-run TSF tables into a
 single comparison table:
 \begin{lstlisting}
-magic2 --mergeTSF out_*/introns.tsf -o all_introns.txt
-magic2 --mergeTSF out_*/genes.tsf   -o all_gene_counts.txt
+cat  out/*/genes.tsf > all_genes.tsf
+bin/tsf -i all_genes.tsf -O table --title 'Gene counts' > all_gene_counts.table.txt
 \end{lstlisting}
 
 % ===============================================================
@@ -880,11 +1050,6 @@ Index creation fails with out-of-memory error
   & Increase available RAM, or use a larger \code{--step} value (e.g.\
     8 or 10) to reduce index size at a some cost to sensitivity. \\[4pt]
 
-Very low alignment rate ($<$20\%)
-  & Check that the correct genome was indexed.  For RNA-seq data,
-    ensure an annotation file (\code{I} line) was included in the
-    tConfig, so that known splice junctions are used during alignment. \\[4pt]
-
 Zero rRNA fraction ($>$50\%)
   & In RNA-seq experiments, this is unusual.  Ensure that an
     \code{R} line pointing to rRNA sequences was included in the
@@ -892,6 +1057,11 @@ Zero rRNA fraction ($>$50\%)
 
 High rRNA fraction ($>$50\%)
   & This is a library quality issue, not an error. \\[4pt]
+
+Very low alignment rate ($<$20\%)
+  & Check that the correct genome was indexed.  For RNA-seq data,
+    verify that the target includes the rRNA and mitochondria files.
+    Possibly consider adding a viral or bacterial contamination fasta file \\[4pt]
 
 SRA download stalls or times out
   & Check your network connection to NCBI.  Use \code{--maxGB} to
@@ -909,7 +1079,7 @@ BAM file not produced despite \code{--bam} flag
     disk space.  BAM files for a human-scale genome typically require
     3--10 GB per run. \\[4pt]
 
-Low gene count output despite \code{--full}
+Missing gene count output despite \code{--full}
   & Confirm that the index was built with \code{-T} (tConfig including
     an \code{I} annotation line) rather than \code{-t} (raw genome only).
     The actual tConfig file used during index creation is copied in the
