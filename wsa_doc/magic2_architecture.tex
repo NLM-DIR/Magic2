@@ -1,0 +1,519 @@
+\documentclass[11pt]{article}
+\pdfoutput=1
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{mdframed}
+ 
+\geometry{
+  letterpaper,
+  top=25mm, bottom=25mm,
+  left=25mm, right=25mm
+}
+ 
+% ---------------------------------------------------------------
+% Code listing style
+% ---------------------------------------------------------------
+\definecolor{codebg}{rgb}{0.95,0.95,0.95}
+\definecolor{codeframe}{rgb}{0.7,0.7,0.7}
+\definecolor{commentcolor}{rgb}{0.4,0.4,0.4}
+\definecolor{keywordcolor}{rgb}{0.1,0.3,0.7}
+ 
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{codeframe},
+  tabsize=4,
+  columns=flexible,
+  keepspaces=true,
+  showstringspaces=false,
+  commentstyle=\color{commentcolor}\itshape,
+  keywordstyle=\color{keywordcolor},
+  numbers=none,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=8pt
+}
+ 
+\newcommand{\code}[1]{\texttt{#1}}
+ 
+% ---------------------------------------------------------------
+% Note / Warning boxes
+% ---------------------------------------------------------------
+\newmdenv[
+  linewidth=1pt,
+  leftmargin=0pt, rightmargin=0pt,
+  innerleftmargin=8pt, innerrightmargin=8pt,
+  innertopmargin=6pt, innerbottommargin=6pt,
+  skipabove=8pt, skipbelow=8pt
+]{notebox}
+ 
+\newmdenv[
+  backgroundcolor=red!8,
+  linewidth=1pt,
+  leftmargin=0pt, rightmargin=0pt,
+  innerleftmargin=8pt, innerrightmargin=8pt,
+  innertopmargin=6pt, innerbottommargin=6pt,
+  skipabove=8pt, skipbelow=8pt
+]{warnbox}
+ 
+% ---------------------------------------------------------------
+% Headers / footers
+% ---------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Magic2 Architecture Notes}
+\fancyhead[R]{\small v1.0 -- DRAFT}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+ 
+% ---------------------------------------------------------------
+% Section formatting
+% ---------------------------------------------------------------
+\titleformat{\section}{\large\bfseries}{{\thesection}}{0.8em}{}[\vspace{2pt}\hrule\vspace{4pt}]
+\titleformat{\subsection}{\normalsize\bfseries}{{\thesubsection}}{0.8em}{}
+\titleformat{\subsubsection}{\normalsize\itshape\bfseries}{{\thesubsubsection}}{0.8em}{}
+ 
+% ---------------------------------------------------------------
+\begin{document}
+ 
+% ---------------------------------------------------------------
+% Title page
+% ---------------------------------------------------------------
+\begin{titlepage}
+\vspace*{20mm}
+{\Huge \textbf{Magic2}}\\[4mm]
+{\Large Architecture and Developer Notes}\\[2mm]
+{\large Internal Document --- Not for End Users}
+\vspace{8mm}
+\hrule
+\vspace{8mm}
+{\large Jean~Thierry-Mieg, Danielle~Thierry-Mieg, Greg~Boratyn}\\[2mm]
+National Library of Medicine, National Institutes of Health\\
+8600 Rockville Pike, Bethesda MD 20894, USA\\[2mm]
+\href{mailto:mieg@ncbi.nlm.nih.gov}{\texttt{mieg@ncbi.nlm.nih.gov}}
+\vspace{8mm}
+ 
+\noindent Source code: \href{https://github.com/NLM-DIR/Magic2}{\texttt{https://github.com/NLM-DIR/Magic2}}
+ 
+\vfill
+\small National Library of Medicine $\cdot$ National Institutes of Health\\
+\textit{This document describes internal implementation details.
+For user-facing documentation see the Magic2 User Guide.}
+\end{titlepage}
+ 
+\newpage
+\tableofcontents
+\newpage
+ 
+% ===============================================================
+\section{Purpose of This Document}
+% ===============================================================
+ 
+This document is intended for developers working on the Magic2 source
+code, not for end users.  It describes the internal pipeline
+architecture, the parallelism model, the NUMA-aware process model,
+the GPU code path, and other implementation details that are not
+relevant to running alignments but are essential for understanding,
+debugging, or extending the code.
+ 
+For user-facing documentation, see the Magic2 User Guide
+(\texttt{wsa\_doc/magic2\_userguide.pdf}).
+ 
+% ===============================================================
+\section{Pipeline Architecture}
+% ===============================================================
+ 
+\subsection{Overview}
+ 
+Magic2 is structured as a deep pipeline of independent processing
+layers.  Data flows through the pipeline as discrete blocks; all
+layers execute concurrently and self-balance their workloads.  This
+design is inspired by the channel and goroutine model of the Go
+programming language, implemented in C using a custom channel library
+(see Section~\ref{sec:channels}).
+ 
+The key architectural properties are:
+ 
+\begin{itemize}
+  \item All pipeline layers run simultaneously.  There is no master
+        thread dispatching work; each layer pulls from its input
+        channel and pushes to its output channel independently.
+  \item Work is divided into \emph{data blocks} of at most
+        \code{bMax} megabases each.  The number of blocks
+        simultaneously in flight is \code{nBlocks}.
+  \item Each layer contains \code{nAgents} parallel agents.
+        All agents within a layer are interchangeable and process
+        whichever block arrives next.
+  \item RAM consumption is controlled by a \emph{dropper} mechanism
+        at the head of the pipeline that withholds new blocks when
+        memory pressure is high, rather than by pre-allocating a
+        fixed buffer.
+  \item Input size is unbounded: blocks flow in and out continuously,
+        so a run of 100~Gbases is handled identically to a run of
+        1~Gbase.
+\end{itemize}
+ 
+\subsection{Pipeline layers}
+ 
+The main alignment pipeline consists of the following layers, in order:
+ 
+\begin{center}
+\begin{tabular}{clp{7.5cm}}
+\toprule
+\textbf{Layer} & \textbf{Name} & \textbf{Function} \\
+\midrule
+1 & Reader      & Reads and decompresses input files or SRA streams;
+                  emits read blocks. \\
+2 & Seeder      & Extracts seeds from reads; looks up seeds in the
+                  index (CPU or GPU). \\
+3 & Sorter      & Radix-sorts seed hits to group candidates by target
+                  position. \\
+4 & Extender    & Extends seed hits to full-length alignments;
+                  resolves introns on the CPU. \\
+5 & Filter      & Applies score, length, and error-rate filters;
+                  resolves multi-mappers. \\
+6 & Writer      & Formats and writes BAM, \code{.hits}, wiggles,
+                  intron tables, and count tables. \\
+\bottomrule
+\end{tabular}
+\end{center}
+ 
+\begin{notebox}
+\textbf{Note:} The GPU accelerates layers 2 and 3 (seeding and
+sorting).  Layer 4 (extension), which requires semantically complex
+splice-junction logic, remains on the CPU in the current
+implementation.  See Section~\ref{sec:gpu}.
+\end{notebox}
+ 
+\subsection{Key internal parameters}
+ 
+\begin{center}
+\begin{tabular}{lllp{6cm}}
+\toprule
+\textbf{Variable} & \textbf{Flag} & \textbf{Default} & \textbf{Meaning} \\
+\midrule
+\code{nAgents}     & \code{--nA} & $3/2 \times n_\text{CPU}$
+                   & Agents per pipeline layer. \\
+\code{nBlocks}     & \code{--nB} & $2 \times n_\text{CPU}$
+                   & Simultaneous blocks in flight. \\
+\code{bMax}        & \code{--bMax} & 3~MB
+                   & Maximum megabases per block. \\
+\code{max\_threads}& \code{--max\_threads} & hardware-derived
+                   & Hard cap on UNIX threads. \\
+\code{tStep}       & \code{--step} & 6 (large genomes)
+                   & Seed step used during index construction. \\
+\code{rStep}       & \code{--rStep} & \code{tStep}/2
+                   & Seed step used during read alignment. \\
+\code{NN}          & \code{--NN} & 16
+                   & Number of seed file partitions. \\
+\bottomrule
+\end{tabular}
+\end{center}
+ 
+\begin{warnbox}
+\textbf{Warning:} \code{max\_threads} must not be set below 64.
+The channel architecture requires a minimum level of concurrency;
+an artificially low thread cap will cause the pipeline to stall
+waiting for virtual threads that cannot be scheduled.
+\end{warnbox}
+ 
+% ===============================================================
+\section{The Channel Library}
+\label{sec:channels}
+% ===============================================================
+ 
+\subsection{Motivation}
+ 
+Standard C parallelism (pthreads, OpenMP) is based on shared memory
+and explicit locking.  Magic2 instead uses a message-passing model
+inspired by Go channels: data blocks are passed between layers through
+typed channels; no layer directly reads or writes another layer's
+memory.
+ 
+This design was chosen because:
+\begin{itemize}
+  \item It eliminates entire classes of race conditions: a block is
+        owned by exactly one layer at a time.
+  \item It makes the pipeline self-documenting: the channel topology
+        is the architecture diagram.
+  \item It scales naturally: adding agents to a layer requires no
+        changes to the surrounding code.
+\end{itemize}
+ 
+\subsection{Channel semantics}
+ 
+Each channel is a bounded FIFO queue.  A layer blocks on a read if
+the channel is empty and blocks on a write if the channel is full.
+The dropper at the head of the pipeline monitors RAM usage and delays
+injection of new blocks when memory is constrained, providing
+back-pressure throughout the system without any layer needing to be
+aware of memory state.
+ 
+\subsection{Virtual threads}
+ 
+Each agent and each channel endpoint runs in its own virtual thread.
+Virtual threads are lightweight: the system may have thousands of them
+scheduled over a smaller number of UNIX threads.  The \code{max\_threads}
+parameter caps the number of UNIX threads, not the number of virtual
+threads.
+ 
+% ===============================================================
+\section{NUMA-Aware Process Model}
+\label{sec:numa}
+% ===============================================================
+ 
+\subsection{NUMA detection}
+ 
+On startup, Magic2 counts the number of NUMA nodes by scanning
+\code{/sys/devices/system/node}.  If the directory is absent
+(non-NUMA kernel, container environment) or contains only one node,
+the count is treated as 1 and no re-spawning occurs.
+ 
+\begin{lstlisting}[language=C]
+static int count_numa_nodes (void)
+{
+    DIR *d = opendir ("/sys/devices/system/node") ;
+    if (!d) return 1 ;
+    int count = 0, dummy ;
+    struct dirent *e ;
+    while ((e = readdir (d)))
+        if (sscanf (e->d_name, "node%d", &dummy) == 1)
+            count++ ;
+    closedir (d) ;
+    return count > 0 ? count : 1 ;
+}
+\end{lstlisting}
+ 
+\subsection{Re-spawn mechanism}
+ 
+When more than one NUMA node is detected, Magic2 identifies the least
+loaded node and re-spawns itself using \code{numactl --cpunodebind=N
+--membind=N}, where \code{N} is the chosen node.  This ensures that
+all memory allocations for the pipeline are local to the CPUs that
+will process them, avoiding the latency penalty of cross-node memory
+access.
+ 
+The re-spawned child receives the flag \code{--numactl} in its
+argument list.  This flag signals that re-spawning has already
+occurred and suppresses a second re-spawn, preventing infinite
+recursion.
+ 
+\subsection{Implications for debugging}
+\label{sec:debug}
+ 
+When re-spawning occurs, a debugger attached to the parent process
+will not follow execution into the child.  Breakpoints set before
+the \code{exec} call will never be hit.
+ 
+Two command-line flags are provided to work around this:
+ 
+\begin{center}
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Flag} & \textbf{Effect} \\
+\midrule
+\code{--debug}
+  & Suppresses re-spawning and forces \code{--nAgents 1 --nBlocks 1},
+    giving a fully serial execution path.  Verbose diagnostic messages
+    are enabled automatically.  Use this for step-by-step debugging. \\
+\code{--numactl}
+  & Suppresses re-spawning only.  Full parallelism is retained.
+    Use this when profiling with \code{perf} or \code{vtune}, or when
+    you need breakpoints but also need realistic concurrency. \\
+\bottomrule
+\end{tabular}
+\end{center}
+ 
+\textbf{Typical gdb sessions:}
+\begin{lstlisting}
+# Fully serial, easiest to step through:
+gdb --args magic2 --debug -x IDX -i test.fa -o /tmp/dbg/
+ 
+# Breakpoints work, full parallelism retained:
+gdb --args magic2 --numactl -x IDX -i test.fa -o /tmp/dbg/
+\end{lstlisting}
+ 
+\begin{notebox}
+\textbf{Note:} On single-node machines, in containers, and on
+non-NUMA kernels, re-spawning never occurs and breakpoints work
+without any special flag.
+\end{notebox}
+ 
+% ===============================================================
+\section{GPU Acceleration}
+\label{sec:gpu}
+% ===============================================================
+ 
+\subsection{Scope}
+ 
+The GPU accelerates the two most computationally intensive layers of
+the pipeline: seed extraction and lookup (layer~2) and radix sorting
+of seed hits (layer~3).  These operations are embarrassingly parallel
+and map well onto GPU execution models.
+ 
+Layer~4 (alignment extension) remains on the CPU.  Extension requires
+splice-junction logic, gap penalties, and intron model evaluation that
+are semantically complex and do not parallelise efficiently on a GPU
+in their current form.  This may change in future versions.
+ 
+\subsection{Internal binary datasets}
+ 
+Several index data structures have GPU-specific variants that differ
+in memory layout from the CPU versions.  These are generated at index
+construction time when a GPU compiler is available.  The flag
+\code{--noJump}, which controls whether jumper entries are inserted
+into the index, is a compile-time internal switch relevant only to the
+GPU build; it is not exposed in the user-facing or developer help.
+ 
+\subsection{Fallback}
+ 
+If no CUDA-capable GPU is present at runtime, Magic2 falls back
+silently to the CPU path for all layers.  No flag is needed.
+ 
+% ===============================================================
+\section{Seed Parameters}
+% ===============================================================
+ 
+\subsection{Index construction step (\code{tStep})}
+ 
+During index construction, a seed is extracted from the target every
+\code{tStep} bases.  \code{tStep} is the \emph{maximum} distance
+between consecutive seeds; because the best seed among the next
+\code{tStep} words is selected, the average distance is
+\code{tStep}/2.
+ 
+The default is 1 for targets smaller than 1~Mb and 6 for larger
+genomes.  Values of 8--10 reduce index RAM and construction time at
+a modest sensitivity cost; values of 1--4 increase sensitivity at
+higher RAM and CPU cost.
+ 
+\subsection{Alignment step (\code{rStep})}
+ 
+During read alignment, seeds are extracted from the query every
+\code{rStep} bases.  By default \code{rStep = tStep / 2}.
+ 
+\code{rStep} is exposed in \code{--devhelp} as \code{--rStep} for
+benchmarking purposes.  It should not be changed in production use.
+ 
+\subsection{Seed file partitioning (\code{NN})}
+ 
+The seed index is split into \code{NN} partitions to allow parallel
+lookup.  The allowed values are powers of 2 from 1 to 64.
+When \code{seedLength} exceeds 16, the minimum required value of
+\code{NN} is $4^{(\text{seedLength} - 16)}$; this minimum is always
+enforced automatically.
+ 
+% ===============================================================
+\section{The TSF Format}
+% ===============================================================
+ 
+\subsection{Overview}
+ 
+TSF (Tag-Sample Format) is the internal tabular format used by Magic2
+for all multi-sample output: gene expression counts, intron support
+tables, poly-A addition sites, QC metrics, and coverage summaries.
+ 
+\subsection{Line structure}
+ 
+Each line contains four tab-separated fields:
+ 
+\begin{center}
+\begin{tabular}{clp{8cm}}
+\toprule
+\textbf{Column} & \textbf{Content} & \textbf{Notes} \\
+\midrule
+1 & Run name  & Identifies the sample or run. \\
+2 & Tag       & Feature identifier (gene name, intron coordinates, etc.). \\
+3 & Format    & Type code string describing the data columns
+                (e.g.\ \code{i} = integer, \code{f} = float,
+                \code{t} = text). \\
+4+ & Data     & One or more data values matching the format code. \\
+\bottomrule
+\end{tabular}
+\end{center}
+ 
+Lines need not be sorted.  TSF files from different runs can be
+concatenated directly; the TSF library merges them by joining on
+column 1, column 2, or both.
+ 
+\subsection{Type codes}
+ 
+The format field (column 3) is a string of single-character type
+codes, one per data column:
+ 
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{Code} & \textbf{Type} \\
+\midrule
+\code{i} & Integer \\
+\code{f} & Float \\
+\code{t} & Text \\
+\bottomrule
+\end{tabular}
+\end{center}
+ 
+For example, a line with format \code{iif} has two integer columns
+followed by one float column.
+ 
+\subsection{Merging and aggregation}
+ 
+The TSF library provides a merge operation that joins lines from
+multiple files on a specified key column and aggregates the data
+columns.  Available aggregation operators include sum, min, max, and
+others.  The merged output can be emitted as a TSF file or as a
+two-dimensional table (rows = tags, columns = runs) suitable for
+import into R or Python.
+ 
+The user-facing merge command is:
+\begin{lstlisting}
+magic2 --mergeTSF run1/genes.tsf run2/genes.tsf -o all_genes.txt
+\end{lstlisting}
+ 
+\subsection{Relation to user guide}
+ 
+The TSF format is mentioned briefly in the Magic2 User Guide in the
+context of output files.  The internal structure, type codes, and
+library API are documented here only, as they are relevant to
+developers who wish to parse TSF output programmatically or extend
+the TSF library.
+ 
+% ===============================================================
+\section{Known Limitations and Future Work}
+% ===============================================================
+ 
+\begin{itemize}
+  \item GPU acceleration of the extension layer (layer~4) is not yet
+        implemented.  The splice-junction and gap model would need to
+        be restructured for efficient GPU execution.
+  \item The \code{--strand} override flag is specified in the
+        documentation and help text but requires implementation in
+        the alignment strategy selection code.
+  \item The \code{-i} flag currently accepts comma-separated file
+        lists; the documented behaviour (single file or paired pair
+        only, comma lists refused with a clear error message) requires
+        a code change to enforce.
+\end{itemize}
+ 
+% ===============================================================
+\section*{Acknowledgements}
+% ===============================================================
+ 
+We thank David Landsman and Tom Madden for their support.
+This work was supported by the Intramural Research Program of the
+National Library of Medicine, National Institutes of Health.
+ 
+\end{document}
+ 

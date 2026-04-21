@@ -48,7 +48,7 @@ void saCreateRandomGenome (PP *pp, int nMb)
     buf[ii] = atgc[randint() % 4] ;
   buf[iMax] = 0 ;
 
-  /* creata duplications at intron boundaries */
+  /* create a duplications at intron boundaries */
   for (ii = 0 ; ii < nMb ; ii++)
     {
       for (jj = 1 ; jj < 10 ; jj++)
@@ -130,6 +130,9 @@ void saCreateRandomGenome (PP *pp, int nMb)
       aceOutf (aom, ">t%d\n%s\n", ii, mrna2) ;
     }
   aceOutf (aog, ">chr1\n%s\n", buf) ; /* export the genome after tweaking the gt_ag */
+  for (int i=0 ; i < 100 ; i++)
+    aceOut (aog, "gggggggggg\n") ;
+  aceOut (aog, "\n") ;
   ac_free (h) ;
   exit (0) ;
 }

@@ -2349,7 +2349,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
       int bestPreviousAli = 0 ;
       BOOL isDown = ! (chrom & 0x1) ;
       BOOL foundI2 = FALSE ;
-      
+      isDown = TRUE ;
       i2 = i02 ; vp = i2 < iMax ? arrp (aa, i2, ALIGN) : 0 ; /* preposition */
       for (foundI2 = FALSE ; pp->splice && i2 < iMax ; i2++, vp++)
 	{
@@ -2734,6 +2734,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
   Array dnaG = 0, dnaGR = 0 ;
   int read1 = read & (~0x1) ;
   int read2 = read | 0x1 ;
+  int dnaLength = 0 ;
   
   arraySort (aa, saAlignOrder) ;
   dna1 = arr (bb->dnas, read1, Array) ;
@@ -2758,6 +2759,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  chromA = ap->chrom ;
 		  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
 		  dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
+		  dnaLength = arrayMax (dnaG) ;
 		}
 	      ap->leftClip = alignFormatLeftOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii) ;
 	      
@@ -2769,6 +2771,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  chromA = ap->chrom ;
 		  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
 		  dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
+		  dnaLength = arrayMax (dnaG) ;
 		}
 	      ap->rightClip = alignFormatRightOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii, iMax) ;
 	    }
@@ -3070,8 +3073,9 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 
 		
 		INTRON *zp = arrayp (bb->confirmedIntrons, arrayMax (bb->confirmedIntrons), INTRON) ;
-		BOOL isReadDown = a1 < a2 ? TRUE : FALSE ;
-
+		BOOL isReadDown = ((chrom & 0x1) ? FALSE : TRUE) ;
+		Array myDnaG = 0 ;
+		
 		zp->run = bb->run ;
 
 		if (chrom != chromA)
@@ -3079,94 +3083,39 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		    chromA = chrom ;
 		    dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
 		    dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
+		    dnaLength = arrayMax (dnaG) ;
 		  }
 
-		if (read & 0x1)
-		  {
-		    if (isReadDown)
-		      { 
-			zp->a1 = a2 + 1 ;
-			zp->a2 = b1 - 1 ;
-			bb->nIntronSupportPlus++ ;
-			const char *cp = arrp (dnaG, zp->a1 - 1, char) ;
-			zp->feet[4] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-			zp->feet[3] = dnaDecodeChar[(int)complementBase(cp[1])] ;
-			zp->feet[2] = '_' ;
-			cp = arrp (dnaG, zp->a2 - 2, char) ;
-			zp->feet[1] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-			zp->feet[0] = dnaDecodeChar[(int)complementBase(cp[1])] ;
-			zp->feet[5] = 0 ;
-		      }
-		    else
-		      {
-			zp->a1 = a2 - 1 ;
-			zp->a2 = b1 + 1 ;
-			bb->nIntronSupportMinus++ ;
-			const char *cp = arrp (dnaG, zp->a1 - 1, char) ;
-			zp->feet[4] = dnaDecodeChar[(int)cp[0]] ;
-			zp->feet[3] = dnaDecodeChar[(int)cp[-1]]  ;
-			zp->feet[2] = '_' ;
-			cp = arrp (dnaG, zp->a2 - 1, char) ;
-			zp->feet[1] = dnaDecodeChar[(int)cp[1]] ;
-			zp->feet[0] = dnaDecodeChar[(int)cp[0]] ;
-			zp->feet[5] = 0 ;
-		      }
-		    int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
-		    zp->n = ap->chain ;
-		    zp->chrom = chrom ^ 0x1;
-		  }
-		else
-		  {
-		    if (isReadDown)
-		      { 
-			zp->a1 = a2 + 1 ;
-			zp->a2 = b1 - 1 ;
-			bb->nIntronSupportPlus++ ;
-			const char *cp = arrp (dnaG, zp->a1 - 1, char) ;
-			zp->feet[0] = dnaDecodeChar[(int)cp[0]] ;
-			zp->feet[1] = dnaDecodeChar[(int)cp[1]] ;
-			zp->feet[2] = '_' ;
-			cp = arrp (dnaG, zp->a2 - 2, char) ;
-			zp->feet[3] = dnaDecodeChar[(int)cp[0]] ;
-			zp->feet[4] = dnaDecodeChar[(int)cp[1]] ;
-			zp->feet[5] = 0 ;
-		      }
-		    else
-		      {
-			zp->a1 = a2 - 1 ;
-			zp->a2 = b1 + 1 ;
-			bb->nIntronSupportMinus++ ;
-			const char *cp = arrp (dnaG, zp->a1 - 1, char) ;
-			zp->feet[0] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-			zp->feet[1] = dnaDecodeChar[(int)complementBase(cp[-1])] ;
-			zp->feet[2] = '_' ;
-			cp = arrp (dnaG, zp->a2 - 1, char) ;
-			zp->feet[3] = dnaDecodeChar[(int)complementBase(cp[1])] ;
-			zp->feet[4] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-			zp->feet[5] = 0 ;
-		      }
-		    zp->n = ap->chain ;
-		    zp->chrom = chrom ;
+		myDnaG = isReadDown ? dnaG : dnaGR ;
+		zp->a1 = a2 + 1 ;
+		zp->a2 = b1 - 1 ;
+		if (read & 0x1) bb->nIntronSupportMinus++ ;
+		else bb->nIntronSupportPlus++ ;
+		const char *cp = arrp (myDnaG, zp->a1 - 1, char) ;
+		zp->feet[4] = dnaDecodeChar[(int)complementBase(cp[0])] ;
+		zp->feet[3] = dnaDecodeChar[(int)complementBase(cp[1])] ;
+		zp->feet[2] = '_' ;
+		cp = arrp (myDnaG, zp->a2 - 2, char) ;
+		zp->feet[1] = dnaDecodeChar[(int)complementBase(cp[0])] ;
+		zp->feet[0] = dnaDecodeChar[(int)complementBase(cp[1])] ;
+		zp->feet[5] = 0 ;
 		    
-		    if (! strcmp (zp->feet, (chrom & 0x1 ? "gt_ag" : "gt_ag")))
-		      {
-			bb->runStat.gt_ag_Support++ ;
-			if (bb->isRna >= 0 && bb->runStat.gt_ag_Support > bb->runStat.ct_ac_Support)
-			  intronBonus++ ;
-		      }
-		    if (! strcmp (zp->feet, (chrom & 0x1 ? "ct_ac" : "ct_ac")))
-		      {
-			bb->runStat.ct_ac_Support++ ;
-			if (bb->isRna >= 0 && bb->runStat.gt_ag_Support < bb->runStat.ct_ac_Support)
-			  intronBonus++ ;
-		      }
-		    if (bb->isRna < 0)
-		      intronBonus++ ; /* all discontinuities lower the global score */
+		if (! strcmp (zp->feet, (read & 0x1) ? "ct_ac" : "gt_ag"))
+		  {
+		    bb->runStat.gt_ag_Support++ ;
+		    if (bb->isRna >= 0 && bb->runStat.gt_ag_Support > bb->runStat.ct_ac_Support)
+		      intronBonus++ ;
 		  }
-		break ;
+		if (! strcmp (zp->feet, (read & 0x1) ? "gt_ag" : "ct_ac"))
+		  {
+		    bb->runStat.ct_ac_Support++ ;
+		    if (bb->isRna >= 0 && bb->runStat.gt_ag_Support < bb->runStat.ct_ac_Support)
+		      intronBonus++ ;
+		  }
+		if (bb->isRna < 0)
+		  intronBonus++ ; /* all discontinuities lower the global score */
 	      }
 	  }
-
       intronBonus *= 2 * errCost * (bb->isRna >= 0 ? 1 : -1) ;
       
       ap = arrp (aa, 0, ALIGN) ;
@@ -3225,17 +3174,18 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    bb->runStat.nPartialReads++ ;
 	  if (nChains == 1 && ap->chain == 1 && ap->x2 == ap->chainX2 && ap->x2 < ap->rightClip - 15)
 	    bb->runStat.nPartialReads++ ;
+	  if (ap->chrom != chromA)
+	    {
+	      chromA = ap->chrom ;
+	      dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
+	      dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
+	      dnaLength = arrayMax (dnaG) ;
+	    }
 	  if (arrayExists (ap->errors))
 	    {
 	      unsigned int flip = 0 ;
 	      
 	      dna = ap->read & 0x1 ? dna2 : dna1 ;
-	      if (ap->chrom != chromA)
-		{
-		  chromA = ap->chrom ;
-		  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
-		  dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
-		}
 	      
 	      if (bb->runStat.p.nPairs && (ap->read & 0x1))
 		flip = 0x0f ; /* will flip last 4 bits */
@@ -3245,7 +3195,13 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		alignFormatErrors (pp, bb, ap, dna, dnaG, dnaGR, read) ;	  
 	      if (! pp->sam && ! pp->bam)
 		arrayDestroy (ap->errors) ;
-
+	    }
+	  if (ap->chrom & 0x1)
+	    {
+	      ap->a1 = dnaLength - ap->a1 + 1 ;
+	      ap->a2 = dnaLength - ap->a2 + 1 ;
+	      ap->chainA1 = dnaLength - ap->chainA1 + 1 ;
+	      ap->chainA2 = dnaLength - ap->chainA2 + 1 ;
 	    }
 	}
 
@@ -3275,7 +3231,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 			    , Array aa, Array err, Array bestAp
 			    , int maxJump, int maxJump2)
 {   
-  BOOL debug = FALSE ;
+  BOOL debug = TRUE ;
   AC_HANDLE h = ac_new_handle () ;
   HIT * restrict hit ;
   ALIGN *ap = 0 ;
@@ -3284,6 +3240,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
   int b1 = 0, b2 = 0, y1 = 0, y2 = 0, ha1 = 0, readOld = 0, chromOld = 0, readA = 0, chromA = 0, read1 = 0, iiGood = 0 ;
   BOOL isDownOld = TRUE ;
   Array dna = 0, dnaG = 0, dnaGR = 0 ;
+  Array dnaG1 = 0, dnaGR1 = 0 ;
   Array introns = arrayHandleCreate (32, ALIGN, bb->h) ;
   int errMax = pp->errMax ; /* 999999 ; */
   int chromLength = 0 ;
@@ -3310,6 +3267,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
       int read = hit->read ;
       int chrom = hit->chrom ;
       BOOL isDown = TRUE ;
+      BOOL isDown2 = TRUE ;
       BOOL isIntron = ((hit->x1  >> NTARGETREPEATBITS )  & 0x7) ? TRUE : FALSE ;
       if (! read || ! chrom)
 	continue ;
@@ -3347,7 +3305,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
       x1 = x1 >> NTARGETREPEATBITS ;
       /* if (0 && x1 && ignoreIntronSeeds) continue ; */
       BOOL isIntronDown = (x1 >> 2) & 0x1 ;
-      isDown = (chrom & 0x1)  ? FALSE : TRUE ;
+      isDown = isDown2 = (chrom & 0x1)  ? FALSE : TRUE ;
       donor = x1 & 0x1 ;
       acceptor = x1 & 0x2 ;
       int DA = x1 & 0x3 ;
@@ -3362,6 +3320,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  a2 = a1 + 1 ;
 	  if (donor) donor = a1 + 2 ; /* first base of intron */
 	  if (acceptor) acceptor = a1 - 1 ; /* last base of intron */
+	  dnaG1 = dnaG ; dnaGR1 = dnaGR ;
 	}
       else   /* minus strand of the genome */
 	{
@@ -3373,6 +3332,11 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  a2 = a1 - 1 ;
 	  if (donor) donor = a1 - 2 ; /* first base of intron */
 	  if (acceptor) acceptor = a1 + 1 ; /* last base of intron */
+	  /* int a0 = a1 ; a1 = a2 ; a2 = a0 ; */
+	  a1 = chromLength - a1 + 1 ;
+	  a2 = chromLength - a2 + 1 ;
+	  isDown = TRUE ;
+	  dnaG1 = dnaGR ; dnaGR1 = dnaG ;
 	}
 
       if (! isIntronDown)
@@ -3403,7 +3367,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  int a0 = a1, x0 = x1 ;
 	  if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tbefore align\t%s\t%u\n"
 			      , ii, read, x1, x2, chrom, a1, a2, dictName (pp->bbG.dict, chrom >> 1), hit->a1) ;
-	  if (alignExtendHit (dna, dnaG, dnaGR, err, isDown, chromLength, &a1, &a2, &x1, &x2, errCost, DA, errMax, 22, maxJump))
+	  if (alignExtendHit (dna, dnaG1, dnaGR1, err, isDown, chromLength, &a1, &a2, &x1, &x2, errCost, DA, errMax, 22, maxJump))
 	    {
 	      if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tAccepted\t%s, u=%u, nErr=%d, DA=%d\n"
 				  , ii, read, x1, x2, chrom, a1, a2
