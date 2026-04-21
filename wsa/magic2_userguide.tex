@@ -333,58 +333,80 @@ This is the recommended approach for any analysis beyond a single test run.
 
 The manifest is a tab-separated text file with up to three columns and
 one row per input file.  Lines beginning with \code{\#} are ignored.
-The third column is fully optional, all these properties can be auto-detected
-by the code by performing a dry run on the first 10 Megabases, and the file formats
-are usually implied by the file names.
-But the third column can be used to override the auto detection.
 
 \begin{center}
 \begin{tabular}{clp{8.5cm}}
 \toprule
 \textbf{Column} & \textbf{Content} & \textbf{Notes} \\
 \midrule
-1 & Filename & Path to a FASTA or FASTQ file, plain or gzip-compressed.
+1 & Filename & SRR identifier or path to a FASTA or FASTQ file, plain or gzip-compressed.
                For paired-end reads in two files, join the two paths with
                \code{+}, e.g.\ \code{R1.fastq.gz+R2.fastq.gz}. \\
-2 & Run name & An alphanumeric identifier (\code{[A-Za-z0-9\_]} only).
-               Used as a component of output file and directory names.
+2 & Run name & A nickname describing the sample.
                Multiple rows sharing the same run name are merged into
-               a single output (BAM, gene counts, coverage tracks). \\
+               a single output. \\
 3 & Properties & Optional comma-separated list of descriptors
-                 (see Table~\ref{tab:rconfig-props}). \\
+                 (defined below). \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\begin{table}[ht]
-\caption{Recognised property keywords in column 3 of the run manifest.}
-\label{tab:rconfig-props}
+\subsubsection{Run naming rules}
+
+The second column, the run name, allows to choose
+a meaningful sample name and to associate several data files to
+the same sample. This is useful for example to group technical replicas (as opposed
+to biological replicas). The program will export a single output table
+(alignments, gene counts, intron counts, coverage plots...) per run.
+By default, if column 2 is empty, the SRR identifer
+or the file name stripped of its path information and suffix will be used as a run name.
+(file=a/b/c.fasta.gz  is reduced to run=c).
+
+\begin{warnbox}
+Run names (column 2) must consist of letters, digits, and underscores
+only (\code{[A-Za-z0-9\_]}).  Spaces, slashes, and special characters
+would cause errors and will be rejected, because run names are used directly as components of
+output file and directory names.
+\end{warnbox}
+
+
+\subsubsection{Column 3 is optional}
+
+The third column is optional as the properties can in general be auto-detected.
+By default, the file format is implied by the file suffix: .fasta, .fastq, .fastc.
+The files called .sample\_12.fast[aq] are interleaved
+(consecutive records ending in \code{/1} and \code{/2}).
+The nature of the data: DNA or RNA, and the eventual adaptors are recognized automatically
+by the code by performing a dry run on the first 10 Megabases.
+Thus, the third column is only needed to impose a choice and override the auto-detection.
+The recogized keyword are:
+
+
+\medskip
 \begin{center}
 \begin{tabular}{lp{9.5cm}}
 \toprule
 \textbf{Keyword} & \textbf{Effect} \\
 \midrule
-\code{RNA}              & Align in RNA mode (intron-aware, poly-A detection).
-                          Overrides auto-detection. \\
-\code{DNA}              & Align in DNA mode (continuous alignments only). \\
-                          Overrides auto-detection. \\
-\code{fasta}            & Treat the file as FASTA regardless of suffix. \\
-\code{fastq}            & Treat the file as FASTQ regardless of suffix. \\
-\code{fastc}            & Treat the file as FASTC format. \\
-\code{interleaved}      & Paired reads are in a single interleaved file
-                          (consecutive records ending in \code{/1} and \code{/2}).
-                          Use when the filename does not carry the
-                          \code{.sample\_12.} suffix. \\
-\code{Adaptor1=\textit{seq}} & Read-1 exit adaptor sequence.
-                          Overrides auto-detection for this sample only. \\
-\code{Adaptor2=\textit{seq}} & Read-2 exit adaptor sequence.
-                          Overrides auto-detection for this sample only. \\
+\code{RNA}                   & Align in RNA mode (intron-aware, poly-A detection). \\
+\code{DNA}                   & Align in DNA mode (continuous alignments only). \\
+\code{fasta}                 & Treat the file as FASTA. \\
+\code{fastq}                 & Treat the file as FASTQ. \\
+\code{fastc}                 & Treat the file as FASTC. \\
+\code{interleaved}           & Treat the file as interleaved paired-end. \\
+\code{Adaptor1=\textit{seq}} & Read-1 exit adaptor sequence. \\
+\code{Adaptor2=\textit{seq}} & Read-2 exit adaptor sequence. \\
 \bottomrule
 \end{tabular}
 \end{center}
-\end{table}
+\medskip
+
+
 
 \subsubsection{Example}
+
+A manifest with only a filename column is valid.  Magic2 will infer the
+format from the file suffix and auto-detect all other properties:
 
 \begin{lstlisting}
 # my_project.rConfig
@@ -404,28 +426,6 @@ The adaptors will be auto-detected in samples A and B, imposed in C.
 RNA/DNA will be auto-detected in A, and is imposed in B and C. 
 All three runs are processed simultaneously.
 
-\subsubsection{Parallelism across runs}
-
-All runs described in the manifest are processed concurrently.
-Magic2 mixes data packets from different runs through the same pipeline,
-fully utilising available hardware regardless of how reads are distributed
-across files.  There is no practical limit on the total number of reads:
-the pipeline's flow-control mechanism prevents RAM exhaustion by
-regulating the rate at which new data blocks enter the pipeline.
-
-\subsubsection{Run naming rules}
-
-\begin{warnbox}
-Run names (column 2) must consist of letters, digits, and underscores
-only (\code{[A-Za-z0-9\_]}).  Spaces, slashes, and special characters
-will cause errors because run names are used directly as components of
-output file and directory names.
-\end{warnbox}
-
-\subsubsection{Column 3 is optional}
-
-A manifest with only a filename column is valid.  Magic2 will infer the
-format from the file suffix and auto-detect all other properties:
 
 \begin{lstlisting}
 sample_A_R1.fastq.gz+sample_A_R2.fastq.gz
@@ -434,7 +434,16 @@ sample_C.fasta.gz
 \end{lstlisting}
 
 In this minimal case each file is treated as its own run; the run name
-defaults to the filename without path or extension.
+defaults to the filename without path or extension: sample\_A, sample\_B and sample\_C.
+
+\subsubsection{Parallelism across runs}
+
+All runs described in the manifest are processed concurrently.
+Magic2 mixes data packets from different runs through the same pipeline,
+fully utilising available hardware regardless of how reads are distributed
+across files.  There is no practical limit on the total number of reads:
+the pipeline's flow-control mechanism prevents RAM exhaustion by
+regulating the rate at which new data blocks enter the pipeline.
 
 \subsection{Streaming SRA runs on the fly}
 
