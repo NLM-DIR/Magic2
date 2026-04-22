@@ -1239,17 +1239,6 @@ static void wholeWork (const void *vp)
 
       if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
 
-      for (ii=0;ii < NN;ii++) {
-          words[ii] = bigArrayp(bb.cwsN[ii], 0, CW);
-          sizes[ii] = bigArrayMax(bb.cwsN[ii]);
-      }
-
-      /* sort words */
-      for (int k = 0 ; k < NN ; k++)
-	if (bb.cwsN[k])
-	  bb.gpu += saSort (bb.cwsN[k], 1) ; /* cwOrder */
-
-      
       /* match hits */
 
       if (0) /* old code before 2026_04_05 */
@@ -1267,7 +1256,13 @@ static void wholeWork (const void *vp)
       else /* new code */
 	{
 #ifndef USEGPU	  
-	  if (bb.length)
+
+       /* sort words */
+      for (int k = 0 ; k < NN ; k++)
+          if (bb.cwsN[k])
+              bb.gpu += saSort (bb.cwsN[k], 1) ; /* cwOrder */
+
+        if (bb.length)
 	    nn = matchSeeds (pp, &bbG, &bb) ;
 	  if (nn)
 	    {
@@ -1277,20 +1272,25 @@ static void wholeWork (const void *vp)
 		bigArraySort (bb.sms, seedMatchOrder) ;
 	    }
 #else
-	  messcrash ("matchSeedsGPU not yet written, sorry") ;
-	  /*
-	    grab from GPU N, number of records
+
+      /* Find max number of matching words to preallocate memory. This is
+         overestimated, but prevents memory copy.*/
+      for (ii=0;ii < NN;ii++) {
+          words[ii] = bigArrayp(bb.cwsN[ii], 0, CW);
+          sizes[ii] = bigArrayMax(bb.cwsN[ii]);
+      }
+
+      /* find matching seeds */
+	  unsigned int N = saGPUMatchHits(gpu_idx, words, sizes, NN);
+      /*
+	    allocate host memory for seed matches, number of records
 	  */
-	  bb->sms = bigArrayHandleCreate (N, SMS, bb->h) ;
-	  /*
-	     grab pointer vp from GPU
-	  */
-	  memcpy (bigArrayp (bb->sms, 0, SMS), vp, N * sizeof (SMS)) ;
-	  bigArrayMax (bb->sms) = N ;
-	  /*
-	    free vp
-	  */
-	  saGPUMatchHits(gpu_idx, words, sizes, NN);
+	  bb.sms = bigArrayHandleCreate (N, SEEDMATCH, bb.h) ;
+      bigArrayMax(bb.sms) = N;
+
+      /* copy matching seeds to the host */
+      saGPUMatchHitsCopyToHost(gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
+
 #endif
 	}
 

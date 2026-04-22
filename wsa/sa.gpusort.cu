@@ -117,6 +117,7 @@ void saGPUSort (char *cp, long int number_of_records, int type)
 struct GPUIndexType
 {
     std::vector< thrust::device_vector<CW> > d_vecs;
+    thrust::device_vector<SEEDMATCH> out_pairs;
 };
 
 struct SeedOfCW {
@@ -166,6 +167,8 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
         auto end = std::chrono::high_resolution_clock::now();
         std::cerr << "Copy index partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
     }
+
+    index->out_pairs.resize(1 << 20);
 
     return index;
 }
@@ -219,8 +222,8 @@ void EmitCartesianProduct(const CW* index,
         const CW& idx = index[start_idx + k_idx];
         const CW& w = words[start_w + k_w];
 
-        out_pairs[start + i] = SEEDMATCH {0, w.nam, w.pos, w.intron,
-                                          0, idx.nam, idx.pos, idx.intron};
+        out_pairs[start + i] = SEEDMATCH {w.seed, w.nam, w.pos, w.intron,
+                                          idx.seed, idx.nam, idx.pos, idx.intron};
     }
 }
 
@@ -230,47 +233,31 @@ struct diff_CW {
     unsigned int operator()(const CW& a, const CW& b) {return b.seed - a.seed;}
 };
 
-void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
-                    unsigned int num_parts)
+unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
+                            unsigned int num_parts)
 {
+    auto start = std::chrono::high_resolution_clock::now();
+
     GPUIndexType* index = static_cast<GPUIndexType*>(idx);
-    // maximum size of the output vector
-    std::size_t output_size = 0;
-    for (unsigned int i=0;i < num_parts;i++) {
-        output_size += min(index->d_vecs[i].size(), sizes[i]);
-    }
-    thrust::device_vector<SEEDMATCH> out_pairs(output_size);
     // points to the last output match saved so far
     std::size_t last_pair = 0;
 
     for (unsigned int i=0;i < num_parts;i++) {
-        auto start = std::chrono::high_resolution_clock::now();
+        // copy read words to GPU and sort
         thrust::device_vector<CW> word_vec(words[i], words[i] + sizes[i]);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Copied word partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
-
-        start = std::chrono::high_resolution_clock::now();
         thrust::sort(word_vec.begin(), word_vec.end(), compare_CW());
-        end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Sorted word partition " << i << " in "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+;
 
         // build runs of unique words for index and reads
         thrust::device_vector<std::uint32_t> idx_unique_seeds;
         thrust::device_vector<std::uint32_t> idx_counts;
         thrust::device_vector<std::uint32_t> idx_starts;
-        start = std::chrono::high_resolution_clock::now();
         BuildRuns(index->d_vecs[i], idx_unique_seeds, idx_counts, idx_starts);
-        end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Build runs for index partition " << i << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << ", " << idx_unique_seeds.size() << " unique seeds" << std::endl;
 
         thrust::device_vector<std::uint32_t> w_unique_seeds;
         thrust::device_vector<std::uint32_t> w_counts;
         thrust::device_vector<std::uint32_t> w_starts;
-        start = std::chrono::high_resolution_clock::now();
         BuildRuns(word_vec, w_unique_seeds, w_counts, w_starts);
-        end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Build runs for read partition " << i << ": " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << ", " << w_unique_seeds.size() << " unique seeds" << std::endl;
-
 
         // find common words
         std::size_t max_common_words = std::min(idx_unique_seeds.size(),
@@ -280,7 +267,6 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         }
 
 
-        start = std::chrono::high_resolution_clock::now();
         thrust::device_vector<std::uint32_t> common_words(max_common_words);
         auto common_end = thrust::set_intersection(w_unique_seeds.begin(),
                                                    w_unique_seeds.end(),
@@ -291,13 +277,9 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         std::size_t num_common = static_cast<std::size_t>(
                                         common_end - common_words.begin());
         common_words.resize(num_common);
-        end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Found " << common_words.size() << " matching seeds in partition " << i << " in "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
-
         if (num_common == 0) {
             continue;
         }
-
 
         // find locations of common words in the index and reads
         thrust::device_vector<std::uint32_t> idx_common(num_common);
@@ -341,7 +323,6 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         thrust::copy_n(out_counts.begin() + (num_common - 1), 1, &last_count);
 
         std::size_t total_out = last_offset + last_count;
-        std::cerr << "total " << total_out << std::endl;
 
         // generate matches
         const CW* d_idx = thrust::raw_pointer_cast(index->d_vecs[i].data());
@@ -358,7 +339,13 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
 
         const std::uint32_t* d_out_offsets = thrust::raw_pointer_cast(out_offsets.data());
 
-        SEEDMATCH* d_pairs = thrust::raw_pointer_cast(out_pairs.data() + last_pair);
+        while (last_pair + total_out > index->out_pairs.size()) {
+            std::size_t new_size = index->out_pairs.size() * 2;
+            index->out_pairs.resize(new_size);
+
+            std::cerr << "Resize\t" << new_size << std::endl;
+        }
+        SEEDMATCH* d_pairs = thrust::raw_pointer_cast(index->out_pairs.data() + last_pair);
 
         int threads = 256;
         int blocks = static_cast<int>(num_common);
@@ -371,17 +358,24 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                                         d_pairs,
                                         num_common);
 
-        last_pair += num_common;
+        last_pair += total_out;
 
     }
-    out_pairs.resize(last_pair);
+    index->out_pairs.resize(last_pair);
     // sort matches by read id
-    thrust::sort(out_pairs.begin(), out_pairs.end(), [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b) {return a.read < b.read;});
+    thrust::sort(index->out_pairs.begin(), index->out_pairs.end(), [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b) {return a.read < b.read;});
 
-    // copy to host
-//    thrust::copy(out_pairs.begin(), out_pairs.end(), cp);
-
+    auto end = std::chrono::high_resolution_clock::now();
+    std::cerr << "Found " << index->out_pairs.size() << " matches in " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
 //    CUDA_CHECK(cudaGetLastError());
 
+    return index->out_pairs.size();
+}
+
+void saGPUMatchHitsCopyToHost(GPUIndex* idx, SEEDMATCH* out_buffer)
+{
+    GPUIndexType* idxobj = static_cast<GPUIndexType*>(idx);
+    // copy to host
+    thrust::copy(idxobj->out_pairs.begin(), idxobj->out_pairs.end(), out_buffer);
 }
