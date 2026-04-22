@@ -234,6 +234,14 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                     unsigned int num_parts)
 {
     GPUIndexType* index = static_cast<GPUIndexType*>(idx);
+    // maximum size of the output vector
+    std::size_t output_size = 0;
+    for (unsigned int i=0;i < num_parts;i++) {
+        output_size += min(index->d_vecs[i].size(), sizes[i]);
+    }
+    thrust::device_vector<SEEDMATCH> out_pairs(output_size);
+    // points to the last output match saved so far
+    std::size_t last_pair = 0;
 
     for (unsigned int i=0;i < num_parts;i++) {
         auto start = std::chrono::high_resolution_clock::now();
@@ -336,8 +344,6 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         std::cerr << "total " << total_out << std::endl;
 
         // generate matches
-        thrust::device_vector<SEEDMATCH> out_pairs(total_out);
-
         const CW* d_idx = thrust::raw_pointer_cast(index->d_vecs[i].data());
         const CW* d_w = thrust::raw_pointer_cast(word_vec.data());
 
@@ -352,7 +358,7 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
 
         const std::uint32_t* d_out_offsets = thrust::raw_pointer_cast(out_offsets.data());
 
-        SEEDMATCH* d_pairs = thrust::raw_pointer_cast(out_pairs.data());
+        SEEDMATCH* d_pairs = thrust::raw_pointer_cast(out_pairs.data() + last_pair);
 
         int threads = 256;
         int blocks = static_cast<int>(num_common);
@@ -365,12 +371,17 @@ void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                                         d_pairs,
                                         num_common);
 
-
-        // sort
-        thrust::sort(out_pairs.begin(), out_pairs.end(), [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b) {return a.read < b.read;});
-
-        // copy to host
+        last_pair += num_common;
 
     }
+    out_pairs.resize(last_pair);
+    // sort matches by read id
+    thrust::sort(out_pairs.begin(), out_pairs.end(), [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b) {return a.read < b.read;});
+
+    // copy to host
+//    thrust::copy(out_pairs.begin(), out_pairs.end(), cp);
+
+
+//    CUDA_CHECK(cudaGetLastError());
 
 }
