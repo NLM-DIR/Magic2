@@ -1,519 +1,685 @@
+%% Magic2 — Supplementary Material / Technical Reference
+%% Draft — April 2026
+%% This document is intended as supplementary material for the
+%% Nature Methods submission, and can also stand alone on arXiv
+%% or GitHub as a technical reference for developers.
+
 \documentclass[11pt]{article}
 \pdfoutput=1
-\usepackage{amsmath}
-\usepackage{hyperref}
-\usepackage{geometry}
-\usepackage{listings}
-\usepackage[dvipsnames]{xcolor}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{times}
+\usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{longtable}
-\usepackage{array}
-\usepackage{parskip}
-\usepackage{fancyhdr}
-\usepackage{titlesec}
-\usepackage{mdframed}
- 
-\geometry{
-  letterpaper,
-  top=25mm, bottom=25mm,
-  left=25mm, right=25mm
-}
- 
-% ---------------------------------------------------------------
-% Code listing style
-% ---------------------------------------------------------------
-\definecolor{codebg}{rgb}{0.95,0.95,0.95}
-\definecolor{codeframe}{rgb}{0.7,0.7,0.7}
-\definecolor{commentcolor}{rgb}{0.4,0.4,0.4}
-\definecolor{keywordcolor}{rgb}{0.1,0.3,0.7}
- 
+\usepackage{hyperref}
+\usepackage{natbib}
+\usepackage{amsmath}
+\usepackage{microtype}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
 \lstset{
-  backgroundcolor=\color{codebg},
-  basicstyle=\small\ttfamily,
-  breaklines=true,
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!10},
   frame=single,
-  rulecolor=\color{codeframe},
-  tabsize=4,
-  columns=flexible,
-  keepspaces=true,
-  showstringspaces=false,
-  commentstyle=\color{commentcolor}\itshape,
-  keywordstyle=\color{keywordcolor},
-  numbers=none,
-  xleftmargin=6pt,
-  xrightmargin=6pt,
-  aboveskip=8pt,
-  belowskip=8pt
+  breaklines=true,
+  columns=flexible
 }
- 
-\newcommand{\code}[1]{\texttt{#1}}
- 
-% ---------------------------------------------------------------
-% Note / Warning boxes
-% ---------------------------------------------------------------
-\newmdenv[
-  linewidth=1pt,
-  leftmargin=0pt, rightmargin=0pt,
-  innerleftmargin=8pt, innerrightmargin=8pt,
-  innertopmargin=6pt, innerbottommargin=6pt,
-  skipabove=8pt, skipbelow=8pt
-]{notebox}
- 
-\newmdenv[
-  backgroundcolor=red!8,
-  linewidth=1pt,
-  leftmargin=0pt, rightmargin=0pt,
-  innerleftmargin=8pt, innerrightmargin=8pt,
-  innertopmargin=6pt, innerbottommargin=6pt,
-  skipabove=8pt, skipbelow=8pt
-]{warnbox}
- 
-% ---------------------------------------------------------------
-% Headers / footers
-% ---------------------------------------------------------------
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small Magic2 Architecture Notes}
-\fancyhead[R]{\small v1.0 -- DRAFT}
-\fancyfoot[C]{\small\thepage}
-\renewcommand{\headrulewidth}{0.4pt}
- 
-% ---------------------------------------------------------------
-% Section formatting
-% ---------------------------------------------------------------
-\titleformat{\section}{\large\bfseries}{{\thesection}}{0.8em}{}[\vspace{2pt}\hrule\vspace{4pt}]
-\titleformat{\subsection}{\normalsize\bfseries}{{\thesubsection}}{0.8em}{}
-\titleformat{\subsubsection}{\normalsize\itshape\bfseries}{{\thesubsubsection}}{0.8em}{}
- 
-% ---------------------------------------------------------------
+
+%% ---------------------------------------------------------------
+\title{\textbf{Magic2: Supplementary Technical Reference}\\[0.5em]
+       \large Architecture, Algorithms, and Implementation}
+
+\author{Jean Thierry-Mieg \and Danielle Thierry-Mieg \and Greg Boratyn}
+\date{April 2026 --- working draft}
+%% ---------------------------------------------------------------
+
 \begin{document}
- 
-% ---------------------------------------------------------------
-% Title page
-% ---------------------------------------------------------------
-\begin{titlepage}
-\vspace*{20mm}
-{\Huge \textbf{Magic2}}\\[4mm]
-{\Large Architecture and Developer Notes}\\[2mm]
-{\large Internal Document --- Not for End Users}
-\vspace{8mm}
-\hrule
-\vspace{8mm}
-{\large Jean~Thierry-Mieg, Danielle~Thierry-Mieg, Greg~Boratyn}\\[2mm]
-National Library of Medicine, National Institutes of Health\\
-8600 Rockville Pike, Bethesda MD 20894, USA\\[2mm]
-\href{mailto:mieg@ncbi.nlm.nih.gov}{\texttt{mieg@ncbi.nlm.nih.gov}}
-\vspace{8mm}
- 
-\noindent Source code: \href{https://github.com/NLM-DIR/Magic2}{\texttt{https://github.com/NLM-DIR/Magic2}}
- 
-\vfill
-\small National Library of Medicine $\cdot$ National Institutes of Health\\
-\textit{This document describes internal implementation details.
-For user-facing documentation see the Magic2 User Guide.}
-\end{titlepage}
- 
-\newpage
+\maketitle
 \tableofcontents
-\newpage
- 
-% ===============================================================
-\section{Purpose of This Document}
-% ===============================================================
- 
-This document is intended for developers working on the Magic2 source
-code, not for end users.  It describes the internal pipeline
-architecture, the parallelism model, the NUMA-aware process model,
-the GPU code path, and other implementation details that are not
-relevant to running alignments but are essential for understanding,
-debugging, or extending the code.
- 
-For user-facing documentation, see the Magic2 User Guide
-(\texttt{wsa\_doc/magic2\_userguide.pdf}).
- 
-% ===============================================================
-\section{Pipeline Architecture}
-% ===============================================================
- 
-\subsection{Overview}
- 
-Magic2 is structured as a deep pipeline of independent processing
-layers.  Data flows through the pipeline as discrete blocks; all
-layers execute concurrently and self-balance their workloads.  This
-design is inspired by the channel and goroutine model of the Go
-programming language, implemented in C using a custom channel library
-(see Section~\ref{sec:channels}).
- 
-The key architectural properties are:
- 
-\begin{itemize}
-  \item All pipeline layers run simultaneously.  There is no master
-        thread dispatching work; each layer pulls from its input
-        channel and pushes to its output channel independently.
-  \item Work is divided into \emph{data blocks} of at most
-        \code{bMax} megabases each.  The number of blocks
-        simultaneously in flight is \code{nBlocks}.
-  \item Each layer contains \code{nAgents} parallel agents.
-        All agents within a layer are interchangeable and process
-        whichever block arrives next.
-  \item RAM consumption is controlled by a \emph{dropper} mechanism
-        at the head of the pipeline that withholds new blocks when
-        memory pressure is high, rather than by pre-allocating a
-        fixed buffer.
-  \item Input size is unbounded: blocks flow in and out continuously,
-        so a run of 100~Gbases is handled identically to a run of
-        1~Gbase.
-\end{itemize}
- 
-\subsection{Pipeline layers}
- 
-The main alignment pipeline consists of the following layers, in order:
- 
-\begin{center}
-\begin{tabular}{clp{7.5cm}}
-\toprule
-\textbf{Layer} & \textbf{Name} & \textbf{Function} \\
-\midrule
-1 & Reader      & Reads and decompresses input files or SRA streams;
-                  emits read blocks. \\
-2 & Seeder      & Extracts seeds from reads; looks up seeds in the
-                  index (CPU or GPU). \\
-3 & Sorter      & Radix-sorts seed hits to group candidates by target
-                  position. \\
-4 & Extender    & Extends seed hits to full-length alignments;
-                  resolves introns on the CPU. \\
-5 & Filter      & Applies score, length, and error-rate filters;
-                  resolves multi-mappers. \\
-6 & Writer      & Formats and writes BAM, \code{.hits}, wiggles,
-                  intron tables, and count tables. \\
-\bottomrule
-\end{tabular}
-\end{center}
- 
-\begin{notebox}
-\textbf{Note:} The GPU accelerates layers 2 and 3 (seeding and
-sorting).  Layer 4 (extension), which requires semantically complex
-splice-junction logic, remains on the CPU in the current
-implementation.  See Section~\ref{sec:gpu}.
-\end{notebox}
- 
-\subsection{Key internal parameters}
- 
-\begin{center}
-\begin{tabular}{lllp{6cm}}
-\toprule
-\textbf{Variable} & \textbf{Flag} & \textbf{Default} & \textbf{Meaning} \\
-\midrule
-\code{nAgents}     & \code{--nA} & $3/2 \times n_\text{CPU}$
-                   & Agents per pipeline layer. \\
-\code{nBlocks}     & \code{--nB} & $2 \times n_\text{CPU}$
-                   & Simultaneous blocks in flight. \\
-\code{bMax}        & \code{--bMax} & 3~MB
-                   & Maximum megabases per block. \\
-\code{max\_threads}& \code{--max\_threads} & hardware-derived
-                   & Hard cap on UNIX threads. \\
-\code{tStep}       & \code{--step} & 6 (large genomes)
-                   & Seed step used during index construction. \\
-\code{rStep}       & \code{--rStep} & \code{tStep}/2
-                   & Seed step used during read alignment. \\
-\code{NN}          & \code{--NN} & 16
-                   & Number of seed file partitions. \\
-\bottomrule
-\end{tabular}
-\end{center}
- 
-\begin{warnbox}
-\textbf{Warning:} \code{max\_threads} must not be set below 64.
-The channel architecture requires a minimum level of concurrency;
-an artificially low thread cap will cause the pipeline to stall
-waiting for virtual threads that cannot be scheduled.
-\end{warnbox}
- 
-% ===============================================================
-\section{The Channel Library}
-\label{sec:channels}
-% ===============================================================
- 
-\subsection{Motivation}
- 
-Standard C parallelism (pthreads, OpenMP) is based on shared memory
-and explicit locking.  Magic2 instead uses a message-passing model
-inspired by Go channels: data blocks are passed between layers through
-typed channels; no layer directly reads or writes another layer's
-memory.
- 
-This design was chosen because:
-\begin{itemize}
-  \item It eliminates entire classes of race conditions: a block is
-        owned by exactly one layer at a time.
-  \item It makes the pipeline self-documenting: the channel topology
-        is the architecture diagram.
-  \item It scales naturally: adding agents to a layer requires no
-        changes to the surrounding code.
-\end{itemize}
- 
-\subsection{Channel semantics}
- 
-Each channel is a bounded FIFO queue.  A layer blocks on a read if
-the channel is empty and blocks on a write if the channel is full.
-The dropper at the head of the pipeline monitors RAM usage and delays
-injection of new blocks when memory is constrained, providing
-back-pressure throughout the system without any layer needing to be
-aware of memory state.
- 
-\subsection{Virtual threads}
- 
-Each agent and each channel endpoint runs in its own virtual thread.
-Virtual threads are lightweight: the system may have thousands of them
-scheduled over a smaller number of UNIX threads.  The \code{max\_threads}
-parameter caps the number of UNIX threads, not the number of virtual
-threads.
- 
-% ===============================================================
-\section{NUMA-Aware Process Model}
-\label{sec:numa}
-% ===============================================================
- 
-\subsection{NUMA detection}
- 
-On startup, Magic2 counts the number of NUMA nodes by scanning
-\code{/sys/devices/system/node}.  If the directory is absent
-(non-NUMA kernel, container environment) or contains only one node,
-the count is treated as 1 and no re-spawning occurs.
- 
-\begin{lstlisting}[language=C]
-static int count_numa_nodes (void)
-{
-    DIR *d = opendir ("/sys/devices/system/node") ;
-    if (!d) return 1 ;
-    int count = 0, dummy ;
-    struct dirent *e ;
-    while ((e = readdir (d)))
-        if (sscanf (e->d_name, "node%d", &dummy) == 1)
-            count++ ;
-    closedir (d) ;
-    return count > 0 ? count : 1 ;
+\clearpage
+
+%% ===============================================================
+\section{Overview and design philosophy}
+\label{sec:overview}
+
+Magic2 is a complete rewrite and extension of the earlier Magic-BLAST
+aligner, developed at the National Library of Medicine (NLM), NIH.
+It aligns short (Illumina) and long (Nanopore, PacBio) RNA-seq or
+DNA-seq reads against an annotated or unannotated reference genome,
+and in a single pass produces alignments, gene-expression counts,
+intron-support tables, poly(A) addition sites, coverage tracks, and
+QC metrics.
+
+The name Magic2 can be parsed as
+\emph{Memory-Aware Genomic Integrative Computation} --- a
+tongue-in-cheek acronym that reflects the central role of memory
+efficiency in the design.
+
+Three principles govern all architectural decisions:
+
+\begin{enumerate}
+\item \textbf{Cache efficiency.}
+      The dominant cost in large-scale genomic computation is data
+      movement, not arithmetic.
+      All core algorithms are designed to generate long sequential
+      memory-access patterns rather than random accesses, keeping
+      working data inside CPU caches and saturating memory bandwidth.
+
+\item \textbf{Automatic configuration.}
+      Read length, paired-end geometry, adapter sequences, strandedness,
+      and sequencing platform are inferred from the data.
+      Internal parameters (seed length, maximum intron size, subsampling
+      density) are derived from genome size and reported to the user for
+      transparency.
+      Manual overrides remain possible but are rarely necessary.
+
+\item \textbf{Single-pass richness.}
+      All integrative outputs --- alignments, expression counts,
+      splice-junction tables, coverage tracks, poly(A) calls, QC
+      metrics --- are produced during the alignment pass while reads and
+      seeds reside in memory, avoiding the need for secondary tools.
+\end{enumerate}
+
+The source code is available at
+\url{https://github.com/NLM-DIR/Magic2} (branch \texttt{master}).
+The main entry point is \texttt{wsa/sa.main.c}; the central header
+defining all structures and function prototypes is \texttt{wsa/sa.h}.
+
+%% ===============================================================
+\section{Hardware constraints and the sort--merge paradigm}
+\label{sec:hardware}
+
+\subsection{Memory hierarchy and its consequences}
+
+Modern CPUs execute arithmetic in approximately one nanosecond when
+operands reside in L1 or L2 cache, but fetching the same data from
+main RAM typically costs 60--100\,ns on current x86 processors.
+A page fault to disk costs milliseconds.
+Because large genomic datasets far exceed cache capacity, algorithm
+design must prioritise access patterns over theoretical operation counts.
+
+The core challenge in alignment is \emph{pre-assignment}: given a
+short read, rapidly identify the small number of genomic loci where
+alignment is likely.
+Hash tables offer $O(1)$ average lookup, but on a multi-gigabyte
+genome index each lookup jumps to a quasi-random memory address,
+triggering cache misses and TLB faults.
+Measured latency per seed commonly reaches 100--300\,ns, turning a
+theoretically fast algorithm into a memory-bandwidth bottleneck.
+
+\subsection{The sort--merge alternative}
+
+Magic2 adopts a \emph{sort--merge} paradigm:
+\begin{enumerate}
+\item Generate seed records for reads and genome as large, contiguous
+      blocks written sequentially to memory.
+\item Sort both lists by seed value using a cache-efficient radix sort
+      (Section~\ref{sec:sort}).
+\item Join the two sorted lists by simultaneous linear traversal: both
+      pointers advance monotonically, so the entire join operates from
+      CPU cache.
+\end{enumerate}
+
+This approach is not novel in principle; it underlies high-performance
+database engines and has been applied in bioinformatics, notably in
+the DIAMOND protein aligner~\citep{buchfink2021}.
+Its roots lie in classical external sorting and merge-join algorithms
+\citep{knuth1973}, with modern refinements in cache-oblivious
+algorithms~\citep{frigo1999}.
+
+The key trade-off is exchanging $O(1)$ random lookups for $O(n \log n)$
+sorting followed by $O(n)$ merging.
+In practice, the sort is highly optimised (Section~\ref{sec:sort}) and
+can be offloaded to a GPU via CUDA Thrust when available
+(Section~\ref{sec:gpu}).
+The merge step is so cache-friendly that it runs at near-memory-bandwidth
+speed, far outpacing hash-table approaches on large genomes.
+
+%% ===============================================================
+\section{Parallel execution: agents and channels}
+\label{sec:parallel}
+
+\subsection{Channel library}
+
+Magic2 exploits multiple cores through a clean, lock-free framework
+in which independent worker threads (\emph{agents}) communicate solely
+through \emph{channels} --- bounded, self-synchronising queues implemented
+in \texttt{wchannels/channel.c}, closely following the paradigm of
+Go channels.
+
+A channel has a fixed capacity.
+An agent inserting into a full channel blocks until space is available;
+an agent extracting from an empty channel blocks until data arrives.
+This built-in backpressure eliminates explicit locks and condition
+variables within agents, greatly simplifying both implementation and
+reasoning about correctness.
+
+Channels track the number of active producers.
+When all producers have finished and decremented the source count to
+zero, the channel closes automatically; consumers drain any remaining
+records and then exit cleanly.
+This guarantee --- no data loss and deadlock-free termination --- holds
+regardless of the number of agents or the order in which blocks are
+processed.
+
+\subsection{Pipeline topology}
+
+The master thread enqueues descriptors of independent data blocks
+(each up to \texttt{bMax}\,Mb, default 3\,Mb) into a shared input
+channel.
+A pool of agents retrieves blocks from this channel, executes the
+complete per-block pipeline (seed identification, alignment extension,
+splicing, wiggle accumulation, local QC), and forwards results to
+designated output channels.
+Dedicated consumer agents drain output channels to merge per-chromosome
+wiggle profiles, write BAM records, and compile junction and QC tables.
+
+Each agent follows a straightforward loop:
+\begin{lstlisting}
+while ((block = channelGet(inputChannel)) != NULL) {
+    processBlock(block);
+    channelPut(outputChannel, result);
 }
+signalDone(outputChannel);
 \end{lstlisting}
- 
-\subsection{Re-spawn mechanism}
- 
-When more than one NUMA node is detected, Magic2 identifies the least
-loaded node and re-spawns itself using \code{numactl --cpunodebind=N
---membind=N}, where \code{N} is the chosen node.  This ensures that
-all memory allocations for the pipeline are local to the CPUs that
-will process them, avoiding the latency penalty of cross-node memory
-access.
- 
-The re-spawned child receives the flag \code{--numactl} in its
-argument list.  This flag signals that re-spawning has already
-occurred and suppresses a second re-spawn, preventing infinite
-recursion.
- 
-\subsection{Implications for debugging}
-\label{sec:debug}
- 
-When re-spawning occurs, a debugger attached to the parent process
-will not follow execution into the child.  Breakpoints set before
-the \code{exec} call will never be hit.
- 
-Two command-line flags are provided to work around this:
- 
-\begin{center}
-\begin{tabular}{lp{10cm}}
-\toprule
-\textbf{Flag} & \textbf{Effect} \\
-\midrule
-\code{--debug}
-  & Suppresses re-spawning and forces \code{--nAgents 1 --nBlocks 1},
-    giving a fully serial execution path.  Verbose diagnostic messages
-    are enabled automatically.  Use this for step-by-step debugging. \\
-\code{--numactl}
-  & Suppresses re-spawning only.  Full parallelism is retained.
-    Use this when profiling with \code{perf} or \code{vtune}, or when
-    you need breakpoints but also need realistic concurrency. \\
-\bottomrule
-\end{tabular}
-\end{center}
- 
-\textbf{Typical gdb sessions:}
-\begin{lstlisting}
-# Fully serial, easiest to step through:
-gdb --args magic2 --debug -x IDX -i test.fa -o /tmp/dbg/
- 
-# Breakpoints work, full parallelism retained:
-gdb --args magic2 --numactl -x IDX -i test.fa -o /tmp/dbg/
-\end{lstlisting}
- 
-\begin{notebox}
-\textbf{Note:} On single-node machines, in containers, and on
-non-NUMA kernels, re-spawning never occurs and breakpoints work
-without any special flag.
-\end{notebox}
- 
-% ===============================================================
-\section{GPU Acceleration}
-\label{sec:gpu}
-% ===============================================================
- 
-\subsection{Scope}
- 
-The GPU accelerates the two most computationally intensive layers of
-the pipeline: seed extraction and lookup (layer~2) and radix sorting
-of seed hits (layer~3).  These operations are embarrassingly parallel
-and map well onto GPU execution models.
- 
-Layer~4 (alignment extension) remains on the CPU.  Extension requires
-splice-junction logic, gap penalties, and intron model evaluation that
-are semantically complex and do not parallelise efficiently on a GPU
-in their current form.  This may change in future versions.
- 
-\subsection{Internal binary datasets}
- 
-Several index data structures have GPU-specific variants that differ
-in memory layout from the CPU versions.  These are generated at index
-construction time when a GPU compiler is available.  The flag
-\code{--noJump}, which controls whether jumper entries are inserted
-into the index, is a compile-time internal switch relevant only to the
-GPU build; it is not exposed in the user-facing or developer help.
- 
-\subsection{Fallback}
- 
-If no CUDA-capable GPU is present at runtime, Magic2 falls back
-silently to the CPU path for all layers.  No flag is needed.
- 
-% ===============================================================
-\section{Seed Parameters}
-% ===============================================================
- 
-\subsection{Index construction step (\code{tStep})}
- 
-During index construction, a seed is extracted from the target every
-\code{tStep} bases.  \code{tStep} is the \emph{maximum} distance
-between consecutive seeds; because the best seed among the next
-\code{tStep} words is selected, the average distance is
-\code{tStep}/2.
- 
-The default is 1 for targets smaller than 1~Mb and 6 for larger
-genomes.  Values of 8--10 reduce index RAM and construction time at
-a modest sensitivity cost; values of 1--4 increase sensitivity at
-higher RAM and CPU cost.
- 
-\subsection{Alignment step (\code{rStep})}
- 
-During read alignment, seeds are extracted from the query every
-\code{rStep} bases.  By default \code{rStep = tStep / 2}.
- 
-\code{rStep} is exposed in \code{--devhelp} as \code{--rStep} for
-benchmarking purposes.  It should not be changed in production use.
- 
-\subsection{Seed file partitioning (\code{NN})}
- 
-The seed index is split into \code{NN} partitions to allow parallel
-lookup.  The allowed values are powers of 2 from 1 to 64.
-When \code{seedLength} exceeds 16, the minimum required value of
-\code{NN} is $4^{(\text{seedLength} - 16)}$; this minimum is always
-enforced automatically.
- 
-% ===============================================================
-\section{The TSF Format}
-% ===============================================================
- 
-\subsection{Overview}
- 
-TSF (Tag-Sample Format) is the internal tabular format used by Magic2
-for all multi-sample output: gene expression counts, intron support
-tables, poly-A addition sites, QC metrics, and coverage summaries.
- 
-\subsection{Line structure}
- 
-Each line contains four tab-separated fields:
- 
-\begin{center}
-\begin{tabular}{clp{8cm}}
-\toprule
-\textbf{Column} & \textbf{Content} & \textbf{Notes} \\
-\midrule
-1 & Run name  & Identifies the sample or run. \\
-2 & Tag       & Feature identifier (gene name, intron coordinates, etc.). \\
-3 & Format    & Type code string describing the data columns
-                (e.g.\ \code{i} = integer, \code{f} = float,
-                \code{t} = text). \\
-4+ & Data     & One or more data values matching the format code. \\
-\bottomrule
-\end{tabular}
-\end{center}
- 
-Lines need not be sorted.  TSF files from different runs can be
-concatenated directly; the TSF library merges them by joining on
-column 1, column 2, or both.
- 
-\subsection{Type codes}
- 
-The format field (column 3) is a string of single-character type
-codes, one per data column:
- 
-\begin{center}
-\begin{tabular}{cl}
-\toprule
-\textbf{Code} & \textbf{Type} \\
-\midrule
-\code{i} & Integer \\
-\code{f} & Float \\
-\code{t} & Text \\
-\bottomrule
-\end{tabular}
-\end{center}
- 
-For example, a line with format \code{iif} has two integer columns
-followed by one float column.
- 
-\subsection{Merging and aggregation}
- 
-The TSF library provides a merge operation that joins lines from
-multiple files on a specified key column and aggregates the data
-columns.  Available aggregation operators include sum, min, max, and
-others.  The merged output can be emitted as a TSF file or as a
-two-dimensional table (rows = tags, columns = runs) suitable for
-import into R or Python.
- 
-The user-facing merge command is:
-\begin{lstlisting}
-magic2 --mergeTSF run1/genes.tsf run2/genes.tsf -o all_genes.txt
-\end{lstlisting}
- 
-\subsection{Relation to user guide}
- 
-The TSF format is mentioned briefly in the Magic2 User Guide in the
-context of output files.  The internal structure, type codes, and
-library API are documented here only, as they are relevant to
-developers who wish to parse TSF output programmatically or extend
-the TSF library.
- 
-% ===============================================================
-\section{Known Limitations and Future Work}
-% ===============================================================
- 
+
+Agents never wait on one another; all synchronisation emerges from
+channel blocking and closure.
+The main program defines the pipeline topology by creating channels,
+setting source counts, launching agents, and seeding the input channel.
+
+\subsection{NUMA-aware execution}
+
+On machines with multiple NUMA nodes, Magic2 re-spawns itself via
+\texttt{numactl} to bind to the least-loaded node, minimising
+cross-node memory traffic.
+Re-spawning is suppressed automatically on single-node machines,
+non-NUMA kernels, containers, and when \texttt{--numactl} has already
+been added by a prior re-spawn (to prevent recursion).
+Users do not set a thread count; Magic2 manages all concurrency
+automatically.
+
+For debugging, \texttt{--debug} forces fully serial execution
+(\texttt{nAgents=1}, \texttt{nBlocks=1}) with verbose output.
+\texttt{--numactl} suppresses re-spawning while retaining full
+parallelism.
+
+%% ===============================================================
+\section{Seed generation and genome indexing}
+\label{sec:seeds}
+
+\subsection{Seed encoding}
+
+Magic2 uses exact $k$-mer seeds of length $k \le 19$, encoded as
+32-bit unsigned integers (2\,bits per base, so 16\,bases fill exactly
+32\,bits).
+The default $k$ is chosen automatically from genome size:
 \begin{itemize}
-  \item GPU acceleration of the extension layer (layer~4) is not yet
-        implemented.  The splice-junction and gap model would need to
-        be restructured for efficient GPU execution.
-  \item The \code{--strand} override flag is specified in the
-        documentation and help text but requires implementation in
-        the alignment strategy selection code.
-  \item The \code{-i} flag currently accepts comma-separated file
-        lists; the documented behaviour (single file or paired pair
-        only, comma lists refused with a clear error message) requires
-        a code change to enforce.
+  \item $k = 16$ for small genomes ($<1$\,Gb; e.g., \textit{C.~elegans},
+        \textit{D.~melanogaster});
+  \item $k = 18$ for large genomes (human, mouse).
 \end{itemize}
- 
-% ===============================================================
-\section*{Acknowledgements}
-% ===============================================================
- 
-We thank David Landsman and Tom Madden for their support.
-This work was supported by the Intramural Research Program of the
-National Library of Medicine, National Institutes of Health.
- 
+When $k > 16$, the extra bases are handled by radix partitioning into
+$NN = 16$ or $32$ separate seed tables indexed by the least significant
+base pair(s), providing effective $18$- or $19$-mer specificity while
+keeping each individual table within 32 bits.
+
+Continuous (ungapped) $k$-mers are preferred over spaced seeds: spaced
+seeds are counterproductive for indel-prone technologies (Nanopore,
+PacBio) because indels disrupt the seed span more severely than
+substitutions affect the covered bases.
+
+\subsection{Strand-agnostic seed generation}
+
+To halve index size and enable strand-agnostic matching, both the
+forward $k$-mer $S$ and its reverse complement $C$ are computed
+simultaneously using an incremental rolling update:
+\begin{align}
+  S_{\text{new}} &= \bigl((S \ll 2) \mid b\bigr) \mathbin{\&} \text{mask} \\
+  C_{\text{new}} &= \bigl((C \gg 2) \mid (b' \ll (k-2))\bigr) \mathbin{\&} \text{mask}
+\end{align}
+where $b$ is the next base (2-bit coded) and $b'$ its complement.
+The strand-agnostic value $Z = \min(S, C)$ is retained.
+The coordinate is encoded as $(x \ll 1)$ if $S$ was chosen (forward
+strand) or $(x \ll 1 \mid 1)$ if $C$ was chosen (reverse strand).
+Ambiguous bases reset the rolling accumulator; a seed is emitted only
+after $k$ consecutive unambiguous bases.
+
+\subsection{Paired-read encoding}
+\label{sec:paired_encoding}
+
+Paired-end reads arrive with names of the form \texttt{xx/1} and
+\texttt{xx/2}.
+Only the base name \texttt{xx} is entered into the read dictionary
+(\texttt{dictAdd(dict, "xx", \&n)}), yielding a compact integer $n$.
+In the \texttt{CW} name field (Section~\ref{sec:gpu_structs}), mate~1
+is stored as $n \ll 1$ and mate~2 as $(n \ll 1) \mid 1$.
+
+This single-bit encoding has an important consequence for sorting:
+any sort by the name field automatically groups both mates of each pair
+into adjacent entries, with mate~1 always immediately preceding mate~2,
+regardless of whether the sort is performed on the CPU or the GPU.
+The alignment stage therefore receives a table in which read-pair
+processing requires no further regrouping.
+
+\subsection{Subsampling}
+
+To reduce index size without sacrificing alignment sensitivity, seeds
+are sub-sampled using a \emph{rolling-min-hash}: a round-robin buffer
+of size $p$ (default 5) stores the hash of $Z$ at recent positions;
+only the position with the minimum hash among the last $p$ values is
+retained as a seed.
+This guarantees:
+\begin{itemize}
+  \item average inter-seed spacing of $p/2$ positions;
+  \item maximum gap of $p$ positions;
+  \item near-perfect synchronisation between read and genome seeds
+        (in practice alignment begins by the second seed with $p = 5$).
+\end{itemize}
+
+\subsection{Multiplicity filtering and jump encoding}
+
+After collection, seeds are sorted (Section~\ref{sec:sort}) and their
+genomic multiplicity (number of occurrences) is counted.
+Seeds with multiplicity $> Q$ (default 81) are discarded to limit
+spurious hits from repetitive elements; empirical tests showed $Q = 31$
+gives higher specificity while $Q = 81$ slightly reduces false negatives
+at acceptable cost in index size and runtime.
+
+Jump information is then embedded directly in the seed records: every
+256th seed stores pointers to future seeds at distances
+$n_1 \times 256$, $n_2 \times 256$, $n_3 \times 256$, enabling
+fast skip-ahead during the merge step.
+
+The filtered, jump-augmented table is written to disk in compact binary
+format for memory-mapped access during production alignment.
+Seed records are 16\,bytes each (Section~\ref{sec:gpu_structs}) and are
+accumulated into large pre-allocated blocks to minimise \texttt{malloc}
+overhead.
+
+\subsection{Junction seeds from annotated splice sites}
+
+When a GFF/GTF annotation is supplied, Magic2 supplements genomic seeds
+with \emph{junction seeds} spanning annotated exon--exon boundaries,
+improving detection of reads that cross short exons or novel junctions.
+
+For each annotated mRNA, all exons are concatenated \textit{in silico}
+to form a continuous spliced transcript.
+All $k$-mers straddling each junction with at least 4 bases on each
+side ($k - 4$ starting positions per junction, with $p = 1$ so every
+valid position is used) are generated.
+For each such $k$-mer, two seed records with identical value $Z$ are
+emitted:
+\begin{itemize}
+  \item one pointing to the donor site (end of upstream exon);
+  \item one pointing to the acceptor site (start of downstream exon),
+        augmented with ancillary phase-shift information encoding the
+        exact junction offset.
+\end{itemize}
+This dual-record strategy ensures that a single seed match near a
+junction can trigger extension on both sides of the splice site.
+
+The additional index size is negligible: with $k = 18$ and
+$\sim$300{,}000 annotated human introns, $(k-4) \times 300{,}000$
+yields only a few million additional seeds, compared to
+$\sim$1 billion genomic seeds.
+Junction seeds are merged with the genomic table, sorted, and stored
+in the same binary format.
+
+%% ===============================================================
+\section{Radix sort}
+\label{sec:sort}
+
+\textbf{[PLACEHOLDER --- to be drafted in the next session
+using \texttt{wsa/sa.sort.c} as reference.]}
+
+\medskip
+Key points to cover:
+\begin{itemize}
+  \item 3-pass radix sort implementation (April~2026 optimisation).
+  \item Cache efficiency: why radix sort outperforms comparison-based
+        sorts on this data.
+  \item GPU offload via CUDA Thrust (optional, silent fallback to CPU);
+        see Section~\ref{sec:gpu}.
+  \item Benchmark: 15\,\% reduction in elapsed and CPU time on large
+        datasets observed after optimisation.
+  \item Dedicated sort--merge step for combining read and genome seed
+        tables.
+\end{itemize}
+
+%% ===============================================================
+\section{GPU acceleration: seed sorting and genome join}
+\label{sec:gpu}
+
+\subsection{Overview}
+
+When an NVIDIA GPU is available, Magic2 offloads two steps of the
+seed-matching pipeline to the device via CUDA Thrust
+(\texttt{wsa/sa.gpusort.cu}): sorting each block's read-seed table,
+and joining it against the pre-loaded genome index.
+GPU use is activated at compile time (\texttt{-DUSEGPU}) and detected
+at run time; execution falls back silently to the CPU radix sort
+(Section~\ref{sec:sort}) when no compatible device is present.
+
+\subsection{Data structures}
+\label{sec:gpu_structs}
+
+Seed records are \texttt{CW} structs (16\,bytes, 16-byte aligned),
+declared in \texttt{wsa/sa.common.h}:
+
+\medskip
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Field & Type & Meaning \\
+\midrule
+\texttt{seed}   & \texttt{unsigned int} & 32-bit 16-mer seed \\
+\texttt{nam}    & \texttt{unsigned int} & read or chrom identifier\\
+\texttt{pos}    & \texttt{unsigned int} & coordinate of first base of seed \\
+\texttt{flags}  & \texttt{unsigned int}  & auxiliary information \\
+\bottomrule
+\end{tabular}
+\end{center}
+\medskip
+
+The 16-byte size is deliberate: four \texttt{CW} records fill one
+64-byte cache line exactly, which is optimal for both the CPU radix
+sort and GPU coalesced memory access.
+
+The join product is a \texttt{SEEDMATCH} struct (32\,bytes, 32-byte
+aligned): the four \texttt{CW} fields of the matching read seed
+followed by the four \texttt{CW} fields of the matching genomic seed,
+Both \texttt{CW} and \texttt{SEEDMATCH} are declared in
+\texttt{wsa/sa.common.h} and shared between the C pipeline and the
+CUDA translation unit, so no data conversion is required at the
+CPU--GPU boundary.
+
+\subsection{Genome index upload}
+
+The filtered genome index (Section~\ref{sec:seeds}) is partitioned
+into $NN$ sub-tables (16 or 32, indexed by the least-significant
+base pair(s) of the seed value).
+At the start of a run, \texttt{GPUIndexCreate} transfers all partitions
+to GPU device memory, where they reside for the duration of alignment.
+Keeping the full index on device eliminates repeated host-side access
+to the multi-gigabyte memory-mapped index during the alignment phase;
+the CPU alignment stage never touches the genome index directly.
+
+\subsection{Per-block GPU pipeline}
+
+Magic2's alignment pipeline processes independent data blocks of up to
+\texttt{bMax}\,Mb through a pool of agents coordinated by channels
+(Section~\ref{sec:parallel}).
+GPU acceleration is applied at the block level: each agent, upon
+receiving a block, calls the GPU for seed sorting and joining, then
+proceeds to CPU-side alignment extension once the device returns.
+Within each block the GPU executes the following steps.
+
+\begin{enumerate}
+
+\item \textbf{Read-seed sort.}
+      For each of the $NN$ seed partitions of the current block, the
+      \texttt{CW} array produced by CPU seed extraction is copied to
+      device memory and sorted by seed value using
+      \texttt{thrust::sort} with a device comparator that orders
+      records by the \texttt{seed} field.
+
+\item \textbf{Run-length encoding.}
+      \texttt{thrust::reduce\_by\_key} compresses both the (resident)
+      genome partition and the (freshly sorted) read partition into
+      compact vectors of unique seed values with their start offsets
+      and run lengths.
+      This step replaces the linear merge traversal used in the CPU
+      sort--merge path with a fully parallel reduction.
+
+\item \textbf{Common-seed identification.}
+      \texttt{thrust::set\_intersection} finds seed values present in
+      both the genome partition and the read-block partition.
+      \texttt{thrust::lower\_bound} then locates each common seed in
+      the respective run-length tables, yielding the start offset and
+      count for each matching group in both the index and the reads.
+
+\item \textbf{Cartesian-product emission.}
+      For each common seed value with $m$ genomic occurrences and $n$
+      read occurrences, the CUDA kernel
+      \texttt{EmitCartesianProduct} writes $m \times n$
+      \texttt{SEEDMATCH} records to a pre-allocated output buffer.
+      The kernel is launched with one thread block per common seed and
+      up to 256 threads per block; each thread handles one or more
+      pairs $(i_{\text{genome}},\, j_{\text{read}})$ from the
+      Cartesian product.
+      Output positions are determined by an exclusive prefix scan
+      (\texttt{thrust::exclusive\_scan}) over per-seed pair counts,
+      ensuring contiguous, conflict-free writes with no atomic
+      operations.
+
+\item \textbf{Sort by read pair.}
+      The completed \texttt{SEEDMATCH} table is sorted on the GPU by
+      the \texttt{read} name field using \texttt{thrust::sort}.
+      Because of the paired-read encoding (Section~\ref{sec:paired_encoding}),
+      mate~1 ($n \ll 1$) and mate~2 ($(n \ll 1) \mid 1$) of each pair
+      differ only in the least-significant bit of the \texttt{nam}
+      field; sorting by this value simultaneously groups all candidate
+      hits by read pair and places mate~1 immediately before mate~2
+      within each pair.
+      This final GPU sort delivers a table that is directly consumable
+      by the CPU alignment stage with no further reordering.
+
+\item \textbf{Return to CPU.}
+      The sorted \texttt{SEEDMATCH} table is copied back to host memory.
+      The CPU extension stage (Section~\ref{sec:align}) processes one
+      read pair at a time, extending each candidate seed match into a
+      full alignment and performing splice-junction analysis, without
+      any further access to the genome index.
+
+\end{enumerate}
+
+\subsection{Latency hiding through channel-based concurrency}
+
+The GPU call in each agent is synchronous: the agent blocks on the
+device until the sorted \texttt{SEEDMATCH} table is ready, then
+resumes.
+No asynchronous CUDA streams, double-buffering, or explicit staging
+logic are required.
+
+The standard GPU programming approach to this problem uses CUDA
+streams with asynchronous transfers (\texttt{cudaMemcpyAsync}):
+while the device processes block $N$, the host prepares and begins
+transferring block $N+1$ into a second buffer, so that the PCIe
+transfer latency of one block is overlapped with the GPU computation
+of the next.
+This \emph{double-buffering} pattern is effective but requires the
+programmer to manage two buffer sets, carefully sequence stream
+operations, and reason explicitly about which synchronisation points
+are safe --- a non-trivial engineering burden that is easy to get
+wrong silently.
+
+Magic2 avoids this complexity entirely.
+The agent pool, coordinated by bounded blocking channels, provides
+CPU--GPU overlap as a natural consequence of its concurrency model.
+While one agent is blocked waiting for the GPU, all other agents
+continue executing their own blocks on CPU --- extracting seeds,
+extending alignments, writing coverage tracks, and accumulating
+junction and QC tables.
+The blocked agent simply parks at what is, from the pipeline's
+perspective, an ordinary blocking-channel operation, indistinguishable
+from blocking on an empty input queue.
+Provided the number of active agents is sufficient to keep both the
+GPU and the CPU cores occupied --- a condition that holds automatically
+given Magic2's block-size and agent-count defaults --- GPU transfer and
+sort latency is fully overlapped with productive CPU work on other
+blocks, with no GPU-specific orchestration code in the pipeline at all.
+
+The channel library (\texttt{wchannels/channel.c}) is a direct C
+implementation of Go's channel semantics~\citep{donovan2015go},
+themselves rooted in Hoare's Communicating Sequential
+Processes~\citep{hoare1978csp}.
+It was written to bring Go's concurrency model to an existing
+700{,}000-line C codebase that could not be migrated to Go.
+Go programmers obtain the same GPU-latency-hiding property for free
+from the goroutine scheduler, which parks a goroutine blocked on a
+channel and runs another in its place.
+Magic2's agent/channel architecture replicates this behaviour in C,
+without any GPU-specific orchestration code in the pipeline.
+
+%% ===============================================================
+\section{Alignment extension}
+\label{sec:align}
+
+\textbf{[PLACEHOLDER --- to be drafted in a future session
+using \texttt{wsa/sa.align.c} as reference.]}
+
+\medskip
+Key points to cover:
+\begin{itemize}
+  \item Banded Smith--Waterman extension from seed anchors.
+  \item Error cost model (\texttt{errCost}=4, \texttt{errRateMax}=12\,\%).
+  \item Handling of mismatches vs.\ indels for short vs.\ long reads.
+  \item \texttt{minAli}=30, \texttt{minScore}=30 thresholds.
+  \item Multi-mapping and \texttt{maxTargetRepeats}=81.
+\end{itemize}
+
+%% ===============================================================
+\section{Intron boundary optimisation, poly(A) detection, and
+         splice-leader identification}
+\label{sec:introns}
+
+\textbf{[PLACEHOLDER --- to be drafted in a future session
+using \texttt{wsa/sa.introns.c} as reference.]}
+
+\medskip
+Key points to cover:
+\begin{itemize}
+  \item Splice-signal scoring (GT-AG, AT-AC, non-canonical).
+  \item \texttt{maxIntron}=1{,}000{,}000\,bases.
+  \item Poly(A)/poly(T) tail detection algorithm.
+  \item Trans-spliced leader (SL) detection in \textit{C.~elegans}.
+  \item Strand inference from splice signals.
+\end{itemize}
+
+%% ===============================================================
+\section{Output formats}
+\label{sec:outputs}
+
+\textbf{[PLACEHOLDER --- to be drafted in a future session.]}
+
+\medskip
+Key points to cover:
+\begin{itemize}
+  \item BAM output (\texttt{wsa/sa.sam.c}): default; standard downstream
+        compatibility.
+  \item \texttt{.hits} compact format (\texttt{wsa/sa.tabular.c}):
+        available via \texttt{--hits}; faster I/O for internal pipelines.
+  \item TSF (Tag--Sample Format): tab-separated, columns are
+        run\,/\,tag\,/\,format-code\,/\,data; format codes
+        \texttt{i}=integer, \texttt{f}=float, \texttt{t}=text;
+        files need not be sorted; directly concatenable for merging;
+        can produce 2-D tables compatible with Excel via \texttt{tsf.c}.
+  \item Wiggle/coverage tracks (\texttt{wsa/sa.wiggle.c}):
+        strand-specific; read-start/end profiles for TSS/TES detection.
+  \item QC metrics table (\texttt{wsa/sa.stats.c}).
+\end{itemize}
+
+%% ===============================================================
+\section{Quality-control metrics}
+\label{sec:qc}
+
+\textbf{[PLACEHOLDER --- to be drafted in a future session
+using \texttt{wsa/sa.stats.c} as reference.]}
+
+\medskip
+Key points to cover:
+\begin{itemize}
+  \item Mapping-class fractions: CDS, UTR, intron, intergenic,
+        mitochondrial.
+  \item Strand-specificity score.
+  \item Concordant-pair rate; insert-size distribution.
+  \item Mismatch distribution (per-cycle and global).
+  \item Perfect-alignment count (zero-mismatch, zero-indel reads).
+  \item Adapter detection and trimming statistics.
+  \item All metrics emitted in TSF format; directly comparable
+        across runs.
+\end{itemize}
+
+%% ===============================================================
+\section{Automatic parameter selection}
+\label{sec:autoconfig}
+
+\textbf{[PLACEHOLDER --- to be drafted in a future session
+using \texttt{wsa/sa.config.c} as reference.]}
+
+\medskip
+Confirmed defaults (April 2026):
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Parameter & Default \\
+\midrule
+\texttt{errCost}         & 4 \\
+\texttt{errRateMax}      & 12\,\% \\
+\texttt{bMax}            & 3\,Mb per block \\
+Index step               & 6 (genomes $>1$\,Mb) \\
+Alignment step (\texttt{iStep}) & \texttt{tStep}/2 \\
+\texttt{seedLength}      & 16 (genomes $<1$\,Gb); 18 (human/mouse) \\
+\texttt{maxTargetRepeats}& 81 \\
+\texttt{minAli}          & 30 \\
+\texttt{minScore}        & 30 \\
+\texttt{maxIntron}       & 1{,}000{,}000\,bases \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%% ===============================================================
+\section{Build system and supported platforms}
+\label{sec:build}
+
+Magic2 is written in C and built with \texttt{make} and \texttt{tcsh}.
+The repository lives inside the global acedb distribution
+($\sim$700{,}000 lines of C); Magic2 depends on acedb libraries
+(notably \texttt{w1}, \texttt{wego}) and has not yet been fully
+separated.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Setting & Value \\
+\midrule
+Optimised Linux build flag & \texttt{ACEDB\_MACHINE=LINUX\_4\_OPT} \\
+64-bit variant             & \texttt{ACEDB\_MACHINE=LINUX\_X86\_64\_4\_OPT} \\
+Output binary              & \texttt{Magic2/bin.LINUX\_4\_OPT/magic2} \\
+Primary platform           & Linux x86-64 \\
+Secondary platforms        & Linux ARM, macOS \\
+Optional GPU acceleration  & CUDA (Thrust); silent CPU fallback \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Continuous integration currently uses Travis CI (\texttt{.travis.yml}).
+Migration to GitHub Actions with matrix builds for all three target
+platforms is planned.
+
+%% ---------------------------------------------------------------
+\bibliographystyle{naturemag}
+\bibliography{magic2_refs}
+
 \end{document}
- 
+@book{donovan2015go,
+  author    = {Donovan, Alan A. A. and Kernighan, Brian W.},
+  title     = {The {Go} Programming Language},
+  publisher = {Addison-Wesley Professional},
+  year      = {2015},
+  isbn      = {978-0134190440}
+}
+
+@article{hoare1978csp,
+  author  = {Hoare, C. A. R.},
+  title   = {Communicating Sequential Processes},
+  journal = {Communications of the {ACM}},
+  volume  = {21},
+  number  = {8},
+  pages   = {666--677},
+  year    = {1978}
+}
