@@ -1692,20 +1692,25 @@ int main (int argc, const char *argv[])
 	}
     }}
 
+  
 #ifdef __linux__
   /* ==================== LINUX ONLY ==================== */
   
-  /******************** NUMA harware  optimizer ******************************************/
-  /******************** pin the threads to the least used node ***************************/
-  /* numa (non unifirm mmory access) harware are composed of several nodes, each with many CPUs
-   * moving data across nodes is slow and costly
+  /******************** Hardware optimizer: NUMA + GPU ******************************************/
+  /******************** Pin threads to least-used node; select GPU binary if available **********/
+  /*
+   * NUMA (Non-Uniform Memory Access) machines have several nodes, each with many CPUs.
+   * Moving data across nodes is slow and costly.
    * This module finds the node with the least number of running threads
-   * and relaunches the program pinned to that node
-   * adding the command line parameter --numactl to prevent recursion
+   * and relaunches the program pinned to that node,
+   * adding --numactl to the command line to prevent recursion.
    *
-   * This system could be useful in other C programs using multithreading and large memory
-   */   
-
+   * If a CUDA-capable GPU is detected, magic2_gpu is spawned instead of magic2,
+   * passing --gpu-device=N to select the device with the most free memory.
+   * This respawn happens even on single-node machines where NUMA binding is not needed.
+   *
+   * This system could be useful in other C programs using multithreading and large memory.
+   */
   if (! p.debug &&
       ! getCmdLineBool (&argc, argv, "--numactl")  &&
       !  (getenv("INVOCATION_NOTIFICATIONS") &&
@@ -1713,28 +1718,43 @@ int main (int argc, const char *argv[])
       isExecutableInPath ("numactl")   /* see w1/utils.c */
       )
     {
-      int node = saGetBestNumaNode () ;   // ~100 ms
-      if (node >= 0) /* else single-node machine, fall through */
+      int node    = saGetBestNumaNode () ;   /* ~200 ms; -1 on single-node machine */
+      int bestDev = -1 ;
+      int ngpu    = saGetGpuInfo (&bestDev) ;
+
+      if (node >= 0 || ngpu > 0)
 	{
-	  // build "numactl --cpunodebind=N --membind=N ./prog ..." 
-	  // and re-exec via system() or execv()
+	  /* Choose binary: magic2_gpu if GPU detected and binary is present,
+	   * otherwise magic2 (i.e. ourselves).                              */
+	  const char *binary = argv[0] ;
+	  if (ngpu > 0 && isExecutableInPath ("magic2_gpu"))
+	    binary = "magic2_gpu" ;
 
 	  vTXT txt = vtxtHandleCreate (h) ;
-	  vtxtPrintf (txt, "/usr/bin/numactl  --cpunodebind=%d --membind=%d ", node, node) ;
-	  /* echo all args */
-	  for (int i = 0 ; i < argc ; i++)
-	    vtxtPrintf (txt, " %s " , argv[i]) ;
-	  /* avoid recursion */
-	  vtxtPrintf (txt, " --numactl ") ;
 
-	  /* launch */
+	  /* NUMA binding — always apply when node >= 0, even for GPU runs. */
+	  if (node >= 0)
+	    vtxtPrintf (txt, "/usr/bin/numactl --cpunodebind=%d --membind=%d ", node, node) ;
+
+	  /* Binary and all original arguments.                             */
+	  vtxtPrintf (txt, "%s", binary) ;
+	  for (int i = 1 ; i < argc ; i++)
+	    vtxtPrintf (txt, " %s", argv[i]) ;
+
+	  /* Prevent recursion.                                             */
+	  vtxtPrintf (txt, " --numactl") ;
+
+	  /* Tell magic2_gpu which device to use.                           */
+	  if (ngpu > 0 && bestDev >= 0)
+	    vtxtPrintf (txt, " --gpu-device=%d", bestDev) ;
+
 	  fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 	  return system (vtxtPtr (txt)) ;
 	}
-      }
+    }
 #endif  /* __linux__ */
   /* This part will always execute */
-  
+
   /************  debugging modules, ignore ****************/
 
   getCmdLineText (h, &argc, argv, "-o", &(p.outFileName)) ;

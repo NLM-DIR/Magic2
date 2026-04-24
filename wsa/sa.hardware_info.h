@@ -1,4 +1,52 @@
 
+/*
+ * saGetGpuInfo  [all platforms]
+ *
+ * Probes for CUDA-capable GPU devices and returns the count.
+ * Optionally fills *bestDevice with the index of the device having
+ * the most free memory, suitable for passing to cudaSetDevice().
+ *
+ * This call is safe on machines with no CUDA runtime and on non-Linux
+ * platforms: the CUDA entry points are loaded via dlopen() at runtime
+ * so the binary has no link-time dependency on libcuda.
+ *
+ * Return value:
+ *    > 0   number of CUDA devices found; *bestDevice set if non-NULL
+ *      0   no CUDA-capable device present or driver not loaded
+ *     -1   CUDA runtime found but device query failed (driver mismatch,
+ *          device in exclusive mode, etc.); treat as 0 for respawn
+ *          decisions, but optionally log a warning.
+ *
+ * Typical cost: 5–50 ms on first call (driver initialisation);
+ * result is cached — subsequent calls return immediately.
+ *
+ * RESPAWN USAGE in sa.hardware_info.c / sa.main.c
+ * ------------------------------------------------
+ *
+ *   int bestDev = -1 ;
+ *   int ngpu = saGetGpuInfo (&bestDev) ;
+ *
+ *   if (ngpu > 0)
+ *     {
+ *       // build "numactl ... magic2_gpu --numactl --gpu-device=N ..."
+ *       // and re-exec; bestDev carries the selected device index
+ *     }
+ *
+ * Pass NULL for bestDevice if you only need presence/absence:
+ *
+ *   if (saGetGpuInfo (NULL) > 0)
+ *       use_gpu_binary () ;
+ *
+ * CACHING
+ * -------
+ * The result of the first call is stored in a static local variable.
+ * The probe is never repeated in the same process.  This is safe
+ * because GPU topology does not change while a process is running,
+ * and because saGetGpuInfo() is intended to be called only in the
+ * initialisation phase, before any threads are created.
+ */
+int saGetGpuInfo (int *bestDevice) ;
+
 #ifndef HARWARE_INFO_H
 #define HARWARE_INFO_H
 /*
