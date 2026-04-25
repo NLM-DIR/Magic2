@@ -17,8 +17,10 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
 
 GPUIndex* GPUIndexFree(GPUIndex* idx);
 
-void saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
-                    unsigned int num_parts);
+unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
+                            unsigned int num_parts);
+
+void saGPUMatchHitsCopyToHost(GPUIndex* idx, SEEDMATCH* out_buffer);
 
 #ifdef __cplusplus
 }
