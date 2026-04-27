@@ -1284,7 +1284,7 @@ static void wholeWork (const void *vp)
 	      sizes[k] = bigArrayMax(bb.cwsN[ k]) ;
 	    }
 
-	  pthread_mutex_lock (&gpu_mutex) ;
+	  if (1)pthread_mutex_lock (&gpu_mutex) ;
 	  /* find matching seeds */
 	  if (! pp->bbG.gpu_idx)
 	    messcrash ("No target GPU index") ;
@@ -1301,7 +1301,7 @@ static void wholeWork (const void *vp)
 
       /* copy matching seeds to the host */
 	  saGPUMatchHitsCopyToHost(pp->bbG.gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
-	  pthread_mutex_unlock (&gpu_mutex) ;
+	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
 
