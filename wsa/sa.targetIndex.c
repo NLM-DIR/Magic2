@@ -748,6 +748,19 @@ void saTargetIndexGenomeParser (const void *vp)
   channelClose (pp->gmChan) ;
   printf ("--- %s: Stop binary genome parser\n", timeBufShowNow (tBuf)) ;
 
+#ifdef USEGPU
+  int NN = pp->nIndex ;
+  CW** index_parts = halloc (NN * sizeof(CW*), h) ;
+  long int *sizes = halloc (NN * sizeof(long int), h) ;
+  for (int i = 0 ; i < NN ; i++)
+    {
+      index_parts[i] = bigArrayp (bbG.cwsN[i], 0, CW);
+      sizes[i] = bigArrayMax (bbG.cwsN[i]);
+    }
+
+  bbG.gpu_idx = GPUIndexCreate (index_parts, sizes, NN) ;
+#endif
+
   ac_free (h) ;
   return ;
 } /* genomeParser */

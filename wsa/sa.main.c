@@ -1219,7 +1219,7 @@ static void wholeWork (const void *vp)
   clock_t  t1, t2, t01, t02 ;
 
 #ifdef USEGPU
-  GPUIndex* gpu_idx = GPUIndexNew(pp, &bbG);
+  /*   GPUIndex* gpu_idx = GPUIndexNew(pp, &bbG); */
 #endif
   
   CW** words = (CW**)malloc(NN * sizeof(CW*));
@@ -1230,6 +1230,7 @@ static void wholeWork (const void *vp)
   while (channelGet (pp->lcChan, &bb, BB))
     {
       long int nn = 0 ;
+      int ii;
 
       t1 = clock () ;
       /* code words */
@@ -1238,6 +1239,17 @@ static void wholeWork (const void *vp)
 
       if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
 
+      for (ii=0;ii < NN;ii++) {
+          words[ii] = bigArrayp(bb.cwsN[ii], 0, CW);
+          sizes[ii] = bigArrayMax(bb.cwsN[ii]);
+      }
+
+      /* sort words */
+      for (int k = 0 ; k < NN ; k++)
+	if (bb.cwsN[k])
+	  bb.gpu += saSort (bb.cwsN[k], 1) ; /* cwOrder */
+
+      
       /* match hits */
 
       if (0) /* old code before 2026_04_05 */
@@ -1255,13 +1267,7 @@ static void wholeWork (const void *vp)
       else /* new code */
 	{
 #ifndef USEGPU	  
-
-       /* sort words */
-      for (int k = 0 ; k < NN ; k++)
-          if (bb.cwsN[k])
-              bb.gpu += saSort (bb.cwsN[k], 1) ; /* cwOrder */
-
-        if (bb.length)
+	  if (bb.length)
 	    nn = matchSeeds (pp, &bbG, &bb) ;
 	  if (nn)
 	    {
@@ -1280,7 +1286,7 @@ static void wholeWork (const void *vp)
       }
 
       /* find matching seeds */
-	  unsigned int N = saGPUMatchHits(gpu_idx, words, sizes, NN);
+	  unsigned int N = saGPUMatchHits(p.bbG.gpu_idx, words, sizes, NN);
       /*
 	    allocate host memory for seed matches, number of records
 	  */
@@ -1289,7 +1295,6 @@ static void wholeWork (const void *vp)
 
       /* copy matching seeds to the host */
       saGPUMatchHitsCopyToHost(gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
-
 #endif
 	}
 
@@ -1712,6 +1717,8 @@ int main (int argc, const char *argv[])
    */
   if (! p.debug &&
       ! getCmdLineBool (&argc, argv, "--numactl")  &&
+      !  (getenv("INVOCATION_NOTIFICATIONS") &&
+	  strstr(getenv("INVOCATION_NOTIFICATIONS"), "numactl")) &&
       isExecutableInPath ("numactl")   /* see w1/utils.c */
       )
     {
@@ -2317,6 +2324,10 @@ int main (int argc, const char *argv[])
     }
 
   int nDone = 0 ;
+#ifdef USEGPU
+  /* GPUIndex* gpu_idx = GPUIndexNew(&p, &(p.bbG)); */
+#endif
+  
   while (channelGet (p.doneChan, &bb, BB))
     {
       long int n = (bb.hits ? bigArrayMax (bb.hits) : 0) ;
