@@ -1315,7 +1315,7 @@ static void wholeWork (const void *vp)
       t01 = t02 ;
     }
 
-#ifdef USEGPU
+#ifdef USEGPU777x
   GPUIndexFree(pp->bbG.gpu_idx);
 #endif
   
