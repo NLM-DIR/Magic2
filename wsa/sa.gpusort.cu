@@ -237,8 +237,8 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                             unsigned int num_parts)
 {
     auto start = std::chrono::high_resolution_clock::now();
-
     GPUIndexType* index = static_cast<GPUIndexType*>(idx);
+    index->out_pairs.resize(1 << 20);  // ensure starting capacity for this block
     // points to the last output match saved so far
     std::size_t last_pair = 0;
 
@@ -376,6 +376,7 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
 void saGPUMatchHitsCopyToHost(GPUIndex* idx, SEEDMATCH* out_buffer)
 {
     GPUIndexType* idxobj = static_cast<GPUIndexType*>(idx);
-    // copy to host
     thrust::copy(idxobj->out_pairs.begin(), idxobj->out_pairs.end(), out_buffer);
+    idxobj->out_pairs.resize(0);       // sets size to 0 but keeps reserved capacity
+    idxobj->out_pairs.shrink_to_fit(); // actually calls cudaFree and releases the memory
 }

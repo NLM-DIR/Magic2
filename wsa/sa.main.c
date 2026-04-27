@@ -1223,7 +1223,7 @@ static void wholeWork (const void *vp)
 #endif
   
   CW** words = (CW**)malloc(NN * sizeof(CW*));
-  long int* sizes = (long int*)malloc(NN * sizeof(long int));
+  long int *sizes = (long int*)malloc(NN * sizeof(long int));
 
   t01 = clock () ;
 
@@ -1238,11 +1238,6 @@ static void wholeWork (const void *vp)
       saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
 
       if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
-
-      for (ii=0;ii < NN;ii++) {
-          words[ii] = bigArrayp(bb.cwsN[ii], 0, CW);
-          sizes[ii] = bigArrayMax(bb.cwsN[ii]);
-      }
 
       /* sort words */
       for (int k = 0 ; k < NN ; k++)
@@ -1279,22 +1274,28 @@ static void wholeWork (const void *vp)
 #else
 
       /* Find max number of matching words to preallocate memory. This is
-         overestimated, but prevents memory copy.*/
-      for (ii=0;ii < NN;ii++) {
-          words[ii] = bigArrayp(bb.cwsN[ii], 0, CW);
-          sizes[ii] = bigArrayMax(bb.cwsN[ii]);
-      }
+       *   overestimated, but prevents memory copy.
+       */
+	  for (int k = 0 ; k < NN ; k++)
+	    {
+	      words[k] = bigArrayp(bb.cwsN[k], 0, CW) ;
+	      sizes[k] = bigArrayMax(bb.cwsN[ k]) ;
+	    }
 
-      /* find matching seeds */
-	  unsigned int N = saGPUMatchHits(p.bbG.gpu_idx, words, sizes, NN);
+
+	  /* find matching seeds */
+	  long int N = saGPUMatchHits(pp->bbG.gpu_idx, words, sizes, NN) ;
+	  for (int k = 0 ; k < NN ; k++)
+	    { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ;}
+	  
       /*
-	    allocate host memory for seed matches, number of records
-	  */
+	allocate host memory for seed matches, number of records
+      */
 	  bb.sms = bigArrayHandleCreate (N, SEEDMATCH, bb.h) ;
-      bigArrayMax(bb.sms) = N;
+	  bigArrayMax(bb.sms) = N ;
 
       /* copy matching seeds to the host */
-      saGPUMatchHitsCopyToHost(gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
+	  saGPUMatchHitsCopyToHost(gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
 #endif
 	}
 
