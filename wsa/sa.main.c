@@ -1296,7 +1296,7 @@ static void wholeWork (const void *vp)
       /*
 	allocate host memory for seed matches, number of records
       */
-	  bb.sms = bigArrayHandleCreate (N, SEEDMATCH, bb.h) ;
+	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
 	  bigArrayMax(bb.sms) = N ;
 
       /* copy matching seeds to the host */
