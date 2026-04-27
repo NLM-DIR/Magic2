@@ -1182,6 +1182,8 @@ static void export (const void *vp)
 } /* export */
 
 #ifdef USEGPU	  
+static pthread_mutex_t gpu_mutex = PTHREAD_MUTEX_INITIALIZER ;
+
 GPUIndex* GPUIndexNew(const PP* p, BB* bbG)
 {
     int i;
@@ -1282,7 +1284,7 @@ static void wholeWork (const void *vp)
 	      sizes[k] = bigArrayMax(bb.cwsN[ k]) ;
 	    }
 
-
+	  pthread_mutex_lock (&gpu_mutex) ;
 	  /* find matching seeds */
 	  long int N = saGPUMatchHits(pp->bbG.gpu_idx, words, sizes, NN) ;
 	  for (int k = 0 ; k < NN ; k++)
@@ -1296,6 +1298,7 @@ static void wholeWork (const void *vp)
 
       /* copy matching seeds to the host */
 	  saGPUMatchHitsCopyToHost(pp->bbG.gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
+	  pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
 
