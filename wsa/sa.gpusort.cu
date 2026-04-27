@@ -153,7 +153,7 @@ static void BuildRuns(const thrust::device_vector<CW>& input,
     starts.resize(n_groups);
 
     // find prefix sums
-    thrust::exclusive_scan(counts.begin(), counts.end(), starts.begin(), std::uint64_t{0});
+    thrust::exclusive_scan(counts.begin(), counts.end(), starts.begin(), std::uint32_t{0});
 }
 
 
