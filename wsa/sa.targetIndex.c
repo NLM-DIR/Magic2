@@ -755,10 +755,13 @@ void saTargetIndexGenomeParser (const void *vp)
   for (int i = 0 ; i < NN ; i++)
     {
       index_parts[i] = bigArrayp (bbG.cwsN[i], 0, CW);
-      sizes[i] = bigArrayMax (bbG.cwsN[i]);
+      sizes[i] = Bigarraymax (bbG.cwsN[i]);
     }
 
   bbG.gpu_idx = GPUIndexCreate (index_parts, sizes, NN) ;
+  for (int i = 0 ; i < NN ; i++)
+    { ac_free (bbG.cwsN[i]) ; bbG.cwsN[i] = 0 ; }
+  
 #endif
 
   ac_free (h) ;

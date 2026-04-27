@@ -168,7 +168,8 @@ typedef struct bStruct {
   long unsigned int aliDa ;  /* cumulated genome coverage */
 
   char *gzBuffer ;
-  
+  void *gpu_idx ;
+
   /*   BitSet isAligned ; */
   BigArray sms ;    /* seed matches, possibly computed on GPU */
   BigArray aligns ; /* final alignments */  
