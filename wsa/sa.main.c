@@ -2273,7 +2273,7 @@ int main (int argc, const char *argv[])
       p.genomeLength = p.bbG.genomeLength ;
 
       
-      if (! p.bbG.cwsN[0])
+      if (! p.bbG.cwsN[0] && ! p.bbG.gpu_idx)
 	messcrash ("matchSeeds received no target words") ;
       saGffBinaryParser (&p) ;
       
