@@ -746,11 +746,6 @@ void saTargetIndexGenomeParser (const void *vp)
   t2 = clock () ;
 
 
-  saCpuStatRegister ("1.GParserDone" , pp->agent, bbG.cpuStats, t1, t2, nn) ;
-  channelPut (pp->gmChan, &bbG, BB) ;
-  channelClose (pp->gmChan) ;
-  printf ("--- %s: Stop binary genome parser\n", timeBufShowNow (tBuf)) ;
-
 #ifdef USEGPU
   int NN = pp->nIndex ;
   CW** index_parts = halloc (NN * sizeof(CW*), h) ;
@@ -766,6 +761,11 @@ void saTargetIndexGenomeParser (const void *vp)
     { ac_free (bbG.cwsN[i]) ; bbG.cwsN[i] = 0 ; }
   
 #endif
+
+  saCpuStatRegister ("1.GParserDone" , pp->agent, bbG.cpuStats, t1, t2, nn) ;
+  channelPut (pp->gmChan, &bbG, BB) ;
+  channelClose (pp->gmChan) ;
+  printf ("--- %s: Stop binary genome parser\n", timeBufShowNow (tBuf)) ;
 
   ac_free (h) ;
   return ;

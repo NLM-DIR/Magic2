@@ -1286,7 +1286,10 @@ static void wholeWork (const void *vp)
 
 	  pthread_mutex_lock (&gpu_mutex) ;
 	  /* find matching seeds */
+	  if (! pp->bbG.gpu_idx)
+	    messcrash ("No target GPU index") ;
 	  long int N = saGPUMatchHits(pp->bbG.gpu_idx, words, sizes, NN) ;
+	  
 	  for (int k = 0 ; k < NN ; k++)
 	    { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ;}
 	  
@@ -2219,6 +2222,7 @@ int main (int argc, const char *argv[])
       
       /* The genome parsers start immediately */
       p.agent = nAgents ;
+      p.bbG.gpu_idx = 0 ;
       wego_go (saTargetIndexGenomeParser, &p, PP) ;
       /* The load regulator maintains --nB data-blocks in the pipeline */
       wego_go (loadRegulator, &p, PP) ;
@@ -2267,6 +2271,7 @@ int main (int argc, const char *argv[])
       /* wait untill the genome is ready */
       channelGet (p.gmChan, &p.bbG, BB) ;
       p.genomeLength = p.bbG.genomeLength ;
+
       
       if (! p.bbG.cwsN[0])
 	messcrash ("matchSeeds received no target words") ;
