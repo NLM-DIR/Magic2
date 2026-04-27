@@ -1295,7 +1295,7 @@ static void wholeWork (const void *vp)
 	  bigArrayMax(bb.sms) = N ;
 
       /* copy matching seeds to the host */
-	  saGPUMatchHitsCopyToHost(gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
+	  saGPUMatchHitsCopyToHost(pp->bbG.gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
 #endif
 	}
 
@@ -1310,7 +1310,7 @@ static void wholeWork (const void *vp)
     }
 
 #ifdef USEGPU
-  GPUIndexFree(gpu_idx);
+  GPUIndexFree(pp->bbG.gpu_idx);
 #endif
   
     if (words) {
