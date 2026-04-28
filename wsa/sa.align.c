@@ -3231,7 +3231,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 			    , Array aa, Array err, Array bestAp
 			    , int maxJump, int maxJump2)
 {   
-  BOOL debug = TRUE ;
+  BOOL debug = FALSE ;
   AC_HANDLE h = ac_new_handle () ;
   HIT * restrict hit ;
   ALIGN *ap = 0 ;

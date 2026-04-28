@@ -1,3 +1,115 @@
+/* ================================================================== */
+/*                     GPU  DETECTION                                 */
+/* ================================================================== */
+/*
+ * saGetGpuInfo
+ * ------------
+ * Probes for CUDA-capable GPU devices via dlopen() and returns the
+ * count.  Optionally fills *bestDevice with the index of the device
+ * having the most free memory, suitable for passing to cudaSetDevice().
+ *
+ * The CUDA runtime is loaded at run time via dlopen() so this binary
+ * has no link-time dependency on libcuda.  The function is therefore
+ * safe to call on machines with no CUDA driver installed.
+ *
+ * Returns:
+ *    > 0   number of CUDA devices found; *bestDevice set if non-NULL
+ *      0   no CUDA-capable device, or driver / runtime not found
+ *     -1   runtime found but device query failed (driver mismatch,
+ *          device in exclusive-process mode, etc.); treat as 0 for
+ *          respawn decisions, but consider logging a warning.
+ *
+ * Called exactly once, during the hardware-detection phase in
+ * sa.main.c, before any threads are created.
+ *
+ * RESPAWN USAGE
+ * -------------
+ *   int bestDev = -1 ;
+ *   int ngpu    = saGetGpuInfo (&bestDev) ;
+ *   if (ngpu > 0)
+ *     {
+ *       // build "numactl ... magic2_gpu --numactl --gpu-device=N ..."
+ *       // bestDev carries the selected device index
+ *       return system (cmd) ;
+ *     }
+ *
+ * Pass NULL for bestDevice if you only need presence/absence:
+ *   if (saGetGpuInfo (NULL) > 0)
+ *       use_gpu_binary () ;
+ */
+#include "sa.h"
+
+typedef int (*pfn_cudaGetDeviceCount_t) (int *) ;
+typedef int (*pfn_cudaSetDevice_t)      (int) ;
+typedef int (*pfn_cudaMemGetInfo_t)     (size_t *, size_t *) ;
+
+#if defined(__linux__) || defined(__APPLE__)
+#  include <dlfcn.h>
+#endif
+
+int saGetGpuInfo (int *bestDevice)
+{
+    if (bestDevice) *bestDevice = -1 ;
+
+#if !defined(__linux__) && !defined(__APPLE__)
+    return 0 ;
+#else
+
+    /* ---- locate the CUDA runtime shared library ------------------- */
+    void *libcuda = 0 ;
+#ifdef __linux__
+    libcuda = dlopen ("libcudart.so.12",  RTLD_LAZY | RTLD_LOCAL) ;
+    if (!libcuda)
+        libcuda = dlopen ("libcudart.so.11.0", RTLD_LAZY | RTLD_LOCAL) ;
+    if (!libcuda)
+        libcuda = dlopen ("libcudart.so",      RTLD_LAZY | RTLD_LOCAL) ;
+#else  /* __APPLE__ */
+    libcuda = dlopen ("libcudart.dylib",  RTLD_LAZY | RTLD_LOCAL) ;
+#endif
+    if (!libcuda)
+        return 0 ;   /* no CUDA runtime installed — not an error */
+
+    /* ---- resolve the three entry points we need ------------------- */
+    pfn_cudaGetDeviceCount_t fn_count =
+        (pfn_cudaGetDeviceCount_t) dlsym (libcuda, "cudaGetDeviceCount") ;
+    pfn_cudaSetDevice_t fn_set =
+        (pfn_cudaSetDevice_t)      dlsym (libcuda, "cudaSetDevice") ;
+    pfn_cudaMemGetInfo_t fn_mem =
+        (pfn_cudaMemGetInfo_t)     dlsym (libcuda, "cudaMemGetInfo") ;
+
+    if (!fn_count || !fn_set || !fn_mem)
+      { /* Library present but entry points missing — should not happen. */
+        dlclose (libcuda) ;
+        return -1 ;
+      }
+
+    /* ---- query device count --------------------------------------- */
+    int ndev = 0 ;
+    int rc = fn_count (&ndev) ;
+    if (rc != 0 || ndev <= 0)
+      { dlclose (libcuda) ;
+        return (rc == 0) ? 0 : -1 ;
+      }
+
+    /* ---- pick device with most free memory ------------------------ */
+    int    best      = 0 ;
+    size_t best_free = 0 ;
+
+    for (int d = 0 ; d < ndev ; d++)
+      {
+        if (fn_set (d) != 0) continue ;   /* skip inaccessible device */
+        size_t free_bytes = 0, total_bytes = 0 ;
+        if (fn_mem (&free_bytes, &total_bytes) == 0)
+            if (free_bytes > best_free)
+              { best_free = free_bytes ; best = d ; }
+      }
+
+    /* Leave library handle open: process is about to exec() anyway.  */
+    if (bestDevice) *bestDevice = best ;
+    return ndev ;
+
+#endif  /* __linux__ || __APPLE__ */
+}
 /*
  * sa.hardware_info.c
  *

@@ -1182,6 +1182,8 @@ static void export (const void *vp)
 } /* export */
 
 #ifdef USEGPU	  
+static pthread_mutex_t gpu_mutex = PTHREAD_MUTEX_INITIALIZER ;
+
 GPUIndex* GPUIndexNew(const PP* p, BB* bbG)
 {
     int i;
@@ -1219,11 +1221,11 @@ static void wholeWork (const void *vp)
   clock_t  t1, t2, t01, t02 ;
 
 #ifdef USEGPU
-  GPUIndex* gpu_idx = GPUIndexNew(pp, &bbG);
+  /*   GPUIndex* gpu_idx = GPUIndexNew(pp, &bbG); */
 #endif
   
   CW** words = (CW**)malloc(NN * sizeof(CW*));
-  long int* sizes = (long int*)malloc(NN * sizeof(long int));
+  long int *sizes = (long int*)malloc(NN * sizeof(long int));
 
   t01 = clock () ;
 
@@ -1238,11 +1240,6 @@ static void wholeWork (const void *vp)
       saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
 
       if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
-
-      for (ii=0;ii < NN;ii++) {
-          words[ii] = bigArrayp(bb.cwsN[ii], 0, CW);
-          sizes[ii] = bigArrayMax(bb.cwsN[ii]);
-      }
 
       /* sort words */
       for (int k = 0 ; k < NN ; k++)
@@ -1277,20 +1274,34 @@ static void wholeWork (const void *vp)
 		bigArraySort (bb.sms, seedMatchOrder) ;
 	    }
 #else
-	  messcrash ("matchSeedsGPU not yet written, sorry") ;
-	  /*
-	    grab from GPU N, number of records
-	  */
-	  bb->sms = bigArrayHandleCreate (N, SMS, bb->h) ;
-	  /*
-	     grab pointer vp from GPU
-	  */
-	  memcpy (bigArrayp (bb->sms, 0, SMS), vp, N * sizeof (SMS)) ;
-	  bigArrayMax (bb->sms) = N ;
-	  /*
-	    free vp
-	  */
-	  saGPUMatchHits(gpu_idx, words, sizes, NN);
+
+      /* Find max number of matching words to preallocate memory. This is
+       *   overestimated, but prevents memory copy.
+       */
+	  for (int k = 0 ; k < NN ; k++)
+	    {
+	      words[k] = bigArrayp(bb.cwsN[k], 0, CW) ;
+	      sizes[k] = bigArrayMax(bb.cwsN[ k]) ;
+	    }
+
+	  if (1)pthread_mutex_lock (&gpu_mutex) ;
+	  /* find matching seeds */
+	  if (! pp->bbG.gpu_idx)
+	    messcrash ("No target GPU index") ;
+	  long int N = saGPUMatchHits(pp->bbG.gpu_idx, words, sizes, NN) ;
+	  
+	  for (int k = 0 ; k < NN ; k++)
+	    { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ;}
+	  
+      /*
+	allocate host memory for seed matches, number of records
+      */
+	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
+	  bigArrayMax(bb.sms) = N ;
+
+      /* copy matching seeds to the host */
+	  saGPUMatchHitsCopyToHost(pp->bbG.gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
+	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
 
@@ -1304,8 +1315,8 @@ static void wholeWork (const void *vp)
       t01 = t02 ;
     }
 
-#ifdef USEGPU
-  GPUIndexFree(gpu_idx);
+#ifdef USEGPU777x
+  GPUIndexFree(pp->bbG.gpu_idx);
 #endif
   
     if (words) {
@@ -1692,20 +1703,25 @@ int main (int argc, const char *argv[])
 	}
     }}
 
+  
 #ifdef __linux__
   /* ==================== LINUX ONLY ==================== */
   
-  /******************** NUMA harware  optimizer ******************************************/
-  /******************** pin the threads to the least used node ***************************/
-  /* numa (non unifirm mmory access) harware are composed of several nodes, each with many CPUs
-   * moving data across nodes is slow and costly
+  /******************** Hardware optimizer: NUMA + GPU ******************************************/
+  /******************** Pin threads to least-used node; select GPU binary if available **********/
+  /*
+   * NUMA (Non-Uniform Memory Access) machines have several nodes, each with many CPUs.
+   * Moving data across nodes is slow and costly.
    * This module finds the node with the least number of running threads
-   * and relaunches the program pinned to that node
-   * adding the command line parameter --numactl to prevent recursion
+   * and relaunches the program pinned to that node,
+   * adding --numactl to the command line to prevent recursion.
    *
-   * This system could be useful in other C programs using multithreading and large memory
-   */   
-
+   * If a CUDA-capable GPU is detected, magic2_gpu is spawned instead of magic2,
+   * passing --gpu-device=N to select the device with the most free memory.
+   * This respawn happens even on single-node machines where NUMA binding is not needed.
+   *
+   * This system could be useful in other C programs using multithreading and large memory.
+   */
   if (! p.debug &&
       ! getCmdLineBool (&argc, argv, "--numactl")  &&
       !  (getenv("INVOCATION_NOTIFICATIONS") &&
@@ -1713,28 +1729,43 @@ int main (int argc, const char *argv[])
       isExecutableInPath ("numactl")   /* see w1/utils.c */
       )
     {
-      int node = saGetBestNumaNode () ;   // ~100 ms
-      if (node >= 0) /* else single-node machine, fall through */
+      int node    = saGetBestNumaNode () ;   /* ~200 ms; -1 on single-node machine */
+      int bestDev = -1 ;
+      int ngpu    = saGetGpuInfo (&bestDev) ;
+
+      if (node >= 0 || ngpu > 0)
 	{
-	  // build "numactl --cpunodebind=N --membind=N ./prog ..." 
-	  // and re-exec via system() or execv()
+	  /* Choose binary: magic2_gpu if GPU detected and binary is present,
+	   * otherwise magic2 (i.e. ourselves).                              */
+	  const char *binary = argv[0] ;
+	  if (ngpu > 0 && isExecutableInPath ("magic2_gpu"))
+	    binary = "magic2_gpu" ;
 
 	  vTXT txt = vtxtHandleCreate (h) ;
-	  vtxtPrintf (txt, "/usr/bin/numactl  --cpunodebind=%d --membind=%d ", node, node) ;
-	  /* echo all args */
-	  for (int i = 0 ; i < argc ; i++)
-	    vtxtPrintf (txt, " %s " , argv[i]) ;
-	  /* avoid recursion */
-	  vtxtPrintf (txt, " --numactl ") ;
 
-	  /* launch */
+	  /* NUMA binding — always apply when node >= 0, even for GPU runs. */
+	  if (node >= 0)
+	    vtxtPrintf (txt, "/usr/bin/numactl --cpunodebind=%d --membind=%d ", node, node) ;
+
+	  /* Binary and all original arguments.                             */
+	  vtxtPrintf (txt, "%s", binary) ;
+	  for (int i = 1 ; i < argc ; i++)
+	    vtxtPrintf (txt, " %s", argv[i]) ;
+
+	  /* Prevent recursion.                                             */
+	  vtxtPrintf (txt, " --numactl") ;
+
+	  /* Tell magic2_gpu which device to use.                           */
+	  if (ngpu > 0 && bestDev >= 0)
+	    vtxtPrintf (txt, " --gpu-device=%d", bestDev) ;
+
 	  fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 	  return system (vtxtPtr (txt)) ;
 	}
-      }
+    }
 #endif  /* __linux__ */
   /* This part will always execute */
-  
+
   /************  debugging modules, ignore ****************/
 
   getCmdLineText (h, &argc, argv, "-o", &(p.outFileName)) ;
@@ -2191,6 +2222,7 @@ int main (int argc, const char *argv[])
       
       /* The genome parsers start immediately */
       p.agent = nAgents ;
+      p.bbG.gpu_idx = 0 ;
       wego_go (saTargetIndexGenomeParser, &p, PP) ;
       /* The load regulator maintains --nB data-blocks in the pipeline */
       wego_go (loadRegulator, &p, PP) ;
@@ -2239,8 +2271,9 @@ int main (int argc, const char *argv[])
       /* wait untill the genome is ready */
       channelGet (p.gmChan, &p.bbG, BB) ;
       p.genomeLength = p.bbG.genomeLength ;
+
       
-      if (! p.bbG.cwsN[0])
+      if (! p.bbG.cwsN[0] && ! p.bbG.gpu_idx)
 	messcrash ("matchSeeds received no target words") ;
       saGffBinaryParser (&p) ;
       
@@ -2300,6 +2333,10 @@ int main (int argc, const char *argv[])
     }
 
   int nDone = 0 ;
+#ifdef USEGPU
+  /* GPUIndex* gpu_idx = GPUIndexNew(&p, &(p.bbG)); */
+#endif
+  
   while (channelGet (p.doneChan, &bb, BB))
     {
       long int n = (bb.hits ? bigArrayMax (bb.hits) : 0) ;

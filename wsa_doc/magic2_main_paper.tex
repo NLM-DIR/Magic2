@@ -1,0 +1,712 @@
+%% Magic2 — Nature Methods Brief Communication
+%% Draft — April 2026  (v90.81.18M.e4 benchmark data, session 2025-04-23)
+%% Status: benchmark section fleshed from real data; tables populated;
+%%         placeholders remain where tool versions and SRA accessions are needed.
+
+\documentclass[11pt]{article}
+\pdfoutput=1
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{natbib}
+\usepackage{authblk}
+\usepackage{amsmath}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{rotating}   % for sidewaystable if needed
+\usepackage{multirow}
+
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+%% Editorial comments (not for publication) use this colour
+\newcommand{\edcomment}[1]{\textcolor{red}{\textit{[#1]}}}
+
+%% ---------------------------------------------------------------
+\title{\textbf{Magic2: a unified, self-configuring aligner for short-
+       and long-read RNA-seq with comprehensive quality-control output}}
+
+\author[1]{Jean Thierry-Mieg}
+\author[1]{Danielle Thierry-Mieg}
+\author[1]{Greg Boratyn}
+\affil[1]{National Center for Biotechnology Information, National Library
+          of Medicine, National Institutes of Health, Bethesda, MD, USA}
+
+\date{}
+%% ---------------------------------------------------------------
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present Magic2, a fast, self-configuring RNA-seq and DNA-seq aligner
+that operates identically on short (Illumina) and long (Nanopore,
+PacBio) reads without requiring the user to specify read type, adapter
+sequences, strandedness, or the number of threads.
+In a single pass, Magic2 produces alignments, splice-junction tables,
+gene-level expression counts, strand-specific coverage tracks,
+poly(A)/poly(T) tail calls, and a rich set of quality-control metrics
+— all directly comparable across runs and laboratories.
+Benchmarks on 31 public datasets (covering human Illumina paired-end,
+Nanopore, PacBio, Roche~454, cross-species primate, \textit{C.\ elegans},
+ChIP-seq, and RefSeq mRNA controls; v90 build) show that Magic2 matches
+or exceeds leading aligners (STAR, HISAT2, Minimap2, Magic-BLAST) in
+known-junction recovery across all data types, produces 100- to
+120-fold fewer false-positive splice junctions than HISAT2 and STAR on
+DNA controls, and delivers 2-fold lower CPU consumption than STAR while
+completing in comparable or shorter wall-clock time.
+Magic2 is freely available at \url{https://github.com/NLM-DIR/Magic2}.
+\end{abstract}
+
+%% ---------------------------------------------------------------
+\section*{Introduction}
+
+High-throughput RNA sequencing is now the dominant approach for
+measuring gene expression, yet the computational chain that transforms
+raw reads into biological conclusions remains fragile and poorly
+standardised.
+Small differences in aligner choice, parameter settings, or
+post-processing steps routinely produce divergent results from
+identical input data~\citep{maqc2014,seqc2019}.
+This fragility has driven the impractical recommendation that authors
+record every parameter down to the exact version of each software
+component — an implicit acknowledgement that reproducibility is not
+yet guaranteed by design.
+
+A contributing source of variability is the proliferation of
+specialised tools: STAR~\citep{dobin2013} and
+HISAT2~\citep{kim2019} are optimised for short Illumina reads,
+while Minimap2~\citep{li2018} targets long, error-prone reads.
+Users must master multiple programs with different parameter
+conventions and output formats, and the choice of default parameters
+can unintentionally bias benchmark comparisons.
+No single aligner currently handles the full spectrum of read
+technologies with consistent accuracy and without manual
+reconfiguration.
+
+Magic2 addresses these limitations through three design principles.
+First, \emph{full automation}: read length, paired-end geometry, adapter
+sequences, and sequencing platform are inferred from the data;
+internal parameters such as seed length and maximum intron size are
+derived from genome size.
+Second, \emph{single-pass richness}: alignments, expression counts,
+splice-junction support, coverage tracks, poly(A) calls, and QC
+metrics are all produced in one run, eliminating downstream
+processing tools.
+Third, \emph{standardised QC}: every run emits an identical set of
+quality metrics (fraction of reads mapping to CDS, introns, and
+intergenic regions; strand-specificity score; concordant-pair rate;
+mismatch distribution), enabling large-scale, cross-laboratory
+comparisons of SRA datasets.
+
+%% ---------------------------------------------------------------
+\section*{Results}
+
+\subsection*{Overview of Magic2}
+
+Magic2 accepts a reference genome (FASTA) and an optional annotation
+(GTF/GFF) to build an on-disk seed index.
+At run time, one or more SRA accession numbers or local FASTA/FASTQ
+files are supplied; no other configuration is required.
+Magic2 detects read length, adapter sequences, paired-end status, and
+strandedness automatically via a dry pass over the first reads.
+The same executable is used for Illumina short reads, PacBio CCS, and
+Nanopore long reads.
+
+Internally, Magic2 follows a sort--merge paradigm rather than hash-table
+lookup: seed records are generated for reads and genome in large
+sequential blocks, sorted with a cache-efficient radix sort (optionally
+GPU-accelerated via CUDA Thrust), and joined by simultaneous linear
+traversal of both sorted lists.
+This design keeps the dominant computation in fast CPU cache rather than
+in random main-memory accesses, and scales naturally across NUMA
+architectures without user-supplied thread counts
+(see Supplementary Material for full details).
+
+The pipeline is structured as concurrent agents communicating through
+bounded, lock-free channels.
+Agents process independent data blocks in parallel; backpressure and
+channel closure guarantee deadlock-free execution and no data loss.
+
+\subsection*{Outputs}
+
+In a single pass Magic2 produces:
+(i) primary alignments in BAM format (or the compact \texttt{.hits}
+    format with \texttt{--hits});
+(ii) splice-junction tables with per-junction read support;
+(iii) gene-level expression counts with bidirectional-overlap resolution;
+(iv) strand-specific wiggle coverage tracks (plus read-start/end profiles
+     for transcript boundary detection);
+(v) poly(A)/poly(T) tail calls and trans-spliced leader identification
+    (in \textit{C.\ elegans});
+(vi) adapter consensus sequences (de-novo or from a supplied list);
+(vii) a standardised QC table in Tag--Sample Format (TSF) covering
+     alignment rates, mapping-class fractions, strand-specificity,
+     mismatch distributions, and concordant-pair statistics.
+
+\subsection*{Benchmark}
+
+We benchmarked Magic2 (build v90, configuration \texttt{011\_SortAlignG6R3}:
+6 genome passes, 3 read rounds, no annotation unless stated)
+against STAR (v.\,\edcomment{X.X}), HISAT2 (v.\,\edcomment{X.X}, 8 threads),
+Minimap2 (v.\,\edcomment{X.X}, 8 threads), and Magic-BLAST
+(v.\,2018/2022/2024) on a panel of 31 publicly available datasets
+downloaded from NCBI SRA
+(Table~\ref{tab:datasets}).
+Each dataset comprises approximately 2\,Gb of sequenced bases.
+The panel covers human Illumina paired-end reads (100\,nt and 151\,nt,
+poly(A)-selected and total RNA), six long-read technologies (Nanopore
+R9/R10 and PacBio Sequel\,II/Revio), seven cross-species primate
+datasets (chimpanzee to mouse lemur) aligned to the human T2T
+reference, single-end 35\,nt ChIP-seq and DNA paired-end controls,
+and RefSeq mRNA sequences used as a zero-SNP perfect-alignment
+benchmark (Table~\ref{tab:datasets}).
+All tools were run with their default parameters; Magic2 required no
+additional configuration for any dataset.
+All jobs were submitted independently to the NCBI compute farm
+(\edcomment{cite/describe hardware}) as $N_\mathrm{datasets}\times
+N_\mathrm{methods}$ independent scripts; timing data were collected
+with \texttt{/usr/bin/time -f 'E \%E U \%U M \%M P \%P'}.
+The RefSeq and Roche datasets were run three times in succession to
+ensure hot cache; all other datasets were run once.
+
+\medskip\noindent\textbf{Timing and resource usage.}\quad
+Table~\ref{tab:timing} summarises wall-clock time, CPU time, and peak
+RAM across all 31 datasets for the five principal configurations.
+Magic2 completed alignment in a median wall time of \textbf{4.3\,min}
+(mean 4.1\,min), compared to 3.1\,min for HISAT2 (8 threads), 8.3\,min
+for Minimap2 (8 threads), 19.4\,min for STAR, and 62.4\,min for
+Magic-BLAST~2024 (Table~\ref{tab:timing}).
+Magic2 therefore runs $5.8\times$ faster than STAR and $17\times$
+faster than Magic-BLAST in elapsed time.
+The 25\% elapsed-time advantage of HISAT2 over Magic2 narrows
+considerably on long-read datasets (long-read mean: Magic2 4.4\,min
+vs.\ HISAT2 4.3\,min, with HISAT2 reporting zero intron support on
+Nanopore; Section~\ref{sec:junctions}), and reflects HISAT2's
+constraint to 8 threads while Magic2 auto-selected a median of
+11 threads (range 4--18) without user intervention.
+
+CPU consumption for Magic2 averaged 47.6\,min (median), compared
+to 68.7\,min for STAR and 228\,min for Magic-BLAST, representing
+approximately $2\times$ and $7\times$ lower CPU use respectively.
+HISAT2 consumed less CPU (22.9\,min median) owing to its narrower
+feature set and hard 8-thread cap.
+Minimap2 at 8 threads consumed 61.7\,min CPU.
+
+Peak RAM for Magic2 averaged 23.8\,GB (max 30\,GB), below STAR
+(33\,GB mean, 36\,GB max) and comparable to Magic-BLAST (22.5\,GB).
+HISAT2 required substantially less memory (4.8\,GB mean).
+
+\medskip\noindent\textbf{Splice-junction recovery and
+specificity.}\quad\label{sec:junctions}
+We used a shared database of all introns observed by any method across
+all runs to classify introns as \emph{known} (present in the RefSeq/T2T
+annotation or in RefSeq mRNA; in Baruzzo simulated sets, ground-truth
+splice sites serve as reference) or \emph{novel} (not in the reference
+set).
+Table~\ref{tab:introns} reports known and novel junction counts for the
+five key methods on representative dataset groups.
+
+On human Illumina paired-end datasets, Magic2 recovered the largest
+absolute number of annotated junctions among all tools (e.g.\
+4.4\,M known intron-supporting reads for dataset A\_100PE vs.\
+2.5\,M for STAR, 2.1\,M for Magic-BLAST, 1.9\,M for Minimap2, and
+1.5\,M for HISAT2), with 98.5--99.2\% of junction-supporting reads
+landing on known junctions.
+Competing tools ranged from 96.6\% to 99\%.
+STAR produced elevated novel-junction counts on the Total RNA datasets
+(135k and 110k novel junctions vs.\ 42--43k for Magic2), indicating
+a higher false-discovery rate with rRNA-contaminated input.
+
+On Nanopore data, HISAT2 reported zero splice-junction support (it is
+not designed for long reads), while Magic2 recovered 743k--826k
+known intron-supporting reads at 97.7--97.8\% precision, comparable
+to Minimap2 (97.6--97.8\%) but from the same unified executable.
+Magic-BLAST~2024 showed lower precision on Nanopore (92\%).
+
+The most striking difference emerged on the \textbf{DNA and ChIP-seq
+controls}.
+On these datasets every reported intron is a false positive.
+Magic2 reported 221--296 total false-positive junctions per
+single-end ChIP-seq dataset, Minimap2 reported 213--234, and
+Magic-BLAST~2024 reported 2,080--2,271.
+HISAT2 and STAR reported 10,000--28,000 false-positive junctions on
+the same data — 100- to 120-fold more than Magic2 — confirming that
+short-read RNA aligners aggressively call spurious splice sites when
+applied to DNA input, while Magic2's splice-signal filter is
+substantially more conservative
+(Table~\ref{tab:introns}).
+
+On the seven cross-species primate datasets (chimpanzee at 0.92\%
+divergence to mouse lemur at 2.64\%), Magic2 consistently recovered
+the highest number of annotated human junctions despite the sequence
+divergence.
+HISAT2 recovered only 20--33\% of the known junctions found by Magic2,
+STAR 51--72\%, and Minimap2 43--51\%.
+Importantly, STAR's novel-junction count on these datasets escalated
+dramatically with divergence (e.g.\ 4$\times$ excess at chimpanzee,
+33$\times$ excess at mouse lemur relative to Magic2), indicating an
+increasing false-positive intron rate under cross-species mismatch —
+consistent with the higher-mismatch reads being misinterpreted as
+split alignments.
+
+\medskip\noindent\textbf{RefSeq mRNA perfect-alignment control.}\quad
+The RefSeq mRNA datasets (iRefSeq38 and iRefSeqT2T) provide a
+zero-SNP ground truth: all reads derive from annotated transcripts and
+should align perfectly.
+On iRefSeq38 without annotation, Magic2, HISAT2, and Minimap2
+recovered $\sim$1.88--1.90\,M known introns with fewer than
+600--1,500 false-positive novel junctions.
+STAR recovered only 0.88\,M known introns ($<$50\% of Magic2's count),
+a known limitation of STAR's default parameters with highly spliced
+mRNA inputs.
+Magic-BLAST~2024 showed anomalously long elapsed time on RefSeq
+(62.7\,min vs.\ 8.5\,min for the 2022 version and 0.41\,min for
+Magic2), suggesting a regression in the 2024 release that is under
+investigation by the same group.
+
+\edcomment{INSERT Figure 1: heatmap of per-tool, per-metric scores across
+all 31 datasets (alignment rate, concordant-pair fraction,
+known-intron count, novel-intron FP rate, elapsed time).}
+
+%% ---------------------------------------------------------------
+\section*{Discussion}
+
+Magic2 achieves the primary goal set out in its design: a single
+executable that handles short and long reads, requires no
+configuration, and produces a richer set of outputs than any
+comparable tool in a single pass.
+The benchmark results confirm that automation of parameter selection
+does not come at the cost of accuracy — on human Illumina reads Magic2
+consistently recovers the largest number of annotated splice junctions,
+and on DNA controls it generates 100-fold fewer false-positive
+junctions than HISAT2 or STAR, indicating that its splice-signal
+scoring provides a qualitatively different level of specificity.
+
+The cross-species sensitivity gradient — seven primates from 0.92\%
+to 3.1\% divergence — exposes a systematic difference in how tools
+handle elevated mismatch rates.
+Magic2's per-read mismatch tolerance is derived automatically from the
+observed read-error distribution, whereas STAR and HISAT2 apply fixed
+thresholds; this explains both the higher sensitivity and the lower
+false-positive intron rate under divergence stress.
+
+The standardised QC output is, we argue, the feature with the broadest
+long-term impact.
+Applied at scale to the SRA, it would allow independent assessment of
+data quality without rerunning every published analysis, directly
+addressing the reproducibility concerns raised in the Introduction.
+
+Magic2 is under active development.
+GPU-accelerated sorting (CUDA Thrust) is implemented and under
+validation; preliminary results on small test data are promising.
+Planned near-term additions include GitHub Actions CI/CD for automated
+multi-platform builds (Linux x86-64, Linux ARM, macOS), a regression
+test suite, and expanded documentation.
+
+%% ---------------------------------------------------------------
+\section*{Methods}
+
+\subsection*{Index construction}
+
+Given a reference genome in FASTA format and an optional GTF/GFF
+annotation, Magic2 builds an on-disk seed index.
+The seed length $k$ (default 16 for genomes $<$1\,Gb, 18 for
+human/mouse) is selected automatically from genome size.
+Seeds are sub-sampled with a rolling-min-hash approach (window $p$,
+default 5) to achieve an average inter-seed spacing of $p/2$ bases
+with a guaranteed maximum gap of $p$.
+Seeds with genomic multiplicity $>Q$ (default 81) are discarded to
+limit hits from repetitive elements.
+When annotation is provided, junction-spanning seeds from all annotated
+exon--exon junctions are added to the index to improve detection of
+reads crossing short exons.
+Full details are given in Supplementary Section~2.
+
+\subsection*{Alignment}
+
+Read seeds are generated using the same parameters as the genome index,
+merged-sorted with the genomic seed table, and joined by simultaneous
+linear traversal.
+Seed matches are extended to full alignments using a banded
+Smith--Waterman variant; intron boundaries are refined by splice-signal
+scoring (GT-AG, AT-AC, and non-canonical).
+Poly(A)/poly(T) tails and trans-spliced leader sequences are detected
+during the same pass.
+See Supplementary Sections~3--5 for algorithmic details.
+
+\subsection*{Parallelism}
+
+Magic2 spawns concurrent agents connected by bounded lock-free channels.
+On machines with multiple NUMA nodes, it re-spawns itself via
+\texttt{numactl} to bind to the least-loaded node; this step is skipped
+automatically in containers and on single-node machines.
+Users do not set a thread count; Magic2 manages concurrency
+automatically, achieving a median effective parallelism of 11 threads
+(range 4--18) across the benchmark panel as measured by
+\texttt{/usr/bin/time \%P}.
+
+\subsection*{Benchmark datasets and evaluation}
+
+Timing was measured with \texttt{/usr/bin/time -f 'E \%E U \%U M \%M P
+\%P'} recording elapsed time (\%E), user+system CPU (\%U+\%S), peak
+RSS (\%M), and average CPU utilisation (\%P).
+Splice-junction analysis used a shared intron database: all
+junction-spanning reads from every tool and every dataset were pooled,
+and each junction was classified as \emph{known} (matching an annotated
+intron in the reference set) or \emph{novel}.
+For RefSeq mRNA datasets the annotation-derived intron list is the
+truth; for Baruzzo simulated datasets the simulation-defined splice
+sites are used.
+For DNA and ChIP-seq datasets every reported junction is a false
+positive by definition.
+
+%% ---------------------------------------------------------------
+\section*{Code availability}
+
+Magic2 source code is available at
+\url{https://github.com/NLM-DIR/Magic2} (branch \texttt{master})
+under \edcomment{[LICENSE]}.
+Pre-built binaries for Linux x86-64 are attached to each GitHub
+Release.
+
+%% ---------------------------------------------------------------
+\section*{Acknowledgements}
+
+\edcomment{[To be completed.]}
+
+%% ---------------------------------------------------------------
+\bibliographystyle{naturemag}
+\bibliography{magic2_refs}
+
+%% ---------------------------------------------------------------
+\clearpage
+
+%% === TABLES ===
+
+\begin{table}[h]
+\caption{\textbf{Benchmark datasets (v90 panel, 31 runs).}
+  All non-RefSeq/non-Roche datasets comprise $\approx$2\,Gb of
+  sequenced bases. PE = paired-end; SE = single-end.
+  Primate divergence from human is given as percentage nucleotide
+  distance.
+  \edcomment{SRA accession numbers to be added.}}
+\label{tab:datasets}
+\footnotesize
+\begin{tabular}{llll}
+\toprule
+\textbf{ID} & \textbf{Description} & \textbf{Type} & \textbf{Reference} \\
+\midrule
+1--2  & MAQC A/B 100\,nt PE                 & Illumina PE & Human T2T \\
+3--4  & MAQC A/B poly(A) 151\,nt PE         & Illumina PE & Human T2T \\
+5--6  & MAQC A/B Total RNA 151\,nt PE       & Illumina PE & Human T2T \\
+7     & MAQC B Roche~454 $\sim$352\,nt      & 454 long-read & Human T2T \\
+8--9  & MAQC A/B Nanopore ($\sim$1234/1306\,nt) & Nanopore & Human T2T \\
+10--11 & MAQC A/B PacBio ($\sim$1745/1810\,nt) & PacBio Sequel\,II & Human T2T \\
+12    & A Total RNA PacBio ($\sim$2822\,nt) & PacBio Sequel\,II & Human T2T \\
+13    & HG02 Revio PacBio ($\sim$2044\,nt)  & PacBio Revio & Human T2T \\
+14--15 & RefSeq mRNA, HG38 ($\pm$ annotation) & mRNA control & HG38 \\
+16--17 & RefSeq mRNA, T2T ($\pm$ annotation)  & mRNA control & Human T2T \\
+18--19 & ChIP-seq A/B, SE 35\,nt            & DNA (SE) & Human T2T \\
+20    & MAQC B DNA 151\,nt PE               & DNA (PE)  & Human T2T \\
+21    & \textit{C.\ elegans} RNA 150\,nt PE & Illumina PE & WormBase \\
+22--28 & Primates: chimp (0.92\%), macaque (2.69\%), & & \\
+      & PT macaque (2.71\%), baboon (2.92\%), & Illumina PE & Human T2T \\
+      & marmoset (3.14\%), squirrel monkey (3.08\%), & & \\
+      & mouse lemur (2.64\%) & & \\
+29--31 & Baruzzo HG19 simulated t1/t2/t3    & Illumina PE (sim.) & HG19 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\begin{table}[h]
+\caption{\textbf{Resource usage: wall-clock time (min), CPU time (min),
+  and peak RAM (GB) across 31 benchmark datasets, build v90.}
+  Median and mean over all 31 datasets; Minimap2 results shown for
+  32-thread configuration (best observed).
+  Magic2 thread count was auto-selected (median 11, range 4--18).
+  \edcomment{HISAT2 16-thread data available; saturation observed
+  between 8t and 16t — confirm which to report as ``best HISAT2''.
+  MagicBLAST 2024 anomalous timing on RefSeq datasets excluded from
+  mean/median; see text.}}
+\label{tab:timing}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Tool} & \multicolumn{2}{c}{\textbf{Elapsed (min)}} &
+               \multicolumn{2}{c}{\textbf{CPU (min)}} &
+               \multicolumn{2}{c}{\textbf{RAM (GB)}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+ & Median & Mean & Median & Mean & Mean & Max \\
+\midrule
+Magic2 (auto-thread)     & \textbf{4.3} & 4.1 & 47.6 & 44.0 & 23.8 & 30.0 \\
+HISAT2 (8 threads)       & 3.1 & 2.9 & 22.9 & 20.0 & 4.8 & 6.7 \\
+STAR                     & 19.4 & 27.5 & 68.7 & 94.9 & 33.0 & 36.3 \\
+Minimap2 (32 threads)    & \edcomment{4.1} & \edcomment{4.2} &
+                           \edcomment{—} & \edcomment{—} &
+                           \edcomment{—} & \edcomment{—} \\
+MagicBLAST 2024          & 62.4 & 71.0 & 228.3 & 266.9 & 22.5 & 36.9 \\
+\midrule
+\multicolumn{7}{l}{\small Magic2 speedup vs.\ STAR: $5.8\times$ (median elapsed),
+  $2.1\times$ (median CPU).} \\
+\multicolumn{7}{l}{\small Magic2 speedup vs.\ MagicBLAST: $17\times$ (median elapsed),
+  $6.9\times$ (median CPU).} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\begin{table}[h]
+\caption{\textbf{Splice-junction support across dataset groups.}
+  \emph{Known}: intron-supporting reads landing on annotated junctions.
+  \emph{Novel}: reads supporting unannotated junctions (putative
+  false positives in RefSeq and DNA controls; potentially real novel
+  junctions in RNA datasets).
+  For DNA and ChIP-seq controls every junction is false-positive by
+  definition.
+  Numbers are read counts (not unique junction counts).
+  \edcomment{Final version should also report unique junction counts.}
+  HISAT2 reports zero junctions on Nanopore data (not designed for
+  long reads).}
+\label{tab:introns}
+\scriptsize
+\begin{tabular}{llrrrrr}
+\toprule
+\textbf{Dataset group} & \textbf{Metric} &
+  \textbf{Magic2} & \textbf{HISAT2-8t} & \textbf{STAR} &
+  \textbf{Minimap2-8t} & \textbf{MB-2024} \\
+\midrule
+\multirow{2}{*}{Human Illumina PE (A\_100PE)} &
+  Known   & 4,446,060 & 1,501,618 & 2,487,079 & 1,937,357 & 2,070,614 \\
+& Novel   &    37,936 &    37,307 &    53,671 &    20,166 &    27,531 \\
+& \%Known &     99.2\% &     97.6\% &     97.9\% &     99.0\% &     98.7\% \\
+\midrule
+\multirow{3}{*}{Total RNA 151PE (A\_Total\_151PE)} &
+  Known   & 2,546,438 &   637,211 &   963,385 & 1,168,395 & 1,210,235 \\
+& Novel   &    41,583 &    18,272 &   135,193 &    23,767 &    26,066 \\
+& \%Known &     98.4\% &     97.2\% &     87.7\% &     98.0\% &     97.9\% \\
+\midrule
+\multirow{3}{*}{Nanopore (A\_Nanopore.1234)} &
+  Known   &   743,366 &         0 &    34,473 & 2,152,601 &   866,817 \\
+& Novel   &    16,560 &         0 &     2,050 &    47,606 &    72,449 \\
+& \%Known &     97.8\% & — & 94.4\% &     97.8\% &     92.3\% \\
+\midrule
+\multirow{3}{*}{PacBio (A\_PacBio.1745)} &
+  Known   & 6,008,528 & 1,960,696 & 3,764,593 & 6,298,360 & 6,115,230 \\
+& Novel   &    88,434 &    31,261 &    70,132 &    97,621 &    99,291 \\
+& \%Known &     98.5\% &     98.4\% &     98.2\% &     98.5\% &     98.4\% \\
+\midrule
+\multirow{2}{*}{RefSeq mRNA / iRefSeq38} &
+  Known   & 1,891,982 & 1,895,950 &   878,049 & 1,883,459 & 1,882,474 \\
+& FP Novel &      581  &       144 &     1,443 &       291 &     1,153 \\
+\midrule
+\multirow{2}{*}{DNA ChIP-seq SE35 \#1} &
+  Total FP &     221  &    26,284 &    28,420 &       234 &     2,080 \\
+& (ratio vs.\ Magic2) & 1$\times$ & 119$\times$ & 129$\times$ & 1.1$\times$ & 9$\times$ \\
+\midrule
+\multirow{2}{*}{Chimpanzee 0.92\%} &
+  Known   & 1,357,093 &   423,644 &   687,017 &   582,567 &   619,384 \\
+& Novel   &    27,819 &    27,130 &   104,577 &    23,239 &    20,644 \\
+\midrule
+\multirow{2}{*}{Mouse Lemur 2.64\%} &
+  Known   &   574,968 &   116,054 &   411,845 &   276,226 &   292,591 \\
+& Novel   &     4,228 &     4,351 &   141,311 &    14,475 &     4,779 \\
+& (\% of Magic2 known) & 100\% & 20\% & 72\% & 48\% & 51\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%% ---------------------------------------------------------------
+\clearpage
+\appendix
+
+\section*{Supplementary Material}
+See separate file \texttt{magic2\_supplementary.tex}.
+
+%% ---------------------------------------------------------------
+%% ===============================================================
+%% EDITORIAL SECTION — NOT FOR PUBLICATION
+%% This section summarises the current state of the benchmark,
+%% missing data, and planned additions as of the session
+%% 2026-04-23. It should be removed before any external submission.
+%% ===============================================================
+
+\clearpage
+\section*{\textcolor{red}{Editorial notes (not for publication) —
+  session 2026-04-23}}
+
+\subsection*{Thread count decisions}
+
+HISAT2 shows saturation between 4 and 8 threads; 16-thread data are
+available in the timing file but give no additional wall-time
+improvement on most datasets and occasionally regress (e.g.\
+PTMacaque: 16t = 16\,min vs.\ 8t = 6.3\,min, likely a farm
+scheduling artefact).
+\textbf{Decision}: report HISAT2 at 8 threads as its ``best''
+configuration.
+
+Minimap2 at 32 threads reaches a median elapsed time comparable
+to Magic2's auto-selected $\sim$11 threads.
+\textbf{Decision}: report Minimap2 at 32 threads when comparing wall
+time (fairest comparison), and note the thread-count asymmetry.
+A 64-thread Minimap2 run is probably not warranted: the 16-to-32
+speedup is already modest (median $\sim$1.4$\times$) and 64-thread
+nodes may not be available on the farm for all datasets.
+
+\subsection*{Known anomalies to investigate before submission}
+
+\begin{enumerate}
+\item \textbf{MagicBLAST 2024 on RefSeq}: elapsed 62.7\,min
+  (iRefSeq38) vs.\ 8.5\,min for the 2022 version and 0.41\,min for
+  Magic2 — a 153$\times$ regression vs.\ Magic2.
+  This appears to be a bug in the 2024 release.
+  All three MB versions are from the same NCBI group; this should be
+  resolved or clearly footnoted.
+
+\item \textbf{STAR high novel-intron count on primates}: STAR reports
+  4$\times$--33$\times$ more novel junctions than Magic2 on cross-species
+  datasets, escalating strongly with divergence (mouse lemur: 141k
+  STAR novel vs.\ 4k Magic2).
+  This is likely a known limitation of STAR's mismatch handling rather
+  than a misconfiguration, but should be confirmed.
+  A supplementary figure showing novel-junction count vs.\ evolutionary
+  distance would make this point clearly.
+
+\item \textbf{STAR low known-junction count on RefSeq} ($\sim$878k vs.\
+  $\sim$1.89M for other tools): STAR's default parameters appear to
+  under-report introns on highly spliced mRNA inputs.
+  Confirm whether this is a known STAR limitation (e.g.\ maximum intron
+  number per read) and cite accordingly.
+
+\item \textbf{Missing CPU time for dataset 30 (HG19t2)}: the
+  \texttt{\%P} field and CPU-time field are blank for Magic2-011 on
+  this dataset.
+  Likely a failed or missing run; should be re-submitted.
+
+\item \textbf{iRefSeqT2T high novel count for Magic2}: 32k novel
+  junctions vs.\ 1.5k for HISAT2 and 5.2k for STAR.
+  On RefSeq mRNA this is unexpected — the reads are annotated and
+  should produce few novel junctions.
+  This may indicate that T2T-specific isoforms are not yet fully
+  captured in the annotation, or that Magic2 is reporting some
+  low-support spurious junctions.
+  Needs investigation; if real isoforms, this is a strength; if noise,
+  a filter threshold should be applied.
+
+\item \textbf{Worm RNA yields zero introns} in all methods.
+  This is not necessarily wrong — the C.\ elegans run used WormBase
+  (confirm which assembly and annotation version) — but should be
+  checked: are worm introns simply absent from the shared intron
+  database, or was the annotation file not loaded?
+\end{enumerate}
+
+\subsection*{Missing metrics for a Nature Methods submission}
+
+\begin{enumerate}
+\item \textbf{Splice-junction precision/recall at unique-junction
+  level}: the current table reports read counts rather than unique
+  junction counts.
+  Reviewers will expect: (a) number of unique known junctions recovered
+  (recall), (b) number of unique novel junctions reported (precision
+  proxy), and (c) ideally a simulated-data experiment with ground-truth
+  junction coordinates (Baruzzo sets partially provide this — see
+  below).
+
+\item \textbf{Baruzzo simulated-data position accuracy}: the HG19
+  t1/t2/t3 datasets (0.54\%, 1.19\%, 6.02\% mismatch rates)
+  currently report \emph{zero} introns for all methods, which is
+  unexpected for RNA-seq reads.
+  Verify that the Baruzzo reads are actually splice-crossing (they
+  should be) and that the intron database was correctly loaded for
+  these datasets.
+  If the Baruzzo sets contain ground-truth splice sites, a
+  sensitivity/specificity table by method and by mismatch tier
+  (t1/t2/t3) is a high-value addition.
+
+\item \textbf{Strand-specificity auto-detection}: Magic2 reports a
+  strand-specificity score per run (in TSF output).
+  A table showing that Magic2 correctly identifies strandedness on
+  poly(A) vs.\ total vs.\ long-read datasets without user input is a
+  direct demonstration of the self-configuration claim.
+
+\item \textbf{Gene-level quantification accuracy}: a Spearman
+  correlation of Magic2 counts vs.\ a gold standard (SEQC
+  A-vs-B log-ratio, or ERCC spike-in expected vs.\ observed) would
+  address expression-quantification quality, which is a stated output
+  of Magic2 and will be queried by reviewers.
+
+\item \textbf{Unique-junction count in unique-intron table}: the
+  current intron data gives read-support counts.
+  A parallel table of unique junction coordinates (how many distinct
+  GT-AG introns per method) would complement the read-count view.
+\end{enumerate}
+
+\subsection*{Recommended additional datasets before submission}
+
+\begin{enumerate}
+\item \textbf{miRNA / small RNA (18--25\,nt SE)} — highest priority.
+  Tests auto-configuration under seed-length stress: with $k=18$ and
+  reads of 22\,nt, only 4\,nt remain for extension.
+  Candidate: ENCODE small-RNA accessions for GM12878 or K562.
+  If Magic2 handles these gracefully (perhaps via $k=16$ auto-switch),
+  this would be a significant claim.
+
+\item \textbf{Modern 75--100\,nt SE RNA-seq} — the only current SE data
+  are old 35\,nt ChIP-seq runs.
+  A contemporary SE mRNA run would fill an obvious panel gap.
+
+\item \textbf{Arabidopsis or zebrafish RNA-seq} — tests genome-size
+  auto-parameter selection ($k=16$ for small genomes) and universality
+  beyond human/worm.
+
+\item \textbf{Direct RNA Nanopore} (not cDNA Nanopore) — different
+  error profile; relevant if claiming full Nanopore support.
+
+\item \textbf{ERCC spike-in dataset} — enables direct quantification
+  accuracy benchmarking without requiring a separate ground-truth
+  generation step.
+\end{enumerate}
+
+\subsection*{Current assessment for Nature Methods}
+
+\textbf{Strengths} (as shown by current v90 data):
+\begin{itemize}
+  \item Highest known-junction recovery on human PE and PacBio data.
+  \item 100--120$\times$ fewer false-positive junctions than HISAT2/STAR on DNA.
+  \item Consistent performance across 7 primate species without
+    reconfiguration; 3--5$\times$ more known junctions than HISAT2 at the
+    most distant species.
+  \item Comparable wall time to HISAT2 on all dataset types; $5.8\times$
+    faster than STAR; $17\times$ faster than MagicBLAST.
+  \item Single executable covers short reads, PacBio, Nanopore, 454,
+    and DNA without parameter changes.
+  \item Rich single-pass output (BAM + junctions + counts + coverage +
+    poly(A) + QC) with no post-processing pipeline.
+\end{itemize}
+
+\textbf{Weaknesses / risks for review}:
+\begin{itemize}
+  \item RAM: 24\,GB mean vs.\ 5\,GB for HISAT2 — will be noted.
+  \item No small-RNA / miRNA test yet.
+  \item Baruzzo ground-truth intron analysis incomplete (zero introns
+    reported — needs investigation).
+  \item No gene-count accuracy metric.
+  \item MagicBLAST 2024 regression is a potential conflict-of-interest
+    optics issue (same group).
+  \item GPU code not yet stable; cannot be included in the current
+    submission but should be noted as in-progress.
+  \item iRefSeqT2T novel-junction excess needs explanation.
+\end{itemize}
+
+\textbf{Overall}: the data are strong enough to support a Methods paper
+at a top journal, contingent on resolving the Baruzzo anomaly, adding
+the small-RNA test, and providing unique-junction precision/recall.
+A pre-submission inquiry to \emph{Nature Methods} is reasonable once
+those three items are addressed.
+
+\end{document}

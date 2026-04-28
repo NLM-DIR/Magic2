@@ -330,7 +330,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 
 /**************************************************************/
 static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex) ;
-static int saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex) ;
+static void *saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex) ;
 int saSort (BigArray aa, int type)
 {
   long int N = bigArrayMax (aa) ;
@@ -401,14 +401,17 @@ int saSort (BigArray aa, int type)
   /* GPU threshold not met: fall through to CPU sort below */
   if (! done && useRadix)
     {
+      void *dst = 0 ;
       switch (type)
 	{
 	case 1:
-	  saRadixSort3 (bigArrp (aa, 0, CW), bigArrayMax (aa), sizeof (CW), 0) ;
+	  dst = saRadixSort3 (bigArrp (aa, 0, CW), bigArrayMax (aa), sizeof (CW), 0) ;
+	  bigArraySwitchBase (aa, bigArrayMax (aa), dst) ;
 	  done = TRUE ;
 	  break ;
 	case 4:
-	  saRadixSort3 (bigArrp (aa, 0, SEEDMATCH), bigArrayMax (aa), sizeof (SEEDMATCH), 1) ;
+	  dst = saRadixSort3 (bigArrp (aa, 0, SEEDMATCH), bigArrayMax (aa), sizeof (SEEDMATCH), 1) ;
+	  bigArraySwitchBase (aa, bigArrayMax (aa), dst) ;
 	  done = TRUE ;
 	  break ;
 	}
@@ -792,7 +795,7 @@ static void saR3CopyBack (unsigned char *dst,
 /* ------------------------------------------------------------------ */
 /* Main entry point                                                     */
 /* ------------------------------------------------------------------ */
-static int saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex)
+static void *saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex)
 {
   unsigned char  *src = (unsigned char *) base ;
   unsigned char  *dst ;
@@ -832,10 +835,9 @@ static int saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex)
   saR3Pass (src, dst, N, stride, keyOff, R3_SHIFT_A, R3_MASK_A, counts[0], offsets) ;
   saR3Pass (dst, src, N, stride, keyOff, R3_SHIFT_B, R3_MASK_B, counts[1], offsets) ;
   saR3Pass (src, dst, N, stride, keyOff, R3_SHIFT_C, R3_MASK_C, counts[2], offsets) ;
-  saR3CopyBack (dst, src, N, stride) ;
+  if (0) saR3CopyBack (dst, src, N, stride) ;
 
-  free (dst) ;
-  return 0 ;
+  return dst  ;
 }  /* saRadixSort3 */
 
 /**************************************************************/

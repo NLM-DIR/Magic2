@@ -1025,7 +1025,7 @@ void saIntronsExport (PP *pp, Array aaa)
 	  else if (!strcasecmp (up->feet, "gc_ag"))
 	    min = 2 ;
 
-	  if (up->n + up->nR >= min)
+	  if (0 && up->n + up->nR >= min)
 	    aceOutf (ao, "%s__%d_%d\t%s\tiit\t%d\t%d\t%s\n"
 		     , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2
 		     , dictName (pp->runDict, up->run)

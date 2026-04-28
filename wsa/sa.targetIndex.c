@@ -726,6 +726,9 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
 } /* genomeParseBinary */
 
 /**************************************************************/
+#ifdef USEGPU
+#include "sa.gpusort.h"
+#endif
 
 void saTargetIndexGenomeParser (const void *vp)
 {
@@ -742,6 +745,22 @@ void saTargetIndexGenomeParser (const void *vp)
   long int nn = genomeParseBinary (pp, &bbG) ;
   t2 = clock () ;
 
+
+#ifdef USEGPU
+  int NN = pp->nIndex ;
+  CW** index_parts = halloc (NN * sizeof(CW*), h) ;
+  long int *sizes = halloc (NN * sizeof(long int), h) ;
+  for (int i = 0 ; i < NN ; i++)
+    {
+      index_parts[i] = bigArrayp (bbG.cwsN[i], 0, CW);
+      sizes[i] = bigArrayMax (bbG.cwsN[i]);
+    }
+
+  bbG.gpu_idx = GPUIndexCreate (index_parts, sizes, NN) ;
+  for (int i = 0 ; i < NN ; i++)
+    { ac_free (bbG.cwsN[i]) ; bbG.cwsN[i] = 0 ; }
+  
+#endif
 
   saCpuStatRegister ("1.GParserDone" , pp->agent, bbG.cpuStats, t1, t2, nn) ;
   channelPut (pp->gmChan, &bbG, BB) ;
