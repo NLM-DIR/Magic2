@@ -1618,6 +1618,7 @@ int main (int argc, const char *argv[])
   AC_HANDLE h ;
   int nAgents = 10 ;
   int channelDepth = 2 ;
+  int bestGpu = -1 ;
   mytime_t t0, t1 ;
   
   freeinit () ; 
@@ -1910,7 +1911,15 @@ int main (int argc, const char *argv[])
   p.createIndex = getCmdLineText (h, &argc, argv, "--createIndex", &(p.indexName)) ;
   p.noJump = getCmdLineBool (&argc, argv, "--noJump") ;
   
+  getCmdLineInt (&argc, argv, "--gpu_device", &bestGpu) ;
+#ifdef USEGPU
+  if (bestGpu >= 0)
+     cudaSetDevice (bestGpu) ;
+#endif
+  
+
   if (p.createIndex)
+
     {
       if (! p.tFileName && ! p.tConfigFileName)
 	saUsage ("--createIndex requires providing a target parameter -t or -T", argc, argv) ;

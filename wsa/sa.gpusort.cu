@@ -76,7 +76,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy data to a GPU
     thrust::device_vector<T> d_vec(cp, cp + number_of_records);
     auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     // sort
@@ -88,7 +88,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy sorted data back to the host
     thrust::copy(d_vec.begin(), d_vec.end(), cp);
     end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 }
 
 // the sort function callable from C
@@ -165,7 +165,7 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
         auto start = std::chrono::high_resolution_clock::now();
         index->d_vecs.emplace_back(index_parts[i], index_parts[i] + sizes[i]);
         auto end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Copy index partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+        // std::cerr << "Copy index partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
     }
 
     index->out_pairs.resize(1 << 20);
@@ -343,7 +343,7 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
             std::size_t new_size = index->out_pairs.size() * 2;
             index->out_pairs.resize(new_size);
 
-            std::cerr << "Resize\t" << new_size << std::endl;
+            // std::cerr << "Resize\t" << new_size << std::endl;
         }
         SEEDMATCH* d_pairs = thrust::raw_pointer_cast(index->out_pairs.data() + last_pair);
 
@@ -366,7 +366,7 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
     thrust::sort(index->out_pairs.begin(), index->out_pairs.end(), [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b) {return a.read < b.read;});
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Found " << index->out_pairs.size() << " matches in " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Found " << index->out_pairs.size() << " matches in " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
 //    CUDA_CHECK(cudaGetLastError());
 
