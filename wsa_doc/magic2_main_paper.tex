@@ -25,7 +25,7 @@
 \newcommand{\edcomment}[1]{\textcolor{red}{\textit{[#1]}}}
 
 %% ---------------------------------------------------------------
-\title{\textbf{Magic2: a unified, self-configuring aligner for short-
+\title{\textbf{Magic2: a unified, self-configuring analyzer for short-
        and long-read RNA-seq with comprehensive quality-control output}}
 
 \author[1]{Jean Thierry-Mieg}
@@ -41,7 +41,7 @@
 \maketitle
 
 \begin{abstract}
-We present Magic2, a fast, self-configuring RNA-seq and DNA-seq aligner
+We present Magic2, a fast, self-configuring RNA-seq and DNA-seq analyzer
 that operates identically on short (Illumina) and long (Nanopore,
 PacBio) reads without requiring the user to specify read type, adapter
 sequences, strandedness, or the number of threads.
@@ -110,20 +110,21 @@ Magic2 accepts a reference genome (FASTA) and an optional annotation
 (GTF/GFF) to build an on-disk seed index.
 At run time, one or more SRA accession numbers or local FASTA/FASTQ
 files are supplied; no other configuration is required.
-Magic2 detects read length, adapter sequences, paired-end status, and
+Magic2 automatically downloads the data from SRA,
+detects read length, adapter sequences, paired-end status, and
 strandedness automatically via a dry pass over the first reads.
 The same executable is used for Illumina short reads, PacBio CCS, and
 Nanopore long reads.
 
 Internally, Magic2 follows a sort--merge paradigm rather than hash-table
 lookup: seed records are generated for reads and genome in large
-sequential blocks, sorted with a cache-efficient radix sort (optionally
-GPU-accelerated via CUDA Thrust), and joined by simultaneous linear
+sequential blocks, sorted and joined by simultaneous linear
 traversal of both sorted lists.
 This design keeps the dominant computation in fast CPU cache rather than
 in random main-memory accesses, and scales naturally across NUMA
 architectures without user-supplied thread counts
 (see Supplementary Material for full details).
+If available, sorting and joinining is automatically delegated to a GPU.
 
 The pipeline is structured as concurrent agents communicating through
 bounded, lock-free channels.
@@ -133,25 +134,23 @@ channel closure guarantee deadlock-free execution and no data loss.
 \subsection*{Outputs}
 
 In a single pass Magic2 produces:
-(i) primary alignments in BAM format (or the compact \texttt{.hits}
-    format with \texttt{--hits});
+(i) primary alignments (in BAM or the richer .hits format)
 (ii) splice-junction tables with per-junction read support;
 (iii) gene-level expression counts with bidirectional-overlap resolution;
 (iv) strand-specific wiggle coverage tracks (plus read-start/end profiles
      for transcript boundary detection);
 (v) poly(A)/poly(T) tail calls and trans-spliced leader identification
     (in \textit{C.\ elegans});
-(vi) adapter consensus sequences (de-novo or from a supplied list);
-(vii) a standardised QC table in Tag--Sample Format (TSF) covering
+(vi) adapter consensus sequences and auto-clipping (de-novo or from a supplied list);
+(vii) a standardised QC table covering
      alignment rates, mapping-class fractions, strand-specificity,
-     mismatch distributions, and concordant-pair statistics.
+     mismatch distributions, and pair concordance statistics.
 
 \subsection*{Benchmark}
 
-We benchmarked Magic2 (build v90, configuration \texttt{011\_SortAlignG6R3}:
-6 genome passes, 3 read rounds, no annotation unless stated)
+We benchmarked Magic2 
 against STAR (v.\,\edcomment{X.X}), HISAT2 (v.\,\edcomment{X.X}, 8 threads),
-Minimap2 (v.\,\edcomment{X.X}, 8 threads), and Magic-BLAST
+Minimap2 (v.\,\edcomment{X.X}, 16 threads), and Magic-BLAST 4-threads
 (v.\,2018/2022/2024) on a panel of 31 publicly available datasets
 downloaded from NCBI SRA
 (Table~\ref{tab:datasets}).
@@ -316,7 +315,7 @@ annotation, Magic2 builds an on-disk seed index.
 The seed length $k$ (default 16 for genomes $<$1\,Gb, 18 for
 human/mouse) is selected automatically from genome size.
 Seeds are sub-sampled with a rolling-min-hash approach (window $p$,
-default 5) to achieve an average inter-seed spacing of $p/2$ bases
+default 6) to achieve an average inter-seed spacing of $p/2$ bases
 with a guaranteed maximum gap of $p$.
 Seeds with genomic multiplicity $>Q$ (default 81) are discarded to
 limit hits from repetitive elements.
@@ -327,14 +326,14 @@ Full details are given in Supplementary Section~2.
 
 \subsection*{Alignment}
 
-Read seeds are generated using the same parameters as the genome index,
-merged-sorted with the genomic seed table, and joined by simultaneous
-linear traversal.
-Seed matches are extended to full alignments using a banded
-Smith--Waterman variant; intron boundaries are refined by splice-signal
+Read seeds are generated using by default half the genome stepping,
+sorted, and joined by simultaneous
+linear traversal (possibly on the GPU).
+Seed matches are extended to full alignments using the same jump-alignment
+as in Magic-BLAST, intron boundaries are refined by splice-signal
 scoring (GT-AG, AT-AC, and non-canonical).
 Poly(A)/poly(T) tails and trans-spliced leader sequences are detected
-during the same pass.
+and clipped after alignment during the same pass.
 See Supplementary Sections~3--5 for algorithmic details.
 
 \subsection*{Parallelism}
@@ -346,7 +345,8 @@ automatically in containers and on single-node machines.
 Users do not set a thread count; Magic2 manages concurrency
 automatically, achieving a median effective parallelism of 11 threads
 (range 4--18) across the benchmark panel as measured by
-\texttt{/usr/bin/time \%P}.
+\texttt{/usr/bin/time \%P}. On machines with a GPU. it respawn itself
+in GPU enabled mode and sub-contracts the sort-merge algorithm to the GPU.
 
 \subsection*{Benchmark datasets and evaluation}
 
