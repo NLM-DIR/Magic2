@@ -36,6 +36,18 @@
 #include <immintrin.h>
 #endif /* __SSE2__ */
 
+/* Minimal CUDA runtime declarations needed by plain C callers.
+ * (including cuda_runtime.h directly in a .c file pulls in C++-only constructs)
+ */
+typedef int cudaError_t;
+int  cudaSetDevice        (int device);
+int  cudaGetDeviceCount   (int *count);
+int  cudaHostRegister     (void *ptr, size_t size, unsigned int flags);
+int  cudaHostUnregister   (void *ptr);
+
+#define cudaHostRegisterDefault  0x00U
+
+  
 
 static int NN = 1 ;
 
@@ -1315,9 +1327,12 @@ static void wholeWork (const void *vp)
 	  SEEDMATCH *sms_ptr = NULL ;
 	   long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN, &sms_ptr) ;
 	   
-	   bb.sms = bigArrayHandleCreate (1, SEEDMATCH, bb.h) ;
-	   bigArraySwitchBase (bb.sms, N, sms_ptr) ; /* must use saGPUFreeHostBuffer on bb.sms->base */
+	   long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN, &sms_ptr) ;
+	   bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
 	   bigArrayMax (bb.sms) = N ;
+	   memcpy (bigArrayp (bb.sms, 0, SEEDMATCH), sms_ptr, N * sizeof (SEEDMATCH)) ;
+
+
 	   
           /* Unregister and free CW partitions now that the transfer is done   */
           for (int k = 0 ; k < NN ; k++)
@@ -1331,7 +1346,7 @@ static void wholeWork (const void *vp)
 	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
-      // bigArrayMax(bb.sms) = 1 ;
+      bigArrayMax(bb.sms) = 1 ;
       saAlignDo (pp, &bb) ;
 
       t2 = clock () ;

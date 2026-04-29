@@ -102,7 +102,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy data to a GPU
     thrust::device_vector<T> d_vec(cp, cp + number_of_records);
     auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     // sort
@@ -114,7 +114,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy sorted data back to the host
     thrust::copy(d_vec.begin(), d_vec.end(), cp);
     end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 }
 
 // the sort function callable from C
@@ -210,10 +210,10 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
         auto t0 = std::chrono::high_resolution_clock::now();
         p.cws.assign(index_parts[i], index_parts[i] + sizes[i]);
         auto t1 = std::chrono::high_resolution_clock::now();
-        std::cerr << "Copy index partition " << i
-                  << " to GPU (" << sizes[i] << "): "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count()
-                  << "ms" << std::endl;
+        // std::cerr << "Copy index partition " << i
+           //       << " to GPU (" << sizes[i] << "): "
+             //     << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count()
+               //   << "ms" << std::endl;
 
         // --- precompute run-length encoding for this partition ---
         // This replaces the per-block BuildRuns call that the original code
@@ -222,10 +222,10 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
         auto t2 = std::chrono::high_resolution_clock::now();
         BuildRuns(p.cws, p.unique_seeds, p.counts, p.starts);
         auto t3 = std::chrono::high_resolution_clock::now();
-        std::cerr << "BuildRuns index partition " << i
-                  << " (" << p.unique_seeds.size() << " unique seeds): "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
-                  << "ms" << std::endl;
+        // std::cerr << "BuildRuns index partition " << i
+           //       << " (" << p.unique_seeds.size() << " unique seeds): "
+             //     << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
+               //   << "ms" << std::endl;
     }
 
     return index;
@@ -448,7 +448,7 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         while (last_pair + total_out > out_pairs.size()) {
             std::size_t new_size = out_pairs.size() * 2;
             out_pairs.resize(new_size);
-            std::cerr << "Resize\t" << new_size << std::endl;
+            // std::cerr << "Resize\t" << new_size << std::endl;
         }
         SEEDMATCH* d_pairs = thrust::raw_pointer_cast(out_pairs.data() + last_pair);
 
@@ -470,9 +470,9 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
 
     auto end = std::chrono::high_resolution_clock::now();
     std::size_t N = out_pairs.size();
-    std::cerr << "Found " << N << " matches in "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-              << "ms" << std::endl;
+    // std::cerr << "Found " << N << " matches in "
+       //       << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+         //     << "ms" << std::endl;
 
     if (N == 0) {
         *out_buffer = nullptr;

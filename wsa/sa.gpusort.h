@@ -33,7 +33,7 @@ extern "C" {
 
 /* Minimal CUDA runtime declarations needed by plain C callers.
  * (including cuda_runtime.h directly in a .c file pulls in C++-only constructs)
- */
+ *
 typedef int cudaError_t;
 int  cudaSetDevice        (int device);
 int  cudaGetDeviceCount   (int *count);
@@ -41,7 +41,8 @@ int  cudaHostRegister     (void *ptr, size_t size, unsigned int flags);
 int  cudaHostUnregister   (void *ptr);
 
 #define cudaHostRegisterDefault  0x00U
-
+*/
+  
  /* ------------------------------------------------------------------ */
 /* Opaque genome index handle                                          */
 /* ------------------------------------------------------------------ */
