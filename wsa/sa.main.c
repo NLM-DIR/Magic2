@@ -1274,37 +1274,64 @@ static void wholeWork (const void *vp)
 		bigArraySort (bb.sms, seedMatchOrder) ;
 	    }
 #else
-
-      /* Find max number of matching words to preallocate memory. This is
-       *   overestimated, but prevents memory copy.
-       */
-	  for (int k = 0 ; k < NN ; k++)
-	    {
-	      words[k] = bigArrayp(bb.cwsN[k], 0, CW) ;
-	      sizes[k] = bigArrayMax(bb.cwsN[ k]) ;
-	    }
+           /* Register each CW partition as pinned, transfer, then unregister.
+	    * cudaHostRegister pins the existing posix_memalign buffer in place —
+           * no copy, no new allocation, full PCIe bandwidth for the upload.
+           */
+          for (int k = 0 ; k < NN ; k++)
+            {
+              words[k] = bigArrayp (bb.cwsN[k], 0, CW) ;
+              sizes[k] = bigArrayMax (bb.cwsN[k]) ;
+              cudaHostRegister (words[k],
+                                sizes[k] * sizeof (CW),
+                                cudaHostRegisterDefault) ;
+            }
 
 	  if (1)pthread_mutex_lock (&gpu_mutex) ;
-	  /* find matching seeds */
-	  if (! pp->bbG.gpu_idx)
-	    messcrash ("No target GPU index") ;
+          /* find matching seeds — no mutex needed, all writable device state
+           * is local to saGPUMatchHits; concurrent agents are safe            */
+          if (! pp->bbG.gpu_idx)
+            messcrash ("No target GPU index") ;
+
+          // SEEDMATCH *sms_ptr = NULL ;
+	  
+	  /*
+	    allocate host memory for seed matches, number of records
+	  *  old code
+
 	  long int N = saGPUMatchHits(pp->bbG.gpu_idx, words, sizes, NN) ;
-	  
-	  for (int k = 0 ; k < NN ; k++)
-	    { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ;}
-	  
-      /*
-	allocate host memory for seed matches, number of records
-      */
 	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
 	  bigArrayMax(bb.sms) = N ;
-
-      /* copy matching seeds to the host */
+	  // copy matching seeds to the host 
 	  saGPUMatchHitsCopyToHost(pp->bbG.gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
+	  */
+
+          /* Attach the pinned SEEDMATCH buffer to a bigArray.
+           * bigArraySwitchCudaBase registers saGPUFreeHostBuffer as the
+           * destructor so ac_free later calls cudaFreeHost, not free().
+	   *
+	   * New code
+	   */
+	  SEEDMATCH *sms_ptr = NULL ;
+	   long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN, &sms_ptr) ;
+	   
+	   bb.sms = bigArrayHandleCreate (1, SEEDMATCH, bb.h) ;
+	   bigArraySwitchBase (bb.sms, N, sms_ptr) ; /* must use saGPUFreeHostBuffer on bb.sms->base */
+	   bigArrayMax (bb.sms) = N ;
+	   
+          /* Unregister and free CW partitions now that the transfer is done   */
+          for (int k = 0 ; k < NN ; k++)
+            {
+              cudaHostUnregister (words[k]) ;
+              ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ;
+            }
+
+
+	  
 	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
-
+      // bigArrayMax(bb.sms) = 1 ;
       saAlignDo (pp, &bb) ;
 
       t2 = clock () ;

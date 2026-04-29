@@ -40,22 +40,15 @@ static mysize_t bigTotalNumberActive = 0 ;
 static Array reportBigArray = 0 ;
 static void uBigArrayFinalise (void *cp) ;
 
-static char * bigArrayAlloc (long int n, int size, int *shift)
+static char * bigArrayAlloc (long int n, int size)
 {
-  mysize_t nn = (mysize_t) n * size + 64 ;
-  char *cp = malloc (nn) ;
-  memset(cp,0,nn) ;
-
-    uintptr_t a = (uintptr_t)cp;
-    uintptr_t aligned = (a + 63) & ~63ULL;
-
-    *shift = (int)(aligned - a);          // 0..63
-
-    // cp + *shift   is always 64-byte aligned
-    // and cp is located inside the allocated area
-
-    return cp;
+  mysize_t nn = (mysize_t) n * size ;
+  char *cp = NULL ;
+  posix_memalign ((void**)&cp, 64, nn) ;
+  memset (cp, 0, nn) ;
+  return cp ;
 } /* bigArrayAlloc */
+
 
 /**************/
 
@@ -75,7 +68,6 @@ BigArray   uBigArrayCreate_dbg (long int n, int size, AC_HANDLE handle,
 				   dbgPos(hfname, hlineno, __FILE__), __LINE__) ;
 #endif
 
-  int shift = 0 ;
   if (!reportBigArray)
     { reportBigArray = (Array)1 ; /* prevents looping */
       reportBigArray = arrayCreate (512, BigArray) ;
@@ -86,8 +78,7 @@ BigArray   uBigArrayCreate_dbg (long int n, int size, AC_HANDLE handle,
     n = 1 ;
   if (reportBigArray != (Array)2)
     bigTotalAllocatedMemory += n * size ;
-  neuf->trueBase = bigArrayAlloc (n , size, &shift) ;
-  neuf->base = neuf->trueBase + shift ;
+  neuf->base = bigArrayAlloc (n , size) ;
   neuf->dim = n ;
   neuf->max = 0 ;
   neuf->size = size ;
@@ -116,8 +107,8 @@ BigArray   uBigArrayCreate_dbg (long int n, int size, AC_HANDLE handle,
    
    int shift = (int)(aligned - a);          // 0..63
    if (shift) messcrash ("bigArraySwitchBase must be provided a pointer 64bytes aligned, not %d bytes off", shift) ; 
-   free (aa->trueBase) ;
-   aa->base = aa->trueBase = vp ;
+   free (aa->base) ;
+   aa->base = vp ;
    aa->max = N ;   
  } /* bigArraySwitchBase */
 
@@ -202,15 +193,13 @@ BigArray uBigArrayReCreate (BigArray a, long int n, int size)
   if (a->dim < n || 
       (a->dim - n)*size > (1 << 19) ) /* free if save > 1/2 meg */
     {
-      int shift = 0 ;
       if (reportBigArray != (Array)2)
 	bigTotalAllocatedMemory -= a->dim * size ;
-      free (a->trueBase) ;
+      free (a->base) ;
       a->dim = n ;
       if (reportBigArray != (Array)2)
 	bigTotalAllocatedMemory += n * size ;
-      a->trueBase = bigArrayAlloc (n, size, &shift) ;
-      a->base = a->trueBase + shift ;
+      a->base = bigArrayAlloc (n, size) ;
     }
   else
     memset(a->base,0,(mysize_t)(a->dim*size)) ;
@@ -251,13 +240,13 @@ static void uBigArrayFinalise (void *cp)
 	messcrash ("Failed to unmap bigArray %s", a->fName) ;
       if (a->fd != -1)
 	close (a->fd) ;
-      a->base = a->trueBase = a->map = 0 ; a->fd = 0 ; a->readOnly = 0 ;
+      a->base = a->map = 0 ; a->fd = 0 ; a->readOnly = 0 ;
       messfree (a->fName) ;
     }
   else if (!finalCleanup)
     {
-      free (a->trueBase) ;
-      a->base = a->trueBase = 0 ;
+      free (a->base) ;
+      a->base = 0 ;
     }
   a->magic = 0 ;
   bigTotalNumberActive-- ;
@@ -297,8 +286,7 @@ void bigArrayExtend (BigArray a, long int n)
   void bigArrayExtend_dbg (BigArray a, long int  n, const char *hfname,int hlineno) 
 #endif
 {
-  char *base, *trueBase ;
-  int shift = 0 ;
+  char *base ;
   
   if (!a || n < a->dim)
     return ;
@@ -319,13 +307,11 @@ void bigArrayExtend (BigArray a, long int n)
 
   if (reportBigArray != (Array)2)
     bigTotalAllocatedMemory += a->dim * a->size ;
-  trueBase = bigArrayAlloc (a->dim, a->size, &shift) ;
-  base = trueBase + shift ;
+  base = bigArrayAlloc (a->dim, a->size) ;
   
   memcpy (base, a->base,a->size*a->max) ;
-  free (a->trueBase) ;
+  free (a->base) ;
 
-  a->trueBase = trueBase ;
   a->base = base ;
 }
 
@@ -1962,8 +1948,8 @@ BigArray uBigArrayMapRead (const char *fName, int recordSize, BOOL readOnly, AC_
   int fd = -1 ;
   if (! fName)
     messcrash ("bigArrayMapRead called with NULL file name") ;
-  free (aa->trueBase) ; aa->base = aa->trueBase = 0 ;
-  aa->base = aa->trueBase = (char *) mmapCreate (fName, &size, &fd, &map, readOnly) ;
+  free (aa->base) ; aa->base = 0 ;
+  aa->base = (char *) mmapCreate (fName, &size, &fd, &map, readOnly) ;
   aa->readOnly = readOnly ;
   aa->size = recordSize ;
   aa->max = aa->dim = size/recordSize ;

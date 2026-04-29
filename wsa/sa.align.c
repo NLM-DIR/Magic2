@@ -19,6 +19,10 @@
 #define MAXJUMP 3
 #define MAXJUMP2 8
 
+#ifdef USEGPU
+#include "sa.gpusort.h"
+#endif
+
 /**************************************************************/
 /**************************************************************/
 /* a0 = a1 - x1 is the putative position of base 1 of the read 
@@ -3954,6 +3958,14 @@ void saAlignDo (const PP *pp, BB *bb)
       goto secondPass ;
     }
   bigArrayDestroy (bb->hits) ;
+#ifdef USEGPU
+  saGPUFreeHostBuffer (bb->sms->base) ;
+  bb->sms->base = 0 ;
+#endif
+  
+  bigArrayDestroy (bb->sms) ;
+  bb->hits = bb->sms = 0 ;
+  
   ac_free (h) ;
   if (0) showPairs (0) ; /* for compile happiness */
 
