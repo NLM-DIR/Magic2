@@ -1300,53 +1300,22 @@ static void wholeWork (const void *vp)
             }
 
 	  if (1)pthread_mutex_lock (&gpu_mutex) ;
-          /* find matching seeds — no mutex needed, all writable device state
-           * is local to saGPUMatchHits; concurrent agents are safe            */
-          if (! pp->bbG.gpu_idx)
-            messcrash ("No target GPU index") ;
-
-          // SEEDMATCH *sms_ptr = NULL ;
-	  
-	  /*
-	    allocate host memory for seed matches, number of records
-	  *  old code
-
-	  long int N = saGPUMatchHits(pp->bbG.gpu_idx, words, sizes, NN) ;
-	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
-	  bigArrayMax(bb.sms) = N ;
-	  // copy matching seeds to the host 
-	  saGPUMatchHitsCopyToHost(pp->bbG.gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
-	  */
-
-          /* Attach the pinned SEEDMATCH buffer to a bigArray.
-           * bigArraySwitchCudaBase registers saGPUFreeHostBuffer as the
-           * destructor so ac_free later calls cudaFreeHost, not free().
-	   *
-	   * New code
-	   */
-	  SEEDMATCH *sms_ptr = NULL ;
-	   long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN, &sms_ptr) ;
-	   
-	   long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN, &sms_ptr) ;
-	   bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
-	   bigArrayMax (bb.sms) = N ;
-	   memcpy (bigArrayp (bb.sms, 0, SEEDMATCH), sms_ptr, N * sizeof (SEEDMATCH)) ;
-
-
-	   
-          /* Unregister and free CW partitions now that the transfer is done   */
+	  pthread_mutex_lock (&gpu_mutex) ;
+	  long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN) ;
           for (int k = 0 ; k < NN ; k++)
-            {
-              cudaHostUnregister (words[k]) ;
-              ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ;
-            }
+            { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ; }	  
 
-
-	  
+ 	  /*
+	    allocate host memory for seed matches, number of records
+	  */
+	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
+	  bigArrayMax (bb.sms) = N ;
+	  saGPUMatchHitsCopyToHost (pp->bbG.gpu_idx, bigArrayp (bb.sms, 0, SEEDMATCH)) ;
+	   
 	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
-      bigArrayMax(bb.sms) = 1 ;
+      //      bigArrayMax(bb.sms) = 1 ;
       saAlignDo (pp, &bb) ;
 
       t2 = clock () ;

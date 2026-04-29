@@ -102,7 +102,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy data to a GPU
     thrust::device_vector<T> d_vec(cp, cp + number_of_records);
     auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     // sort
@@ -114,7 +114,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy sorted data back to the host
     thrust::copy(d_vec.begin(), d_vec.end(), cp);
     end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 }
 
 // the sort function callable from C
@@ -223,18 +223,19 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
         auto t0 = std::chrono::high_resolution_clock::now();
         p.cws.assign(index_parts[i], index_parts[i] + sizes[i]);
         auto t1 = std::chrono::high_resolution_clock::now();
-        std::cerr << "Copy index partition " << i
+        /*std::cerr << "Copy index partition " << i
                   << " to GPU (" << sizes[i] << "): "
                   << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count()
                   << "ms" << std::endl;
-
+*/
         auto t2 = std::chrono::high_resolution_clock::now();
         BuildRuns(p.cws, p.unique_seeds, p.counts, p.starts);
         auto t3 = std::chrono::high_resolution_clock::now();
-        std::cerr << "BuildRuns index partition " << i
+  /*      std::cerr << "BuildRuns index partition " << i
                   << " (" << p.unique_seeds.size() << " unique seeds): "
                   << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
                   << "ms" << std::endl;
+		  */
     }
 
     // Preallocate output buffers.  1<<20 (~1M) records is a comfortable
@@ -247,8 +248,7 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
     cudaError_t err = cudaMallocHost(reinterpret_cast<void**>(&index->host_buf),
                                      initial * sizeof(SEEDMATCH));
     if (err != cudaSuccess) {
-        std::cerr << "GPUIndexCreate: cudaMallocHost failed: "
-                  << cudaGetErrorString(err) << std::endl;
+        // std::cerr << "GPUIndexCreate: cudaMallocHost failed: "                  << cudaGetErrorString(err) << std::endl;
         index->host_buf = nullptr;
         index->host_buf_capacity = 0;
     }
@@ -445,7 +445,7 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         while (last_pair + total_out > index->out_pairs.size()) {
             std::size_t new_size = index->out_pairs.size() * 2;
             index->out_pairs.resize(new_size);
-            std::cerr << "Resize device buffer\t" << new_size << std::endl;
+            // std::cerr << "Resize device buffer\t" << new_size << std::endl;
         }
 
         const CW*            d_idx        = thrust::raw_pointer_cast(gpart.cws.data());
@@ -480,9 +480,10 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
     std::size_t N = last_pair;
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Found " << N << " matches in "
+    /* std::cerr << "Found " << N << " matches in "
               << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
               << "ms" << std::endl;
+	      */
 
     if (N == 0) {
         return 0;
@@ -504,7 +505,7 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
             return 0;
         }
         index->host_buf_capacity = new_cap;
-        std::cerr << "Resize pinned host buffer\t" << new_cap << std::endl;
+        // std::cerr << "Resize pinned host buffer\t" << new_cap << std::endl;
     }
 
     // Direct DMA from device to pinned host — no staging, no extra copy.
