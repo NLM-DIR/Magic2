@@ -30,20 +30,7 @@
 extern "C" {
 #endif
 
-
-/* Minimal CUDA runtime declarations needed by plain C callers.
- * (including cuda_runtime.h directly in a .c file pulls in C++-only constructs)
- *
-typedef int cudaError_t;
-int  cudaSetDevice        (int device);
-int  cudaGetDeviceCount   (int *count);
-int  cudaHostRegister     (void *ptr, size_t size, unsigned int flags);
-int  cudaHostUnregister   (void *ptr);
-
-#define cudaHostRegisterDefault  0x00U
-*/
-  
- /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
 /* Opaque genome index handle                                          */
 /* ------------------------------------------------------------------ */
 typedef void GPUIndex;
@@ -59,7 +46,7 @@ void saGPUSort (char *cp, long int number_of_records, int type);
 
 /* Upload all NN genome partitions to device memory and precompute their
  * run-length encodings.  Called once at startup.                      */
-GPUIndex* GPUIndexCreate (CW** index_parts, long int* sizes, unsigned int num_parts) ;
+GPUIndex* GPUIndexCreate (CW** index_parts, long int* sizes, unsigned int num_parts);
 
 /* Release all device memory associated with the index.                */
 GPUIndex* GPUIndexFree   (GPUIndex* idx);
@@ -68,11 +55,12 @@ GPUIndex* GPUIndexFree   (GPUIndex* idx);
 /* Pinned host memory helpers                                          */
 /* ------------------------------------------------------------------ */
 
-/* Release any buffer obtained from saGPUAllocHostCW or
- * saGPUAllocHostSeedMatches.
- */
-void saGPUFreeHostBuffer (void* ptr) ;
-  
+/* Release a cudaMallocHost buffer allocated by saGPUMatchHits.
+ * Call this explicitly in sa.main.c before the standard bigArray
+ * destructor runs, so that cudaFreeHost stays localised to the magic2
+ * GPU layer and the bigArray library needs no USEGPU ifdefs.          */
+void saGPUFreeHostBuffer (void* ptr);
+
 /* ------------------------------------------------------------------ */
 /* Seed matching                                                       */
 /* ------------------------------------------------------------------ */
@@ -96,4 +84,3 @@ unsigned int saGPUMatchHits (GPUIndex* idx, CW** words, long int* sizes,
 #ifdef __cplusplus
 }
 #endif
-

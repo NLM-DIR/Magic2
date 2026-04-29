@@ -102,7 +102,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy data to a GPU
     thrust::device_vector<T> d_vec(cp, cp + number_of_records);
     auto end = std::chrono::high_resolution_clock::now();
-    // std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     // sort
@@ -114,7 +114,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy sorted data back to the host
     thrust::copy(d_vec.begin(), d_vec.end(), cp);
     end = std::chrono::high_resolution_clock::now();
-    // std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 }
 
 // the sort function callable from C
@@ -188,13 +188,27 @@ struct IndexPartition {
     thrust::device_vector<std::uint32_t> starts;        // start offset of each run in cws
 };
 
-// Data used to search genome index.
-// out_pairs has been removed: each saGPUMatchHits call allocates its own
-// local output buffer, so concurrent calls from different agents do not
-// share any writable device memory and need no mutex.
+// -----------------------------------------------------------------------
+// GPUIndexType: shared genome index plus persistent output buffers.
+//
+// Under mutex protection a single caller uses this struct at a time, so
+// the output buffers (device and pinned-host) can be preallocated once in
+// GPUIndexCreate and reused across every block.  They grow by doubling
+// when a block produces more matches than the current capacity, but they
+// never shrink — this minimises cudaMallocHost / cudaFreeHost calls to at
+// most O(log N_max) over the entire run rather than once per block.
+// -----------------------------------------------------------------------
 struct GPUIndexType
 {
-    std::vector<IndexPartition>  partitions;  // one per NN sub-table, read-only after creation
+    std::vector<IndexPartition>  partitions;   // one per NN sub-table, read-only after creation
+
+    // Persistent device output buffer, reused every block.
+    thrust::device_vector<SEEDMATCH>  out_pairs;
+
+    // Persistent pinned host buffer, reused every block.
+    // Allocated with cudaMallocHost so device→host DMA is direct.
+    SEEDMATCH*   host_buf;
+    std::size_t  host_buf_capacity;  // in SEEDMATCH records
 };
 
 
@@ -206,26 +220,37 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
     for (unsigned int i = 0; i < num_parts; i++) {
         IndexPartition& p = index->partitions[i];
 
-        // --- upload partition to device ---
         auto t0 = std::chrono::high_resolution_clock::now();
         p.cws.assign(index_parts[i], index_parts[i] + sizes[i]);
         auto t1 = std::chrono::high_resolution_clock::now();
-        // std::cerr << "Copy index partition " << i
-           //       << " to GPU (" << sizes[i] << "): "
-             //     << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count()
-               //   << "ms" << std::endl;
+        std::cerr << "Copy index partition " << i
+                  << " to GPU (" << sizes[i] << "): "
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count()
+                  << "ms" << std::endl;
 
-        // --- precompute run-length encoding for this partition ---
-        // This replaces the per-block BuildRuns call that the original code
-        // performed on every read block.  The genome index is read-only after
-        // this point, so paying the cost once here is correct.
         auto t2 = std::chrono::high_resolution_clock::now();
         BuildRuns(p.cws, p.unique_seeds, p.counts, p.starts);
         auto t3 = std::chrono::high_resolution_clock::now();
-        // std::cerr << "BuildRuns index partition " << i
-           //       << " (" << p.unique_seeds.size() << " unique seeds): "
-             //     << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
-               //   << "ms" << std::endl;
+        std::cerr << "BuildRuns index partition " << i
+                  << " (" << p.unique_seeds.size() << " unique seeds): "
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
+                  << "ms" << std::endl;
+    }
+
+    // Preallocate output buffers.  1<<20 (~1M) records is a comfortable
+    // starting capacity; doubling on demand costs at most a handful of
+    // reallocations over an entire multi-gigabase run.
+    const std::size_t initial = 1 << 20;
+    index->out_pairs.resize(initial);
+
+    index->host_buf_capacity = initial;
+    cudaError_t err = cudaMallocHost(reinterpret_cast<void**>(&index->host_buf),
+                                     initial * sizeof(SEEDMATCH));
+    if (err != cudaSuccess) {
+        std::cerr << "GPUIndexCreate: cudaMallocHost failed: "
+                  << cudaGetErrorString(err) << std::endl;
+        index->host_buf = nullptr;
+        index->host_buf_capacity = 0;
     }
 
     return index;
@@ -236,6 +261,8 @@ GPUIndex* GPUIndexFree(GPUIndex* idx)
 {
     GPUIndexType* idxobj = static_cast<GPUIndexType*>(idx);
     if (idxobj) {
+        if (idxobj->host_buf)
+            cudaFreeHost(idxobj->host_buf);
         delete idxobj;
     }
     return nullptr;
@@ -316,10 +343,9 @@ struct diff_CW {
 // element size in each case.
 // ---------------------------------------------------------------------------
 
-// saGPUFreeHostBuffer: release a cudaMallocHost buffer.
-// Called explicitly by sa.main.c before the standard bigArray destructor,
-// so that cudaFreeHost is localised to the magic2 GPU layer and the bigArray
-// library needs no USEGPU ifdefs.
+// saGPUFreeHostBuffer: exposed so sa.main.c can explicitly release the
+// pinned SEEDMATCH buffer before the standard bigArray destructor runs,
+// keeping cudaFreeHost out of the bigArray library.
 void saGPUFreeHostBuffer(void* ptr)
 {
     if (ptr)
@@ -329,33 +355,21 @@ void saGPUFreeHostBuffer(void* ptr)
 // ---------------------------------------------------------------------------
 // saGPUMatchHits
 //
-// Find all SEEDMATCH records between the current read block and the (resident)
-// genome index, sort by read id, and return both the count and a pointer to a
-// freshly allocated pinned host buffer containing the results.
+// Called under pthread_mutex_lock by sa.main.c.  Because only one agent
+// enters at a time the persistent output buffers in GPUIndexType are safe
+// to reuse.  Both buffers grow by doubling when needed but never shrink,
+// so the expensive cudaMallocHost / cudaFreeHost occur at most O(log N_max)
+// times over the entire run.
 //
-// The caller owns the returned buffer and must free it with
-// saGPUFreeHostBuffer() (via bigArraySwitchCudaBase on destruction).
-//
-// All writable device memory is allocated locally within this call.
-// The genome index partitions (GPUIndexType::partitions) are read-only.
-// Concurrent calls from different agents therefore share no writable state
-// and require NO MUTEX.
-//
-// Workflow:
-//   1. For each of the NN seed partitions:
-//      a. Upload read CW array to device (fast if source is pinned via
-//         saGPUAllocHostCW / bigArraySwitchCudaBase).
-//      b. Sort by seed.
-//      c. BuildRuns on reads (genome runs are precomputed).
-//      d. set_intersection to find common seeds.
-//      e. gather counts, exclusive_scan for output offsets.
-//      f. EmitCartesianProduct kernel writes SEEDMATCHes into local
-//         device buffer, growing it as needed.
-//   2. Sort all SEEDMATCHes by read id.
-//   3. cudaMallocHost a pinned host buffer of exactly N records.
-//   4. thrust::copy the sorted device results into the pinned buffer.
-//      Because the destination is pinned, this DMA is direct and fast.
-//   5. Return N and the pinned pointer via *out_buffer.
+// Returns N (number of SEEDMATCH records found).
+// *out_buffer receives a pointer into the persistent pinned host buffer;
+// the caller must copy or consume the data before releasing the mutex and
+// before the next saGPUMatchHits call overwrites the buffer.
+// In practice sa.main.c does:
+//   bb.sms = bigArrayHandleCreate(N+1, SEEDMATCH, bb.h);
+//   bigArrayMax(bb.sms) = N;
+//   memcpy(bigArrayp(bb.sms,0,SEEDMATCH), *out_buffer, N*sizeof(SEEDMATCH));
+// and then releases the mutex, so the pinned buffer is never aliased.
 // ---------------------------------------------------------------------------
 unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
                             unsigned int num_parts, SEEDMATCH** out_buffer)
@@ -364,22 +378,14 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
     GPUIndexType* index = static_cast<GPUIndexType*>(idx);
     *out_buffer = nullptr;
 
-    // Local device output buffer — not shared between concurrent callers.
-    thrust::device_vector<SEEDMATCH> out_pairs(1 << 20);
     std::size_t last_pair = 0;
 
     for (unsigned int i = 0; i < num_parts; i++) {
-        // Genome partition: read-only, precomputed in GPUIndexCreate.
         const IndexPartition& gpart = index->partitions[i];
 
-        // Upload read CW array.  If words[i] was allocated via
-        // saGPUAllocHostCW (pinned), this transfer runs at full PCIe
-        // bandwidth.  If it is ordinary pageable memory it still works,
-        // just slightly slower.
         thrust::device_vector<CW> word_vec(words[i], words[i] + sizes[i]);
         thrust::sort(word_vec.begin(), word_vec.end(), compare_CW());
 
-        // Build runs for reads (genome runs already built).
         thrust::device_vector<std::uint32_t> w_unique_seeds;
         thrust::device_vector<std::uint32_t> w_counts;
         thrust::device_vector<std::uint32_t> w_starts;
@@ -435,8 +441,15 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         thrust::copy_n(out_counts.begin()  + (num_common - 1), 1, &last_count);
         std::size_t total_out = last_offset + last_count;
 
-        const CW*           d_idx        = thrust::raw_pointer_cast(gpart.cws.data());
-        const CW*           d_w          = thrust::raw_pointer_cast(word_vec.data());
+        // Grow persistent device buffer if needed (doubling, never shrinks).
+        while (last_pair + total_out > index->out_pairs.size()) {
+            std::size_t new_size = index->out_pairs.size() * 2;
+            index->out_pairs.resize(new_size);
+            std::cerr << "Resize device buffer\t" << new_size << std::endl;
+        }
+
+        const CW*            d_idx        = thrust::raw_pointer_cast(gpart.cws.data());
+        const CW*            d_w          = thrust::raw_pointer_cast(word_vec.data());
         const std::uint32_t* d_idx_starts = thrust::raw_pointer_cast(gpart.starts.data());
         const std::uint32_t* d_idx_counts = thrust::raw_pointer_cast(gpart.counts.data());
         const std::uint32_t* d_w_starts   = thrust::raw_pointer_cast(w_starts.data());
@@ -444,13 +457,8 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         const std::uint32_t* d_idx_common = thrust::raw_pointer_cast(idx_common.data());
         const std::uint32_t* d_w_common   = thrust::raw_pointer_cast(w_common.data());
         const std::uint32_t* d_out_offsets= thrust::raw_pointer_cast(out_offsets.data());
-
-        while (last_pair + total_out > out_pairs.size()) {
-            std::size_t new_size = out_pairs.size() * 2;
-            out_pairs.resize(new_size);
-            // std::cerr << "Resize\t" << new_size << std::endl;
-        }
-        SEEDMATCH* d_pairs = thrust::raw_pointer_cast(out_pairs.data() + last_pair);
+        SEEDMATCH*           d_pairs      = thrust::raw_pointer_cast(
+                                               index->out_pairs.data() + last_pair);
 
         EmitCartesianProduct<<<static_cast<int>(num_common), 256>>>(
             d_idx, d_idx_starts, d_idx_counts,
@@ -461,43 +469,51 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
         last_pair += total_out;
     }
 
-    out_pairs.resize(last_pair);
+    // Trim logical size (does not free memory, just adjusts end iterator).
+    index->out_pairs.resize(last_pair);
 
-    // Sort all matches by read id.
-    thrust::sort(out_pairs.begin(), out_pairs.end(),
+    // Sort matches by read id.
+    thrust::sort(index->out_pairs.begin(), index->out_pairs.end(),
                  [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b)
                  { return a.read < b.read; });
 
+    std::size_t N = last_pair;
+
     auto end = std::chrono::high_resolution_clock::now();
-    std::size_t N = out_pairs.size();
-    // std::cerr << "Found " << N << " matches in "
-       //       << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-         //     << "ms" << std::endl;
+    std::cerr << "Found " << N << " matches in "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+              << "ms" << std::endl;
 
     if (N == 0) {
-        *out_buffer = nullptr;
         return 0;
     }
 
-    // Allocate a pinned host buffer of exactly N records.
-    // cudaMallocHost guarantees >= 256-byte alignment, satisfying
-    // SEEDMATCH's __attribute__((aligned(32))).
-    // The caller must free this with saGPUFreeHostBuffer() (bigArray
-    // destructor will do so automatically via bigArraySwitchCudaBase).
-    SEEDMATCH* pinned = nullptr;
-    cudaError_t err = cudaMallocHost(reinterpret_cast<void**>(&pinned),
-                                     N * sizeof(SEEDMATCH));
-    if (err != cudaSuccess) {
-        std::cerr << "saGPUMatchHits: cudaMallocHost failed for " << N
-                  << " SEEDMATCH records: " << cudaGetErrorString(err) << std::endl;
-        // fall back: caller gets nullptr and 0 — treat as empty block
-        return 0;
+    // Grow persistent pinned host buffer if needed (doubling, never shrinks).
+    if (N > index->host_buf_capacity) {
+        std::size_t new_cap = index->host_buf_capacity ? index->host_buf_capacity : 1;
+        while (new_cap < N) new_cap *= 2;
+        if (index->host_buf)
+            cudaFreeHost(index->host_buf);
+        cudaError_t err = cudaMallocHost(reinterpret_cast<void**>(&index->host_buf),
+                                         new_cap * sizeof(SEEDMATCH));
+        if (err != cudaSuccess) {
+            std::cerr << "saGPUMatchHits: cudaMallocHost failed for " << new_cap
+                      << " records: " << cudaGetErrorString(err) << std::endl;
+            index->host_buf = nullptr;
+            index->host_buf_capacity = 0;
+            return 0;
+        }
+        index->host_buf_capacity = new_cap;
+        std::cerr << "Resize pinned host buffer\t" << new_cap << std::endl;
     }
 
     // Direct DMA from device to pinned host — no staging, no extra copy.
-    thrust::copy_n(out_pairs.begin(), N, pinned);
+    thrust::copy_n(index->out_pairs.begin(), N, index->host_buf);
 
-    *out_buffer = pinned;
-    // out_pairs goes out of scope here; device memory freed automatically.
+    // Restore full capacity for next block (resize to capacity, not to N,
+    // so the next block starts with the full pre-allocated device memory).
+    index->out_pairs.resize(index->out_pairs.capacity());
+
+    *out_buffer = index->host_buf;
     return static_cast<unsigned int>(N);
 }
