@@ -3785,7 +3785,14 @@ void saAlignDo (const PP *pp, BB *bb)
 	  diii = nn ;
 	}
       hits = bb->hits ;
-      
+
+      if (nn)
+	{
+	  HIT *up = bigArrayp (hits, 0, HIT) ;
+	  int read = up->read >> 1 ;
+	  if (! read || read > dictMax (bb->dict))
+	    nn = 0 ;
+	}
       if (nn >= 1) /* this read has n+1 hit */
 	{ /* create  a copy of the hits of that read */
 	  h2 = bigArrayp (hits, nn - 1, HIT) ; /* make room */
@@ -3797,7 +3804,7 @@ void saAlignDo (const PP *pp, BB *bb)
 
 	  if (1)
 	    {
-	      int chrom = 0, mult ;
+	      int read = 0, chrom = 0, mult ;
 	      int k, kk = 0, a1 = 0 ;
 	      HIT *up  ;
 	      COUNTCHROM *zp = 0, *zp0 = 0 ;
@@ -3869,6 +3876,7 @@ void saAlignDo (const PP *pp, BB *bb)
 		  bigArrayMax (hits2) = 0 ;
 
 		  int mm = 0, k8 = 1 ;
+		  int read ;
 		  zp = zp0 = arrayp (countChroms, 0, COUNTCHROM) ;
 		  if (zp->seed1 < zp->seed2) k8 = 2 ;
 		  if (zp->seed1 < zp->seed4) k8 = 4 ;
@@ -3902,6 +3910,7 @@ void saAlignDo (const PP *pp, BB *bb)
 		  /* switch chroms and reorder */
 		  if (0) hits2 = bb->hits ;
 		  bb->gpu += saSort (hits2, 2) ; /* hitReadOrder */
+
 		  if (0)  showCountChroms (countChroms) ;
 
 		  alignDoOnePair (pp, bb, aaa, hits2, aa, err, &adaptors) ;
@@ -3958,7 +3967,7 @@ void saAlignDo (const PP *pp, BB *bb)
       goto secondPass ;
     }
   bigArrayDestroy (bb->hits) ;
-#ifdef USEGPU
+#ifdef USEGPU9999
   saGPUFreeHostBuffer (bb->sms->base) ;
   bb->sms->base = 0 ;
 #endif

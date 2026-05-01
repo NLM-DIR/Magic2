@@ -674,7 +674,8 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
   BigArray hits = 0 ;
   BigArray intronHits = 0 ;
   long int nn = 0, k = 0, kk = 0 ;
-
+  int targetMax = dictMax (pp->bbG.dict) << 1 ;
+  
   const long unsigned int mask26 = (1L << 26) - 1 ;
   const int seedLength = pp->seedLength ;
   const int intronBonus = 1 ;
@@ -693,7 +694,9 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
     {
       long int a1, x1 ;
       HIT *hit = 0 ;
-      
+
+      if (!smp->target || smp->target > targetMax)
+	continue ;
       /* success, non intron case */
       if (((smp->targetFlags >> 31) & 0x1) == 0x0)
 	{
@@ -702,7 +705,7 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 	  int nTargetRepeats = smp->targetFlags ;
 	  
 	  if (1 && nTargetRepeats > maxTargetRepeats)
-			continue ;
+	    continue ;
 	  /* report at most absoluteMax (i.e. 31) */
 	  if (nTargetRepeats >= absoluteMax)
 	    nTargetRepeats = absoluteMax - 1 ; 
@@ -1244,7 +1247,6 @@ static void wholeWork (const void *vp)
   while (channelGet (pp->lcChan, &bb, BB))
     {
       long int nn = 0 ;
-      int ii;
 
       t1 = clock () ;
       /* code words */
@@ -1294,13 +1296,9 @@ static void wholeWork (const void *vp)
             {
               words[k] = bigArrayp (bb.cwsN[k], 0, CW) ;
               sizes[k] = bigArrayMax (bb.cwsN[k]) ;
-              cudaHostRegister (words[k],
-                                sizes[k] * sizeof (CW),
-                                cudaHostRegisterDefault) ;
             }
 
 	  if (1)pthread_mutex_lock (&gpu_mutex) ;
-	  pthread_mutex_lock (&gpu_mutex) ;
 	  long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN) ;
           for (int k = 0 ; k < NN ; k++)
             { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ; }	  
@@ -1310,12 +1308,13 @@ static void wholeWork (const void *vp)
 	  */
 	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
 	  bigArrayMax (bb.sms) = N ;
+	  fprintf (stderr, "waiting for %ld  sms\n", N) ;	   
 	  saGPUMatchHitsCopyToHost (pp->bbG.gpu_idx, bigArrayp (bb.sms, 0, SEEDMATCH)) ;
-	   
+	  fprintf (stderr, "received %ld  sms\n", N) ;	   
 	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
-      //      bigArrayMax(bb.sms) = 1 ;
+        bigArrayMax(bb.sms) = 1 ;
       saAlignDo (pp, &bb) ;
 
       t2 = clock () ;
@@ -1729,7 +1728,7 @@ int main (int argc, const char *argv[])
    * adding --numactl to the command line to prevent recursion.
    *
    * If a CUDA-capable GPU is detected, magic2_gpu is spawned instead of magic2,
-   * passing --gpu-device=N to select the device with the most free memory.
+   * passing --gpu_device=N to select the device with the most free memory.
    * This respawn happens even on single-node machines where NUMA binding is not needed.
    *
    * This system could be useful in other C programs using multithreading and large memory.
@@ -1769,7 +1768,7 @@ int main (int argc, const char *argv[])
 
 	  /* Tell magic2_gpu which device to use.                           */
 	  if (ngpu > 0 && bestDev >= 0)
-	    vtxtPrintf (txt, " --gpu-device=%d", bestDev) ;
+	    vtxtPrintf (txt, " --gpu_device=%d", bestDev) ;
 
 	  fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 	  return system (vtxtPtr (txt)) ;

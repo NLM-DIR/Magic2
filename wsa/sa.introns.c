@@ -1073,7 +1073,7 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 		min = 1 ;
 	      else if (!strcasecmp (up->feet1, "ct_ac") && !strcasecmp (up->feet2, "ct_gc"))
 		min = 1 ;
-	      if (up->n >= min)
+	      if (0 && up->n >= min)
 		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->b2, up->b1, up->a2, up->a1
 			 , dictName (pp->runDict, up->run)
@@ -1090,7 +1090,7 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 		min = 1 ;
 	      else if (!strcasecmp (up->feet1, "gt_ag") && !strcasecmp (up->feet2, "gc_ag"))
 		min = 1 ;
-	      if (up->n >= min)
+	      if (0 && up->n >= min)
 		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2, up->b1, up->b2
 			 , dictName (pp->runDict, up->run)
