@@ -1314,7 +1314,7 @@ static void wholeWork (const void *vp)
 	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
-        bigArrayMax(bb.sms) = 1 ;
+      //  bigArrayMax(bb.sms) = 1 ;
       saAlignDo (pp, &bb) ;
 
       t2 = clock () ;
