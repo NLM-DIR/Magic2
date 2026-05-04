@@ -154,8 +154,8 @@ setenv SV     v96.81.18M.e4.apr19     # idem, +radix sorting and use --nB = 2*nC
 setenv SVlast v96.81.18M.e4.apr19
 setenv SV     v97.81.18M.e4.apr20     # all ali seen as positive strand I hope i used the GPU for 011  on biogpu21
 setenv SVlast v97.81.18M.e4.apr20
-#setenv SV     v98.81.18M.e4.may1     # all ali seen as positive strand I hope i used the CPU for 011 on biogpu21
-#setenv SVlast v98.81.18M.e4.may1
+setenv SV     v98.81.18M.e4.may1     # all ali seen as positive strand I hope i used the CPU for 011 on biogpu21
+setenv SVlast v98.81.18M.e4.may1
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV

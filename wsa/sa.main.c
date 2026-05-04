@@ -1365,10 +1365,10 @@ static void reportRunStats (PP *pp, Array runStats)
   printf ("\n#:Reads_aligned\t%ld\t%.3f%%", s0->nMultiAligned[0], 100.0 * s0->nMultiAligned[0]/ (0.0000001 + s0->p.nReads)) ;
   printf ("\n#:PerfectReads\t%ld\t%.2f%%", s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(s0->p.nReads + .000001)) ;
 
-  printf ("\n#:Reads supporting introns %ld, plus %ld, minus %ld, stranding %.2f%%\n"
-	  , s0->nIntronSupportPlus + s0->nIntronSupportMinus 
-	  , s0->nIntronSupportPlus
-	  , s0->nIntronSupportMinus
+  printf ("\n#:Introns supports %ld, gt_ag %ld, ct_ac %ld, stranding %.2f%%\n"
+	  , s0->gt_ag_Support + s0->ct_ac_Support 
+	  , s0->gt_ag_Support
+	  , s0->ct_ac_Support 
 	  , s0->intronStranding
 	  ) ;
   printf ("\n#:SupportedIntrons\t%ld", s0->nSupportedIntrons) ;
@@ -2391,8 +2391,6 @@ int main (int argc, const char *argv[])
       aliDx += bb.aliDx ;
       if (bb.cpuStats)
 	saCpuStatCumulate (cpuStats, bb.cpuStats) ;
-      bb.runStat.nIntronSupportPlus = bb.nIntronSupportPlus ;
-      bb.runStat.nIntronSupportMinus = bb.nIntronSupportMinus ;
 	
       if (bb.run)
 	{

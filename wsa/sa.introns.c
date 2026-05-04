@@ -867,11 +867,10 @@ static char *flipFeet (char *feet)
 {
   char buf[6] ;
   memcpy (buf, feet, 6) ;
-  feet[0] = complementLetter(buf[4]) ;
-  feet[1] = complementLetter(buf[3]) ;
-  feet[3] = complementLetter(buf[1]) ;
-  feet[4] = complementLetter(buf[0]) ;
-
+  feet[0] = ace_lower(complementLetter(buf[4])) ;
+  feet[1] = ace_lower(complementLetter(buf[3])) ;
+  feet[3] = ace_lower(complementLetter(buf[1])) ;
+  feet[4] = ace_lower(complementLetter(buf[0])) ;
   return feet ;
 }
   
@@ -879,119 +878,56 @@ static char *flipFeet (char *feet)
 
 void saIntronStranding (PP *pp, Array aa)
 {
-  INTRON *zp, *zpR ;
+  INTRON *zp ;
   int runMax = dictMax (pp->runDict) + 1 ;
-  int nGt_ag[runMax] ;
-  int nCt_ac [runMax] ;
-  int cGood[runMax][12] ;
-  int cOther [runMax][12] ;
-  int k  ;
   float minS = 100 ;
   int run, ii, iMax = arrayMax (aa) ;
   float *s0 = pp->runStranding ;
-  
-  memset (nGt_ag, 0, sizeof (nGt_ag)) ;
-  memset (nCt_ac, 0, sizeof (nCt_ac)) ;
-  memset (cGood, 0, sizeof (cGood)) ;
-  memset (cOther, 0, sizeof (cOther)) ;
-  
-  if (iMax)
-    for (ii = 0, zp = arrp (aa, ii, INTRON) ; ii < iMax ; ii++, zp++)
-      {
-	for (char *cp = zp->feet ; *cp ; cp++)
-	*cp = ace_lower ((int)*cp) ;
-	if (! strcmp (zp->feet, "gt_ag"))
-	  {
-	    k = zp->n + zp->nR ;
-	    nGt_ag[zp->run]++ ;
-	    cGood[zp->run][k < 12 ? k : 11]++ ;
-	  }
-	else if (! strcmp (zp->feet, "ct_ac"))
-	  {
-	    k = zp->n + zp->nR ;
-	    nCt_ac[zp->run]++ ;
-	    cGood[zp->run][k < 12 ? k : 11]++ ;
-	  }
-	else
-	  {
-	    k = zp->n + zp->nR ;
-	    cOther[zp->run][k < 12 ? k : 11]++ ;
-	  }
-      }
-  
-  /* check ratio of Good/Other to find the threshold */
-  for (run = 0 ; run < runMax ; run++)
+
+  if (! iMax)
+    return ;
+
+  for (run = 1 ; run < runMax ; run++)
     {
-      /* cumul by coverage */
-      for (k = 1 ; k < 12 ; k++)
-	{	
-	  cGood[run][k] += cGood[run][k-1] ;
-	  cOther[run][k] += cOther[run][k-1] ;
-	}
-    }
-  for (run = 0 ; run < runMax ; run++)
-    {
-      s0[run] = array(pp->runStats, run, RunSTAT).intronStranding = 100.0 * (nGt_ag[run] + 1.0) / (nGt_ag[run] + nCt_ac[run] + .0001) ;
-      
+      int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
+      int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
+      s0[run] = 100.0 * (np + 0.01) / (np + nm + 0.0000001) ;
       if (pp->strand)
 	s0[run] = 100 ;
       else if (pp->antiStrand)
 	s0[run] = 0 ;
-      if (s0[run] < minS && nCt_ac[run])
-	minS = s0[run] ;
+      array(pp->runStats, run, RunSTAT).intronStranding = s0[run] ;
+      if (s0[run] < minS) minS = s0[run] ;
     }
   
-  if (minS < 70) /* flip needed */
+  if (1)
     {
       for (ii = 0, zp = arrp (aa, ii, INTRON) ; ii < iMax ; ii++, zp++)
 	{
-	  if (s0[zp->run] < 40)
+	  if (s0[zp->run] > 60 && zp->nR > zp->n)
 	    {  /* flip the whole run */
 	      int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
 	      flipFeet (zp->feet) ;
+	      int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
 	    }
-	  else if (s0[zp->run] < 60)  
+	  else if (s0[zp->run] < 40 && zp->nR < zp->n)
+	    {  /* flip the whole run */
+	      int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
+	      flipFeet (zp->feet) ;
+	      int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
+	    }
+	  else if (s0[zp->run] <= 60 &&  s0[zp->run] >=40)
 	    {  /* non stranded case, choose for every intron */
 	      if (! strcmp (zp->feet, "ct_ac") || ! strcmp (zp->feet, "ct_gc"))
 		{
 		  int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
 		  flipFeet (zp->feet) ;
+		  int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
 		}
 	    }
 	}
     }
   
-  /* compute the anti counts */
-  if (iMax)
-    {
-      array (aa, 2*iMax -1, INTRON).n = 0 ;
-      for (ii = 0, zp = arrp (aa, ii, INTRON), zpR = zp + iMax ; ii < iMax ; ii++, zp++, zpR++)
-	{
-	  *zpR = *zp ;
-	  zpR->a1 = zp->a2 ; zpR->a2 = zp->a1 ; 
-	  zpR->nR = zp->n ; zpR->n = zp->nR ; zpR->feet[0] = 0 ;
-	}
-      /* merged counts and antiCounts */
-      for (run = 0 ; run < runMax ; run++)
-	{
-	  array(pp->runStats, run, RunSTAT).nIntronSupportPlus = 0 ;
-	  array(pp->runStats, run, RunSTAT).nIntronSupportMinus = 0 ;
-	}
-      iMax = confirmedIntronsCompress (aa) ;
-      for (ii = 0, zp = arrp (aa, ii, INTRON); ii < iMax ; ii++, zp++)
-	{
-	  array(pp->runStats, zp->run, RunSTAT).nIntronSupportPlus +=  (s0[zp->run] < 40 ? zp->nR : zp->n) ;
-	  array(pp->runStats, zp->run, RunSTAT).nIntronSupportMinus += (s0[zp->run] < 40 ? zp->n : zp->nR) ;
-	  array(pp->runStats, 0, RunSTAT).nIntronSupportPlus += (s0[zp->run] < 40 ? zp->nR : zp->n) ;
-	  array(pp->runStats, 0, RunSTAT).nIntronSupportMinus += (s0[zp->run] < 40 ? zp->n : zp->nR) ;
-	}
-      for (run = 0 ; run < runMax ; run++)
-	{
-	  int np = array(pp->runStats, run, RunSTAT).nIntronSupportPlus ;
-	  int nm = array(pp->runStats, run, RunSTAT).nIntronSupportMinus ;
-	  array(pp->runStats, run, RunSTAT).intronStranding = 100.0 * np / (np + nm + 0.0000001) ;
-	}
-    }
   return ;
 } /* saIntronStranding */
 
@@ -1025,7 +961,7 @@ void saIntronsExport (PP *pp, Array aaa)
 	  else if (!strcasecmp (up->feet, "gc_ag"))
 	    min = 2 ;
 
-	  if (0 && up->n + up->nR >= min)
+	  if (1 && up->n + up->nR >= min)
 	    aceOutf (ao, "%s__%d_%d\t%s\tiit\t%d\t%d\t%s\n"
 		     , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2
 		     , dictName (pp->runDict, up->run)
@@ -1063,8 +999,10 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 	  int min = 2 ;
 	  if (! up->feet1[0])
 	    continue ;
-	  if (s0[up->run] < 40 || /* flip whole run */
-	      (s0[up->run] < 40 && (! strcasecmp (up->feet1, "ct_ac") || ! strcasecmp (up->feet2, "ct_ac")))
+	  if (
+	      (s0[up->run] > 60 && up->nR > up->n) ||
+	      (s0[up->run] < 40 && up->nR < up->n) ||
+	      (s0[up->run] <= 60 &&  s0[up->run] >=40 && (!strcasecmp (up->feet1, "ct_ac") || !strcasecmp (up->feet1, "ct_gc")))
 	      ) /* flip needed */
 	    {
 	      if (!strcasecmp (up->feet1, "ct_ac") && !strcasecmp (up->feet2, "ct_ac"))
@@ -1073,11 +1011,12 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 		min = 1 ;
 	      else if (!strcasecmp (up->feet1, "ct_ac") && !strcasecmp (up->feet2, "ct_gc"))
 		min = 1 ;
-	      if (0 && up->n >= min)
-		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+	      if (up->n + up->nR >= min)
+		aceOutf (ao, "AA: %f  %s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+			 , s0[up->run]
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->b2, up->b1, up->a2, up->a1
 			 , dictName (pp->runDict, up->run)
-			 , up->n, up->nR
+			 , up->nR, up->n
 			 , flipFeet (up->feet2)
 			 , flipFeet (up->feet1)
 			 ) ;
@@ -1090,8 +1029,9 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 		min = 1 ;
 	      else if (!strcasecmp (up->feet1, "gt_ag") && !strcasecmp (up->feet2, "gc_ag"))
 		min = 1 ;
-	      if (0 && up->n >= min)
-		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+	      if (up->n + up->nR >= min)
+		aceOutf (ao, "BB: %f %s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+			 , s0[up->run]
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2, up->b1, up->b2
 			 , dictName (pp->runDict, up->run)
 			 , up->n, up->nR

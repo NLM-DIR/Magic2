@@ -226,13 +226,9 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
       aceOutf (ao, "\n%s\t%s\tSupported_introns\t%ld\tgt_ag seen once or other seen 3\n", run, METHOD, confirmedIntronsCountSites (pp, 0, 0)) ;
       aceOutf (ao, "\n%s\t%s\tnDoubleIntrons\t%ld\n", run, METHOD, arrayMax (pp->doubleIntrons)) ;
       aceOutf (ao, "%s\t%s\tIntron_supports\t%ld\t%ld\t%ld\t%.3f\n", run, METHOD
-	       /* , s0->gt_ag_Support + s0->ct_ac_Support 
-		  , s0->gt_ag_Support
-		  , s0->ct_ac_Support
-	       */
-	       , s0->nIntronSupportPlus + s0->nIntronSupportMinus
-	       , s0->nIntronSupportPlus
-	       , s0->nIntronSupportMinus
+	       , s0->gt_ag_Support + s0->ct_ac_Support 
+	       , s0->gt_ag_Support
+	       , s0->ct_ac_Support
 	       , s0->intronStranding
 	       ) ;
     }
@@ -300,8 +296,6 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   up->lowEntropyBases += vp->lowEntropyBases ;
   up->tooShortBases += vp->tooShortBases ;
   up->nSupportedIntrons += vp->nSupportedIntrons ;
-  up->nIntronSupportPlus += vp->nIntronSupportPlus ;
-  up->nIntronSupportMinus += vp->nIntronSupportMinus ;
   up->gt_ag_Support += vp->gt_ag_Support ;
   up->ct_ac_Support += vp->ct_ac_Support ;
   
@@ -797,9 +791,9 @@ void saRunStatExport (const PP *pp, Array runStats)
 	    {
 	      aceOutf (ao, "%s\tIntron_supports\tiiif\t%ld\t%ld\t%ld\t%.3f%%\n"
 		       , runNam
-		       , up->nIntronSupportPlus + up->nIntronSupportMinus 
-		       , up->nIntronSupportPlus /* up->gt_ag_Support */
-		       , up->nIntronSupportMinus /* up->ct_ac_Support */
+		       , up->gt_ag_Support + up->ct_ac_Support 
+		       , up->gt_ag_Support
+		       , up->ct_ac_Support 
 		       , up->intronStranding
 		       ) ;
 	      aceOutf (ao, "%s\tSupported_introns\tit\t%ld\tgt_ag seen once or other seen 3\n"

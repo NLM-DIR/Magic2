@@ -342,8 +342,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   int run = nw / (2 * chromMax) ;
   int chrom = (nw % (2 * chromMax)) ;
-  int np = array(pp->runStats, run, RunSTAT).nIntronSupportPlus ;
-  int nm = array(pp->runStats, run, RunSTAT).nIntronSupportMinus ;
+  int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
+  int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
   char flip = (pp->antiStrand || (! pp->strand && nm > 3 && 100*nm > 80*(nm+np))) ? 0x1 : 0x0 ;  ;  
   char strand = ( nw & 0x1) ^ flip ? 'r' : 'f' ;
   long int ii, iMax = 0 ;

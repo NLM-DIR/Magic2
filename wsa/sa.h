@@ -120,10 +120,8 @@ typedef struct runStatStruct {
   long int SlRead ;
   long int nClippedSls[SLMAX] ;
   long int nSupportedIntrons ;
-  long int nIntronSupportPlus ;
-  long int nIntronSupportMinus ;
-  int gt_ag_Support ;
-  int ct_ac_Support ;
+  long int gt_ag_Support ;
+  long int ct_ac_Support ;
   float intronStranding ;
   long int wiggleCumul ; /* in million bases */
   long int wiggleLCumul ; /* in million bases */
@@ -405,9 +403,9 @@ typedef struct geneStruct {
 		  
 typedef struct intronStruct {
   int run ;
-  int mrna ;
   int chrom ;
   int n, nR, a1, a2 ;
+  int chromLength ;
   char feet[6] ;
 } __attribute__((aligned(32))) INTRON ;
 		  
@@ -421,6 +419,7 @@ typedef struct doubleIntronStruct {
   int run ;
   int chrom ;
   int n, nR, a1, a2, b1, b2 ;
+  int chromLength ;
   char feet1[6] ;
   char feet2[6] ;
 } __attribute__((aligned(32))) DOUBLEINTRON ;

@@ -1400,8 +1400,10 @@ static void alignAdjustIntrons (const PP *pp, BB *bb, Array bestAp, Array aa, in
       int iv = k - 1, iw = iv + 1 ;
       if (up->chrom != chromA)
 	{
+	  int isUp = up->chrom & 0x1 ;
+	  Array dnas = isUp ? pp->bbG.dnasR : pp->bbG.dnas ;
 	  chromA = up->chrom ;
-	  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
+	  dnaG = arr (dnas, chromA >> 1, Array) ;
 	}
 
       wp = (iv < iMax - 1 && vp[1].chain == chain ? vp + 1 : 0) ;
@@ -2726,6 +2728,19 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 } /* alignSelectBestDynamicPath */
 
 /**************************************************************/
+
+static char *flipFeet (char *feet)
+{
+  char buf[6] ;
+  memcpy (buf, feet, 6) ;
+  feet[0] = ace_lower(complementLetter(buf[4])) ;
+  feet[1] = ace_lower(complementLetter(buf[3])) ;
+  feet[3] = ace_lower(complementLetter(buf[1])) ;
+  feet[4] = ace_lower(complementLetter(buf[0])) ;
+  return feet ;
+}
+  
+/**************************************************************/
 /* Establish chain scores, select best */
 static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array aa, int read, Array bestAp, ADAPTORS *adaptors)
 {
@@ -3043,14 +3058,13 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      { /* found one intron */
 
 		int chrom = ap->chrom ;
-		int a1 = ap->a1 ;
 		int a2 = ap->a2 ;
 		int x2 = ap->x2 ;
 		int b1 = bp->a1 ;
 		int y1 = bp->x1 ;
 		BOOL ok = TRUE ;
 		
-		if (a1 <10 || b1 < 10 || a2 < 10)
+		if (b1 < 10 || a2 < 10)
 		  continue ;
 		if (ap->errors)
 		  {
@@ -3077,11 +3091,10 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 
 		
 		INTRON *zp = arrayp (bb->confirmedIntrons, arrayMax (bb->confirmedIntrons), INTRON) ;
-		BOOL isReadDown = ((chrom & 0x1) ? FALSE : TRUE) ;
 		Array myDnaG = 0 ;
 		
 		zp->run = bb->run ;
-
+		zp->chrom = chrom ;
 		if (chrom != chromA)
 		  {
 		    chromA = chrom ;
@@ -3090,20 +3103,19 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		    dnaLength = arrayMax (dnaG) ;
 		  }
 
-		myDnaG = isReadDown ? dnaG : dnaGR ;
+		myDnaG = chrom & 0x1 ? dnaGR : dnaG ;
 		zp->a1 = a2 + 1 ;
 		zp->a2 = b1 - 1 ;
-		if (read & 0x1) bb->nIntronSupportMinus++ ;
-		else bb->nIntronSupportPlus++ ;
 		const char *cp = arrp (myDnaG, zp->a1 - 1, char) ;
-		zp->feet[4] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-		zp->feet[3] = dnaDecodeChar[(int)complementBase(cp[1])] ;
+		zp->feet[0] = dnaDecodeChar[(int)cp[0]] ;
+		zp->feet[1] = dnaDecodeChar[(int)cp[1]] ;
 		zp->feet[2] = '_' ;
 		cp = arrp (myDnaG, zp->a2 - 2, char) ;
-		zp->feet[1] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-		zp->feet[0] = dnaDecodeChar[(int)complementBase(cp[1])] ;
+		zp->feet[3] = dnaDecodeChar[(int)cp[0]] ;
+		zp->feet[4] = dnaDecodeChar[(int)cp[1]] ;
 		zp->feet[5] = 0 ;
-		    
+		zp->chromLength = dnaLength ;
+
 		if (! strcmp (zp->feet, (read & 0x1) ? "ct_ac" : "gt_ag"))
 		  {
 		    bb->runStat.gt_ag_Support++ ;
@@ -3141,33 +3153,85 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  INTRON *zp1 = arrayp (bb->confirmedIntrons, ii, INTRON) ;
 	  INTRON *zp2 = arrayp (bb->confirmedIntrons, ii + 1, INTRON) ;
 	  
-	  if (zp1->chrom == zp2->chrom && zp1->n == zp2->n &&
+	  if (
 	      (
-	       (zp1->a1 < zp1->a2 && zp1->a2 < zp2->a1 && zp2->a1 < zp2->a2) ||
-	       (zp1->a1 > zp1->a2 && zp1->a2 > zp2->a1 && zp2->a1 > zp2->a2) 
-	       ) &&
-	      ! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gt_ag") 
-	      ) /* same chain chain */
+	       ((zp1->chrom & 0x1) == 0) &&
+	       zp1->chrom == zp2->chrom && zp1->n == zp2->n &&
+	       (zp1->a1 < zp1->a2 && zp1->a2 < zp2->a1 && zp2->a1 < zp2->a2)  &&
+	       (
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gc_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gc_ag"))  ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_gc") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_gc"))  
+		)
+	       )
+	      ||
+	      (
+	       (zp1->chrom & 0x1) &&
+	       zp1->chrom == zp2->chrom && zp1->n == zp2->n &&
+	       (zp1->a1 < zp1->a2 && zp2->a2 > zp1->a1 && zp2->a1 < zp2->a2)  &&
+	       (
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gc_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gc_ag"))  ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_gc") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_gc"))  
+		)
+	       )
+	      ) /* same chain chain  good topology*/
 	    {
 	      DOUBLEINTRON *zzp = arrayp (bb->doubleIntrons, arrayMax (bb->doubleIntrons), DOUBLEINTRON) ;
-	      zzp->chrom = zp1->chrom ;
+	      zzp->chromLength = zp1->chromLength ;
 	      zzp->run = bb->run ;
-	      zzp->n = 1 ;
-	      zzp->a1 = zp1->a1 ; zzp->a2 = zp1->a2 ;
-	      zzp->b1 = zp2->a1 ; zzp->b2 = zp2->a2 ;
-	      memcpy (zzp->feet1, zp1->feet, 6) ;
-	      memcpy (zzp->feet2, zp2->feet, 6) ;
+
+	      if (zp1->chrom & 0x1)
+		{
+		  zzp->nR = 1 ;
+		  zzp->chrom = zp1->chrom & (~0x1) ;
+		  zzp->a1 = dnaLength - zp2->a2 + 1 ; zzp->a2 = dnaLength - zp2->a1 + 1 ;
+		  zzp->b1 = dnaLength - zp1->a2 + 1 ; zzp->b2 = dnaLength - zp1->a1 + 1 ;
+		  memcpy (zzp->feet1, zp2->feet, 6) ; flipFeet (zzp->feet1) ;
+		  memcpy (zzp->feet2, zp1->feet, 6) ; flipFeet (zzp->feet2) ;
+		}
+	      else
+		{
+		  zzp->n = 1 ;
+		  zzp->chrom = zp1->chrom ;
+		  zzp->a1 = zp1->a1 ; zzp->a2 = zp1->a2 ;
+		  zzp->b1 = zp2->a1 ; zzp->b2 = zp2->a2 ;
+		  memcpy (zzp->feet1, zp1->feet, 6) ;
+		  memcpy (zzp->feet2, zp2->feet, 6) ;
+		}
 	    }
 	}
       
-  /* reset the count which was overlaoded with chain */
+
+      intronMax = arrayMax (bb->confirmedIntrons) ;
       for (ii = intronMaxOld ; ii < intronMax ; ii++)
 	{
-	  INTRON *zp1 = arrayp (bb->confirmedIntrons, ii, INTRON) ;
-	  zp1->n = 1 ;
+	  /* flip and reset the count which was overloaded with chain */
+	  INTRON *zp = arrayp (bb->confirmedIntrons, ii, INTRON) ;
+	  if (zp->chrom & 0x1)
+	    {
+	      int chromLength = zp->chromLength ;
+	      int a1 = zp->a1 ;
+	      zp->a1 = chromLength - zp->a2 + 1 ;
+	      zp->a2 = chromLength - a1 + 1 ;
+	      flipFeet (zp->feet) ;	  
+	      if (read & 0x1)   { zp->n = 1 ; zp->nR = 0 ; }
+	      else { zp->n = 0 ; zp->nR = 1 ; } 
+	    }
+	  else
+	    {
+	      if (read & 0x1)   { zp->n = 0 ; zp->nR = 1 ; }
+	      else { zp->n = 1 ; zp->nR = 0 ; } 
+	    }
 	}
     }
-
+  
   /* format the errors, must come after register introns since here we destroy the errors */
   iMax = arrayMax (aa) ;
   if (iMax)
@@ -3804,7 +3868,7 @@ void saAlignDo (const PP *pp, BB *bb)
 
 	  if (1)
 	    {
-	      int read = 0, chrom = 0, mult ;
+	      int chrom = 0, mult ;
 	      int k, kk = 0, a1 = 0 ;
 	      HIT *up  ;
 	      COUNTCHROM *zp = 0, *zp0 = 0 ;
@@ -3876,7 +3940,6 @@ void saAlignDo (const PP *pp, BB *bb)
 		  bigArrayMax (hits2) = 0 ;
 
 		  int mm = 0, k8 = 1 ;
-		  int read ;
 		  zp = zp0 = arrayp (countChroms, 0, COUNTCHROM) ;
 		  if (zp->seed1 < zp->seed2) k8 = 2 ;
 		  if (zp->seed1 < zp->seed4) k8 = 4 ;
@@ -3927,7 +3990,6 @@ void saAlignDo (const PP *pp, BB *bb)
       int isRna = 1 ;
       long int baseAligned = bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2 ;
       long int iSupport = bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support ;
-      if (0) iSupport = bb->runStat.nIntronSupportPlus + bb->runStat.nIntronSupportMinus ;
       if (3 * baseAligned > 100000 * pp->BMAX && 4000 * iSupport < baseAligned)
 	isRna = -1 ;
       if (saReadAdaptors (&adaptors, &(bb->runStat), TRUE))
@@ -3943,10 +4005,9 @@ void saAlignDo (const PP *pp, BB *bb)
 	}
       if (0 && redo == 0) redo = 1 ;
       bb->isRna = isRna ;
-      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld %ld   gc_ag=%d %d  baseAli = %ld\n"
+      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld   baseAli = %ld\n"
 	       , bb->lane, isRna
-	       , bb->runStat.nIntronSupportPlus, bb->runStat.nIntronSupportMinus
-	       , bb->runStat.gt_ag_Support, bb->runStat.ct_ac_Support
+	       , bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support
 	       ,  bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2
 	       ) ;
     }
