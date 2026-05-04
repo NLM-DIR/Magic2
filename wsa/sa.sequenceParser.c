@@ -969,11 +969,10 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  bb->cpuStats = arrayHandleCreate (128, CpuSTAT, bb->h) ;
 	  bb->rc.fileName1 = sraID ;
 	  /* copy the buffer */
-	  bb->gzBuffer = halloc (bytes + bytes2 + 1, bb->h) ;
-	  memcpy (bb->gzBuffer, sra->seq, bytes) ;
-	  memcpy (bb->gzBuffer + bytes, sra->seq2, bytes2) ;
+	  bb->gzBuffer = halloc (nBytes + 1, bb->h) ;
+	  memcpy (bb->gzBuffer, sra->seq, nBytes) ;
 	  
-	  bb->gzBuffer[bytes + bytes2] = 0 ;
+	  bb->gzBuffer[nBytes] = 0 ;
 	  bb->nSeqs = 100 ;  /* a guess */
 	  
 	  /* export the databalock to the channel */
@@ -1498,7 +1497,7 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
   
   while (! Gb || nMax-- > 0)
     {
-      SraGetReadBatch(sra, num_bases, fastq, split_pairs) ;
+      SraGetReadBatch (sra, num_bases, fastq, split_pairs) ;
       if (sra->seq)
 	{
 	  nn++ ;
