@@ -912,7 +912,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
     fastq = FALSE ;
   split_pairs = FALSE ;
 
-  if (num_bases > nMax) num_bases = nMax ;
+  if (nMax && num_bases > nMax) num_bases = nMax ;
   nMax =  (nMax + num_bases - 1) / num_bases ; 
   format = SRA ;
 

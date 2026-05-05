@@ -154,10 +154,10 @@ setenv SV     v96.81.18M.e4.apr19     # idem, +radix sorting and use --nB = 2*nC
 setenv SVlast v96.81.18M.e4.apr19
 setenv SV     v97.81.18M.e4.apr20     # all ali seen as positive strand I hope i used the GPU for 011  on biogpu21
 setenv SVlast v97.81.18M.e4.apr20
-setenv SV     v98.81.18M.e4.may1     # all ali seen as positive strand I hope i used the CPU for 011 on biogpu21
-setenv SVlast v98.81.18M.e4.may1
-setenv SV     v99.81.18M.e4.may1     # all ali seen as positive strand, back on farm
-setenv SVlast v99.81.18M.e4.may1
+#setenv SV     v98.81.18M.e4.may1     # all ali seen as positive strand I hope i used the CPU for 011 on biogpu21
+#setenv SVlast v98.81.18M.e4.may1
+#setenv SV     v99.81.18M.e4.may1     # all ali seen as positive strand, back on farm
+#setenv SVlast v99.81.18M.e4.may1
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -259,8 +259,8 @@ setenv wormRuns "  Worm_RNA_150PE "
 setenv monkeyRuns "Chimpanzee_0.92pc Macaque_2.69pc PTMacaque_2.71pc Baboon_2.92pc Marmoset_3.14 SquirrelMonkey_3.08pc MouseLemur_2.64pc"
 setenv baruzzoRuns "HG19t1_0.543pc HG19t2_1.186pc HG19t3_6.024pc"
 
-setenv allRuns "$iRefSeqRuns $ABRuns  $dnaRuns $monkeyRuns  $baruzzoRuns $wormRuns  "
-setenv runs    "$iRefSeqRuns $ABRuns  $dnaRuns $monkeyRuns  $baruzzoRuns $wormRuns  "
+setenv allRuns "$ABRuns  $iRefSeqRuns $dnaRuns $monkeyRuns  $wormRuns $baruzzoRuns "
+setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $monkeyRuns  $wormRuns $baruzzoRuns   "
 
 
 # setenv runs "RNA_PolyA_AB_1_97G"
@@ -978,8 +978,8 @@ foreach run ($runs)
         # scripts/submit $method/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2" local
 	touch RESULTS/$method/$run/toto
 	\rm RESULTS/$method/$run/*
-	scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  64G
-        # scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  local
+	# scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  64G
+        scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  local
         if (-e RESULTS/$method/$run/s2g.samSats) \rm RESULTS/$method/$run/s2g.samSats
         if (-e RESULTS/$method/$run/$run.s2g.samSats) \rm RESULTS/$method/$run/$run.s2g.samSats
         if (-e RESULTS/$method/$run/$run/s2g.samSats) \rm RESULTS/$method/$run/$run/s2g.samSats
