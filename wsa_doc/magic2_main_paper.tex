@@ -47,15 +47,17 @@ PacBio) reads without requiring the user to specify read type, adapter
 sequences, strandedness, or the number of threads.
 In a single pass, Magic2 produces alignments, splice-junction tables,
 gene-level expression counts, strand-specific coverage tracks,
-poly(A)/poly(T) tail calls, and a rich set of quality-control metrics
+poly(A)/poly(T) tail calls, probable transcription start and end poins,
+and a rich set of quality-control metrics
 — all directly comparable across runs and laboratories.
 Benchmarks on 31 public datasets (covering human Illumina paired-end,
 Nanopore, PacBio, Roche~454, cross-species primate, \textit{C.\ elegans},
-ChIP-seq, and RefSeq mRNA controls; v90 build) show that Magic2 matches
+ChIP-seq, and RefSeq mRNA controls) show that Magic2 matches
 or exceeds leading aligners (STAR, HISAT2, Minimap2, Magic-BLAST) in
-known-junction recovery across all data types, produces 100- to
+mapping quality across all data types, produces 100- to
 120-fold fewer false-positive splice junctions than HISAT2 and STAR on
-DNA controls, and delivers 2-fold lower CPU consumption than STAR while
+DNA controls, and delivers 2-fold lower CPU consumption than STAR
+or minimap-16 threads while
 completing in comparable or shorter wall-clock time.
 Magic2 is freely available at \url{https://github.com/NLM-DIR/Magic2}.
 \end{abstract}
@@ -87,7 +89,9 @@ technologies with consistent accuracy and without manual
 reconfiguration.
 
 Magic2 addresses these limitations through three design principles.
-First, \emph{full automation}: read length, paired-end geometry, adapter
+First, \emph{full automation}: sequencing data can be downloaded
+automatically from the NCBI short-read-archives (SRA) and
+analyzed on the fly. Read length, paired-end geometry, adapter
 sequences, and sequencing platform are inferred from the data;
 internal parameters such as seed length and maximum intron size are
 derived from genome size.
@@ -106,7 +110,9 @@ comparisons of SRA datasets.
 
 \subsection*{Overview of Magic2}
 
-Magic2 accepts a reference genome (FASTA) and an optional annotation
+Magic2 accepts a reference genome (FASTA), plus the motochondria
+and a master copy of the rRNA precursor,
+and an optional annotation
 (GTF/GFF) to build an on-disk seed index.
 At run time, one or more SRA accession numbers or local FASTA/FASTQ
 files are supplied; no other configuration is required.
@@ -120,16 +126,18 @@ Internally, Magic2 follows a sort--merge paradigm rather than hash-table
 lookup: seed records are generated for reads and genome in large
 sequential blocks, sorted and joined by simultaneous linear
 traversal of both sorted lists.
-This design keeps the dominant computation in fast CPU cache rather than
-in random main-memory accesses, and scales naturally across NUMA
-architectures without user-supplied thread counts
-(see Supplementary Material for full details).
-If available, sorting and joinining is automatically delegated to a GPU.
+This design favors fast sequential cache access over
+much slower random main-memory accesses, strongly accelerating
+the calculations
 
 The pipeline is structured as concurrent agents communicating through
-bounded, lock-free channels.
+bounded, lock-free channels following the GO language paradigm.
 Agents process independent data blocks in parallel; backpressure and
 channel closure guarantee deadlock-free execution and no data loss.
+This design scales naturally with the number of available CPUs without
+user intervention and,
+if available, will delagate part of the calculations to a GPU.
+
 
 \subsection*{Outputs}
 
@@ -137,14 +145,16 @@ In a single pass Magic2 produces:
 (i) primary alignments (in BAM or the richer .hits format)
 (ii) splice-junction tables with per-junction read support;
 (iii) gene-level expression counts with bidirectional-overlap resolution;
-(iv) strand-specific wiggle coverage tracks (plus read-start/end profiles
+(iv) strand-specific wiggle coverage tracks (plus trancription start/end profiles
      for transcript boundary detection);
 (v) poly(A)/poly(T) tail calls and trans-spliced leader identification
     (in \textit{C.\ elegans});
 (vi) adapter consensus sequences and auto-clipping (de-novo or from a supplied list);
 (vii) a standardised QC table covering
-     alignment rates, mapping-class fractions, strand-specificity,
-     mismatch distributions, and pair concordance statistics.
+     alignment rates, mapping-class fractions (intergenic, intronic, CDS, UTR)
+     and target fractions (genomic, rRNA, mitochondria, contaminants),
+     strand-specificity,
+     mismatch distributions and pair concordance statistics.
 
 \subsection*{Benchmark}
 
@@ -160,7 +170,9 @@ poly(A)-selected and total RNA), six long-read technologies (Nanopore
 R9/R10 and PacBio Sequel\,II/Revio), seven cross-species primate
 datasets (chimpanzee to mouse lemur) aligned to the human T2T
 reference, single-end 35\,nt ChIP-seq and DNA paired-end controls,
-and RefSeq mRNA sequences used as a zero-SNP perfect-alignment
+2 short RNA samples,  
+artificial controls from Baruzzo, a C.elegans sample,
+and human RefSeq mRNA sequences used as a zero-SNP perfect-alignment
 benchmark (Table~\ref{tab:datasets}).
 All tools were run with their default parameters; Magic2 required no
 additional configuration for any dataset.

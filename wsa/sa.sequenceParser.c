@@ -131,8 +131,13 @@ static BOOL parseOneSequence (DnaFormat format, char *namBuf, ACEIN ai, Array dn
 	    }
 	  if (! cp) /* no > identifier in the ramainder of the fasta file */
 	    return FALSE ;
-	  if (cp[0] != '>' || cp[1] == 0)
+	  if (cp[0] != '>')
 	    messcrash ("\nMissing identifier at line %d of fasta sequence file %s\n", *linep, aceInFileName (ai)) ; 
+	  if (cp[1] == 0)
+	    {
+	      messerror ("\nEmpty identifier at line %d of fasta sequence file %s\n", *linep, aceInFileName (ai) ? aceInFileName (ai) : "closed file") ;
+	      return FALSE ;
+	    }
 	  strncpy (namBuf, cp + 1, NAMMAX - 2) ;
 	  n = nn = 0 ;
 	  while (aceInCard (ai))
