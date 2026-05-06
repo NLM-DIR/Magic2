@@ -3567,6 +3567,7 @@ static void alignDoOnePair (const PP *pp, BB *bb
 	      
 	      /* keep best scores */
 	      arraySort (pairs, pairOrder) ;
+	      px0 = arrayp (pairs, 0, PAIR)  ;
 	      for (j1 = 0, bestScore = px0->score ; j1 < jMax ; j1++)
 		if (px0[j1].score < bestScore)
 		  break ;
@@ -3574,7 +3575,7 @@ static void alignDoOnePair (const PP *pp, BB *bb
 
 	      /* keep closest pairs */
 	      arraySort (pairs, pairOrder2) ;
-	      for (j1 = 0 ; j1 < jMax ; j1++)
+	      px0 = arrayp (pairs, 0, PAIR)  ;
 	      for (j1 = 0, bestDb = px0->db ; j1 < jMax ; j1++)
 		if (px0[j1].db > 2 * bestDb)
 		  break ;
