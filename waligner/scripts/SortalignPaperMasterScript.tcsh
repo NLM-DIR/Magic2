@@ -158,6 +158,8 @@ setenv SVlast v97.81.18M.e4.apr20
 #setenv SVlast v98.81.18M.e4.may1
 setenv SV     v99.81.18M.e4.may1     # all ali seen as positive strand, back on farm
 setenv SVlast v99.81.18M.e4.may1
+setenv SV     v100.81.18M.e4.may5     # all ali seen as positive strand final, back on farm, pairs should be fixed 
+setenv SVlast v100.81.18M.e4.may5
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV

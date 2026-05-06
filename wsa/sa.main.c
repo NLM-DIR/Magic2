@@ -1931,10 +1931,8 @@ int main (int argc, const char *argv[])
   if (bestGpu >= 0)
      cudaSetDevice (bestGpu) ;
 #endif
-  
 
   if (p.createIndex)
-
     {
       if (! p.tFileName && ! p.tConfigFileName)
 	saUsage ("--createIndex requires providing a target parameter -t or -T", argc, argv) ;
@@ -2182,7 +2180,7 @@ int main (int argc, const char *argv[])
   if (p.createIndex)
     { /* The human genome index consumes around 18 Gigabytes of RAM */
       if (p.maxTargetRepeats <= 0)
-	p.maxTargetRepeats = 31 ;  /* was 81  31 12 */
+	p.maxTargetRepeats = 81 ;  /* was 81  31 12 */
 
       saTargetIndexCreate (&p) ;
       goto done ;

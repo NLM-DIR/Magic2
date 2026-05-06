@@ -74,7 +74,7 @@ Array saTargetParseConfig (PP *pp)
 		       , line
 		       , pp->tConfigFileName
 		       ) ;
-	  if (! strchr ("GMCREATIBV", cc))
+	  if (! strchr ("GMCREIBV", cc))
 	    messcrash ("\n\nThe target class must be specified as a single character [GMCREATIBV], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
 		       , cc
 		       , line

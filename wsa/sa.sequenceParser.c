@@ -135,7 +135,7 @@ static BOOL parseOneSequence (DnaFormat format, char *namBuf, ACEIN ai, Array dn
 	    messcrash ("\nMissing identifier at line %d of fasta sequence file %s\n", *linep, aceInFileName (ai)) ; 
 	  if (cp[1] == 0)
 	    {
-	      messerror ("\nEmpty identifier at line %d of fasta sequence file %s\n", *linep, aceInFileName (ai) ? aceInFileName (ai) : "closed file") ;
+	      fprintf (stderr, "\nEmpty identifier at line %d of fasta sequence file %s\n", *linep, aceInFileName (ai) ? aceInFileName (ai) : "closed file") ;
 	      return FALSE ;
 	    }
 	  strncpy (namBuf, cp + 1, NAMMAX - 2) ;
@@ -360,7 +360,8 @@ void saSequenceParseGzBuffer (const PP *pp, BB *bb)
       atgcn[T_] = 1 ;
       atgcn[G_] = 2 ;
       atgcn[C_] = 3 ;
-      
+
+      aceInSpecial (ai, "\n") ;
       memset (namBuf, 0, NAMMAX) ;
       bb->errors = arrayHandleCreate (256, int, bb->h) ;
       bb->txt1 = vtxtHandleCreate (bb->h) ;
@@ -625,9 +626,11 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       bb->cpuStats = arrayHandleCreate (128, CpuSTAT, bb->h) ;
       bb->rc.fileName1 = fileName1 ;
       /* copy the buffer */
-      bb->gzBuffer = halloc (bytes + 1, bb->h) ;
+      bb->gzBuffer = halloc (bytes + 32, bb->h) ;
       memcpy (bb->gzBuffer, buffer, bytes) ;
-      bb->gzBuffer[bytes] = 0 ;
+      for (int i = 0 ; i < 32 ; i++)
+	bb->gzBuffer[bytes+i] = 0 ;
+      bb->gzBuffer[bytes] = '\n' ;
       /* position the remnant */
       if (! done) memcpy (buffer, buffer2, pos) ;
       bb->nSeqs = 100 ;  /* a guess */
