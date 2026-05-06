@@ -327,10 +327,10 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   int i, j, nE ;
   int bestN, bestI = -1, bestJ = -1 ;
   int dy = 0 ;  /* dy > 0 recouvrement, dy < 0: trou dans le read */
-  BOOL isDown = (vp->a1 < vp->a2 ? TRUE : FALSE ) ;
-  int da = isDown ? vp->a2 - wp->a1 + 1: wp->a1 - vp->a2 + 1 ;
+  BOOL isDown = (vp->a1 <= vp->a2 ? TRUE : FALSE ) ;
+  int da = vp->a2 - wp->a1 + 1 ;
   /* int day = dy - da ; */
-  
+  if (! isDown) messcrash("isdown should be true") ;
   if (0 && da < 4 && da > -4 && dy < 4 && dy > -4 && vp->chrom == wp->chrom)
     {
       /* merge the 2 alignments */
@@ -343,7 +343,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    vp->errors = arrayHandleCreate (20, A_ERR, bb->h) ;
 	}
       vp->nErr = arrayMax (vp->errors) ;
-      /*       int dz = dy - (isDown ? da : -da) ; */
+
       if (dy) /* create an error at th new junction */
 	{
 	  epX = arrayp (vp->errors, vp->nErr++, A_ERR) ;
@@ -375,7 +375,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
     {
       int dx = vp->x1 - wp->x1 ;
       wp->x1 = vp->x1 ;
-      wp->a1 += (isDown ? dx : -dx ) ;  /* correct only if there are no indel in [wp->a1,wp->a1+dx] segment */
+      wp->a1 += dx ;  /* correct only if there are no indel in [wp->a1,wp->a1+dx] segment */
     }
   dy = vp->x2 - wp->x1 + 1 ;
   if (dy > 0 && nEx + nEy > 0)
@@ -481,8 +481,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    {
 	      epX = arrp (vp->errors, bestI, A_ERR) ;
 	      vp->x2 = epX->iShort ;  /* last exact base bio coords */
-	      /* vp->a2 = epX->iLong + (isDown ? 0 : 2) ; */
-	      int zA = epX->iLong + (isDown ? 0 : 0) ;
+	      int zA = epX->iLong ;
 	      vp->a2 = (vp->chrom & 0x1 ?  arrayMax(dnaG) - zA + 1 : zA) ;
 	    }
 	  nEx = bestI ;
@@ -523,7 +522,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	      break ;
 	    }
 	  wp->x1 = zY + dY + 1 ;  /* bio coords */
-	  wp->a1 = (isDown ?  zA + dA + 1 : arrayMax(dnaG) - zA - dA) ;
+	  wp->a1 = zA + dA + 1 ;
 	  wp->nErr -= bestJ + 1 ;
 	  if (wp->nErr)
 	    for (j = 0, epY = arrp (wp->errors, 0, A_ERR) ; j < wp->nErr ; epY++, j++)

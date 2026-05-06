@@ -156,8 +156,8 @@ setenv SV     v97.81.18M.e4.apr20     # all ali seen as positive strand I hope i
 setenv SVlast v97.81.18M.e4.apr20
 #setenv SV     v98.81.18M.e4.may1     # all ali seen as positive strand I hope i used the CPU for 011 on biogpu21
 #setenv SVlast v98.81.18M.e4.may1
-#setenv SV     v99.81.18M.e4.may1     # all ali seen as positive strand, back on farm
-#setenv SVlast v99.81.18M.e4.may1
+setenv SV     v99.81.18M.e4.may1     # all ali seen as positive strand, back on farm
+setenv SVlast v99.81.18M.e4.may1
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -978,8 +978,8 @@ foreach run ($runs)
         # scripts/submit $method/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2" local
 	touch RESULTS/$method/$run/toto
 	\rm RESULTS/$method/$run/*
-	# scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  64G
-        scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  local
+	scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  64G
+        # scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  local
         if (-e RESULTS/$method/$run/s2g.samSats) \rm RESULTS/$method/$run/s2g.samSats
         if (-e RESULTS/$method/$run/$run.s2g.samSats) \rm RESULTS/$method/$run/$run.s2g.samSats
         if (-e RESULTS/$method/$run/$run/s2g.samSats) \rm RESULTS/$method/$run/$run/s2g.samSats

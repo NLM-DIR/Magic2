@@ -382,13 +382,13 @@ void saSequenceParseGzBuffer (const PP *pp, BB *bb)
 	    {
 	    case FASTA2:
 	      cp = namBuf + strlen (namBuf) - 2 ;
-	      if (! strcmp (cp, ".2"))
+	      if (! strcmp (cp, ".2") || ! strcmp (cp, "/2"))
 		{
 		  isRead2 = 1 ;
 		  *cp = 0 ;
 		  bb->runStat.p.nPairs++ ;
 		}
-	      if (! strcmp (cp, ".1"))
+	      if (! strcmp (cp, ".1") || ! strcmp (cp, "/1"))
 		{
 		  isRead2 = 0 ;
 		  *cp = 0 ;
@@ -547,7 +547,8 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       bytes += pos ;
 
 
-      if (bytes && format == FASTA2)
+      if (0 &&   /* no guessing, the format was declared FASTA2 */
+	  bytes && format == FASTA2)
 	{   /* check for identifiers signalling a paired end read */
 	  unsigned char *cq = buffer ;
 	  int nDots = 0, k = 0 ;
@@ -806,7 +807,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   char tBuf[25] ;
   clock_t t1, t2 ;
 
-  if (isGenome || (!pp->sraCaching && format != SRA && format != FASTA2 && format != FASTQ2))
+  if (isGenome || (!pp->sraCaching && format != SRA && format != FASTA2 && format != FASTQ && format != FASTQ2))
     messcrash ("Bad internal options in sraSequenceParser, please edit the code, sorry") ;
   
   if (format == SRA || pp->sraCaching)  /* check in the cache */

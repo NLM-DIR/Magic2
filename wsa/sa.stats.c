@@ -130,6 +130,7 @@ static int confirmedIntronsCountSites (const PP *pp, int run, RunSTAT *up)
 	    {
 	      if (n >= min)
 		nn++ ;
+	      min = 3 ;
 	      if (!strcmp (zp->feet, "gt_ag"))
 		min = 1 ;
 	      else if (!strcmp (zp->feet, "gc_ag"))

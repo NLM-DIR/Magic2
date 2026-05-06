@@ -1365,13 +1365,13 @@ static void reportRunStats (PP *pp, Array runStats)
   printf ("\n#:Reads_aligned\t%ld\t%.3f%%", s0->nMultiAligned[0], 100.0 * s0->nMultiAligned[0]/ (0.0000001 + s0->p.nReads)) ;
   printf ("\n#:PerfectReads\t%ld\t%.2f%%", s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(s0->p.nReads + .000001)) ;
 
-  printf ("\n#:Introns supports %ld, gt_ag %ld, ct_ac %ld, stranding %.2f%%\n"
+  printf ("\n#:Introns_supports %ld, gt_ag %ld, ct_ac %ld, stranding %.2f%%\n"
 	  , s0->gt_ag_Support + s0->ct_ac_Support 
 	  , s0->gt_ag_Support
 	  , s0->ct_ac_Support 
 	  , s0->intronStranding
 	  ) ;
-  printf ("\n#:SupportedIntrons\t%ld", s0->nSupportedIntrons) ;
+  printf ("\n#:Supported_introns\t%ld", s0->nSupportedIntrons) ;
 
 
   printf ("\n\n#:Bases\t%ld", s0->p.nBase1 + s0->p.nBase2) ;
@@ -1779,6 +1779,11 @@ int main (int argc, const char *argv[])
 
   /************  debugging modules, ignore ****************/
 
+  fprintf (stderr, "# ") ;
+  for (int i = 0 ; i < argc ; i++)
+    fprintf (stderr, " %s", argv[i]) ;
+  fprintf (stderr, "\n") ;
+  
   getCmdLineText (h, &argc, argv, "-o", &(p.outFileName)) ;
 
   p.gzi = getCmdLineBool (&argc, argv, "--gzi") ;   /* decompress input files (implicit for files named .gz) */
@@ -2068,7 +2073,7 @@ int main (int argc, const char *argv[])
 
   /* defaults */
   nAgents = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;   number of aligner agents */
-  p.nBlocks = 4 * nCPU/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
+  p.nBlocks = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;
