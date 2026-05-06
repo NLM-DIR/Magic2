@@ -1496,10 +1496,10 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
   SRAReadBatch* sra = SRAReadBatchNew(sraID);
   int nn = 0 ;
   BOOL firstPass = TRUE ;
-  int num_bases = 1 << 27 ; /* 128 M */
+  int num_bases = 1 << 25 ; /* 128 M */
   float Gb = pp->maxSraGb ;
   long unsigned int nMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
-  if (num_bases > nMax) num_bases = nMax ;
+  if (nMax && num_bases > nMax) num_bases = nMax ;
   nMax =  (nMax + num_bases - 1) / num_bases ; 
   fprintf (stderr, "%s : SRA download %s ", timeBufShowNow(tBuf), sraID) ;
   if (Gb) fprintf (stderr, "(top %.3f GigaBases) ", Gb) ;
