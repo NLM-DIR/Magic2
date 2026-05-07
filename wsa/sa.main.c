@@ -2452,7 +2452,7 @@ int main (int argc, const char *argv[])
 	  bb.stop = timeNow () ;
 	  timeDiffSecs (bb.start, bb.stop, &ns) ;
 	  if (1)
-	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.1g strategy %d\n"
+	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.3g strategy %d\n"
 		   ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.isRna) ; 
 	}
       ac_free (bb.h) ;

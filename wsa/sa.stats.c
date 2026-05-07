@@ -230,7 +230,7 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
 	       , s0->gt_ag_Support + s0->ct_ac_Support 
 	       , s0->gt_ag_Support
 	       , s0->ct_ac_Support
-	       , s0->intronStranding
+	       , pp->runStranding[0]
 	       ) ;
     }
   
@@ -790,24 +790,16 @@ void saRunStatExport (const PP *pp, Array runStats)
 
 	  if (isRna > 0)
 	    {
-	      aceOutf (ao, "%s\tIntron_supports\tiiif\t%ld\t%ld\t%ld\t%.3f%%\n"
+	      aceOutf (ao, "%s\tIntron_supports\titititft\t%ld\tany\t%ld\tgt_ag\t%ld\tct_ac\t%.3f%%\tpositive_strand_supports\n"
 		       , runNam
 		       , up->gt_ag_Support + up->ct_ac_Support 
 		       , up->gt_ag_Support
 		       , up->ct_ac_Support 
-		       , up->intronStranding
+		       , pp->runStranding[run]
 		       ) ;
 	      aceOutf (ao, "%s\tSupported_introns\tit\t%ld\tgt_ag seen once or other seen 3\n"
 		       , runNam
 		       , confirmedIntronsCountSites (pp, run, up)
-		       ) ;
-	      aceOutf (ao, "%s\tRaw_gt_ag_Support\ti\t%ld\n"
-		       , runNam
-		       , up->gt_ag_Support
-		       ) ;
-	      aceOutf (ao, "%s\tRaw_ct_ac_Support\ti\t%ld\n"
-		       , runNam
-		       , up->ct_ac_Support
 		       ) ;
 	    }
 	  aceOutf (ao, "%s\tMin_read_length\ti\t%d\n", runNam, up->p.minReadLength) ;

@@ -882,7 +882,7 @@ void saIntronStranding (PP *pp, Array aa)
   float minS = 100 ;
   int run, ii, iMax = arrayMax (aa) ;
   float *s0 = pp->runStranding ;
-
+  long int np0 = 0, nm0 = 0 ;
   if (! iMax)
     return ;
 
@@ -891,6 +891,7 @@ void saIntronStranding (PP *pp, Array aa)
       int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
       int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
       s0[run] = 100.0 * (np + 0.01) / (np + nm + 0.0000001) ;
+      np0 += np ; nm0 += nm ;
       if (pp->strand)
 	s0[run] = 100 ;
       else if (pp->antiStrand)
@@ -898,6 +899,11 @@ void saIntronStranding (PP *pp, Array aa)
       array(pp->runStats, run, RunSTAT).intronStranding = s0[run] ;
       if (s0[run] < minS) minS = s0[run] ;
     }
+  s0[0] = 100.0 * (np0 + 0.01) / (np0 + nm0 + 0.0000001) ;
+  if (pp->strand)
+    s0[0] = 100 ;
+  else if (pp->antiStrand)
+    s0[0] = 0 ;
   
   if (1)
     {

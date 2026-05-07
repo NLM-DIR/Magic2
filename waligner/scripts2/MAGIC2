@@ -221,7 +221,7 @@ if (! -e scripts2/MAGIC2) then
     exit 1
 endif
 
-if (! -e TARGET/LIMITS || ! -d TARGET/Targets || ! -d TARGET/CHROMS) then
+if (! -e TARGET/LIMITS || ! -d TARGET/Targets) then
     echo "The TARGET directory, which should contains at least LIMITS, CHROMS and Targets is missing or incomplete"
     echo 'You may be in the wrong directory, our you should run the command'
     echo '$MAGIC_SRC/waligner/scritps2/MAGIC2 init [DNA | RNA]'
