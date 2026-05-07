@@ -50,6 +50,7 @@ gene-level expression counts, strand-specific coverage tracks,
 poly(A)/poly(T) tail calls, probable transcription start and end poins,
 and a rich set of quality-control metrics
 — all directly comparable across runs and laboratories.
+Download from NCBI short read archive (SRA) is automatic.
 Benchmarks on 31 public datasets (covering human Illumina paired-end,
 Nanopore, PacBio, Roche~454, cross-species primate, \textit{C.\ elegans},
 ChIP-seq, and RefSeq mRNA controls) show that Magic2 matches
@@ -80,7 +81,7 @@ yet guaranteed by design.
 A contributing source of variability is the proliferation of
 specialised tools: STAR~\citep{dobin2013} and
 HISAT2~\citep{kim2019} are optimised for short Illumina reads,
-while Minimap2~\citep{li2018} targets long, error-prone reads.
+while STAR-long or Minimap2~\citep{li2018} targets long, error-prone reads.
 Users must master multiple programs with different parameter
 conventions and output formats, and the choice of default parameters
 can unintentionally bias benchmark comparisons.
@@ -110,8 +111,8 @@ comparisons of SRA datasets.
 
 \subsection*{Overview of Magic2}
 
-Magic2 accepts a reference genome (FASTA), plus the motochondria
-and a master copy of the rRNA precursor,
+Magic2 accepts a reference genome (FASTA), plus the mitochondria
+and a master copy of the rRNA precursors,
 and an optional annotation
 (GTF/GFF) to build an on-disk seed index.
 At run time, one or more SRA accession numbers or local FASTA/FASTQ
@@ -136,7 +137,7 @@ Agents process independent data blocks in parallel; backpressure and
 channel closure guarantee deadlock-free execution and no data loss.
 This design scales naturally with the number of available CPUs without
 user intervention and,
-if available, will delagate part of the calculations to a GPU.
+if available, will automatically delagate part of the calculations to a GPU.
 
 
 \subsection*{Outputs}
@@ -160,8 +161,8 @@ In a single pass Magic2 produces:
 
 We benchmarked Magic2 
 against STAR (v.\,\edcomment{X.X}), HISAT2 (v.\,\edcomment{X.X}, 8 threads),
-Minimap2 (v.\,\edcomment{X.X}, 16 threads), and Magic-BLAST 4-threads
-(v.\,2018/2022/2024) on a panel of 31 publicly available datasets
+Minimap2 (v.\,\edcomment{X.X}, 16 threads), and Magic-BLAST
+(v.\,2018/2022/2024, 4-threads) on a panel of 31 publicly available datasets
 downloaded from NCBI SRA
 (Table~\ref{tab:datasets}).
 Each dataset comprises approximately 2\,Gb of sequenced bases.
@@ -180,39 +181,39 @@ All jobs were submitted independently to the NCBI compute farm
 (\edcomment{cite/describe hardware}) as $N_\mathrm{datasets}\times
 N_\mathrm{methods}$ independent scripts; timing data were collected
 with \texttt{/usr/bin/time -f 'E \%E U \%U M \%M P \%P'}.
-The RefSeq and Roche datasets were run three times in succession to
+The small RefSeq and Roche datasets were run three times in succession to
 ensure hot cache; all other datasets were run once.
 
 \medskip\noindent\textbf{Timing and resource usage.}\quad
 Table~\ref{tab:timing} summarises wall-clock time, CPU time, and peak
 RAM across all 31 datasets for the five principal configurations.
+All calculations were performed on the large NCBI linux compute farm, where
+most machines have 24 CPUs and 64 Gb of RAM or more.
 Magic2 completed alignment in a median wall time of \textbf{4.3\,min}
 (mean 4.1\,min), compared to 3.1\,min for HISAT2 (8 threads), 8.3\,min
-for Minimap2 (8 threads), 19.4\,min for STAR, and 62.4\,min for
-Magic-BLAST~2024 (Table~\ref{tab:timing}).
+for Minimap2 (16 threads), 19.4\,min for STAR, and 62.4\,min for
+Magic-BLAST~2024 4-threads (Table~\ref{tab:timing}).
 Magic2 therefore runs $5.8\times$ faster than STAR and $17\times$
 faster than Magic-BLAST in elapsed time.
 The 25\% elapsed-time advantage of HISAT2 over Magic2 narrows
 considerably on long-read datasets (long-read mean: Magic2 4.4\,min
 vs.\ HISAT2 4.3\,min, with HISAT2 reporting zero intron support on
 Nanopore; Section~\ref{sec:junctions}), and reflects HISAT2's
-constraint to 8 threads while Magic2 auto-selected a median of
+lower sensitivity. Magic2 auto-selected a median of
 11 threads (range 4--18) without user intervention.
 
 CPU consumption for Magic2 averaged 47.6\,min (median), compared
-to 68.7\,min for STAR and 228\,min for Magic-BLAST, representing
-approximately $2\times$ and $7\times$ lower CPU use respectively.
-HISAT2 consumed less CPU (22.9\,min median) owing to its narrower
-feature set and hard 8-thread cap.
-Minimap2 at 8 threads consumed 61.7\,min CPU.
+to 68.7\,min for STAR, 62 mun for minimap2 and 228\,min for Magic-BLAST, representing
+approximately $2\times$ $2\times$ and $7\times$ lower CPU use respectively.
+HISAT2 consumed less CPU (22.9\,min median) but is much less sensitive.
 
 Peak RAM for Magic2 averaged 23.8\,GB (max 30\,GB), below STAR
 (33\,GB mean, 36\,GB max) and comparable to Magic-BLAST (22.5\,GB).
-HISAT2 required substantially less memory (4.8\,GB mean).
+HISAT2 required substantially less memory (4.8\,GB mean).  VERIFY THESE NUMBERS.
 
 \medskip\noindent\textbf{Splice-junction recovery and
 specificity.}\quad\label{sec:junctions}
-We used a shared database of all introns observed by any method across
+We constructed an acedb database of all introns observed by any method across
 all runs to classify introns as \emph{known} (present in the RefSeq/T2T
 annotation or in RefSeq mRNA; in Baruzzo simulated sets, ground-truth
 splice sites serve as reference) or \emph{novel} (not in the reference
@@ -234,7 +235,7 @@ a higher false-discovery rate with rRNA-contaminated input.
 On Nanopore data, HISAT2 reported zero splice-junction support (it is
 not designed for long reads), while Magic2 recovered 743k--826k
 known intron-supporting reads at 97.7--97.8\% precision, comparable
-to Minimap2 (97.6--97.8\%) but from the same unified executable.
+to Minimap2 (97.6--97.8\%).
 Magic-BLAST~2024 showed lower precision on Nanopore (92\%).
 
 The most striking difference emerged on the \textbf{DNA and ChIP-seq
@@ -244,10 +245,9 @@ Magic2 reported 221--296 total false-positive junctions per
 single-end ChIP-seq dataset, Minimap2 reported 213--234, and
 Magic-BLAST~2024 reported 2,080--2,271.
 HISAT2 and STAR reported 10,000--28,000 false-positive junctions on
-the same data — 100- to 120-fold more than Magic2 — confirming that
+the same data — 100- to 120-fold more than Magic2 or Minimap2 — confirming that
 short-read RNA aligners aggressively call spurious splice sites when
-applied to DNA input, while Magic2's splice-signal filter is
-substantially more conservative
+applied to DNA input
 (Table~\ref{tab:introns}).
 
 On the seven cross-species primate datasets (chimpanzee at 0.92\%
@@ -265,7 +265,8 @@ split alignments.
 
 \medskip\noindent\textbf{RefSeq mRNA perfect-alignment control.}\quad
 The RefSeq mRNA datasets (iRefSeq38 and iRefSeqT2T) provide a
-zero-SNP ground truth: all reads derive from annotated transcripts and
+zero-SNP ground truth: all reads are derived from the genomic image
+of annotated transcripts and
 should align perfectly.
 On iRefSeq38 without annotation, Magic2, HISAT2, and Minimap2
 recovered $\sim$1.88--1.90\,M known introns with fewer than
@@ -277,6 +278,36 @@ Magic-BLAST~2024 showed anomalously long elapsed time on RefSeq
 (62.7\,min vs.\ 8.5\,min for the 2022 version and 0.41\,min for
 Magic2), suggesting a regression in the 2024 release that is under
 investigation by the same group.
+
+\medskip\noindent\textbf{Coverage plots and gene expression counts.}\quad
+Optionally, Magic2 exports, for each run, 4 types of strand specific coverage plots in BF format, compatible
+with th UCSC browser: the plain coverage, the partial reads (pointing to
+genomic rearrangments or deletions), the multiply-aligned locations, and the
+fragment ends strand differential contrast which gives a novel and
+precious information on mRNA transcription starts and ends.
+The gene expression counts are then derived from the coverage plot
+attributing bases included in several different genes (for examples opposite strand
+long 3' UTRs) in proportion of the unambiguous coverage.
+This is more or less similar to the method of Langsmead.
+If the analysis shows that the reads are stranded (or anti stranded),
+the mapping is automatically attributed to the correct strand.
+
+
+Computing the coverage plots is performed in parallel by additional agents
+while the data is in cache.
+The extra-time is on avarage 1 minute per sample. The timing benchmark
+does not include the coverage plots since non of the other programs
+proposes that option. The usual method is a slow post-mortem analysis of the BAM files
+which takes around X minutes per sample.
+
+
+\medskip\noindent\textbf{SRA quality control.}\quad
+Magic2 can automatically analyze a sample (say the first 2Giga bases)
+of a large nuber of SRA runs  and produce uniform QC metrics without
+ever storing the fastq files or the bam files on the local machine
+in a couple of minutes per sample. This methd works well even on a home
+computer with 4 CPUs, 32Gb of RAM and limited disks and a throughput
+of several hundred runs per day.
 
 \edcomment{INSERT Figure 1: heatmap of per-tool, per-metric scores across
 all 31 datasets (alignment rate, concordant-pair fraction,
