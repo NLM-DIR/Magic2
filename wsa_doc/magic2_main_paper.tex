@@ -115,6 +115,8 @@ Magic2 accepts a reference genome (FASTA), plus the mitochondria
 and a master copy of the rRNA precursors,
 and an optional annotation
 (GTF/GFF) to build an on-disk seed index.
+ERCC spike-in and likely bacterial and virus contaminants fasta
+files also valuable and will be quantized separatelly.
 At run time, one or more SRA accession numbers or local FASTA/FASTQ
 files are supplied; no other configuration is required.
 Magic2 automatically downloads the data from SRA,
@@ -294,9 +296,9 @@ the mapping is automatically attributed to the correct strand.
 
 
 Computing the coverage plots is performed in parallel by additional agents
-while the data is in cache.
-The extra-time is on avarage 1 minute per sample. The timing benchmark
-does not include the coverage plots since non of the other programs
+while the data is in cache. The elapsed time is increased by about 10\%.
+The coverage plots were not requested during the timing benchmark
+because none of the other programs
 proposes that option. The usual method is a slow post-mortem analysis of the BAM files
 which takes around X minutes per sample.
 
@@ -363,8 +365,8 @@ with a guaranteed maximum gap of $p$.
 Seeds with genomic multiplicity $>Q$ (default 81) are discarded to
 limit hits from repetitive elements.
 When annotation is provided, junction-spanning seeds from all annotated
-exon--exon junctions are added to the index to improve detection of
-reads crossing short exons.
+exon--exon junctions are added to the index to mapping
+reads crossing exon-exon junctions.
 Full details are given in Supplementary Section~2.
 
 \subsection*{Alignment}
