@@ -988,6 +988,8 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  nPuts++ ;
 	  channelPut (chan, bb, BB) ;
 	}
+      else
+	break ;
     }
   channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
   
@@ -1520,6 +1522,8 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
 	  if (ao1 || ao2)
 	    sraCacheDo (ao1, ao2, sra->seq, sra->seq2) ;
 	}
+      else
+	break ;
     }
   SRAReadBatchFree(sra);
   if (ao1)

@@ -1682,14 +1682,13 @@ int main (int argc, const char *argv[])
 	  p.split_pairs = getCmdLineBool (&argc, argv, "--split_pairs") ;
 	  p.interleaved = getCmdLineBool (&argc, argv, "--interleaved") ;
 	  
-	  getCmdLineFloat (&argc, argv, "--maxGB", &(p.maxSraGb)) ;
-	  if (p.maxSraGb < 0)
-	    saUsage ("--maxGB parameter should be positive", argc, argv) ;
+	  if (getCmdLineFloat (&argc, argv, "--maxGB", &(p.maxSraGb)) )
+	    if (p.maxSraGb <= 0)
+	      saUsage ("--maxGB parameter should be positive", argc, argv) ;
 
 	  /*****************  Check tat all parameters have been parsed *******************/
 	  if (argc > 1)
 	    saUsage (0, argc, argv) ;
-	  
 	  cp = strnew (sraID, h) ;
 	  while (cp)
 	    {

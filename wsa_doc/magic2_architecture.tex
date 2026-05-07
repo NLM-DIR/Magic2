@@ -53,9 +53,9 @@ and in a single pass produces alignments, gene-expression counts,
 intron-support tables, poly(A) addition sites, coverage tracks, and
 QC metrics.
 
-The name Magic2 can be parsed as
-\emph{Memory-Aware Genomic Integrative Computation} --- a
-tongue-in-cheek acronym that reflects the central role of memory
+A posteriori, the name Magic2 can be parsed as
+\emph{Memory-Aware Genomic Integrative Computation} --- an
+acronym that reflects the central role of memory
 efficiency in the design.
 
 Three principles govern all architectural decisions:
@@ -116,7 +116,7 @@ Magic2 adopts a \emph{sort--merge} paradigm:
 \begin{enumerate}
 \item Generate seed records for reads and genome as large, contiguous
       blocks written sequentially to memory.
-\item Sort both lists by seed value using a cache-efficient radix sort
+\item Sort both lists by seed value using a hard-coded cache-efficient radix sort
       (Section~\ref{sec:sort}).
 \item Join the two sorted lists by simultaneous linear traversal: both
       pointers advance monotonically, so the entire join operates from
@@ -130,13 +130,16 @@ Its roots lie in classical external sorting and merge-join algorithms
 \citep{knuth1973}, with modern refinements in cache-oblivious
 algorithms~\citep{frigo1999}.
 
-The key trade-off is exchanging $O(1)$ random lookups for $O(n \log n)$
-sorting followed by $O(n)$ merging.
-In practice, the sort is highly optimised (Section~\ref{sec:sort}) and
-can be offloaded to a GPU via CUDA Thrust when available
-(Section~\ref{sec:gpu}).
+
+The key trade-off is replacing n individually cheap but cache hostile random hash look ups
+by  $O(n \log n)$
+sorting followed by $O(n)$ sequential merging
 The merge step is so cache-friendly that it runs at near-memory-bandwidth
 speed, far outpacing hash-table approaches on large genomes.
+
+If avalailable, the whole preassignment is automatically offloaded
+to a GPU
+(Section~\ref{sec:gpu}).
 
 %% ===============================================================
 \section{Parallel execution: agents and channels}
@@ -172,10 +175,11 @@ The master thread enqueues descriptors of independent data blocks
 channel.
 A pool of agents retrieves blocks from this channel, executes the
 complete per-block pipeline (seed identification, alignment extension,
-splicing, wiggle accumulation, local QC), and forwards results to
+adaptor detection, splicing, scoring mismatches, pairing), and forwards results to
 designated output channels.
-Dedicated consumer agents drain output channels to merge per-chromosome
-wiggle profiles, write BAM records, and compile junction and QC tables.
+Dedicated consumer agents drain output channels to merge the per-chromosome
+wiggle profiles, cumulate the gene expression counts, the introns, the poly-A sites
+and compile QC tables.
 
 Each agent follows a straightforward loop:
 \begin{lstlisting}
@@ -189,18 +193,20 @@ signalDone(outputChannel);
 Agents never wait on one another; all synchronisation emerges from
 channel blocking and closure.
 The main program defines the pipeline topology by creating channels,
-setting source counts, launching agents, and seeding the input channel.
+setting source counts, launching agents, and seeding the input channel
+but does not contain any explict calls to the low level
+unix semaphores and other synchronization tools.
 
 \subsection{NUMA-aware execution}
 
-On machines with multiple NUMA nodes, Magic2 re-spawns itself via
-\texttt{numactl} to bind to the least-loaded node, minimising
-cross-node memory traffic.
-Re-spawning is suppressed automatically on single-node machines,
-non-NUMA kernels, containers, and when \texttt{--numactl} has already
-been added by a prior re-spawn (to prevent recursion).
-Users do not set a thread count; Magic2 manages all concurrency
-automatically.
+During its initialisation, Magic2 analyses the harware
+and counts the number of CPUs, nodes and eventual GPU.
+Then Magic2 re-spawns itself and
+binds to the least-loaded node, and eventually the least buzy GPU,
+minimising cross-node memory traffic.
+Users do not need set a thread count; Magic2 manages all concurrency
+automatically and continuosuly monitors its usage of memory
+by varying the number of datablocks processed in parallel.
 
 For debugging, \texttt{--debug} forces fully serial execution
 (\texttt{nAgents=1}, \texttt{nBlocks=1}) with verbose output.
@@ -223,7 +229,7 @@ The default $k$ is chosen automatically from genome size:
   \item $k = 18$ for large genomes (human, mouse).
 \end{itemize}
 When $k > 16$, the extra bases are handled by radix partitioning into
-$NN = 16$ or $32$ separate seed tables indexed by the least significant
+$16$ or $32$ separate seed tables indexed by the least significant
 base pair(s), providing effective $18$- or $19$-mer specificity while
 keeping each individual table within 32 bits.
 
@@ -255,14 +261,9 @@ Paired-end reads arrive with names of the form \texttt{xx/1} and
 \texttt{xx/2}.
 Only the base name \texttt{xx} is entered into the read dictionary
 (\texttt{dictAdd(dict, "xx", \&n)}), yielding a compact integer $n$.
-In the \texttt{CW} name field (Section~\ref{sec:gpu_structs}), mate~1
-is stored as $n \ll 1$ and mate~2 as $(n \ll 1) \mid 1$.
-
-This single-bit encoding has an important consequence for sorting:
-any sort by the name field automatically groups both mates of each pair
-into adjacent entries, with mate~1 always immediately preceding mate~2,
-regardless of whether the sort is performed on the CPU or the GPU.
-The alignment stage therefore receives a table in which read-pair
+Then mate~1 and mate~2 are stored as contiguous numbers $2n$ and $(2n+1)$
+such that sorting by reads automatically implies sorting by pairs.
+The alignment stage therefore receives tables in which read-pair
 processing requires no further regrouping.
 
 \subsection{Subsampling}
@@ -304,7 +305,7 @@ overhead.
 
 When a GFF/GTF annotation is supplied, Magic2 supplements genomic seeds
 with \emph{junction seeds} spanning annotated exon--exon boundaries,
-improving detection of reads that cross short exons or novel junctions.
+improving detection of short exons with known junctions.
 
 For each annotated mRNA, all exons are concatenated \textit{in silico}
 to form a continuous spliced transcript.

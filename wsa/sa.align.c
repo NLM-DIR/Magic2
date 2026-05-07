@@ -968,16 +968,16 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    int da = isUp ? 1 : 0 ;
 	    unsigned char *cp = arrp(myDnaG, xLong - 1, unsigned char) ;
 	    
-	    cc1L = cp[0] ;
-	    cc2L = cp[1] ;
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
 	    
 	    if (isUp)
 	      while (cp[-1] == cp[1]) { da++; cp-- ;}
 	    if (da>1) ss = "*--" ;
 	    if (!isUp) { if (cp[-1] == cp[1]) ss = "*--" ; }
 	    
-	    cc1S = cp[0] ;
-	    cc2S = cp[1] ;
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
 	    
 	    cc1LR = isUp ? complementBase(cc2L) : cc1L ; 
 	    cc2LR = isUp ? complementBase(cc1L) : cc2L ;
@@ -1008,18 +1008,18 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    int da = isUp ? 1 : 0 ;
 	    unsigned char *cp = arrp(myDnaG, xLong - 1, unsigned char) ;
 	    
-	    cc1L = cp[0] ;
-	    cc2L = cp[1] ;
-	    cc3L = cp[2] ;
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
+	    cc3S = cp[2] ;
 	    
 	    if (isUp)
 	      while (cp[-1] == cp[2]) { da++; cp-- ;}
 	    if (da>1) ss = "*---" ;
 	    if (!isUp) { if (cp[-1] == cp[2]) ss = "*---" ; }
 	    
-	    cc1S = cp[0] ;
-	    cc2S = cp[1] ;
-	    cc3S = cp[2] ;
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+	    cc3L = cp[2] ;
 	    
 	    cc1LR = isUp ? complementBase(cc3L) : cc1L ; 
 	    cc2LR = isUp ? complementBase(cc2L) : cc2L ;
@@ -3481,13 +3481,13 @@ static void alignDoOnePair (const PP *pp, BB *bb
 	  int i1, i2 ;
 	  int jj = 0 ;
 	  ALIGN *up, *vp ;
+	  int bestDb = 99999999 ;
 	  int bestScore = 0 ;
 	  BOOL isCompatiblePair = FALSE ;
 	  BOOL isCirclePair = FALSE ;
 	  
 	  for (i1 = 1 ; i1 < iMax1 ; i1++)
 	    {
-	      int bestDb = 99999999 ;
 	      int j1 = arr (bestAp1, i1, int) ;
 	      if (!j1) continue ;
 	      up = arrp (aaa, j1 - 1, ALIGN) ;
@@ -3562,7 +3562,7 @@ static void alignDoOnePair (const PP *pp, BB *bb
 	      arraySort (pairs, pairOrder2) ;
 	      px0 = arrayp (pairs, 0, PAIR)  ;
 	      for (j1 = 0, bestDb = px0->db ; j1 < jMax ; j1++)
-		if (px0[j1].db > 2 * bestDb)
+		if (px0[j1].db > 200 && px0[j1].db > 2 * bestDb)  /* negative bestDb (overlapping reads) must not reject itself  */
 		  break ;
 	      jMax = arrayMax (pairs) = j1 ;
 

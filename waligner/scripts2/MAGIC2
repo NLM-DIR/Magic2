@@ -2369,7 +2369,7 @@ if (! -d tmp/SA) mkdir tmp/SA
 
 foreach run (`cat MetaDB/$MAGIC/RunList`)
   if (-e tmp/SA/$run/runStats.tsf) continue
-  if (-d tmp/SA/$run) \rm -rf tmp/SA/$run
+  if (-d tmp/SA/$run/hits) \rm -rf tmp/SA/$run/hits
   mkdir tmp/SA/$run
   if (! -e Fastc/$run/LaneList && ! -e tmp/SA/$run/iConfig) then
     set srr=`cat MetaDB/$MAGIC/Run2Srr.txt | gawk -F '\t' '{if($1==run)print $2;}' run=$run`
