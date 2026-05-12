@@ -614,7 +614,6 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       bb->rc.jump5r1 = rc ? rc->jump5r1 : 0 ;
       bb->rc.jump5r2 = rc ? rc->jump5r2 : 0 ;      
 
-      bb->readerAgent = pp->agent ;
       bb->run = rc ? rc->run : 0 ;
       bb->start = timeNow () ;
       /*
@@ -628,8 +627,13 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       /* copy the buffer */
       bb->gzBuffer = halloc (bytes + 32, bb->h) ;
       memcpy (bb->gzBuffer, buffer, bytes) ;
-      for (int i = 0 ; i < 32 ; i++)
-	bb->gzBuffer[bytes+i] = 0 ;
+      if (1)
+	bb->gzBuffer[bytes] = '0' ;
+      else
+	{
+	  for (int i = 0 ; i < 32 ; i++)
+	    bb->gzBuffer[bytes+i] = 0 ;
+	}
       bb->gzBuffer[bytes] = '\n' ;
       /* position the remnant */
       if (! done) memcpy (buffer, buffer2, pos) ;
@@ -805,10 +809,9 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   AC_HANDLE h = ac_new_handle () ;
   ACEOUT ao1 = 0, ao2 = 0 ;
   BB b ;
-  CHAN *chan = pp->plChan ;
   BOOL debug = FALSE ;
-  int BMAX = isGenome ? 100000 : (pp->BMAX << 20) ;
-  long int bytes = 0, bytes2 = 0,  nBytes = 0 ;
+  int BMAX = isGenome ? 1000000 : (pp->BMAX << 20) ;
+  long int nBytes = 0, nBases = 0 ;
   int nPuts = 0 ;
   DnaFormat format = rc->format ;
   const char *sraID = rc ? rc->fileName1 : tc->fileName ;
@@ -912,36 +915,46 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   BOOL firstPass = TRUE ;
   BOOL fastq = pp->fastq ;
   BOOL split_pairs = pp->split_pairs ;
-  int num_bases = 1 << 27 ; /* 128 M */
   float Gb = pp->maxSraGb ;
-  long unsigned int nMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
+  long int bMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
 
   format = FASTA ;
   if (! pp->sraCaching) /* for internal use, prefer interleaved fasta */
     fastq = FALSE ;
   split_pairs = FALSE ;
 
-  if (nMax && num_bases > nMax) num_bases = nMax ;
-  nMax =  (nMax + num_bases - 1) / num_bases ; 
-  format = SRA ;
+  long int nReads = 0, nnReads = 0, nBloc = 0, nnBytes = 0 ;
 
-  if (! Gb) num_bases = BMAX ;
-  while (!Gb || nMax-- > 0)
+  format = SRA ;
+  while (Gb == 0 || bMax > 0)
     {
+      int num_bases = BMAX ;
+      if (Gb && num_bases > bMax) num_bases = bMax ;
+      
       SraGetReadBatch(sra, num_bases, fastq, split_pairs) ;
       if (sra->seq)
 	{
-	  if (0)
-	    {
-	      bytes = strlen (sra->seq) ;
-	      bytes2 = sra->seq2 ? strlen (sra->seq2) : 0 ;
-	      nBytes += bytes + bytes2 ;
-	    }
-	  else
-	    nBytes = sra->num_bases ;
+	  nBases = sra->num_bases ;
+	  nBytes = strlen (sra->seq) ;
+	  /*
+	    {{
+	      int lastSeq = 0 ;
+	      const char *cp = sra->seq ;
+	      nReads = 0 ;
+	      while (cp)
+		{
+		  nReads++ ;
+		  lastSeq = cp - sra->seq ;
+		  cp = strchr(cp+1, '>') ;
+		}
+	      nnBytes += nBytes ;
+	      nnReads += nReads ; nBloc++ ;
+	      fprintf(stderr, "++++ SraGet bloc %ld  r %ld cumul %ld bases %ld cumul %ld remaining %ld GB=%f lastSeq=%d\n", nBloc, nReads, nnReads, nBases, nnBytes, bMax, Gb, lastSeq) ;
+	    }}
+	  */
 	  if (!nBytes)
 	    messcrash ("No sequence found in SRA %s\n", sraID) ;
-	  
+	  if (Gb > 0) bMax -= nBytes ;
 	  if (format == SRA)
 	    {   /* check for identifiers signaling a paired end read */
 	      if (sra->is_paired)
@@ -971,7 +984,6 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  bb->rc.format = format ;
 	  bb->rc.jump5r1 = rc ? rc->jump5r1 : 0 ;
 	  bb->rc.jump5r2 = rc ? rc->jump5r2 : 0 ;      
-	  bb->readerAgent = pp->agent ;
 	  bb->run = rc ? rc->run : 0 ;
 	  bb->start = timeNow () ;
 	  bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
@@ -986,19 +998,22 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  
 	  /* export the databalock to the channel */
 	  nPuts++ ;
-	  channelPut (chan, bb, BB) ;
+	  channelPut (pp->plChan, bb, BB) ;
 	}
       else
-	break ;
+	{
+	  fprintf(stderr, "++++ SraGet exited\n") ;
+	  break ;
+	}
     }
   channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
   
   ac_free (h) ;
   
   t2 = clock () ;
-  saCpuStatRegister ("2.sraSequenceParser", pp->agent, bb->cpuStats, t1, t2, nBytes) ;
+  if (bb) saCpuStatRegister ("2.sraSequenceParser", pp->agent, bb->cpuStats, t1, t2, nBytes) ;
 
-  if (debug)
+  if (1 || debug)
     {
      int lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 0) ;
      printf ("--- %s: Stop sraSequenceParser %d blocks %ld bytes file %s\n", timeBufShowNow (tBuf), lane, nBytes, sraID) ;
@@ -1065,7 +1080,6 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
     {
       bb = &b ;
       memset (bb, 0, sizeof (BB)) ;
-      bb->readerAgent = pp->agent ;
       bb->start = timeNow () ;
       bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
       chan = pp->plChan ;
@@ -1304,7 +1318,6 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 	  t1 = clock () ;
 	  
 	  nn = 0 ;
-	  bb->readerAgent = pp->agent ;
 	  bb->start = timeNow () ;
 	  bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
 	  bb->h = ac_new_handle () ;
@@ -1383,20 +1396,19 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 {
   DnaFormat format = rc ? rc->format : tc->format ;
-  if (0 && ! isGenome && ! rc->pairedEnd)
-    return saUringSequenceParser (pp, rc, tc, bb) ;
-
   if (! isGenome)
     {
       if (format == SRA ||  pp->sraCaching)
-	return sraSequenceParser (pp, rc, tc, bb, isGenome) ;
+	sraSequenceParser (pp, rc, tc, bb, isGenome) ;
       else if ((format == FASTA && !rc->pairedEnd) ||
 	       format == FASTA2       
 	       )
-	return fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
+	fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
     }
+  else
+    otherSequenceParser (pp, rc, tc, bb, isGenome) ;
 
-  return otherSequenceParser (pp, rc, tc, bb, isGenome) ;   
+  return ;
 } /* saSequenceParse */
 
 /**************************************************************/
@@ -1495,22 +1507,26 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID)
     }}
   /* download */
   
-  SRAReadBatch* sra = SRAReadBatchNew(sraID);
+  SRAReadBatch* sra = SRAReadBatchNew (sraID);
   int nn = 0 ;
   BOOL firstPass = TRUE ;
-  int num_bases = 1 << 25 ; /* 128 M */
   float Gb = pp->maxSraGb ;
-  long unsigned int nMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
-  if (nMax && num_bases > nMax) num_bases = nMax ;
-  nMax =  (nMax + num_bases - 1) / num_bases ; 
+  long int bMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
+  int BMAX = 1 << 23 ; /* 8 Mb */
+    
   fprintf (stderr, "%s : SRA download %s ", timeBufShowNow(tBuf), sraID) ;
   if (Gb) fprintf (stderr, "(top %.3f GigaBases) ", Gb) ;
   
-  while (! Gb || nMax-- > 0)
+  while (Gb == 0 || bMax > 0)
     {
+      int num_bases = BMAX ;
+      if (! Gb && num_bases > bMax) num_bases = bMax ;
+      
+
       SraGetReadBatch (sra, num_bases, fastq, split_pairs) ;
       if (sra->seq)
 	{
+	  if (Gb > 0) bMax -= sra->num_bases ;
 	  nn++ ;
 	  if (firstPass)
 	    sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, sra->is_paired, split_pairs, h) ;

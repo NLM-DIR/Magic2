@@ -148,11 +148,10 @@ static void npCounter (const void *vp)
     {
       channelGet (pp->npChan, &nPuts, int) ;
       nn += nPuts ;
-      printf ("--- %s: npCounter Parsed %d/%d files\t%d blocs\tcumul %d blocks to be analysed\n",
+      fprintf (stderr, "--- %s: npCounter Parsed %d/%d files\t%d blocs\tcumul %d blocks to be analysed\n",
 	      timeBufShowNow (tBuf), ++n, nf, nPuts, nn) ;
     }
-  printf ("--- %s: npCounter Processed %d files, closing pcChan at %d blocks\n", timeBufShowNow (tBuf), nf, nn) ;
-  channelCloseSource  (pp->plChan) ;
+  fprintf (stderr, "--- %s: npCounter Processed %d files, plChan should process %d blocks\n", timeBufShowNow (tBuf), nf, nn) ;
   NTODO = nn ; /* this is global but there is no other place where we wrtie this variable */
   return ;
 } /* npCounter */
@@ -195,6 +194,7 @@ static void readParser (const void *vp)
   
   while (channelGet (pp->fpChan, &rc, RC))
     saSequenceParse (pp, &rc, 0, 0, 0) ;
+  channelCloseSource  (pp->plChan) ;
   return ;
 } /* Readparser */
 
@@ -1230,7 +1230,8 @@ static void wholeWork (const void *vp)
 {
   BB bb = {0} ;
   const PP *pp = vp ;
-  BB bbG = pp->bbG;
+  BB bbG = pp->bbG ;
+  long int nReads = 0, nnReads = 0 ;
   char tBuf[25] ;
 
   clock_t  t1, t2, t01, t02 ;
@@ -1249,11 +1250,21 @@ static void wholeWork (const void *vp)
       long int nn = 0 ;
 
       t1 = clock () ;
+
+      bb.readerAgent = pp->agent ;
       /* code words */
       saSequenceParseGzBuffer (pp, &bb) ;
       saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
 
-      if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
+      
+      if (pp->debug)
+	{
+	  nReads = bigArrayMax (bb.dnas) / 2 - 1 ;  /* dnas contains dna and dnaR */
+	  nnReads += nReads ;
+	  printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld nSeqs %ld reads %ld cumul %ld bases against %ld target bases\n"
+		  , timeBufShowNow (tBuf), pp->agent, bb.lane
+		  , bb.nSeqs, nReads, nnReads, bb.length, bbG.length) ;
+	}
 
       /* sort words */
       for (int k = 0 ; k < NN ; k++)
@@ -2221,7 +2232,7 @@ int main (int argc, const char *argv[])
       channelDebug (p.npChan, debug, "npChan") ;
       p.gmChan = channelCreate (1, BB, p.h) ;
       channelDebug (p.gmChan, debug, "gmChan") ;
-      p.plChan = channelCreate (1, BB, p.h) ;
+      p.plChan = channelCreate (3, BB, p.h) ;
       channelDebug (p.plChan, debug, "plChan") ;
       p.lcChan = channelCreate (channelDepth, BB, p.h) ;
       channelDebug (p.lcChan, debug, "lcChan") ;
@@ -2259,7 +2270,7 @@ int main (int argc, const char *argv[])
        * and recurssibvely all program layers
        * to close after having processed N BB blocks
        */
-      wego_go (npCounter, &p, PP) ; channelAddSources (p.plChan, 1) ;
+      wego_go (npCounter, &p, PP) ; 
       /* Read preprocessing agents, they do not require the genome */
       for (int pass = 0 ; pass < 2 ; pass++)
 	for (int i = 0 ; i < p.nFiles && i < nAgents && i < 10 ; i++)
@@ -2267,7 +2278,7 @@ int main (int argc, const char *argv[])
 	    if (pass) fprintf (stderr, "Launch readParser %d\n", i) ;
 	    p.agent = i ;
 	    
-	    if (pass) wego_go (readParser, &p, PP) ; else channelAddSources (p.npChan, 1) ;
+	    if (pass) wego_go (readParser, &p, PP) ; else channelAddSources (p.plChan, 1) ;
 	  }
       for (int pass = 0 ; pass < 2 ; pass++)
 	for (int i = 0 ; i < nAgents && i < p.nBlocks ; i++)
@@ -2469,12 +2480,13 @@ int main (int argc, const char *argv[])
       saIntronsExport (&p, p.confirmedIntrons) ; /* before wiggleExport to restrand the gene expression */ 
       saDoubleIntronsExport (&p, p.doubleIntrons) ;
     }
+  GeneCounts gcs = {0} ;
   if (p.wiggle)
-    saWiggleExport (&p, nAgents) ;
+    gcs = saWiggleExport (&p, nAgents) ;
   if (p.debug) saCpuStatExport (&p, cpuStats) ;
   saPolyAsExport (&p, p.confirmedPolyAs) ;
   saSLsExport (&p, p.confirmedSLs) ;
-  saRunStatExport (&p, p.runStats) ; /* must come afer PolyAsExport and IntronsExport */
+  saRunStatExport (&p, p.runStats, gcs) ; /* must come afer PolyAsExport and IntronsExport */
   
   wego_log ("Done") ;
   wego_flush () ; /* flush the wego logs to stderr */

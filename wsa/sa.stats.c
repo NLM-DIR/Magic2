@@ -309,8 +309,6 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   for (int i = 0 ; i < 11 ; i++)
     up->nMultiAligned[i] += vp->nMultiAligned[i] ;
   for (int i = 0 ; i < 256 ; i++)
-    up->nReadsAlignedPerTargetClass[i] += vp->nReadsAlignedPerTargetClass[i] ;
-  for (int i = 0 ; i < 256 ; i++)
     up->nBasesAlignedPerTargetClass[i] += vp->nBasesAlignedPerTargetClass[i] ;
 
   for (int i = 0 ; i < OVERHANGMAX ; i++)
@@ -352,8 +350,10 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
       array (up->errors, i, int) += array (vp->errors, i, int) ;
   for (int i = 0 ; i < 256 ; i++)
     {
-      up->GF[i] += vp->GF[i] ;
-      up->GR[i] += vp->GR[i] ;
+      up->RF[i] += vp->RF[i] ;
+      up->RR[i] += vp->RR[i] ;
+      up->BF[i] += vp->BF[i] ;
+      up->BR[i] += vp->BR[i] ;
     }
   if (!up->p.lengthDistribution)
     {
@@ -583,7 +583,7 @@ static void saOverhangExport (const PP *pp, int run, RunSTAT *up, BOOL isLeft)
   
 /**************************************************************/
   
-void saRunStatExport (const PP *pp, Array runStats)
+void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 {
   AC_HANDLE h = ac_new_handle () ;
   ACEOUT ao = aceOutCreate (pp->outFileName, ".runStats.tsf", 0, h) ;
@@ -671,6 +671,11 @@ void saRunStatExport (const PP *pp, Array runStats)
 		   , 100.0 * up->nBaseAligned1/(.000001 + up->p.nBase1)
 		   , up->nBaseAligned2
 		   , 100.0 * up->nBaseAligned2/(.000001 + up->p.nBase2)
+		   ) ;
+
+	  aceOutf (ao, "%s\tUnaligned_bases\ti\t%ld\n"
+		   , runNam
+		   , up->p.nBase1 + up->p.nBase2 - up->nBaseAligned1 - up->nBaseAligned2
 		   ) ;
 
 	  up->intergenic = up->wiggleCumul - up->cds - up->utr - up->intronic ;
@@ -886,15 +891,6 @@ void saRunStatExport (const PP *pp, Array runStats)
 	  
 	  for (int ii = 1 ; ii < 256 ; ii++)
 	    {
-	      if (up->nReadsAlignedPerTargetClass[ii])
-		aceOutf (ao, "%s\tReads_aligned_in_class_%c\tif\t%ld\t%.3f\n"
-			 , runNam, ii
-			 , up->nReadsAlignedPerTargetClass[ii]
-			 , 100.0 * up->nReadsAlignedPerTargetClass[ii]/(.000001 + up->nMultiAligned[0]) 
-			 ) ;
-	    }
-	  for (int ii = 1 ; ii < 256 ; ii++)
-	    {
 	      if (up->nBasesAlignedPerTargetClass[ii])
 		aceOutf (ao, "%s\tBases_aligned_in_class_%c\tif\t%ld\t%.3f\n"
 			 , runNam, ii
@@ -902,25 +898,40 @@ void saRunStatExport (const PP *pp, Array runStats)
 			 , 100.0 * up->nBasesAlignedPerTargetClass[ii]/(.000001 + up->nBasesAlignedPerTargetClass[0]) 
 			 ) ;
 	    }
+	  int f0 = up->RF[0] ;
+	  int r0 = up->RR[0] ;
+	  int t0 = f0 + r0 ;
 	  for (int ii = 1 ; ii < 256 ; ii++)
 	    {
-	      if (up->nReadsAlignedPerTargetClass[ii])
-		{
-		  int f = up->GF[ii] ;
-		  int r = up->GR[ii] ;
-		  int t = f + r ;
-		  if (t)		  
-		    aceOutf (ao, "%s\tStranding_in_class_%c\tfii\t%.3f\t%ld\t%ld\n", runNam, ii
-			     , 100.0 * f/t, f, r
-			     ) ;
+	      int f = up->RF[ii] ;
+	      int r = up->RR[ii] ;
+	      int t = f + r ;
+	      if (t)
+		{	
+		  aceOutf (ao, "%s\tReads_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand\t%ld\tnegative_strand\t", runNam, ii, t, f, r) ;
+		  aceOutPercent (ao, (100.0*f) / t) ;
+		  aceOutf (ao, "%%\tpositive_strand_alignments\t") ;
+		  aceOutPercent (ao, (100.0*t) / t0) ;
+		  aceOutf (ao, "%%\tof_all_classes\n") ;
 		}
 	    }
-	  if (up->gt_ag_Support + up->ct_ac_Support  > 10000)
+	  f0 = up->BF[0] ;
+	  r0 = up->BR[0] ;
+	  t0 = f0 + r0 ;
+	  for (int ii = 1 ; ii < 256 ; ii++)
 	    {
-	      aceOutf (ao, "%s\tStranding_in_class_I\tfii\t", runNam) ;
-	      aceOutPercent (ao, (100.0 * up->gt_ag_Support) / (up->gt_ag_Support + up->ct_ac_Support)) ;
-	      aceOutf (ao, "\t%ld\t%ld\n", up->gt_ag_Support, up->ct_ac_Support ) ;
-	    }	  
+	      long int f = up->BF[ii] ;
+	      long int r = up->BR[ii] ;
+	      long int t = f + r ;
+	      if (t)
+		{	
+		  aceOutf (ao, "%s\tBases_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand\t%ld\tnegative_strand\t", runNam, ii, t, f, r) ;
+		  aceOutPercent (ao, (100.0*f) / t) ;
+		  aceOutf (ao, "%%\tpositive_strand_alignments\t") ;
+		  aceOutPercent (ao, (100.0*t) / t0) ;
+		  aceOutf (ao, "%%\tof_all_classes\n") ;
+		}
+	    }
 	}
     }
   ac_free (h) ;

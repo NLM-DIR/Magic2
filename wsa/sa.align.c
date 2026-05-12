@@ -2830,41 +2830,11 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 
   /* global statistics */
   /* stranding : once per target class */
-  memset (allTc, 0, sizeof (allTc)) ;
-  
-  for (int ic = 0 ; ic < arrayMax (bestAp) ; ic++)
-    {
-      int k = array (bestAp, ic, int) ;
-      if (! k) continue ;
-      ap = arrp (aa, k - 1, ALIGN) ;
-      if (read == ap->read && ! ap->next)
-	{
-	  int a1 = ap->a1 ;
-	  int a2 = ap->a2 ;
-	  int tc = ap->targetClass ;
-	  BOOL s = a1 < a2 ;
-
-	  if (ap->chrom & 0x1) s = !s ;
-	  if (! tc || allTc[tc])
-	    continue ;
-	  allTc[tc] = 1 ;
-	  if (ap->read & 0x1)
-	    s = !s ;
-	  if (ap->chrom & 0x1)
-	    s = !s ;
-
-	  if (s)
-	    bb->runStat.GF[tc]++ ;
-	  else
-	    bb->runStat.GR[tc]++ ;
-	}
-    }
   /* increase the block stats */
   nChains = 0 ;
   if (arrayMax (bestAp))
     {
       BOOL isComplex = FALSE ;
-      int tc0 = 0 ;
       nChains = 0 ;
       memset (allTc, 0, sizeof (allTc)) ;
       
@@ -2882,12 +2852,9 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (! ap)
 		{
 		  ap = vp ;
-		  tc0 = tc ;
-		  allTc[tc0] = 1 ;
 		  bb->nAli++ ;
 		  bb->runStat.nAlignments++ ;
 		  bb->runStat.nMultiAligned[0]++ ;
-		  bb->runStat.nReadsAlignedPerTargetClass[0]++ ;
 		  nChains = 1 ;
 		  if (ap->chainErr == 0 && ap->leftClip + ap->chainAli >= ap->rightClip)
 		    {
@@ -2921,7 +2888,21 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (! allTc[tc])
 		{
 		  allTc[tc] = 1 ;
-		  bb->runStat.nReadsAlignedPerTargetClass[tc]++ ;
+		  if ( (ap->chrom & 0x1) ^ (ap->read & 0x1))
+		    {
+		      bb->runStat.RR[0] += (allTc[0] == 0 ? 1 : 0) ;
+		      bb->runStat.RR[tc]++ ;
+		      bb->runStat.BR[0] += (allTc[0] == 0 ? vp->chainAli : 0) ;
+		      bb->runStat.BR[tc] += vp->chainAli ;
+		    }
+		  else
+		    {
+		      bb->runStat.RF[0] += (allTc[0] == 0 ? 1 : 0) ;
+		      bb->runStat.RF[tc]++ ;
+		      bb->runStat.BF[0] += (allTc[0] == 0 ? vp->chainAli : 0) ;
+		      bb->runStat.BF[tc] += vp->chainAli ;
+		    }
+		  allTc[0]= 1 ;
 		}
 	    }
 	}

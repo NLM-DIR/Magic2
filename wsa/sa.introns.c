@@ -330,7 +330,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   BOOL isDown = (vp->a1 <= vp->a2 ? TRUE : FALSE ) ;
   int da = vp->a2 - wp->a1 + 1 ;
   /* int day = dy - da ; */
-  if (! isDown) messcrash("isdown should be true") ;
+  if (! isDown) { messerror ("isdown should be true read %s\n", dictName (bb->dict, vp->read)) ;  return  ;} 
   if (0 && da < 4 && da > -4 && dy < 4 && dy > -4 && vp->chrom == wp->chrom)
     {
       /* merge the 2 alignments */
