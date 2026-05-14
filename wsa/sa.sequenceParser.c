@@ -798,7 +798,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   BB b ;
   BOOL debug = FALSE ;
   int BMAX = isGenome ? 1000000 : (pp->BMAX << 20) ;
-  long int nBytes = 0 ;
+  long int size, size2 ;
   int nPuts = 0 ;
   DnaFormat format = rc->format ;
   const char *sraID = rc ? rc->fileName1 : tc->fileName ;
@@ -921,26 +921,11 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
       SraGetReadBatch(sra, num_bases, fastq, split_pairs) ;
       if (sra->seq)
 	{
-	  nBytes = strlen (sra->seq) ;
-	  /*
-	    {{
-	      int lastSeq = 0 ;
-	      const char *cp = sra->seq ;
-	      nReads = 0 ;
-	      while (cp)
-		{
-		  nReads++ ;
-		  lastSeq = cp - sra->seq ;
-		  cp = strchr(cp+1, '>') ;
-		}
-	      nnBytes += nBytes ;
-	      nnReads += nReads ; nBloc++ ;
-	      fprintf(stderr, "++++ SraGet bloc %ld  r %ld cumul %ld bases %ld cumul %ld remaining %ld GB=%f lastSeq=%d\n", nBloc, nReads, nnReads, nBases, nnBytes, bMax, Gb, lastSeq) ;
-	    }}
-	  */
-	  if (!nBytes)
+	  size = sra->size ;
+	  size2 = sra->size2 ;
+	  if (! size)
 	    messcrash ("No sequence found in SRA %s\n", sraID) ;
-	  if (Gb > 0) bMax -= nBytes ;
+	  if (Gb > 0) bMax -= size ;
 	  if (format == SRA)
 	    {   /* check for identifiers signaling a paired end read */
 	      if (sra->is_paired)
@@ -976,10 +961,10 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 	  bb->cpuStats = arrayHandleCreate (128, CpuSTAT, bb->h) ;
 	  bb->rc.fileName1 = sraID ;
 	  /* copy the buffer */
-	  bb->gzBuffer = halloc (nBytes + 1, bb->h) ;
-	  memcpy (bb->gzBuffer, sra->seq, nBytes) ;
+	  bb->gzBuffer = halloc (size + 1, bb->h) ;
+	  memcpy (bb->gzBuffer, sra->seq, size) ;
 	  
-	  bb->gzBuffer[nBytes] = 0 ;
+	  bb->gzBuffer[size] = 0 ;
 	  bb->nSeqs = 100 ;  /* a guess */
 	  
 	  /* export the databalock to the channel */
