@@ -79,7 +79,15 @@ typedef struct aStruct {
 
 #define SLMAX 1000
 #define LETTERMAX 1000
-#define OVERHANGMAX 600   /* 4*30*5  overhang: 32 bases max, starting on base atgc, 5 counts atgcn per position */
+#define OVERHANGMAX 600   /* 4*30*5  overhang: 32 bases max, starting on base atgc, 5 counts natgc per position */
+
+static const unsigned char natgc[256] = {
+  [A_] = 1,
+  [T_] = 2,
+  [G_] = 3,
+  [C_] = 4
+  /* all other 252 entries default to 0 == NATGC_N  */
+} ;
 
 typedef struct PSDstruct {
   int run ;   /* index in p.runDict */
@@ -90,7 +98,7 @@ typedef struct PSDstruct {
   int minReadLength, maxReadLength ;
   long int letterProfile1[5 * LETTERMAX] ;
   long int letterProfile2[5 * LETTERMAX] ;
-  long int ATGCN[5] ;
+  long int NATGC[5] ;
 
 } PSD ;
 
@@ -159,6 +167,7 @@ typedef struct bStruct {
   BigArray msps ;        /* BigArray of seedmatches */
   BigArray hits ;        /* BigArray of read<->genome hits */
   BigArray *cwsN ;         /* BigArray of codeWords */
+  long unsigned nPairs ;
   long unsigned int nSeqs ;  /* number of sequences in bloc */
   long unsigned int length ; /* cumulated number of bases */
   long unsigned int nerr ;   /* cumulated number of errors */
@@ -545,12 +554,14 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step) ;
 /* sa.sequenceParser.c */
 void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
 int saSequenceParseSraDownload (PP *pp, const char *sraID) ;
-void saSequenceParseGzBuffer (const PP *pp, BB *bb) ;
+void saParseGzBuffer (const PP *pp, BB *bb) ;
+void saParseR12Buffers (const PP *pp, BB *bb) ;
 void saSequenceDeduplicate (const PP *pp, BB *bb) ;
+void globalDnaCreate (BB *bb) ;
 
 /* sa.compressedSequenceParser.c */
-void saCompressedSequenceParser (const PP *pp, DnaFormat format, const char *fNam) ;
-
+void saCompressedSequenceParser (const PP *pp, RC *rc) ;
+  
 /* sa.wiggle */
 void saWiggleCumulate (const PP *pp, BB *bb) ;
 GeneCounts saWiggleExport (PP *pp, int nAgents) ;
@@ -581,6 +592,7 @@ void saDevHelp (void) ;
 
 /* sa.tests */
 void saCreateRandomGenome (PP *pp, int nMb) ;
+
 
 /**************************************************************/
 /**************************************************************/

@@ -31,7 +31,7 @@
  *
  *  USAGE SUMMARY:
  *    GZIIndex *idx = bgzfGZILoad (fNam) ;        // load .gzi sidecar
- *    BGZFFile *bgzf = bgzfOpen (fNam) ;           // open .gz file
+ *    BGZFFile *bgzf = bgzfOpen (fNam, h) ;           // open .gz file
  *    uint64_t  cOff = bgzfGZIFloor (idx, uOff) ;   // compressed seek point
  *    bgzfSeek (bgzf, cOff) ;                                // seek to block boundary
  *    bgzfRead (bgzf, buf, len) ;                          // decompress into buf
@@ -48,6 +48,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/types.h>          /* ssize_t, off_t                           */
+#include "ac.h"  // for AC_HANDLE
 
 /*---------------------------------------------------------------------------
  * GZI index
@@ -89,7 +90,7 @@ typedef struct BGZFFile_ BGZFFile ;
 /* Open a BGZF-format .gz file for reading.
  * Returns NULL on failure.
  */
-BGZFFile   *bgzfOpen     (const char *fNam) ;
+BGZFFile   *bgzfOpen     (const char *fNam, AC_HANDLE h) ;
 
 /* Close and free a BGZFFile.                                            */
 void        bgzfClose    (BGZFFile *bgzf) ;
@@ -107,5 +108,42 @@ ssize_t     bgzfRead     (BGZFFile *bgzf, void *buf, size_t len) ;
 
 /* Return current uncompressed position.                                 */
 uint64_t    bgzfTell     (const BGZFFile *bgzf) ;
+
+/*---------------------------------------------------------------------------
+ * BGZF write interface
+ *
+ * bgzfOpenWrite opens a new .gz file for writing in BGZF format.
+ * Data is accumulated in an internal buffer and flushed as complete
+ * BGZF blocks.  bgzfClose in write mode flushes the final partial block
+ * and writes the mandatory BGZF EOF sentinel block (28 bytes, SAM spec).
+ * The resulting file is a valid gzip file readable by any gzip tool and
+ * a valid BGZF file readable by bgzfOpen above.
+ *
+ * USAGE:
+ *   BGZFFile *w = bgzfOpenWrite ("out.fasta.gz", h) ;
+ *   bgzfWrite (w, buf, len) ;
+ *   bgzfClose (w) ;            -- flushes + writes EOF block
+ * or equivalent: ac_free (h), the h handle on which w was allocated 
+ *
+ * bgzfWrite returns number of bytes accepted, -1 on error.
+ * Compression level: Z_DEFAULT_COMPRESSION (zlib default, ~level 6).
+
+ * BGZFFile *w = bgzfOpenWrite ("hello.fasta.gz", 0) ;
+ * bgzfWrite (w, ">hello\nACGTACGT\n", 16) ;
+ * bgzfClose (w) ;   // flushes block + writes EOF sentinel
+
+*/
+/* result is a valid gzip AND valid BGZF file */
+/* verify: bgzip -t hello.fasta.gz  → no error */
+/* verify: zcat hello.fasta.gz      → >hello    */
+ /*-------------------------------------------------------------------------*/
+
+/* Open a new file for BGZF writing. Returns NULL on failure.            */
+BGZFFile  *bgzfOpenWrite  (const char *fNam, AC_HANDLE h) ;
+
+/* Write len bytes from buf into the BGZF stream.
+ * Flushes complete blocks automatically.
+ * Returns len on success, -1 on error.                                  */
+ssize_t    bgzfWrite      (BGZFFile *bgzf, const void *buf, size_t len) ;
 
 #endif /* BGZF_H_DEFINED */

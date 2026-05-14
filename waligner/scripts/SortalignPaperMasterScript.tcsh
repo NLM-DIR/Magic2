@@ -162,6 +162,8 @@ setenv SV     v100.81.18M.e4.may5     # all ali seen as positive strand final, b
 setenv SVlast v100.81.18M.e4.may5
 setenv SV     v101.81.18M.e4.may6     # all ali seen as positive strand final, back on farm, pairs should be fixed 
 setenv SVlast v101.81.18M.e4.may6
+setenv SV     v102.81.18M.e4.may13     # all ali seen as positive strand final, back on farm, pairs should be fixed 
+setenv SVlast v102.81.18M.e4.may13    # i tried to optimize the fasta parser gz pigz and bgzf, nothing was useful
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV

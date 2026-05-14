@@ -301,7 +301,7 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   up->ct_ac_Support += vp->ct_ac_Support ;
   
   for (int i = 0 ; i < 5 ; i++)
-    up->p.ATGCN[i] += vp->p.ATGCN[i] ;
+    up->p.NATGC[i] += vp->p.NATGC[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile1[i] += vp->p.letterProfile1[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
@@ -695,11 +695,11 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 
 	  aceOutf (ao, "%s\tATGCN\tiiiii\t%ld\t%ld\t%ld\t%ld\t%ld\n"
 		   , runNam
-		   , up->p.ATGCN[0]
-		   , up->p.ATGCN[1]
-		   , up->p.ATGCN[2]
-		   , up->p.ATGCN[3]
-		   , up->p.ATGCN[4]
+		   , up->p.NATGC[1]
+		   , up->p.NATGC[2]
+		   , up->p.NATGC[3]
+		   , up->p.NATGC[4]
+		   , up->p.NATGC[0]
 		   ) ;
 
 

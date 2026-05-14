@@ -193,7 +193,10 @@ static void readParser (const void *vp)
   RC rc ;
   
   while (channelGet (pp->fpChan, &rc, RC))
-    saSequenceParse (pp, &rc, 0, 0, 0) ;
+    {
+      if (1)
+	saSequenceParse (pp, &rc, 0, 0, 0) ;
+    }
   channelCloseSource  (pp->plChan) ;
   return ;
 } /* Readparser */
@@ -1253,9 +1256,9 @@ static void wholeWork (const void *vp)
 
       bb.readerAgent = pp->agent ;
       /* code words */
-      saSequenceParseGzBuffer (pp, &bb) ;
+      if (bb.gzBuffer) /* fasta buffer method 2025 */
+	saParseGzBuffer (pp, &bb) ;
       saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
-
       
       if (pp->debug)
 	{
@@ -2538,8 +2541,8 @@ int main (int argc, const char *argv[])
   if (p.justStats && p.outFileName)  system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)) ;
   saSetGetAdaptors (-999999, 0, 0, 0) ;
   oligoEntropy (0, -999999, 0) ;
-  ac_free (p.h) ;
-  if (0)   ac_free (h) ; /* blocks on channel cond destroy */
+
+  if (p.debug)   ac_free (h) ; /* blocks on channel cond destroy */
   return 0 ;
 }
 

@@ -980,7 +980,7 @@ if ($phase == a0) goto phasea0
 
 ### verify once the metadata
 
-if ($firstPhase == 1) scripts2/metadata.tcsh
+if (0 && $firstPhase == 1) scripts2/metadata.tcsh
 
 set firstPhase=0
 if (0 && ! -e  tmp/METADATA/metadata.ok) then

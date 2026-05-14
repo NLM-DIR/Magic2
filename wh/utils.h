@@ -34,6 +34,14 @@
 
 BOOL isExecutableInPath (const char *name) ;
 
+#define ustrlen(_s)              strlen ((const char *)(_s))
+#define ustrcmp(_s,_t)        strcmp ((const char *)(_s), (const char *)(_t))
+#define ustrncmp(_s,_t,_n) strncmp((const char *)(_s), (const char *)(_t), (_n))
+#define ustrcpy(_d,_s)        strcpy ((char *)(_d), (const char *)(_s))
+#define ustrncpy(_d,_s,_n) strncpy((char *)(_d), (const char *)(_s), (_n))
+#define ustrcat(_d,_s)         strcat ((char *)(_d), (const char *)(_s))
+#define ustrchr(_s,_c)         ((unsigned char *)strchr((const char *)(_s), (_c)))
+
 /* case-insensitive version of strstr */
 char *strcasestr (const char *str1, const char *str2);
 /* Wrapper to allow lexstrcmp to be used with arraySort.y */

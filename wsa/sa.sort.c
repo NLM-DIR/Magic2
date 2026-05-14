@@ -329,7 +329,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 /* #endif // USEGPU */
 
 /**************************************************************/
-static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex) ;
+// static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex) ;
 static void *saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex) ;
 int saSort (BigArray aa, int type)
 {
@@ -486,7 +486,7 @@ int saSort (BigArray aa, int type)
 #define SA_KEY_FROM_PTR(ptr)  (*(unsigned int *)((ptr) + keyOff))
 
 #endif  /* VECTORIZED_MEM_CPY */
-
+#ifdef JUNK
 static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
 {
   unsigned char       *src = (unsigned char *) base ;
@@ -617,10 +617,7 @@ static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex)
   free (dst) ;
   return 0 ;
 }  /* saRadixSort */
-
-/**************************************************************/
-/**************************************************************/
-/**************************************************************/
+#endif
 
 /**************************************************************/
 /**************************************************************/

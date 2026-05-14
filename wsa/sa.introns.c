@@ -330,7 +330,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   BOOL isDown = (vp->a1 <= vp->a2 ? TRUE : FALSE ) ;
   int da = vp->a2 - wp->a1 + 1 ;
   /* int day = dy - da ; */
-  if (! isDown) { messerror ("isdown should be true read %s\n", dictName (bb->dict, vp->read)) ;  return  ;} 
+  if (! isDown) { messerror ("isDown should be true read %s\n", dictName (bb->dict, vp->read >> 1)) ;  return  ;} 
   if (0 && da < 4 && da > -4 && dy < 4 && dy > -4 && vp->chrom == wp->chrom)
     {
       /* merge the 2 alignments */
@@ -344,7 +344,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	}
       vp->nErr = arrayMax (vp->errors) ;
 
-      if (dy) /* create an error at th new junction */
+      if (dy) /* create an error at the new junction */
 	{
 	  epX = arrayp (vp->errors, vp->nErr++, A_ERR) ;
 	  epX->iShort = wp->x1 - 1 ;
@@ -376,6 +376,27 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
       int dx = vp->x1 - wp->x1 ;
       wp->x1 = vp->x1 ;
       wp->a1 += dx ;  /* correct only if there are no indel in [wp->a1,wp->a1+dx] segment */
+            if (nEy)  /* we need to correct wp->a1 for the clipped errors */
+	{
+	  int dda = 0 ;
+	  epY = arrp (wp->errors, 0, A_ERR) ;
+	  for (int i = 0 ; i < nEy && epY->iShort + 1 <= wp->x1 ; i++, epY++)
+	    {
+	      if (epY->iShort + 1 < wp->x1 - dx) continue ;
+	      switch (epY->type)
+		{
+		case INSERTION: dda++ ; break ;
+		case INSERTION_DOUBLE: dda += 2 ; break ;
+		case INSERTION_TRIPLE: dda += 3 ; break ;
+		case TROU: dda-- ; break ;
+		case TROU_DOUBLE: dda -= 2 ; break ;
+		case TROU_TRIPLE: dda -= 3 ; break ;
+		default: break ;
+		}
+	    }
+	  wp->a1 -= dda ;
+	}
+
     }
   dy = vp->x2 - wp->x1 + 1 ;
   if (dy > 0 && nEx + nEy > 0)
@@ -482,7 +503,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	      epX = arrp (vp->errors, bestI, A_ERR) ;
 	      vp->x2 = epX->iShort ;  /* last exact base bio coords */
 	      int zA = epX->iLong ;
-	      vp->a2 = (vp->chrom & 0x1 ?  arrayMax(dnaG) - zA + 1 : zA) ;
+	      vp->a2 = zA ;
 	    }
 	  nEx = bestI ;
 	  vp->nErr = arrayMax (vp->errors) = nEx ;
@@ -763,7 +784,26 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   if (dy > 0)
     { 
       wp->x1 += dy ;
-      wp->a1 += (wp->a1 < wp->a2 ? dy : -dy) ;
+      wp->a1 += dy ;
+      if (nEy)  /* we need to correct wp->a1 for the clipped errors */
+	{
+	  int dda = 0 ;
+	  epY = arrp (wp->errors, 0, A_ERR) ;
+	  for (int i = bestJ + 1 ; i < nEy && epY->iShort + 1 <= wp->x1 ; i++, epY++)
+	    {	      
+	      switch (epY->type)
+		{
+		case INSERTION: dda++ ; break ;
+		case INSERTION_DOUBLE: dda += 2 ; break ;
+		case INSERTION_TRIPLE: dda += 3 ; break ;
+		case TROU: dda-- ; break ;
+		case TROU_DOUBLE: dda -= 2 ; break ;
+		case TROU_TRIPLE: dda -= 3 ; break ;
+		default: break ;
+		}
+	    }
+	  wp->a1 -= dda ;
+	}
     }
 
   dy = vp->x2 - wp->x1 + 1 ;

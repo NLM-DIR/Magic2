@@ -155,8 +155,7 @@ static void alignCheckSize (BB *bb, Array aa)
     {
       ALIGN *up = arrp (aa, ii, ALIGN) ;
       int dx = up->x2 - up->x1 + 1 ;
-      int da = up->a2 - up->a1 ;
-      da = (da > 0 ? da + 1 : -da+ 1 ) ;
+      int da = up->a2 - up->a1 + 1 ;
       nD = nI = 0 ;
       
       if (up->errors)
@@ -165,22 +164,24 @@ static void alignCheckSize (BB *bb, Array aa)
 	  for (jj = 0 ; jj < jMax ; jj++)
 	    {
 	      A_ERR *ep = arrp (up->errors, jj, A_ERR) ;
-	      switch (ep->type)
-		{
-		case TROU: nD += 1 ; break ;
-		case TROU_DOUBLE: nD += 2 ; break ;
-		case TROU_TRIPLE: nD += 3 ; break ;
-		case INSERTION: nI += 1 ; break ;
-		case INSERTION_DOUBLE: nI += 2 ; break ;
-		case INSERTION_TRIPLE: nI += 3 ; break ;
-		default: break ;
-		}
+	      if (ep->iShort + 1 > up->x1 &&  ep->iShort + 1 <= up->x2)
+		switch (ep->type)
+		  {
+		  case TROU: nD += 1 ; break ;
+		  case TROU_DOUBLE: nD += 2 ; break ;
+		  case TROU_TRIPLE: nD += 3 ; break ;
+		  case INSERTION: nI += 1 ; break ;
+		  case INSERTION_DOUBLE: nI += 2 ; break ;
+		  case INSERTION_TRIPLE: nI += 3 ; break ;
+		  default: break ;
+		  }
 	    }
 	}
-      if (0 && da + nI != dx + nD)
-	messcrash ("\nRead %s dx=%d da=%d nI=%d nD=%d dA+nI-dx-nD=%d\n"
+      if (0  && (da + nI != dx + nD))
+	messcrash ("\nRead %s dx=%d da=%d nI=%d nD=%d dA+nI-dx-nD=%d a=%d/%d x=%d/%d\n"
 		   , dictName (bb->dict, up->read >> 1)
 		   , dx, da, nI, nD, da+nI-dx-nD
+		   , up->a1, up->a2, up->x1, up->x2
 		   ) ;
     }
   return ;
@@ -1311,7 +1312,7 @@ static int alignLocateChains (Array bestAp, Array aa, int myRead)
     {
       for (i1 = i2 = jj = 0, up = vp = arrp (aa, 0, ALIGN) ; i1 < iMax ; i1++, up++)
 	{
-	  if (up->chain > 0 && up->a1 != up->a2)
+	  if (up->chain > 0 && up->a1 <= up->a2)
 	    {
 	      if (vp < up) *vp = *up ;
 	      if (vp->read == myRead && vp->chain > jj)
@@ -1442,6 +1443,7 @@ static Array alignAdjustExonChainImage (const PP *pp, BB *bb, KEYSET ks, Array b
   int chromA = up->chrom ;
   Array dnaG = arr (dnas, chromA >> 1, Array) ;
   memset (zp, 0, sizeof(ALIGN)) ;
+  jj = 0 ;
   zp->x1 = up->x1 ;
   zp->a1 = jj + 1 ;
   
@@ -2725,6 +2727,10 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  
 	  if (1)
 	    {  /* without this code, we have errors with the miRs */
+	      if (da2  <= ap1->chainAli + 5)
+		continue ;  // we do not gain enough to justify a rafia
+	      if (da2  <= ap2->chainAli + 5)
+		continue ;  // we do not gain enough to justify a rafia
 	      if (da > 0 && du >= ap1->chainAli)
 		{ /* kill chain ap1 */
 		  for (int i = 0 ; i < di1 ; i++)

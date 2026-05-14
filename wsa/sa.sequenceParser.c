@@ -28,8 +28,9 @@
  * Set the individual dna array to point into the globalDna
  * Collect their coordinates 
  */
-static void globalDnaCreate (BB *bb)
+void globalDnaCreate (BB *bb)
 {
+  AC_HANDLE h = ac_new_handle () ;
   long int ln = 0 ;
   int n, ii, iMax = arrayMax (bb->dnas) ;
   unsigned char *cp, *cq ;
@@ -41,25 +42,29 @@ static void globalDnaCreate (BB *bb)
       iMax++ ;
     }
   
-  bb->dnaCoords = bigArrayHandleCreate (2 * (iMax + 1), unsigned int, bb->h) ;
-
+  BigArray dnaCoords = 0 ;
+  if (bb->isGenome)
+    dnaCoords = bb->dnaCoords = bigArrayHandleCreate (2 * (iMax + 1), unsigned int, bb->h) ;
+  else
+    dnaCoords = bb->dnaCoords = bigArrayHandleCreate (2 * (iMax + 1), unsigned int, h) ;
+  
   /* compute the length of the global DNA (avoid reallocations) */
   for (ln = 0, ii = 1 ; ii < iMax ; ii++)
     {
       dna = array (bb->dnas, ii, Array) ;
       if (dna)
 	{
-	  bigArray (bb->dnaCoords, 2*ii, unsigned int) = ln ;    /* off set of dna ii */
+	  bigArray (dnaCoords, 2*ii, unsigned int) = ln ;    /* off set of dna ii */
 	  n = arrayMax (dna) ;
-	  bigArray (bb->dnaCoords, 2*ii + 1, unsigned int) = ln + n ;    /* off set of dna ii */
+	  bigArray (dnaCoords, 2*ii + 1, unsigned int) = ln + n ;    /* off set of dna ii */
 	  ln += n + 16 ;            /* mininal 16 zeroes protection */
 	  n = n % 16 ;
 	  if (n)          /* align the data */
 	    ln += 16 - n ;
 	}
     }
-  bigArray (bb->dnaCoords, 2 * ii, unsigned int) = ln ;    /* global end */
-  bigArray (bb->dnaCoords, 2 * ii + 1, unsigned int) = ln ;    /* global end */ 
+  bigArray (dnaCoords, 2 * ii, unsigned int) = ln ;    /* global end */
+  bigArray (dnaCoords, 2 * ii + 1, unsigned int) = ln ;    /* global end */ 
   
   /* construct the global DNA  */
   if (!ln) messcrash ("Could not read any sequence in the fasta file") ;
@@ -76,6 +81,7 @@ static void globalDnaCreate (BB *bb)
 	  cq = arrp (dna, 0, unsigned char) ;
 	  memcpy (cp, cq, n) ; 
 	  messfree (dna->base) ;
+	  dna->virtual = TRUE ; /* abuse, we should call virtualArrayCreate */
 	  arrayLock (dna) ;
 	  dna->base = (char *) cp ; 
 	  ln += n ; cp += n ;
@@ -86,7 +92,7 @@ static void globalDnaCreate (BB *bb)
 	    {  memset (cp, 0, 16 - n) ; ln += 16 - n ; cp += 16 - n ; }
 	}
     }
-
+  ac_free (h) ;
   return ;
 } /* globalDnaCreate */
   
@@ -343,7 +349,7 @@ static BOOL parseOnePair (DnaFormat format, char *namBuf
 
 /**************************************************************/
 /* parse a fasta buffer into an array of DNA */ 
-void saSequenceParseGzBuffer (const PP *pp, BB *bb)
+void saParseGzBuffer (const PP *pp, BB *bb)
 {
   if (bb->gzBuffer) /* fasta buffer */
     {
@@ -416,7 +422,7 @@ void saSequenceParseGzBuffer (const PP *pp, BB *bb)
 	      int i, iMax = arrayMax (dna1) ;
 	      unsigned char *cp = arrp (dna1, 0, unsigned char) ;
 	      for (i = 0 ; i < iMax ; i++, cp++)
-		bb->runStat.p.ATGCN[atgcn[(int)*cp]]++ ;
+		bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
 	      
 	      if (iMax > bb->runStat.p.maxReadLength)
 		bb->runStat.p.maxReadLength = iMax ;
@@ -429,7 +435,7 @@ void saSequenceParseGzBuffer (const PP *pp, BB *bb)
 	      int i, iMax = arrayMax (dna1) ;
 	      unsigned char *cp = arrp (dna1, 0, unsigned char) ;
 	      for (i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
-		bb->runStat.p.letterProfile1[5*i + atgcn[(int)*cp]]++ ;
+		bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]++ ;
 	    }
 
 	  dna1 = arrayHandleCreate (256, unsigned char, bb->h) ;
@@ -439,7 +445,7 @@ void saSequenceParseGzBuffer (const PP *pp, BB *bb)
     }
   
   return ;
-} /* saSequenceParseGzBuffer */
+} /* saParseGzBuffer */
 
 /**************************************************************/
 
@@ -553,25 +559,6 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       bytes += pos ;
 
 
-      if (0 &&   /* no guessing, the format was declared FASTA2 */
-	  bytes && format == FASTA2)
-	{   /* check for identifiers signalling a paired end read */
-	  unsigned char *cq = buffer ;
-	  int nDots = 0, k = 0 ;
-	  while (k++ < bytes && cq && *cq != '\n')
-	    nDots += (*cq++ == '.' ? 1 : 0) ;
-	  if (nDots == 3)
-	    {
-	      format = FASTA2 ;
-	      pairedEnd = TRUE ;
-	    }
-	  else
-	    {
-	      format = FASTA ;
-	      pairedEnd = FALSE ;
-	    }
-	}
-      
       if (bytes < BMAX)
 	{
 	  done = TRUE ;
@@ -811,7 +798,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   BB b ;
   BOOL debug = FALSE ;
   int BMAX = isGenome ? 1000000 : (pp->BMAX << 20) ;
-  long int nBytes = 0, nBases = 0 ;
+  long int nBytes = 0 ;
   int nPuts = 0 ;
   DnaFormat format = rc->format ;
   const char *sraID = rc ? rc->fileName1 : tc->fileName ;
@@ -923,7 +910,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
     fastq = FALSE ;
   split_pairs = FALSE ;
 
-  long int nReads = 0, nnReads = 0, nBloc = 0, nnBytes = 0 ;
+  //  long int nReads = 0, nnReads = 0, nBloc = 0, nnBytes = 0 ;
 
   format = SRA ;
   while (Gb == 0 || bMax > 0)
@@ -934,7 +921,6 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
       SraGetReadBatch(sra, num_bases, fastq, split_pairs) ;
       if (sra->seq)
 	{
-	  nBases = sra->num_bases ;
 	  nBytes = strlen (sra->seq) ;
 	  /*
 	    {{
@@ -1047,13 +1033,6 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
   BOOL pairedEnd = rc ? rc->pairedEnd : FALSE ;
   char tBuf[25] ;
   clock_t t1, t2 ;
-  
-  unsigned char atgcn[256] ;
-  memset (atgcn, 4, sizeof(atgcn)) ;
-  atgcn[A_] = 0 ;
-  atgcn[T_] = 1 ;
-  atgcn[G_] = 2 ;
-  atgcn[C_] = 3 ;
   
   t1 = clock () ;
   
@@ -1175,21 +1154,21 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 		  int i, iMax = arrayMax (dna1) ;
 		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
 		  for (i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
-		    bb->runStat.p.letterProfile1[5*i + atgcn[(int)*cp]]++ ;
+		    bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]++ ;
 		}
 	      if (arrayMax (dna2))
 		{
 		  int i, iMax = arrayMax (dna2) ;
 		  unsigned char *cp = arrp (dna2, 0, unsigned char) ;
 		  for (i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
-		    bb->runStat.p.letterProfile2[5*i + atgcn[(int)*cp]]++ ;
+		    bb->runStat.p.letterProfile2[5*i + natgc[(int)*cp]]++ ;
 		}
 	      if (arrayMax (dna1))
 		{
 		  int i, iMax = arrayMax (dna1) ;
 		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
 		  for (i = 0 ; i < iMax ; i++, cp++)
-		    bb->runStat.p.ATGCN[atgcn[(int)*cp]]++ ;
+		    bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
 
 		  if (iMax > bb->runStat.p.maxReadLength)
 		    bb->runStat.p.maxReadLength = iMax ;
@@ -1202,7 +1181,7 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 		  int i, iMax = arrayMax (dna1) ;
 		  unsigned char *cp = arrp (dna2, 0, unsigned char) ;
 		  for (i = 0 ; i < iMax ; i++, cp++)
-		    bb->runStat.p.ATGCN[atgcn[(int)*cp]]++ ;
+		    bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
 
 		  if (iMax > bb->runStat.p.maxReadLength)
 		    bb->runStat.p.maxReadLength = iMax ;
@@ -1272,7 +1251,7 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 		  int i, iMax = arrayMax (dna1) ;
 		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
 		  for (i = 0 ; i < iMax ; i++, cp++)
-		    bb->runStat.p.ATGCN[atgcn[(int)*cp]]++ ;
+		    bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
 
 		  if (iMax > bb->runStat.p.maxReadLength)
 		    bb->runStat.p.maxReadLength = iMax ;
@@ -1285,7 +1264,7 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 		  int i, iMax = arrayMax (dna1) ;
 		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
 		  for (i = 0 ; i < iMax && i < LETTERMAX ; i++)
-		    bb->runStat.p.letterProfile1[5*i + atgcn[(int)*cp]]++ ;
+		    bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]++ ;
 		}
 
 	      if (bb->quals && qual1)
@@ -1404,6 +1383,8 @@ void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 	       format == FASTA2       
 	       )
 	fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
+      else
+	otherSequenceParser (pp, rc, tc, bb, isGenome) ;
     }
   else
     otherSequenceParser (pp, rc, tc, bb, isGenome) ;

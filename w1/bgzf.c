@@ -29,7 +29,6 @@
  */
 
 #include "bgzf.h"
-
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -38,6 +37,21 @@
 #include <stdio.h>
 #include <errno.h>
 #include <zlib.h>               /* inflate, crc32 — stable since 1996      */
+static int bgzfFlushBlock (BGZFFile *bgzf) ;
+
+/*---------------------------------------------------------------------------
+ * BGZF EOF block — mandatory 28-byte sentinel defined in SAM spec.
+ * Any BGZF reader uses this to distinguish clean EOF from truncation.
+ *-------------------------------------------------------------------------*/
+static const unsigned char bgzfEOFBlock[28] = {
+  0x1f, 0x8b, 0x08, 0x04, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0xff, 0x06, 0x00, 0x42, 0x43, 0x02, 0x00,
+  0x1b, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00
+} ;
+/* file open mode — stored in BGZFFile.mode */
+#define BGZF_MODE_READ  0
+#define BGZF_MODE_WRITE 1
 
 /*---------------------------------------------------------------------------
  * Internal helpers — little-endian reads
@@ -74,6 +88,8 @@ static uint64_t leU64 (const unsigned char *p)
  *-------------------------------------------------------------------------*/
 GZIIndex *bgzfGZILoad (const char *fNam)
 {
+  if (!fNam || !*fNam)
+    messcrash ("bgzfGZILoad called with NULL or empty filename") ;
   /* construct sidecar path: fNam + ".gzi" */
   size_t  ln      = strlen (fNam) ;
   char   *gziPath = malloc (ln + 5) ;
@@ -161,7 +177,7 @@ void bgzfGZIFree (GZIIndex *idx)
 uint64_t bgzfGZIFloor (const GZIIndex *idx, uint64_t uTarget)
 {
   if (!idx || idx->nEntries == 0)
-    return 0 ;
+    messcrash ("bgzfGZIFloor called with NULL or empty index") ;
 
   size_t lo = 0 ;
   size_t hi = idx->nEntries ;       /* half-open [lo, hi) */
@@ -182,44 +198,98 @@ uint64_t bgzfGZIFloor (const GZIIndex *idx, uint64_t uTarget)
  *=========================================================================*/
 
 struct BGZFFile_ {
+  void          *magic ;    /* == bgzfDestroy when valid, NULL after destroy */
+  AC_HANDLE      h ;        /* internal handle for bgzf's own allocations    */
   int            fd ;                         /* raw file descriptor        */
+  int            mode ;                       /* O_RDONLY or O_WRONLY       */
   uint64_t       cPos ;                       /* current compressed offset  */
   uint64_t       uPos ;                       /* current uncompressed offset */
 
-  /* decompressed block cache */
-  unsigned char  block[BGZF_MAX_BLOCK] ;      /* current decompressed block */
-  size_t         blockLen ;                   /* valid bytes in block[]     */
-  size_t         blockOff ;                   /* read cursor within block[] */
+  /* read side — decompressed block cache */
+  unsigned char  block[BGZF_MAX_BLOCK] ;
+  size_t         blockLen ;
+  size_t         blockOff ;
+
+  /* write side — uncompressed accumulation buffer */
+  unsigned char  wbuf[BGZF_MAX_BLOCK] ;       /* pending uncompressed data  */
+  size_t         wbufLen ;                    /* bytes pending in wbuf      */
 } ;
 
 /*---------------------------------------------------------------------------
- * bgzfOpen
+ * BGZFFile acedb-style lifecycle
  *-------------------------------------------------------------------------*/
-BGZFFile *bgzfOpen (const char *fNam)
+
+static void bgzfDestroy (void *vp)
+{
+  BGZFFile *bgzf = (BGZFFile *)vp ;
+  if (!bgzf)
+    return ;
+  if (bgzf->magic != bgzfDestroy)
+    messcrash ("Bad call to bgzfDestroy") ;
+  bgzf->magic = NULL ;              /* guard against double destroy        */
+
+  if (bgzf->mode == BGZF_MODE_WRITE)
+    {
+      bgzfFlushBlock (bgzf) ;       /* flush final partial block           */
+      write (bgzf->fd, bgzfEOFBlock, 28) ;  /* mandatory EOF sentinel      */
+    }
+  close (bgzf->fd) ;
+  bgzf->fd = -1 ;
+  ac_free (bgzf->h) ;               /* frees internal allocations          */
+} /* bgzfDestroy */
+
+/******************************************************************/
+BGZFFile *bgzfOpen (const char *fNam, AC_HANDLE h0)
 {
   int fd = open (fNam, O_RDONLY) ;
-  if (fd < 0)
-    return NULL ;
+  if (fd < 0) return NULL ;
 
-  BGZFFile *bgzf = calloc (1, sizeof *bgzf) ;
-  bgzf->fd       = fd ;
-  bgzf->cPos     = 0 ;
-  bgzf->uPos     = 0 ;
-  bgzf->blockLen = 0 ;
-  bgzf->blockOff = 0 ;
+  BGZFFile *bgzf  = (BGZFFile *) halloc (sizeof *bgzf, h0) ;
+  bgzf->h         = handleCreate () ;   /* internal handle                 */
+  bgzf->fd        = fd ;
+  bgzf->mode      = BGZF_MODE_READ ;
+  bgzf->magic     = bgzfDestroy ;       /* type tag + double-free guard    */
+  blockSetFinalise (bgzf, bgzfDestroy) ;
   return bgzf ;
 } /* bgzfOpen */
+
+/******************************************************************/
+BGZFFile *bgzfOpenWrite (const char *fNam, AC_HANDLE h0)
+{
+  int fd = open (fNam, O_WRONLY | O_CREAT | O_TRUNC, 0666) ;
+  if (fd < 0) return NULL ;
+
+  BGZFFile *bgzf  = (BGZFFile *) halloc (sizeof *bgzf, h0) ;
+  bgzf->h         = handleCreate () ;
+  bgzf->fd        = fd ;
+  bgzf->mode      = BGZF_MODE_WRITE ;
+  bgzf->magic     = bgzfDestroy ;
+  blockSetFinalise (bgzf, bgzfDestroy) ;
+  return bgzf ;
+} /* bgzfOpenWrite */
 
 /*---------------------------------------------------------------------------
  * bgzfClose
  *-------------------------------------------------------------------------*/
 void bgzfClose (BGZFFile *bgzf)
 {
-  if (bgzf)
+  ac_free (bgzf) ;          /* triggers bgzfDestroy via blockSetFinalise    */
+} /* bgzfClose */
+
+void bgzfCloseJunk (BGZFFile *bgzf)
+{
+  if (!bgzf) return ;
+
+  if (bgzf->mode == BGZF_MODE_WRITE)
     {
-      close (bgzf->fd) ;
-      free (bgzf) ;
+      /* flush any remaining data as a final partial block */
+      bgzfFlushBlock (bgzf) ;
+      /* write mandatory BGZF EOF sentinel */
+      write (bgzf->fd, bgzfEOFBlock, 28) ;
     }
+
+  close (bgzf->fd) ;
+  free (bgzf) ;
 } /* bgzfClose */
 
 /*---------------------------------------------------------------------------
@@ -227,7 +297,11 @@ void bgzfClose (BGZFFile *bgzf)
  *-------------------------------------------------------------------------*/
 int bgzfSeek (BGZFFile *bgzf, uint64_t cOffset)
 {
-  if (!bgzf) return -1 ;
+  if (!bgzf || bgzf->magic != bgzfDestroy)
+    messcrash ("Bad call to bgzfSeek") ;
+  if (bgzf->mode != BGZF_MODE_READ)
+    messcrash ("bgzfSeek called on write-mode handle: %s\n", "use bgzfWrite") ;
+   
   off_t rc = lseek (bgzf->fd, (off_t)cOffset, SEEK_SET) ;
   if (rc < 0) return -1 ;
   bgzf->cPos     = cOffset ;
@@ -310,7 +384,13 @@ static ssize_t bgzfReadBlock (BGZFFile *bgzf)
  *-------------------------------------------------------------------------*/
 ssize_t bgzfRead (BGZFFile *bgzf, void *buf, size_t len)
 {
-  if (!bgzf || !buf || len == 0) return 0 ;
+  if (!bgzf || bgzf->magic != bgzfDestroy)
+    messcrash ("Bad call to bgzfRead") ;
+  if (bgzf->mode != BGZF_MODE_READ)
+    messcrash ("bgzfRead called on write-mode handle") ;
+  if (!buf)
+    messcrash ("bgzfRead called on null buf") ;
+  if (len == 0) return 0 ;
 
   size_t         done = 0 ;
   unsigned char *dst  = (unsigned char *)buf ;
@@ -342,5 +422,127 @@ ssize_t bgzfRead (BGZFFile *bgzf, void *buf, size_t len)
  *-------------------------------------------------------------------------*/
 uint64_t bgzfTell (const BGZFFile *bgzf)
 {
+  if (!bgzf || bgzf->magic != bgzfDestroy)
+    messcrash ("Bad call to bgzfTell") ;
   return bgzf ? bgzf->uPos : 0 ;
 } /* bgzfTell */
+/*---------------------------------------------------------------------------
+ * Little-endian write helpers — write side only
+ *-------------------------------------------------------------------------*/
+
+static void putLeU16 (unsigned char *p, uint16_t v)
+{
+  p[0] = (unsigned char)(v)      ;
+  p[1] = (unsigned char)(v >> 8) ;
+} /* putLeU16 */
+
+static void putLeU32 (unsigned char *p, uint32_t v)
+{
+  p[0] = (unsigned char)(v)       ;
+  p[1] = (unsigned char)(v >>  8) ;
+  p[2] = (unsigned char)(v >> 16) ;
+  p[3] = (unsigned char)(v >> 24) ;
+} /* putLeU32 */
+
+/*---------------------------------------------------------------------------
+ * bgzfFlushBlock — internal: compress and write one BGZF block.
+ * Compresses bgzf->wbuf[0..wbufLen-1] and writes the complete block
+ * (header + compressed payload + trailer) to bgzf->fd.
+ * Returns 0 on success, -1 on error.
+ *-------------------------------------------------------------------------*/
+static int bgzfFlushBlock (BGZFFile *bgzf)
+{
+  if (bgzf->wbufLen == 0)
+    return 0 ;                              /* nothing to flush             */
+
+  /* compressed payload buffer — worst case is slightly larger than input  */
+  unsigned char cbuf[BGZF_MAX_BLOCK + 64] ;
+  uLongf        cLen = sizeof cbuf ;
+
+  /* compress using raw deflate (-15 = no zlib wrapper, matching BGZF)    */
+  z_stream zs ;
+  memset (&zs, 0, sizeof zs) ;
+  zs.next_in   = bgzf->wbuf ;
+  zs.avail_in  = (uInt)bgzf->wbufLen ;
+  zs.next_out  = cbuf ;
+  zs.avail_out = (uInt)sizeof cbuf ;
+
+  if (deflateInit2 (&zs, Z_DEFAULT_COMPRESSION,
+                    Z_DEFLATED,
+                    -15,                    /* raw deflate, no header       */
+                    8,                      /* memory level                 */
+                    Z_DEFAULT_STRATEGY) != Z_OK)
+    return -1 ;
+
+  if (deflate (&zs, Z_FINISH) != Z_STREAM_END)
+    { deflateEnd (&zs) ; return -1 ; }
+  deflateEnd (&zs) ;
+  cLen = zs.total_out ;
+
+  /* total block size = 18 (header) + cLen + 8 (trailer)                  */
+  uint16_t bsize = (uint16_t)(18 + cLen + 8 - 1) ;  /* BSIZE field = size-1 */
+
+  /* --- build 18-byte BGZF header --------------------------------------- */
+  unsigned char hdr[18] ;
+  hdr[ 0] = 0x1f ;  hdr[ 1] = 0x8b ;   /* gzip magic                     */
+  hdr[ 2] = 8 ;                          /* CM = deflate                   */
+  hdr[ 3] = 4 ;                          /* FLG = FEXTRA                   */
+  hdr[ 4] = hdr[5] = hdr[6] = hdr[7] = 0 ; /* MTIME = 0                   */
+  hdr[ 8] = 0 ;                          /* XFL                            */
+  hdr[ 9] = 255 ;                        /* OS = unknown                   */
+  hdr[10] = 6 ; hdr[11] = 0 ;           /* XLEN = 6                       */
+  hdr[12] = 'B' ; hdr[13] = 'C' ;       /* BGZF extra tag                 */
+  hdr[14] = 2 ;   hdr[15] = 0 ;         /* extra field length = 2         */
+  putLeU16 (hdr + 16, bsize) ;           /* BSIZE                          */
+
+  /* --- build 8-byte trailer -------------------------------------------- */
+  unsigned char trailer[8] ;
+  uint32_t crc = (uint32_t)crc32 (0L, bgzf->wbuf, (uInt)bgzf->wbufLen) ;
+  putLeU32 (trailer,     crc) ;
+  putLeU32 (trailer + 4, (uint32_t)bgzf->wbufLen) ;  /* ISIZE             */
+
+  /* --- write header + compressed payload + trailer ---------------------- */
+  if (write (bgzf->fd, hdr,     18)   != 18)   return -1 ;
+  if (write (bgzf->fd, cbuf,    cLen) != (ssize_t)cLen) return -1 ;
+  if (write (bgzf->fd, trailer, 8)    != 8)    return -1 ;
+
+  bgzf->cPos   += 18 + cLen + 8 ;
+  bgzf->uPos   += bgzf->wbufLen ;
+  bgzf->wbufLen = 0 ;                   /* reset write accumulation buffer */
+  return 0 ;
+} /* bgzfFlushBlock */
+
+/*---------------------------------------------------------------------------
+ * bgzfWrite
+ *-------------------------------------------------------------------------*/
+ssize_t bgzfWrite (BGZFFile *bgzf, const void *buf, size_t len)
+{
+  if (!bgzf || bgzf->magic != bgzfDestroy)
+    messcrash ("Bad call to bgzfWrite") ;
+  if (bgzf->mode != BGZF_MODE_WRITE)
+    messcrash ("bgzfWrite called on read-mode handle") ;
+  if (!buf) 
+    messcrash ("bgzfWrite called on null buf") ;
+  if (len == 0) return 0 ;
+  
+  const unsigned char *src  = (const unsigned char *)buf ;
+  size_t               done = 0 ;
+
+  while (done < len)
+    {
+      /* fill wbuf up to BGZF_MAX_BLOCK */
+      size_t avail = BGZF_MAX_BLOCK - bgzf->wbufLen ;
+      size_t take  = (len - done < avail) ? (len - done) : avail ;
+      memcpy (bgzf->wbuf + bgzf->wbufLen, src + done, take) ;
+      bgzf->wbufLen += take ;
+      done          += take ;
+
+      /* flush when block is full */
+      if (bgzf->wbufLen == BGZF_MAX_BLOCK)
+        if (bgzfFlushBlock (bgzf) < 0)
+          return -1 ;
+    }
+
+  return (ssize_t)done ;
+} /* bgzfWrite */
+

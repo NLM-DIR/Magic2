@@ -38,7 +38,8 @@ typedef struct ArrayStruct
     unsigned int  max ;     /* largest element accessed via array() */
     mysize_t   id ;      /* unique identifier */
     int   magic ;
-    BOOL lock ;
+    BOOL lock ;          /* do not modify while locked, only extension and destruction are guaranteed because of write access public pointers */
+    BOOL virtual ;       /* the base memory is not owned by the array, do not extend, do not free a->base, writing is allowed */
   } *Array ;
  
     /* NB we need the full definition for arr() for macros to work
@@ -76,11 +77,14 @@ void arrayLock (Array a) ;
 void arrayUnlock (Array a) ;
 
 Array   uArrayReCreate (Array a, int n, int size) ;
+Array   uVirtualArrayCreate (void *base, int n, int size, AC_HANDLE h) ;
 void    uArrayDestroy (Array a);
 char    *uArray (Array a, int index) ;
 char    *uArrCheck (Array a, int index, int size) ;
 char    *uArrayCheck (Array a, int index, int size) ;
 #define arrayCreate(n,type)	uArrayCreate(n,sizeof(type), 0)
+#define virtualArrayCreate(b,n,type)	uVirtualArrayCreate(b,n,sizeof(type), 0)
+#define virtualArrayHandleCreate(b,n,type)	uVirtualArrayCreate(b,n,sizeof(type), h)
 #define arrayHandleCreate(n,type,handle) uArrayCreate(n, sizeof(type), handle)
 #define arrayReCreate(a,n,type)	uArrayReCreate(a,n,sizeof(type))
 #define arrayDestroy(x)		((x) ? uArrayDestroy(x), x=0, TRUE : FALSE)
