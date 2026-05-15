@@ -97,7 +97,7 @@ COMPILE.c = $(COMPILER) $(USEROPTS) $(IDIR) -DAC_TEST -D$(NAME) -D_FILE_OFFSET_B
 #################################################################
 
 SA_OBJS = sa.main.o sa.config.o sa.targetIndex.o \
-	sa.sequenceParser.o \
+	sa.sequenceParser.o sa.parse.o \
 	sa.seeds.o sa.sort.o sa.align.o \
 	sa.introns.o sa.wiggle.o sa.gff.o \
 	sa.stats.o sa.sam.o sa.tabular.o \

@@ -501,6 +501,7 @@ static JUMP jumpN [] = {{1000,0,0,0}} ;  /* a kludge, to jump ambiguities */
   /* dna1 = short, dna2 = long */
 
 JUMP jumper [] = {  /* called from abifix.c */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 12, 0},    /* ponctuel */
@@ -535,6 +536,7 @@ JUMP jumper [] = {  /* called from abifix.c */
 } ;
 
 JUMP editGenomeJumper [] = {  /* called from dna2dna -editGenome */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 80, 1},    /* insert in 1 */
  {0, 1, 80, 1},    /* trou in 1 */
  {1, 1, 80, 1},    /* ponctuel */
@@ -547,6 +549,7 @@ JUMP editGenomeJumper [] = {  /* called from dna2dna -editGenome */
 } ;
 
 JUMP ilmJumper [] = {  /* called from abifix.c */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 12, 0},    /* ponctuel */
@@ -568,6 +571,7 @@ JUMP ilmJumper [] = {  /* called from abifix.c */
 
 
 static JUMP solidJumper [] = {  /* called from abifix.c */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 10, 0},    /* ponctuel */
@@ -670,6 +674,7 @@ static JUMP deleteJumper [] = {
  * au jumper nanopore utilise en depuis juin 2020
  */
 static JUMP pacbioJumper [] = {
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 12, 0},    /* ponctuel */
@@ -739,9 +744,9 @@ static JUMP pacbioJumperOld
 #endif
 
 static JUMP nanoporeJumper [] = {
+ {1, 1, 4, 0},    /* ponctuel */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
- {1, 1, 12, 0},    /* ponctuel */
 
  {1, 0, 8, 0},    /* insert in 1 */
  {0, 1, 8, 0},    /* trou in 1 */

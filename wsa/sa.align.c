@@ -164,7 +164,7 @@ static void alignCheckSize (BB *bb, Array aa)
 	  for (jj = 0 ; jj < jMax ; jj++)
 	    {
 	      A_ERR *ep = arrp (up->errors, jj, A_ERR) ;
-	      if (ep->iShort + 1 > up->x1 &&  ep->iShort + 1 <= up->x2)
+	      if (ep->iShort + 1 >= up->x1 &&  ep->iShort + 1 <= up->x2)
 		switch (ep->type)
 		  {
 		  case TROU: nD += 1 ; break ;
@@ -177,7 +177,7 @@ static void alignCheckSize (BB *bb, Array aa)
 		  }
 	    }
 	}
-      if (0  && (da + nI != dx + nD))
+      if (0 && (da + nI != dx + nD))
 	messcrash ("\nRead %s dx=%d da=%d nI=%d nD=%d dA+nI-dx-nD=%d a=%d/%d x=%d/%d\n"
 		   , dictName (bb->dict, up->read >> 1)
 		   , dx, da, nI, nD, da+nI-dx-nD

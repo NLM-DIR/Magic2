@@ -26,10 +26,11 @@
 /*  scan the saParse buffers, encode the dna, create virtual dna arrays */
 static int saScanDnaEncode (SAPARSE *sap)
 {
+  int nn = 0 ;
   int ii, iMax = sap->recordMax ;
   DnaRecord *up ;
   unsigned int maxDnaLn = 0, minDnaLn = 1 << 31 ;
-  for (ii = 0, up = sap->records ; ii < iiMax ; ii++, up++)
+  for (ii = 0, up = sap->records ; ii < iMax ; ii++, up++)
     {
       int n = 0 ;
       unsigned char cc, *cp = sap->dnaBuffer + up->dna ;
@@ -38,10 +39,10 @@ static int saScanDnaEncode (SAPARSE *sap)
       if (n < up->dnaLn)
 	{
 	  cp = sap->dnaBuffer + up->dna ;
-	  messcrah ("Wrong character %c at position %d in dna sequence %s\n"
-		    , sap->idBuffer + up->id
-		    , cc, n
-		    ) ;
+	  messcrash ("Wrong character %c at position %d in dna sequence %s\n"
+		     , sap->idBuffer + up->id
+		     , cc, n
+		     ) ;
 	}
       minDnaLn = (n < minDnaLn ? n : minDnaLn) ;
       maxDnaLn = (n > maxDnaLn ? n : maxDnaLn) ;
@@ -66,7 +67,7 @@ static void saScanVirtualArrayCreate (BB *bb, SAPARSE *sap)
   int ii, iMax = sap->recordMax ;
 
   dnas  = bb->dnas = arrayHandleCreate (iMax, Array, bb->h) ;
-  for (ii = 0, up = sap->records ; ii < iiMax ; ii++, up++)
+  for (ii = 0, up = sap->records ; ii < iMax ; ii++, up++)
     array (dnas, ii, Array) = virtualArrayCreate (sap->dnaBuffer + up->dna,  up->dnaLn, unsigned char) ;
   return ;
 } /* saScanVirtualArrayCreate */
@@ -76,7 +77,7 @@ static void saScanVirtualArrayCreate (BB *bb, SAPARSE *sap)
 int saScan (const PP *pp, BB *bb)
 {
   SAPARSE *sap = bb->saParse ;
-  int ii, iMax = sap->recordMax ;
+  int iMax = sap->recordMax ;
 
   if (! iMax) return 0 ;
 
@@ -125,11 +126,11 @@ static int readScanId (unsigned char *buf, char prefix, int *suffix)
       if (ln > 2)
 	{
 	  cq = cp + ln - 2 ;
-	  if (*cq == '/' || *cq = '.' || *cq = ' ')
+	  if (*cq == '/' || *cq == '.' || *cq == ' ')
 	    {
 	      cq++ ;
-	      if (cq == '1') *suffix = 1 ;
-	      if (cq == '2') *suffix = 2 ;
+	      if (*cq == '1') *suffix = 1 ;
+	      if (*cq == '2') *suffix = 2 ;
 	    }
 	}
     }
@@ -151,7 +152,7 @@ static int readScanQual (unsigned char *buf)
       ln = cq - buf + 1 ;
     }
   else
-    ln = ustrlen (cp) ;
+    ln = ustrlen (buf) ;
   return ln ;
 } /* readScanQual */
 
@@ -178,6 +179,7 @@ static int readScanDna (unsigned char *buf)
 	default: *cq++ = *cp ; break ;
 	}
     }
+ done:
   ln = cp - buf + 1 ;
   return ln ;
 } /* readScanDna */
@@ -190,8 +192,8 @@ static int readScanDna (unsigned char *buf)
 
 SAPARSE *saParseCreateFromFileChunk (BB *bb)
 {
-  SAPARSE *saParse = handleAlloc (sizeof(SAPARSE), bb->h) ;
-  RC *rc = bb->rc ;
+  SAPARSE *saParse = halloc (sizeof(SAPARSE), bb->h) ;
+  // RC *rc = bb->rc ;
   unsigned char *buf = bb->gzBuffer ;
 
   memset (saParse, 0, sizeof (SAPARSE)) ;

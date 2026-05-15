@@ -449,24 +449,25 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    {
 	      epY = arrp (wp->errors, j, A_ERR) ;
 	      zY = epY->iShort + 2  ; /* first good base starting from the right */
-	      switch (epY->type)
- 		{   /* we need to adjust the coordinates */
-		case INSERTION:
-		  break ;
-		case INSERTION_DOUBLE:
-		  zY+= 1 ;
-		  break ;
-		case INSERTION_TRIPLE:
-		  zY += 2 ;
-		  break ;
-		case TROU:
-		case TROU_DOUBLE:
-		case TROU_TRIPLE:
-		  zY -- ;
-		  break ;
-		default:
-		  break ;
-		}
+	      if (1)  // no adjustment we are in read coordinates
+		switch (epY->type)
+		  {   /* we need to adjust the coordinates */
+		  case INSERTION:
+		    break ;
+		  case INSERTION_DOUBLE:
+		    zY+= 1 ;
+		    break ;
+		  case INSERTION_TRIPLE:
+		    zY += 2 ;
+		    break ;
+		  case TROU:
+		  case TROU_DOUBLE:
+		  case TROU_TRIPLE:
+		    zY -- ;
+		    break ;
+		  default:
+		    break ;
+		  }
 
 	      if (zY <= cX2 + 1)
 		{  /* eating this Y error is favorable */
@@ -587,29 +588,6 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
       if (donor && vp->a2 == donor - 1)
 	foundDonor = TRUE ;
     }
-  else
-    {
-      isReadDown = FALSE ;
-      donor = vp->donor ;
-      acceptor = wp->acceptor ;
-
-      if (donor < 0)
-	{ donor = - donor ; acceptor = -acceptor ; }
-      if (donor == 0 && acceptor < 0)
-	{ acceptor = - acceptor ; }
-      if (donor && donor < acceptor)
-	donor = acceptor = 0 ;
-      
-      if (dy > 0 && donor && vp->a2 <= donor && vp->a2 >= donor - dy + 1)
-	
-	{  /* move back to the canonical donor site */
-	  dy = donor - vp->a2 + 1 ;
-	  vp->x2 -= dy ;
-	  vp->a2 += dy ;
-	}      
-      if (donor && vp->a2 == donor + 1)
-	foundDonor = TRUE ;
-    }
 
   /* alternativelly  trim if possible the wp->x2 start of the second  exon on a known 'acceptor' */
   dy = vp->x2 - wp->x1 + 1 ;
@@ -629,25 +607,6 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    {
 	      vp->x2 -= dy ;
 	      vp->a2 -= dy ;
-	    }
-	}
-    }
-  else if (!isReadDown && acceptor)
-    {
-      if (dy > 0 && wp->a1 > acceptor - 1 && wp->a1 - dy <= acceptor - 1)
-	{
-	  dy = wp->a1 - acceptor + 1 ;
-	  wp->x1 += dy ;
-	  wp->a1 -= dy ;
-	}
-      if (wp->a1 == acceptor - 1)
-	{
-	  foundAcceptor = TRUE ;
-	  dy = vp->x2 - wp->x1 + 1 ;
-	  if (dy > 0) /* trim vp->x2 */
-	    {
-	      vp->x2 -= dy ;
-	      vp->a2 += dy ;
 	    }
 	}
     }
@@ -716,68 +675,6 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	  acceptor = wp->a1 - 1 ;
 	}	    
     }
-  else if (dy > 0 && !isReadDown && ! foundDonor && !foundAcceptor && wp->a1 > dy && vp->a2 > 3) 
-    {
-      /* move backwards on the genome */
-      unsigned char *cp = arrp (dnaG, wp->a1 - dy, unsigned char) ; /* the base just after vp->a2 - dy */
-      unsigned char *cq = arrp (dnaG, vp->a2 - 3, unsigned char) ; /* the base 2 bases before wp->a1 - dy */
-      int bestI = -1 ;
-      if (bb->runStat.gt_ag_Support < bb->runStat.ct_ac_Support)
-	{     /* favor gt_ag over ct_ac */
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == C_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == G_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == T_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	}
-      else
-	{ /* favor ct_ac over gt_ag */
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == G_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == C_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cq[i] == A_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	}
-    ok2:
-      if (bestI >= 0)
-	{
-	  dy -= bestI ;
-	  wp->x1 += dy ;
-	  wp->a1 -= dy ;
-	  donor = vp->a2 - 1 ;
-	  
-	  dy = bestI ;
-	  vp->x2 -= dy ;
-	  vp->a2 += dy ;
-	  acceptor = wp->a1 + 1 ;
-	}	    
-    }
   
  done:   /* In any case trim the second exon a bouts francs */
   dy = vp->x2 - wp->x1 + 1 ;
@@ -789,7 +686,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	{
 	  int dda = 0 ;
 	  epY = arrp (wp->errors, 0, A_ERR) ;
-	  for (int i = bestJ + 1 ; i < nEy && epY->iShort + 1 <= wp->x1 ; i++, epY++)
+	  for (int i = bestJ + 1 ; i < nEy && epY->iShort + 1 < wp->x1 ; i++, epY++)
 	    {	      
 	      switch (epY->type)
 		{
