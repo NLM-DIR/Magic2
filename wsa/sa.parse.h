@@ -48,4 +48,12 @@ typedef struct saParseStruct {
   unsigned int recordMax ;          // usage: for (i=0;i<recordMax;i++)
 } SAPARSE ;
 
+/* notice that read pairs are stored in a single SRAPARSE obj
+ * preferably but not necessarily interleaved (memory optimization)
+ */
+
+SAPARSE *saParseGet (const char *srrId, int BMAX, format info) ;
+void saParseClose (SAPARSE *saParse) ;  // free or recycle the buffers
+
+
 #endif
