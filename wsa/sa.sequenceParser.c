@@ -982,12 +982,12 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
   ac_free (h) ;
   
   t2 = clock () ;
-  if (bb) saCpuStatRegister ("2.sraSequenceParser", pp->agent, bb->cpuStats, t1, t2, nBytes) ;
+  if (bb) saCpuStatRegister ("2.sraSequenceParser", pp->agent, bb->cpuStats, t1, t2, size + size2) ;
 
   if (1 || debug)
     {
      int lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 0) ;
-     printf ("--- %s: Stop sraSequenceParser %d blocks %ld bytes file %s\n", timeBufShowNow (tBuf), lane, nBytes, sraID) ;
+     printf ("--- %s: Stop sraSequenceParser %d blocks %ld bytes file %s\n", timeBufShowNow (tBuf), lane, size + size2, sraID) ;
     }
   
   return ;

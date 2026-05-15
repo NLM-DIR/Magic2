@@ -34,6 +34,7 @@ typedef struct dnaRecordStruct {
   unsigned int id ;   // offset in idBuffer, offset <<1 | (isMate ? 0x1 : 0x0)
   unsigned int dna ;  // offset in dnaBuffer, divisible by 16
   unsigned int qual ; // offset in idBuffer
+  int dnaLn ;         // length of the dna sequence
 } DnaRecord ;
 
 typedef struct saParseStruct {
@@ -46,14 +47,16 @@ typedef struct saParseStruct {
   unsigned int dnaBufferSize ;
   unsigned int qualityBufferSize ;
   unsigned int recordMax ;          // usage: for (i=0;i<recordMax;i++)
+
+  unsigned int minDnaLn, maxDnaLn, nBases ;
 } SAPARSE ;
 
 /* notice that read pairs are stored in a single SRAPARSE obj
  * preferably but not necessarily interleaved (memory optimization)
  */
 
-SAPARSE *saParseGet (const char *srrId, int BMAX, format info) ;
-void saParseClose (SAPARSE *saParse) ;  // free or recycle the buffers
+SAPARSE *sraParseGet (const char *srrId, int BMAX /* , format info */ ) ;
+void sraParseClose (SAPARSE *saParse) ;  // free or recycle the buffers
 
 
 #endif

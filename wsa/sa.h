@@ -42,6 +42,7 @@
 #include <zlib.h>
 #include <stdatomic.h>
 #include "../wsra/sra_read.h"
+#include "sa.parse.h"
 #include "sa.common.h"
 
 #define ERRMAXMAX 1000000
@@ -158,6 +159,7 @@ typedef struct bStruct {
   DICT *dict, *errDict ;
   mytime_t start, stop ;
   int gpu ;
+  SAPARSE *saParse ;
   BigArray dnaCoords ;   /* offSets of the dna in the globalDna array */
   Array dnas ;           /* Array of const char Arrays */
   Array dnasR ;          /* Their reverse complement, only computed for the genome */
