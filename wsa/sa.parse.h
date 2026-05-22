@@ -4,6 +4,9 @@
 /* May 14, 2026
  * New struct to parse the reads
  * the concept is to put all reads of a BB block together in minimla space
+ * Authors: Jean Thierry-Mieg, Danielle Thierry-Mieg and Greg Boratyn, NCBI/NLM/NIH
+
+ * This code is public.
  */
 
 /* Define 3 large buffers, possibly we need their size to reuse them
@@ -31,14 +34,14 @@
  */
  
 typedef struct dnaRecordStruct {
-  unsigned int id ;   // offset in idBuffer, offset <<1 | (isMate ? 0x1 : 0x0)
-  unsigned int dna ;  // offset in dnaBuffer, divisible by 16
-  unsigned int qual ; // offset in idBuffer
+  unsigned int xId ;   // offset in idBuffer, offset <<1 | (isMate ? 0x1 : 0x0)
+  unsigned int xDna ;  // offset in dnaBuffer, divisible by 16
+  unsigned int xQual ; // offset in idBuffer
   int dnaLn ;         // length of the dna sequence
 } DnaRecord ;
 
 typedef struct saParseStruct {
-  unsigned char *idBuffer ;      // all ids, packed, zero terminated
+  unsigned char *idBuffer ;      // all ids, packed, zero terminated, a pair shares a single id
   unsigned char *dnaBuffer ;     // all dnas, aligned, 2 to 16 terminal 0
   unsigned char *qualityBuffer ; // all quals, packed, zero terminated
   DnaRecord *records ;
@@ -46,9 +49,10 @@ typedef struct saParseStruct {
   unsigned int idBufferSize ;      // sizes may be useful for recycling
   unsigned int dnaBufferSize ;
   unsigned int qualityBufferSize ;
-  unsigned int recordMax ;          // usage: for (i=0;i<recordMax;i++)
+  unsigned int nRecords ;          // usage: for (i=0;i<nRecords;i++)
 
   unsigned int minDnaLn, maxDnaLn, nBases ;
+  unsigned int isPaired ;           // 0: single end reads,  1: paired end reads
 } SAPARSE ;
 
 /* notice that read pairs are stored in a single SRAPARSE obj

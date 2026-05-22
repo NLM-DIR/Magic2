@@ -166,6 +166,20 @@ setenv SV     v102.81.18M.e4.may13     # all ali seen as positive strand final, 
 setenv SVlast v102.81.18M.e4.may13    # i tried to optimize the fasta parser gz pigz and bgzf, nothing was useful
 setenv SV     v103.81.18M.e4.may15     # all ali seen as positive strand final, back on farm, pairs should be fixed 
 setenv SVlast v103.81.18M.e4.may15    # i tried to optimize the fasta parser gz pigz and bgzf, nothing was useful
+setenv SV     v104.81.18M.e4.may15     # maybe we fixed all sam errors
+setenv SVlast v104.81.18M.e4.may15    # 
+setenv SV     v105.81.18M.e4.may17     # maybe we fixed all sam errors errcost 8
+setenv SVlast v105.81.18M.e4.may17    # 
+setenv SV     v106.81.18M.e4.may19     # maybe we fixed all sam errors errcost 8
+setenv SVlast v106.81.18M.e4.may19    # 
+setenv SV     v107.81.18M.e4.may20     # new sa.parse
+setenv SVlast v107.81.18M.e4.may20    # 
+setenv SV     v108.81.18M.e4.may20     # new sa.parse fixed the pairs
+setenv SVlast v108.81.18M.e4.may20    # 
+setenv SV     v109.81.18M.e4.may20     # new sa.parse fixed the pairs
+setenv SVlast v109.81.18M.e4.may20    # 
+setenv SV     v110.81.18M.e4.may22     # intron mates intronHit orientation fixednew sa.parse fixed the pairs
+setenv SVlast v110.81.18M.e4.may22    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -178,7 +192,7 @@ endif
 \cp bin/sortalign.$SV bin/sortalign
 
 setenv NOINTRONSEEDS 0
-setenv EXPORTSAM 0
+setenv EXPORTSAM 1
 setenv EXPORTWIGGLES 0
 setenv EXPORTWIGGLEENDS 0
 setenv seedLength 16
@@ -267,8 +281,8 @@ setenv wormRuns "  Worm_RNA_150PE "
 setenv monkeyRuns "Chimpanzee_0.92pc Macaque_2.69pc PTMacaque_2.71pc Baboon_2.92pc Marmoset_3.14 SquirrelMonkey_3.08pc MouseLemur_2.64pc"
 setenv baruzzoRuns "HG19t1_0.543pc HG19t2_1.186pc HG19t3_6.024pc"
 
-setenv allRuns "$ABRuns  $iRefSeqRuns $dnaRuns $monkeyRuns  $wormRuns $baruzzoRuns "
-setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $monkeyRuns  $wormRuns $baruzzoRuns   "
+setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns "
+setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns   "
 
 
 # setenv runs "RNA_PolyA_AB_1_97G"
@@ -1126,7 +1140,7 @@ date
     endif
 
     if (-e RESULTS/$mm/$run/$run/$run.sam && ! -e RESULTS/$mm/$run/samTools.stats) then
-      samtools stats RESULTS/$mm/$run/$run/$run.sam > RESULTS/$mm/$run/$run/samTools.stats
+      # samtools stats RESULTS/$mm/$run/$run/$run.sam > RESULTS/$mm/$run/$run/samTools.stats
     endif
     # cat RESULTS/$mm/$run/$run/samTools.stats | gawk -f scripts/sam_stats.awk > RESULTS/$mm/$run/s2g.samTools.txt  
 
@@ -2123,7 +2137,7 @@ foreach target (T2T GRCh38 HG19)
 	endif
       end
     end
-    cat $IDB/introns.tsf | sort | gawk -F '\t' '/^#/{next;}{if($2 != old){old=$2;split(old,aa,"__");split(aa[2],bb,"_");a1=bb[1];a2=bb[2];if(a1<100 || a2<100){old=0;next;}ln=a2-a1;if(ln<0)ln=-ln;ln+=1;printf("\nIntron %s\nIntron\nIntMap %s %d %d\nLength %d\n", old,aa[1],a1,a2, ln);}printf("de_duo %s__%s %d\n",$1,$3,$5);}END{printf("\n");}' > $IDB/introns.$SV.ace
+    cat $IDB/introns.tsf | sort | gawk -F '\t' '/^#/{next;}{if($2 != old){old=$2;split(old,aa,"__");split(aa[2],bb,"_");a1=bb[1];a2=bb[2];if(a1<100 || a2<100){old=0;next;}ln=a2-a1;if(ln<0)ln=-ln;ln+=1;printf("\nIntron %s\nIntron\nIntMap %s %d %d\nLength %d\n", old,aa[1],a1,a2, ln);}printf("de_duo %s__%s %d\n",$1,$3,$5+$6);}END{printf("\n");}' > $IDB/introns.$SV.ace
     tace $IDB  <<EOF
       query find intron de_duo
       edit -D de_duo

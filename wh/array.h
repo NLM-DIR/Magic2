@@ -77,14 +77,16 @@ void arrayLock (Array a) ;
 void arrayUnlock (Array a) ;
 
 Array   uArrayReCreate (Array a, int n, int size) ;
+Array   uVirtualArrayStructFill (struct ArrayStruct *neuf, void *base, int n, int size) ;
 Array   uVirtualArrayCreate (void *base, int n, int size, AC_HANDLE h) ;
 void    uArrayDestroy (Array a);
 char    *uArray (Array a, int index) ;
 char    *uArrCheck (Array a, int index, int size) ;
 char    *uArrayCheck (Array a, int index, int size) ;
 #define arrayCreate(n,type)	uArrayCreate(n,sizeof(type), 0)
+#define virtualArrayStructFill(ap,b,n,type)	uVirtualArrayStructFill(ap,b,n,sizeof(type))
 #define virtualArrayCreate(b,n,type)	uVirtualArrayCreate(b,n,sizeof(type), 0)
-#define virtualArrayHandleCreate(b,n,type)	uVirtualArrayCreate(b,n,sizeof(type), h)
+#define virtualArrayHandleCreate(b,n,type,h)	uVirtualArrayCreate(b,n,sizeof(type), h)
 #define arrayHandleCreate(n,type,handle) uArrayCreate(n, sizeof(type), handle)
 #define arrayReCreate(a,n,type)	uArrayReCreate(a,n,sizeof(type))
 #define arrayDestroy(x)		((x) ? uArrayDestroy(x), x=0, TRUE : FALSE)

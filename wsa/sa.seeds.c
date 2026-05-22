@@ -437,7 +437,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
   const unsigned char *restrict cp ;
   Array dnas = bb->dnas ;
   int k, ia, iaMax = arrayMax (dnas), nSeeds = 0 ;
-  long int dMax = bigArrayMax (bb->globalDna) / (NN * step) ;
+  long int dMax = (bb->globalDna ? bigArrayMax (bb->globalDna) : bb->length) / (NN * step) ;
   const int wLen = pp->seedLength ;
   const int nHidden = wLen > 16 ? wLen - 16 : 0 ;
   const int nHidden2 = nHidden << 1 ;

@@ -5,15 +5,15 @@
  * A new RNA aligner with emphasis on parallelisation by multithreading and channels, and memory locality
  * Authors: Jean Thierry-Mieg, Danielle Thierry-Mieg and Greg Boratyn, NCBI/NLM/NIH
  * Created April 18, 2025
+ * Authors: Danielle Thierry-Mieg, Jean Thierry-Mieg, Greg Boratyn, NCBI/NLM/NIH
 
- * This is public.
-
-
+ * This code is public.
  * This code handles the sam format
  * Given an alignment in internal format (ALI structures and _ERR) it exports a sam file
  */
 
 #include "sa.h"
+#include "sa.parse.h"
 
 /*********************************************************************/
 /*********************************************************************/
@@ -412,7 +412,7 @@ if (1)
     }
   else
     vtxtPrintf (record, "\t*\t0\t0") ;    
-
+  
   /* export the sequence of the read */
   if (pp->exportSamSequence)
     {
@@ -423,7 +423,7 @@ if (1)
 	  Array dnaR = dnaCopy (dna) ;
 	  char *cp = arrp (dnaR, 0, char) ;
 	  dnaDecodeArray (dnaR) ;
-	  if (1) while (i--)
+	  while (i--)
 	    { *cp = ace_upper (*cp) ; cp++; }
 	  vtxtPrintf (record, "\t%s", arrp (dnaR, 0, char)) ;
 	  ac_free (dnaR) ;
@@ -435,7 +435,7 @@ if (1)
 	  char *cp = arrp (dnaR, 0, char) ;
 	  reverseComplement (dnaR) ;
 	  dnaDecodeArray (dnaR) ;
-	  if (1) while (i--)
+	  while (i--)
 	    { *cp = ace_upper (*cp) ; cp++; }
 	  vtxtPrintf (record, "\t%s", arrp (dnaR, 0, char)) ;
 	  ac_free (dnaR) ;
@@ -443,23 +443,26 @@ if (1)
     }
   else
     vtxtPrintf (record, "\t*") ;
-
-  if (pp->exportSamQuality && bb->quals)
+  
+  if (pp->exportSamQuality && bb->saParse && bb->saParse->qualityBuffer)
     {
-      Array qual = read < arrayMax (bb->quals) ? arr (bb->quals, read, Array) : 0 ;
-      if (qual && arrayExists (qual) && arrayMax(qual))
+      unsigned const char *quals = bb->saParse->qualityBuffer ;
+      Array records = bb->dnaRecords ;
+      DnaRecord *r = (read < arrayMax (records) ? arrp (records, read, DnaRecord) : 0) ;
+      unsigned const char *qual = (r && r->xQual ? quals + r->xQual : 0) ;
+      if (qual && *qual)
 	{
 	  if (isDown)
 	    {
-	      vtxtPrintf (record, "\t%s", arrp (qual, 0, char)) ;
+	      vtxtPrintf (record, "\t%s", qual) ;
 	    }
 	  else
 	    {
-	      int i = arrayMax (qual) - 1 ;
-	      char *cp = arrp (qual, i, char) ;
-	      vtxtPrintf (record, "\t") ;
-	      while (i-- >= 0)
-		vtxtPrintf (record, "%c", *cp--) ;
+	      int ln = ustrlen (qual) ;
+	      unsigned char buf[ln + 1] ;
+	      for (int i = 0 ; i < ln ; i++)
+		buf[i] = qual[ln - i - 1] ;
+	      vtxtPrintf (record, "\t%s", buf) ;
 	    }
 	}
       else
@@ -467,11 +470,11 @@ if (1)
     }
   else
     vtxtPrintf (record, "\t*") ;
-
-
+  
+  
   /* end of the 11 mandatory columns */
 
-    
+  
   vtxtPrintf (record, "\tNH:i:%d", ap->nChains) ; /* px->uu */ ;
   vtxtPrintf (record, "\tAS:i:%d", ap->pairScore ? ap->pairScore : ap->chainScore) ;
   vtxtPrintf (record, "\tNM:i:%d", nSub + nIns + nDel) ;
@@ -479,7 +482,7 @@ if (1)
   /* vtxtPrintf (record, "\tMD:Z:0") ; */
   
   aceOutf (ao, "%s\n", vtxtPtr (record)) ;
-
+  
  done:
   ac_free (h) ;
   return kMax ;
@@ -552,7 +555,7 @@ ACEOUT saSamCreateFile (const PP *pp, BB *bb, BOOL isError, AC_HANDLE h)
       /* aceOutf (ao, "\tCL:%s", commandBuf) ; */
     }
   return ao ;
-} /* saSamFile */
+} /* saSamCreateFile */
 
 /**************************************************************/
 /**************************************************************/

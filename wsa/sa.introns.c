@@ -415,6 +415,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	}
       nE = zEx + zEy ;
       bestN = nE ;
+      if (bestI == nEx) zX = vp->x2 ;
       int cI = bestI, cJ = bestJ ;
       int cY1 = y1, cX2 = zX ;
       

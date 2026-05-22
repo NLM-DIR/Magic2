@@ -2,7 +2,9 @@
  * sa.main.c : sortalign RNA aligner
 
  * Created April 18, 2025
- * In collaboration with Greg Boratyn, NCBI
+ * Authors: Danielle Thierry-Mieg, Gean Thierry-Mieg, Greg Boratyn, NCBI/NLM/NIH
+
+ * This code is public.
 
  * A new RNA aligner with emphasis on parallelisation by multithreading and channels, and memory locality
 
@@ -194,8 +196,10 @@ static void readParser (const void *vp)
   
   while (channelGet (pp->fpChan, &rc, RC))
     {
-      if (1)
-	saSequenceParse (pp, &rc, 0, 0, 0) ;
+      if (0)
+	saSequenceParse (pp, &rc) ;
+      else
+	saParse (pp, &rc) ;
     }
   channelCloseSource  (pp->plChan) ;
   return ;
@@ -678,7 +682,8 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
   BigArray intronHits = 0 ;
   long int nn = 0, k = 0, kk = 0 ;
   int targetMax = dictMax (pp->bbG.dict) << 1 ;
-  
+
+  int chromA = 0, chromLength = 0 ;
   const long unsigned int mask26 = (1L << 26) - 1 ;
   const int seedLength = pp->seedLength ;
   const int intronBonus = 1 ;
@@ -825,7 +830,19 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 	      intronHit->x2 = x1 + 1 ;
 	      intronHit->a2 = a1 - 1 ; /* first base of intron */
 	      intronHit->a1 = a1 + da ; /* last base of intron */
-	      
+
+	      if (intronHit->chrom != chromA)
+		{
+		  chromA = intronHit->chrom ;
+		  Array dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
+		  chromLength = arrayMax (dnaG) ;
+		}
+	      if (1)
+		{
+		  intronHit->a1 = chromLength - intronHit->a1 + 1 ;
+		  intronHit->a2 = chromLength - intronHit->a2 + 1 ;
+		}
+
 	      /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
 	      nn++ ;
 	      hit = bigArrayp (hits, k++, HIT) ;
@@ -1258,6 +1275,8 @@ static void wholeWork (const void *vp)
       /* code words */
       if (bb.gzBuffer) /* fasta buffer method 2025 */
 	saParseGzBuffer (pp, &bb) ;
+      else if (bb.r1Buffer) /* fasta buffer method 2026 */
+	saScan (pp, &bb) ;
       saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
       
       if (pp->debug)
@@ -1708,7 +1727,7 @@ int main (int argc, const char *argv[])
 	    {
 	      char *cq = strchr (cp, ',') ;
 	      if (cq) *cq = 0 ;
-	      saSequenceParseSraDownload (&p, cp) ;
+	      saParseSraDownload (&p, cp) ;
 	      cp = cq ? cq + 1 : 0 ;
 	    }
 	  exit (0) ;
@@ -2014,13 +2033,17 @@ int main (int argc, const char *argv[])
   /* action options ***/
   p.wiggle = getCmdLineBool (&argc, argv, "--wiggles") ;
   p.wiggleEnds = getCmdLineBool (&argc, argv, "--wiggleEnds") ;
+  p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
+  getCmdLineInt (&argc, argv, "--wiggleStep", &(p.wiggle_step)) ;
+
   p.snps = getCmdLineBool (&argc, argv, "--snp") ;
+  p.blink = getCmdLineBool (&argc, argv, "--blink") ;
+  p.blinkLn = 8 ;
+  getCmdLineInt (&argc, argv, "--blinkLn", &(p.blinkLn)) ;
 
   getCmdLineText (h, &argc, argv, "--adaptor1", &(p.rawAdaptor1R)) ;
   getCmdLineText (h, &argc, argv, "--adaptor2", &(p.rawAdaptor2R)) ;
 
-  p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
-  getCmdLineInt (&argc, argv, "--wiggleStep", &(p.wiggle_step)) ;
 
   if (0) { p.sam = TRUE ; p.wiggle = TRUE ; p.wiggleEnds = FALSE ;}
   /*****************  sequence file names and their formats  ************************/
@@ -2084,7 +2107,9 @@ int main (int argc, const char *argv[])
 
   /* defaults */
   nAgents = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;   number of aligner agents */
-  p.nBlocks = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
+  if (nAgents > maxThreads)
+    nAgents = maxThreads / 2 ;
+  p.nBlocks = 3 * nAgents/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;
@@ -2130,8 +2155,8 @@ int main (int argc, const char *argv[])
   p.splice = TRUE ;
   if (getCmdLineBool (&argc, argv, "--no_splice"))
     p.splice = FALSE ;
-  p.errCost = 4 ; /* was 8 */
-  getCmdLineInt (&argc, argv, "--errCost", &(p.errCost)) ;
+  p.errCost = 4 ; /* was 4 */
+  getCmdLineInt (&argc, argv, "--errCost", &(p.userErrCost)) ;
   getCmdLineInt (&argc, argv, "--errMax", &(p.errMax)) ;
   getCmdLineInt (&argc, argv, "--minScore", &(p.minScore)) ;
   getCmdLineInt (&argc, argv, "--minAli", &(p.minAli)) ;
@@ -2141,11 +2166,14 @@ int main (int argc, const char *argv[])
   p.maxIntron = 1000000 ;
   getCmdLineInt (&argc, argv, "--maxIntron", &(p.maxIntron)) ;
 
+  if (p.userErrCost) p.errCost = p.userErrCost ;
   if (p.minScore < 0) p.minScore = 0 ;
   if (p.minAli < 0) p.minAli = 30 ;
   if (p.minAliPerCent < 0) p.minAliPerCent = 0 ;
   if (p.minAli < p.minScore) p.minAli = p.minScore ;
-
+  if (p.errMax == 0)
+    aceDnaSetPaddedJumper (TRUE) ; /* No indel, use if maxError = 0 */
+ 
   p.BMAX = 3 ;
   getCmdLineInt (&argc, argv, "--bMax", &(p.BMAX)) ;
   if (p.BMAX < 1) p.BMAX = 1 ;
@@ -2466,8 +2494,8 @@ int main (int argc, const char *argv[])
 	  bb.stop = timeNow () ;
 	  timeDiffSecs (bb.start, bb.stop, &ns) ;
 	  if (1)
-	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.3g strategy %d\n"
-		   ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.isRna) ; 
+	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.3g errCost %d strategy %d\n"
+		     ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.errCost, bb.isRna) ; 
 	}
       ac_free (bb.h) ;
     }
@@ -2483,6 +2511,7 @@ int main (int argc, const char *argv[])
       saIntronsExport (&p, p.confirmedIntrons) ; /* before wiggleExport to restrand the gene expression */ 
       saDoubleIntronsExport (&p, p.doubleIntrons) ;
     }
+
   GeneCounts gcs = {0} ;
   if (p.wiggle)
     gcs = saWiggleExport (&p, nAgents) ;
@@ -2519,6 +2548,7 @@ int main (int argc, const char *argv[])
     reportRunStats (&p, p.runStats) ;
   if (p.align)
     reportRunErrors (&p, p.runStats, runErrors) ;
+
   if (p.bam) ac_free (p.bamHandle) ;
   /* release memory */
   if (p.bbG.dnas)
@@ -2539,7 +2569,7 @@ int main (int argc, const char *argv[])
     }
   /* wego_log is the thread-safe way to pass messages to stderr */
   if (p.justStats && p.outFileName)  system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)) ;
-  saSetGetAdaptors (-999999, 0, 0, 0) ;
+  saSetGetAdaptors (-999999, 0, 0, 0, 0) ;
   oligoEntropy (0, -999999, 0) ;
 
   if (p.debug)   ac_free (h) ; /* blocks on channel cond destroy */

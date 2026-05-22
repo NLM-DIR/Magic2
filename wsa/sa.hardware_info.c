@@ -131,9 +131,8 @@ int saGetGpuInfo (int *bestDevice)
  *
  *  1.  saGetBestNumaNode()          [Linux only, guard with #ifdef __linux__]
  *        Measures CPU load across NUMA nodes (~100 ms).
- *        Returns the index of the least-loaded node, or -1 when there
- *        is only one node.  The caller re-execs via numactl only when
- *        the return value is >= 0.  If -1, continue without re-exec.
+ *        Returns the index of the least-loaded node, or 0 when there
+ *        is only one node.  
  *
  *  ── second invocation (or first on non-NUMA / non-Linux) ─────────────
  *
@@ -381,12 +380,6 @@ static long macos_available_ram_kb (void)
  * Samples /proc/stat twice over ~100 ms, computes average CPU load per
  * NUMA node, and returns the index of the least-loaded node.
  *
- * Returns:
- *    >= 0   node index  → caller should re-exec under:
- *               numactl --cpunodebind=<N> --membind=<N> ./program ...
- *    -1     only one NUMA node, or node topology unreadable:
- *               caller should skip numactl and continue directly.
- *
  * This function exists only on Linux.  Wrap call sites with:
  *    #ifdef __linux__
  *    int node = saGetBestNumaNode () ;
@@ -398,7 +391,7 @@ int saGetBestNumaNode (void)
 {
     int num_nodes = count_numa_nodes () ;
     if (num_nodes <= 1)
-        return -1 ;   /* nothing to choose between */
+        return 0 ;   /* nothing to choose between */
 
     /* Snapshot buffers on the heap — ~64 KB total, not on the stack. */
     cpu_times_t *before = calloc (SA_MAX_CPUS, sizeof (cpu_times_t)) ;

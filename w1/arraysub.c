@@ -110,29 +110,40 @@ Array   uArrayCreate_dbg (mysize_t n, int size, AC_HANDLE handle,
 
 /**************/
 
-Array uVirtualArrayCreate (void *base, int n, int size, AC_HANDLE handle)
-{
-  mysize_t id = totalNumberCreated++ ;  /* not guaranteed in multi threaded case, but it does not matter */
-  Array neuf = (Array) handleAlloc (uArrayFinalise, 
-				   handle,
-				   sizeof (struct ArrayStruct)) ;
+ Array uVirtualArrayStructFill (struct ArrayStruct *neuf, void *base, int n, int size)
+ {
   if (size <= 0)
     messcrash("negative size %d in uVirtualArrayCreate", size) ;
   if (n < 1)
     messcrash("negative max %d in uVirtualArrayCreate", n) ;
+  if (! neuf)
+    messcrash("null ArrayStruct *neuf in uVirtualArrayCreate") ;
   if (! base)
     messcrash("null base in uVirtualArrayCreate") ;
+  mysize_t id = totalNumberCreated++ ;  /* not guaranteed in multi threaded case, but it does not matter */
+
+  neuf->id = id ;
   neuf->base = base ;
   neuf->dim = n ;
   neuf->max = n ;
   neuf->size = size ;
-  neuf->id = ++id ;
   neuf->magic = ARRAY_MAGIC ;
   neuf->virtual = TRUE ; /* never resize, never free the memory */
 
   totalNumberActive++ ;
   return neuf ;
-}
+ } /* virtualArraypFill */
+ 
+/**************/
+
+Array uVirtualArrayCreate (void *base, int n, int size, AC_HANDLE handle)
+{
+  Array neuf = (Array) handleAlloc (uArrayFinalise, 
+				   handle,
+				    sizeof (struct ArrayStruct)) ;
+  totalNumberActive++ ;
+  return uVirtualArrayStructFill (neuf, base, n, size) ;
+} /* uVirtualArrayCreate */
 
 /**************/
 

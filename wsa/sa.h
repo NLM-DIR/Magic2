@@ -2,7 +2,9 @@
  * sortalign : RNA aligner
 
  * Created April 18, 2025
- * In collaboration with Greg Boratyn, NCBI
+ * Authors: Jean Thierry-Mieg, Danielle Thierry-Mieg and Greg Boratyn, NCBI/NLM/NIH
+
+ * This code is public.
 
  * A new RNA aligner with emphasis on parallelisation by multithreading and channels, and memory locality
 
@@ -159,7 +161,10 @@ typedef struct bStruct {
   DICT *dict, *errDict ;
   mytime_t start, stop ;
   int gpu ;
+  int errCost ;
   SAPARSE *saParse ;
+  BOOL sraStreaming ;   /* saParse buffer created and freed by sra C++ code */
+  Array dnaRecords ;
   BigArray dnaCoords ;   /* offSets of the dna in the globalDna array */
   Array dnas ;           /* Array of const char Arrays */
   Array dnasR ;          /* Their reverse complement, only computed for the genome */
@@ -295,7 +300,7 @@ typedef struct pStruct {
   Array confirmedIntrons ;
   Array doubleIntrons ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
-  BOOL sam, bam, hitsFormat, tabular ;
+  BOOL sam, bam, hitsFormat, tabular, blink ;
   BOOL exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;
@@ -318,8 +323,9 @@ typedef struct pStruct {
   int tMaxTargetRepeats ;
   int seedLength ;
   int maxIntron ;
+  int blinkLn ;
   int BMAX ; /* max number of bases in a block, default 200M */
-  int errCost ;
+  int userErrCost, errCost ;
   int errMax ;       /* (--align case) max number of errors in seed extension */
   int minScore, minAli, minAliPerCent ;
   int minLength, minEntropy ;
@@ -513,7 +519,7 @@ Array saConfigGetRuns (PP *pp, Array runStats) ;
  * isRna: >=0: favor introns, search polyAs, export gene expression
  *        <0: none of the above, disfavor deletions.
  */
-BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run) ;
+BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCostp) ;
 
 /* sa.gff.c */
 long int saGffParser (PP *pp, TC *tc) ;
@@ -554,12 +560,19 @@ int saCodeIntronSeeds (PP *pp, BB *bbG) ;
 void saCodeSequenceSeeds (const PP *pp, BB *bb, int step) ;
   
 /* sa.sequenceParser.c */
-void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
+void saSequenceParse (const PP *pp, RC *rc) ;
+void saSequenceParseTarget (const PP *pp, TC *tc, BB *bb, int isLast) ;
 int saSequenceParseSraDownload (PP *pp, const char *sraID) ;
 void saParseGzBuffer (const PP *pp, BB *bb) ;
-void saParseR12Buffers (const PP *pp, BB *bb) ;
 void saSequenceDeduplicate (const PP *pp, BB *bb) ;
 void globalDnaCreate (BB *bb) ;
+void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
+void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
+
+/* sa.parse.c */
+void saParse (const PP *pp, RC *rc) ;
+void saScan (const PP *pp, BB *bb) ;
+int saParseSraDownload (PP *pp, const char *sraID) ;
 
 /* sa.compressedSequenceParser.c */
 void saCompressedSequenceParser (const PP *pp, RC *rc) ;

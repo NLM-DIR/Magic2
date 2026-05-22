@@ -3,6 +3,7 @@
 
  * This module is part of the sortalign package
  * Created November, 2025
+ * Authors: Danielle Thierry-Mieg, Jean Thierry-Mieg, Greg Boratyn, NCBI/NLM/NIH
 
  * This code is public.
 
@@ -791,7 +792,7 @@ static void sraCacheDo (ACEOUT ao1, ACEOUT ao2,	const char *seq, const char *seq
  * so in this way, even facinga single large fastq, the pipeline will no longer be hanged on the parser
  */
 
-static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
+void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 {
   AC_HANDLE h = ac_new_handle () ;
   ACEOUT ao1 = 0, ao2 = 0 ;
@@ -995,7 +996,7 @@ static void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenom
 
 /**************************************************************/
 
-static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
+void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 {
   AC_HANDLE h = ac_new_handle () ;
   BB b ;
@@ -1009,13 +1010,13 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
   int line1 = 0, line2 = 0, line10 = 0 ;
   Array dna1 = 0, dna2 = 0, dnas = 0 ;
   Array qual1 = 0, qual2 = 0 ;
-  char targetClass = tc ? tc->targetClass : 0 ;
+  char targetClass = 0 ;
   char namBufG [NAMMAX+12] ;
   char *namBufX, *namBuf = namBufG + 2 ;
-  DnaFormat format = rc ? rc->format : tc->format ;
-  const char *fileName1 = rc ? rc->fileName1 : tc->fileName ;
-  const char *fileName2 = rc ? rc->fileName2 : 0 ;
-  BOOL pairedEnd = rc ? rc->pairedEnd : FALSE ;
+  DnaFormat format = rc->format ;
+  const char *fileName1 = rc->fileName1 ;
+  const char *fileName2 = rc->fileName2 ;
+  BOOL pairedEnd = rc->pairedEnd ;
   char tBuf[25] ;
   clock_t t1, t2 ;
   
@@ -1326,28 +1327,6 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
     }
   
-  /* create the REVERSE COMPLEMENT of the GENOME */
-  if (isGenome == 2)
-    {                       /* we need the minus strand of the genome */
-      int iMax = bb->nSeqs ;
-      globalDnaCreate (bb) ;
-      bb->globalDnaR = bigArrayHandleCopy (bb->globalDna, bb->h) ;
-      
-      bb->dnasR = arrayHandleCreate (iMax, Array, bb->h) ;
-      unsigned char *cp0 = bigArrayp (bb->globalDnaR, 0, unsigned char) ;
-      for (int ii = 1 ; ii <= iMax ; ii++)
-	{
-	  Array dnaR = arrayHandleCreate (8, unsigned char, bb->h) ;
-	  unsigned int x1 = bigArr (bb->dnaCoords, 2*ii, unsigned int) ;      /* offset of this DNA */
-	  unsigned int x2 = bigArr (bb->dnaCoords, 2*ii + 1, unsigned int) ;
-	  messfree (dnaR->base) ;
-	  arrayLock (dnaR) ;
-	  dnaR->base = (char *) cp0 + x1 ;
-	  dnaR->max = dnaR->dim = x2 - x1 ;
-	  reverseComplement (dnaR)  ;             /* complement in place */
-	  array (bb->dnasR, ii, Array) = dnaR ;
-	}
-    }
   
   if (1 || pp->debug) printf ("--- %s: Stop sequence parser %d sequences, %d lines from file %s\n", timeBufShowNow (tBuf), nSeqs, line1, fileName1) ;
   
@@ -1357,25 +1336,32 @@ static void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 
 /**************************************************************/
 
-void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
+void saSequenceParse (const PP *pp, RC *rc)
 {
-  DnaFormat format = rc ? rc->format : tc->format ;
-  if (! isGenome)
+  DnaFormat format = rc->format ;
+  if (1)
     {
       if (format == SRA ||  pp->sraCaching)
-	sraSequenceParser (pp, rc, tc, bb, isGenome) ;
+	sraSequenceParser (pp, rc, 0, 0, 0) ;
       else if ((format == FASTA && !rc->pairedEnd) ||
 	       format == FASTA2       
 	       )
-	fastaSequenceParser (pp, rc, tc, bb, isGenome) ;
+	fastaSequenceParser (pp, rc, 0, 0, 0) ;
       else
-	otherSequenceParser (pp, rc, tc, bb, isGenome) ;
+	otherSequenceParser (pp, rc, 0, 0, 0) ;
     }
-  else
-    otherSequenceParser (pp, rc, tc, bb, isGenome) ;
 
   return ;
 } /* saSequenceParse */
+
+/**************************************************************/
+
+void saSequenceParseTarget (const PP *pp, TC *tc, BB *bb, int isLast)
+{
+  otherSequenceParser (pp, 0, tc, bb, isLast) ;
+
+  return ;
+} /* saSequenceParseTarget */
 
 /**************************************************************/
 
