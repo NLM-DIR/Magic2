@@ -179,7 +179,7 @@ Array saConfigGetRuns (PP *pp, Array runStats)
     }
   
   if (isSet)
-    saSetGetAdaptors (2, 0, &(pp->adaptors), 0) ;  /* run=0: valid for all runs */
+    saSetGetAdaptors (2, 0, &(pp->adaptors), 0, 0) ;  /* run=0: valid for all runs */
   
   if (pp->inFileName)
     {   /* Split the individual file names, they are coma separated 
@@ -253,12 +253,12 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	  if (pp->isRna) /* user imposed */
 	    {
 	      int isRna = 1 ;
-	      saSetGetAdaptors (2, &isRna, 0, rc->run) ;
+	      saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
 	    }
 	  if (pp->isDna) /* user imposed */
 	    {
 	      int isRna = -1 ;
-	      saSetGetAdaptors (2, &isRna, 0, rc->run) ;
+	      saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
 	    }
 
 	  if (pp->sraCaching || rc->format == SRA)  /* check in the cache */
@@ -367,13 +367,13 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	      else if (! strcasecmp (cp, "rna")) /* user imposed */
 		{
 		  int isRna = 1 ;
-		  saSetGetAdaptors (2, &isRna, 0, rc->run) ;
+		  saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
 		}
 
 	      else if (! strcasecmp (cp, "dna")) /* user imposed */
 		{
 		  int isRna = -1 ;
-		  saSetGetAdaptors (2, &isRna, 0, rc->run) ;
+		  saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
 		}
 
 	      else if (sscanf (cp, "jump1=%d", &k) && k >0)
@@ -452,14 +452,14 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 
 static pthread_mutex_t adaptor_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run)
+BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCostp)
 {
   static AC_HANDLE h = 0 ;
   static Array aaa = 0 ;
   static Array isSets = 0 ;
   static Array isRnas = 0 ;
   int isSet = TRUE ;
-  
+  static int errCost = 8 ;  
   pthread_mutex_lock(&adaptor_mutex);
 
   if (aaa == 0)
@@ -498,6 +498,8 @@ BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run)
 	  if (*isRnaRp) /* run specific */
 	    { iss++ ; *isRnap = *isRnaRp ; }
 	}
+      if (errCostp)
+	*errCostp = errCost ;
       /* client code wish to block if we return FALSE */
       isSet = (iss > 0 ? TRUE : FALSE) ;
     }
@@ -512,6 +514,8 @@ BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run)
 	  memcpy (aR, aa, sizeof (ADAPTORS)) ;
 	}
       isSet = TRUE ;
+      if (errCostp)
+	errCost = *errCostp ;
     }
 
   else if (set == 1)
@@ -536,6 +540,8 @@ BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run)
 	      break ;
 	    }
 	}
+      if (errCostp)
+	errCost = *errCostp ;
       isSet = TRUE ;
     }
   else if (set == -999999)

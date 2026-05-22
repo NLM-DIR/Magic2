@@ -2,7 +2,9 @@
  * sortalign : RNA aligner
 
  * Created April 18, 2025
- * In collaboration with Greg Boratyn, NCBI
+ * Authors: Jean Thierry-Mieg, Danielle Thierry-Mieg and Greg Boratyn, NCBI/NLM/NIH
+
+ * This code is public.
 
  * A new RNA aligner with emphasis on parallelisation by multithreading and channels, and memory locality
 
@@ -42,6 +44,7 @@
 #include <zlib.h>
 #include <stdatomic.h>
 #include "../wsra/sra_read.h"
+#include "sa.parse.h"
 #include "sa.common.h"
 
 #define ERRMAXMAX 1000000
@@ -79,7 +82,15 @@ typedef struct aStruct {
 
 #define SLMAX 1000
 #define LETTERMAX 1000
-#define OVERHANGMAX 600   /* 4*30*5  overhang: 32 bases max, starting on base atgc, 5 counts atgcn per position */
+#define OVERHANGMAX 600   /* 4*30*5  overhang: 32 bases max, starting on base atgc, 5 counts natgc per position */
+
+static const unsigned char natgc[256] = {
+  [A_] = 1,
+  [T_] = 2,
+  [G_] = 3,
+  [C_] = 4
+  /* all other 252 entries default to 0 == NATGC_N  */
+} ;
 
 typedef struct PSDstruct {
   int run ;   /* index in p.runDict */
@@ -90,7 +101,7 @@ typedef struct PSDstruct {
   int minReadLength, maxReadLength ;
   long int letterProfile1[5 * LETTERMAX] ;
   long int letterProfile2[5 * LETTERMAX] ;
-  long int ATGCN[5] ;
+  long int NATGC[5] ;
 
 } PSD ;
 
@@ -120,10 +131,8 @@ typedef struct runStatStruct {
   long int SlRead ;
   long int nClippedSls[SLMAX] ;
   long int nSupportedIntrons ;
-  long int nIntronSupportPlus ;
-  long int nIntronSupportMinus ;
-  int gt_ag_Support ;
-  int ct_ac_Support ;
+  long int gt_ag_Support ;
+  long int ct_ac_Support ;
   float intronStranding ;
   long int wiggleCumul ; /* in million bases */
   long int wiggleLCumul ; /* in million bases */
@@ -139,7 +148,8 @@ typedef struct runStatStruct {
   long int overhangR1 [OVERHANGMAX] ; /* read 1 right overhang  */
   long int overhangR2 [OVERHANGMAX] ; /* read 2 right overhang */
   
-  int GF[256], GR[256] ; /* number of reads aligned per target_class on Forward/Reverse strand */
+  int RF[256], RR[256] ; /* number of reads aligned per target_class on Forward/Reverse strand */
+  int BF[256], BR[256] ; /* number of bases aligned per target_class on Forward/Reverse strand */
   Array errors ;  /* substitutions, insertions, deletions counts */
   /* coverage of long transcripts ? */
 } RunSTAT ;
@@ -151,6 +161,10 @@ typedef struct bStruct {
   DICT *dict, *errDict ;
   mytime_t start, stop ;
   int gpu ;
+  int errCost ;
+  SAPARSE *saParse ;
+  BOOL sraStreaming ;   /* saParse buffer created and freed by sra C++ code */
+  Array dnaRecords ;
   BigArray dnaCoords ;   /* offSets of the dna in the globalDna array */
   Array dnas ;           /* Array of const char Arrays */
   Array dnasR ;          /* Their reverse complement, only computed for the genome */
@@ -160,6 +174,7 @@ typedef struct bStruct {
   BigArray msps ;        /* BigArray of seedmatches */
   BigArray hits ;        /* BigArray of read<->genome hits */
   BigArray *cwsN ;         /* BigArray of codeWords */
+  long unsigned nPairs ;
   long unsigned int nSeqs ;  /* number of sequences in bloc */
   long unsigned int length ; /* cumulated number of bases */
   long unsigned int nerr ;   /* cumulated number of errors */
@@ -167,7 +182,13 @@ typedef struct bStruct {
   long unsigned int aliDx ;  /* cumulated aligned read length */
   long unsigned int aliDa ;  /* cumulated genome coverage */
 
+  unsigned char *r1Buffer ;      /* R1 reads, or single-file buffer      */
+  size_t         r1BufferSize ;
+  unsigned char *r2Buffer ;      /* R2 reads, NULL in single-file mode   */
+  size_t         r2BufferSize ;
+
   char *gzBuffer ;
+  mysize_t gzBufferSize ;
   void *gpu_idx ;
 
   /*   BitSet isAligned ; */
@@ -279,7 +300,7 @@ typedef struct pStruct {
   Array confirmedIntrons ;
   Array doubleIntrons ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
-  BOOL sam, bam, hitsFormat, tabular ;
+  BOOL sam, bam, hitsFormat, tabular, blink ;
   BOOL exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;
@@ -302,8 +323,9 @@ typedef struct pStruct {
   int tMaxTargetRepeats ;
   int seedLength ;
   int maxIntron ;
+  int blinkLn ;
   int BMAX ; /* max number of bases in a block, default 200M */
-  int errCost ;
+  int userErrCost, errCost ;
   int errMax ;       /* (--align case) max number of errors in seed extension */
   int minScore, minAli, minAliPerCent ;
   int minLength, minEntropy ;
@@ -405,9 +427,9 @@ typedef struct geneStruct {
 		  
 typedef struct intronStruct {
   int run ;
-  int mrna ;
   int chrom ;
   int n, nR, a1, a2 ;
+  int chromLength ;
   char feet[6] ;
 } __attribute__((aligned(32))) INTRON ;
 		  
@@ -421,6 +443,7 @@ typedef struct doubleIntronStruct {
   int run ;
   int chrom ;
   int n, nR, a1, a2, b1, b2 ;
+  int chromLength ;
   char feet1[6] ;
   char feet2[6] ;
 } __attribute__((aligned(32))) DOUBLEINTRON ;
@@ -447,6 +470,17 @@ typedef struct cpuStatStruct {
   clock_t tA ; /* time time active */
 } CpuSTAT ;
 
+
+typedef struct geneCountsStruct {
+  float zero_index, low_index, cross_over_index ;
+  int Genes_touched  ;
+  int Genes_with_index  ;
+  int Genes_with_index_over_10  ;
+  int Genes_with_index_over_12  ;
+  int Genes_with_index_over_15 ;
+  int Genes_with_index_over_18  ;
+  float Mb_aligned, Mb_in_genes, Mb_in_genes_with_GeneId_minus_high_genes, Mb_in_high_genes, Intergenic, Intergenic_density ;
+} GeneCounts ;
 
 #define step1 256
 #define step2 512
@@ -485,7 +519,7 @@ Array saConfigGetRuns (PP *pp, Array runStats) ;
  * isRna: >=0: favor introns, search polyAs, export gene expression
  *        <0: none of the above, disfavor deletions.
  */
-BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run) ;
+BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCostp) ;
 
 /* sa.gff.c */
 long int saGffParser (PP *pp, TC *tc) ;
@@ -526,23 +560,32 @@ int saCodeIntronSeeds (PP *pp, BB *bbG) ;
 void saCodeSequenceSeeds (const PP *pp, BB *bb, int step) ;
   
 /* sa.sequenceParser.c */
-void saSequenceParse (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
+void saSequenceParse (const PP *pp, RC *rc) ;
+void saSequenceParseTarget (const PP *pp, TC *tc, BB *bb, int isLast) ;
 int saSequenceParseSraDownload (PP *pp, const char *sraID) ;
-void saSequenceParseGzBuffer (const PP *pp, BB *bb) ;
+void saParseGzBuffer (const PP *pp, BB *bb) ;
 void saSequenceDeduplicate (const PP *pp, BB *bb) ;
+void globalDnaCreate (BB *bb) ;
+void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
+void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
 
-/* sa.uringSequenceParser.c */
-void saUringSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb) ;
+/* sa.parse.c */
+void saParse (const PP *pp, RC *rc) ;
+void saScan (const PP *pp, BB *bb) ;
+int saParseSraDownload (PP *pp, const char *sraID) ;
 
+/* sa.compressedSequenceParser.c */
+void saCompressedSequenceParser (const PP *pp, RC *rc) ;
+  
 /* sa.wiggle */
 void saWiggleCumulate (const PP *pp, BB *bb) ;
-void saWiggleExport (PP *pp, int nAgents) ;
+GeneCounts saWiggleExport (PP *pp, int nAgents) ;
 
 /* sa.tabular */
 void saExportTabular (const PP *pp, BB *bb) ;
 
 /* sa.stats */
-void saRunStatExport (const PP *pp, Array runStats) ;
+void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs) ;
 void saCpuStatExport (const PP *pp, Array stats) ;
 void saCpuStatCumulate (Array aa, Array a) ;
 void saRunStatsCumulate (int run, PP *pp, BB *bb) ;
@@ -564,6 +607,7 @@ void saDevHelp (void) ;
 
 /* sa.tests */
 void saCreateRandomGenome (PP *pp, int nMb) ;
+
 
 /**************************************************************/
 /**************************************************************/

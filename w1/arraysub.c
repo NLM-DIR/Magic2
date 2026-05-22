@@ -51,9 +51,9 @@ mysize_t stackused (void)
 
 /************ Array : class to implement variable length arrays ************/
 
-static mysize_t totalAllocatedMemory = 0 ;
-static mysize_t totalNumberCreated = 0 ;
-static mysize_t totalNumberActive = 0 ;
+static volatile mysize_t totalAllocatedMemory = 0 ;
+static volatile mysize_t totalNumberCreated = 0 ;
+static volatile mysize_t totalNumberActive = 0 ;
 static Array reportArray = 0 ;
 static void uArrayFinalise (void *cp) ;
 
@@ -66,7 +66,8 @@ static void uArrayFinalise (void *cp) ;
 #else
 Array   uArrayCreate_dbg (mysize_t n, int size, AC_HANDLE handle,
 					      const char *hfname,int hlineno) 
-{ mysize_t id = totalNumberCreated++ ;  
+{
+  mysize_t id = totalNumberCreated++ ;  /* not guaranteed in multi threaded case, but it does not matter */
   Array neuf = (Array) handleAlloc_dbg (uArrayFinalise, 
 				   handle,
 				   sizeof (struct ArrayStruct),
@@ -106,6 +107,43 @@ Array   uArrayCreate_dbg (mysize_t n, int size, AC_HANDLE handle,
     }
   return neuf ;
 }
+
+/**************/
+
+ Array uVirtualArrayStructFill (struct ArrayStruct *neuf, void *base, int n, int size)
+ {
+  if (size <= 0)
+    messcrash("negative size %d in uVirtualArrayCreate", size) ;
+  if (n < 1)
+    messcrash("negative max %d in uVirtualArrayCreate", n) ;
+  if (! neuf)
+    messcrash("null ArrayStruct *neuf in uVirtualArrayCreate") ;
+  if (! base)
+    messcrash("null base in uVirtualArrayCreate") ;
+  mysize_t id = totalNumberCreated++ ;  /* not guaranteed in multi threaded case, but it does not matter */
+
+  neuf->id = id ;
+  neuf->base = base ;
+  neuf->dim = n ;
+  neuf->max = n ;
+  neuf->size = size ;
+  neuf->magic = ARRAY_MAGIC ;
+  neuf->virtual = TRUE ; /* never resize, never free the memory */
+
+  totalNumberActive++ ;
+  return neuf ;
+ } /* virtualArraypFill */
+ 
+/**************/
+
+Array uVirtualArrayCreate (void *base, int n, int size, AC_HANDLE handle)
+{
+  Array neuf = (Array) handleAlloc (uArrayFinalise, 
+				   handle,
+				    sizeof (struct ArrayStruct)) ;
+  totalNumberActive++ ;
+  return uVirtualArrayStructFill (neuf, base, n, size) ;
+} /* uVirtualArrayCreate */
 
 /**************/
 
@@ -211,6 +249,8 @@ void uArrayDestroy (Array a)
 
   if (a->magic != ARRAY_MAGIC)
     messcrash ("uArrayDestroy received corrupt array->magic");
+  if (a->virtual)
+    { a->virtual = a->lock = FALSE ; a->base = 0 ; }
   if (a->lock)
      messcrash ("arrayDestroy called on locked array") ;
   a->magic = 0 ;
@@ -221,17 +261,17 @@ static void uArrayFinalise (void *cp)
 {
   Array a = (Array)cp;
   
-  if (reportArray != (Array)2)
+  if (! a->virtual && reportArray != (Array)2)
     totalAllocatedMemory -= a->dim * a->size ;
-  if (!a->lock && !finalCleanup) messfree (a->base) ;
+  if (!a->lock && ! a->virtual &&  !finalCleanup) messfree (a->base) ;
   a->magic = 0 ; a->base = 0 ;
   totalNumberActive-- ;
-  if (!finalCleanup && reportArray != (Array)1 && reportArray != (Array)2) 
+  if (! a->virtual && !finalCleanup && reportArray != (Array)1 && reportArray != (Array)2) 
     arr(reportArray, a->id, Array) = 0 ;
 }
 
 /******************************/
-
+/* guarantee that the array is not modified */
 void arrayLock (Array a)
 {
   if (!arrayExists(a))
@@ -265,6 +305,8 @@ void arrayUnlock (Array a)
   if (!a || n < a->dim)
     return ;
   
+  if (a->virtual)
+     messcrash ("arrayExtend called on virtual array") ;
   if (a->lock)
      messcrash ("arrayExtend called on locked array") ;
   

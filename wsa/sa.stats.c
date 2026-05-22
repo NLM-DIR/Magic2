@@ -130,6 +130,7 @@ static int confirmedIntronsCountSites (const PP *pp, int run, RunSTAT *up)
 	    {
 	      if (n >= min)
 		nn++ ;
+	      min = 3 ;
 	      if (!strcmp (zp->feet, "gt_ag"))
 		min = 1 ;
 	      else if (!strcmp (zp->feet, "gc_ag"))
@@ -196,6 +197,7 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
   
   aceOutf (ao, "%s\t%s\tPairs\t%ld\n", run, METHOD, s0->p.nPairs) ;
   aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\tof_raw_pairs\n", run, METHOD, s0->nPairsAligned, (100.0 * s0->nPairsAligned)/(nRawReads/2 + .000001)) ;
+  
   aceOutf (ao, "%s\t%s\tnCompatible_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCompatiblePairs, (100.0 * s0->nCompatiblePairs)/(s0->nPairsAligned + .000001)) ;
   aceOutf (ao, "%s\t%s\tnCircle_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCirclePairs, (100.0 * s0->nCirclePairs)/(s0->nPairsAligned + .000001)) ;
   aceOutf (ao, "%s\t%s\tNon_compatible_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nIncompatiblePairs, (100.0 * s0->nIncompatiblePairs)/(s0->nPairsAligned + .000001)) ;
@@ -213,27 +215,32 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
 
   aceOutf (ao, "\n%s\t%s\tnBases\t%ld\n", run, METHOD, s0->p.nBase1 + s0->p.nBase2) ;
   aceOutf (ao, "%s\t%s\tRawBases\t%ld\n", run, METHOD, nRawBases) ;
-  aceOutf (ao, "%s\t%s\tnAlignedBases\t%ld\t%.2f%%\tof_raw_bases\n", run, METHOD, s0->nBaseAligned1 + s0->nBaseAligned2, 100.0 * (s0->nBaseAligned1 + s0->nBaseAligned2) / (nRawBases + .000001)) ;
-  aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t%.6f%%\tof_aligned_bases\n", run, METHOD, s0->nErr, (100.0 * s0->nErr)/(s0->nBaseAligned1 + s0->nBaseAligned2 + 0.00000001)) ;
-  aceOutf (ao, "%s\t%s\tnMismatches_and_InDels\t%ld\t%.6f%%\tof_aligned_bases\n", run, METHOD, s0->nMID, (100.0 * s0->nMID)/(s0->nBaseAligned1 + s0->nBaseAligned2 + 0.00000001)) ;
+  aceOutf (ao, "%s\t%s\tnAlignedBases\t%ld\t%.2f%%\tof_raw_bases\n"
+	   , run, METHOD
+	   , s0->nBaseAligned1 + s0->nBaseAligned2
+	   , 100.0 * (s0->nBaseAligned1 + s0->nBaseAligned2) / (nRawBases + .000001)
+	   ) ;
+  aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t", run, METHOD, s0->nErr) ;
+  aceOutPercent (ao, 100.0 * s0->nMID /(.0001 + s0->nBaseAligned1 + s0->nBaseAligned2)) ;
+  aceOut (ao, "%\tof_aligned_bases\n") ;
+  aceOutf (ao, "%s\t%s\tnMismatches_and_InDels\t%ld\t", run, METHOD, s0->nMID) ;
+  aceOutPercent (ao, 100.0 * s0->nMID /(.0001 + s0->nBaseAligned1 + s0->nBaseAligned2)) ;
+  aceOut (ao, "%\tof_aligned_bases\n") ;
 
   aceOutf (ao, "\n%s\t%s\tnPolyA_sites\t%ld\n", run, METHOD, confirmedPolyAsCountSites (pp, 0)) ;
 
   int isRna = 0 ;
-  saSetGetAdaptors (0, &isRna, 0, 1) ;
+  saSetGetAdaptors (0, &isRna, 0, 1, 0) ;
   if (1 || isRna > 0)
     {
       aceOutf (ao, "\n%s\t%s\tSupported_introns\t%ld\tgt_ag seen once or other seen 3\n", run, METHOD, confirmedIntronsCountSites (pp, 0, 0)) ;
       aceOutf (ao, "\n%s\t%s\tnDoubleIntrons\t%ld\n", run, METHOD, arrayMax (pp->doubleIntrons)) ;
-      aceOutf (ao, "%s\t%s\tIntron_supports\t%ld\t%ld\t%ld\t%.3f\n", run, METHOD
-	       /* , s0->gt_ag_Support + s0->ct_ac_Support 
-		  , s0->gt_ag_Support
-		  , s0->ct_ac_Support
-	       */
-	       , s0->nIntronSupportPlus + s0->nIntronSupportMinus
-	       , s0->nIntronSupportPlus
-	       , s0->nIntronSupportMinus
-	       , s0->intronStranding
+      aceOutf (ao, "%s\t%s\tIntron_supports\t%ld\t%ld\t%ld\t%.3f%%\tpositive_strand_supports\n"
+	       , run, METHOD
+	       , s0->gt_ag_Support + s0->ct_ac_Support 
+	       , s0->gt_ag_Support
+	       , s0->ct_ac_Support
+	       , pp->runStranding[0]
 	       ) ;
     }
   
@@ -243,9 +250,9 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
   for (int j = 0 ; j < 1 ; j++)
     if (s0->nMultiAligned[j])
       {
-	aceOutf (ao, "%s\t%s\tnUnaligned\t%ld\t%.2f%%\tof_aligned_reads\n", run, METHOD
+	aceOutf (ao, "%s\t%s\tnUnaligned\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD
 		 , nUnaligned
-		 , 100.0 * nUnaligned / (s0->nMultiAligned[0] + .000001)
+		 , 100.0 * nUnaligned / (nRawReads + .000001)
 		 ) ;
       }
   for (int j = 1 ; j < 2 ; j++)
@@ -300,21 +307,17 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   up->lowEntropyBases += vp->lowEntropyBases ;
   up->tooShortBases += vp->tooShortBases ;
   up->nSupportedIntrons += vp->nSupportedIntrons ;
-  up->nIntronSupportPlus += vp->nIntronSupportPlus ;
-  up->nIntronSupportMinus += vp->nIntronSupportMinus ;
   up->gt_ag_Support += vp->gt_ag_Support ;
   up->ct_ac_Support += vp->ct_ac_Support ;
   
   for (int i = 0 ; i < 5 ; i++)
-    up->p.ATGCN[i] += vp->p.ATGCN[i] ;
+    up->p.NATGC[i] += vp->p.NATGC[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile1[i] += vp->p.letterProfile1[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile2[i] += vp->p.letterProfile2[i] ;
   for (int i = 0 ; i < 11 ; i++)
     up->nMultiAligned[i] += vp->nMultiAligned[i] ;
-  for (int i = 0 ; i < 256 ; i++)
-    up->nReadsAlignedPerTargetClass[i] += vp->nReadsAlignedPerTargetClass[i] ;
   for (int i = 0 ; i < 256 ; i++)
     up->nBasesAlignedPerTargetClass[i] += vp->nBasesAlignedPerTargetClass[i] ;
 
@@ -357,8 +360,10 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
       array (up->errors, i, int) += array (vp->errors, i, int) ;
   for (int i = 0 ; i < 256 ; i++)
     {
-      up->GF[i] += vp->GF[i] ;
-      up->GR[i] += vp->GR[i] ;
+      up->RF[i] += vp->RF[i] ;
+      up->RR[i] += vp->RR[i] ;
+      up->BF[i] += vp->BF[i] ;
+      up->BR[i] += vp->BR[i] ;
     }
   if (!up->p.lengthDistribution)
     {
@@ -588,7 +593,7 @@ static void saOverhangExport (const PP *pp, int run, RunSTAT *up, BOOL isLeft)
   
 /**************************************************************/
   
-void saRunStatExport (const PP *pp, Array runStats)
+void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 {
   AC_HANDLE h = ac_new_handle () ;
   ACEOUT ao = aceOutCreate (pp->outFileName, ".runStats.tsf", 0, h) ;
@@ -678,6 +683,11 @@ void saRunStatExport (const PP *pp, Array runStats)
 		   , 100.0 * up->nBaseAligned2/(.000001 + up->p.nBase2)
 		   ) ;
 
+	  aceOutf (ao, "%s\tUnaligned_bases\ti\t%ld\n"
+		   , runNam
+		   , up->p.nBase1 + up->p.nBase2 - up->nBaseAligned1 - up->nBaseAligned2
+		   ) ;
+
 	  up->intergenic = up->wiggleCumul - up->cds - up->utr - up->intronic ;
 	  aceOutf (ao, "%s\tGenome_length\ti\t%ld\n", runNam, pp->genomeLength) ;
 	  if (pp->wiggles)
@@ -695,18 +705,18 @@ void saRunStatExport (const PP *pp, Array runStats)
 
 	  aceOutf (ao, "%s\tATGCN\tiiiii\t%ld\t%ld\t%ld\t%ld\t%ld\n"
 		   , runNam
-		   , up->p.ATGCN[0]
-		   , up->p.ATGCN[1]
-		   , up->p.ATGCN[2]
-		   , up->p.ATGCN[3]
-		   , up->p.ATGCN[4]
+		   , up->p.NATGC[1]
+		   , up->p.NATGC[2]
+		   , up->p.NATGC[3]
+		   , up->p.NATGC[4]
+		   , up->p.NATGC[0]
 		   ) ;
 
 
 	  if (1)
 	    {
 	      ADAPTORS adaptors = {{0}} ;
-	      saSetGetAdaptors (0, 0, &adaptors, run) ;
+	      saSetGetAdaptors (0, 0, &adaptors, run, 0) ;
 	      saReadAdaptors (&adaptors, up, FALSE) ;
 	      if (1)
 		{
@@ -775,19 +785,21 @@ void saRunStatExport (const PP *pp, Array runStats)
 		   ) ;
 	  
 	  aceOutf (ao, "%s\twiggleCumul\ti\t%ld\n", runNam, up->wiggleCumul) ;
-	  aceOutf (ao, "%s\tErrors\tif\t%ld\t%.3f\n"
+	  aceOutf (ao, "%s\tErrors\tift\t%ld\t"
 		   , runNam
 		   , up->nErr
-		   , 100.0 * up->nErr /(.0001 + up->nBaseAligned1 + up->nBaseAligned2)
 		   ) ;
-	  aceOutf (ao, "%s\tMismatches_and_InDels\tif\t%ld\t%.3f\n"
+	  aceOutPercent (ao, 100.0 * up->nErr /(.0001 + up->nBaseAligned1 + up->nBaseAligned2)) ;
+	  aceOut (ao, "%\tof_aligned_bases\n") ;
+	  aceOutf (ao, "%s\tMismatches_and_InDels\tift\t%ld\t"
 		   , runNam
 		   , up->nMID
-		   , 100.0 * up->nMID /(.0001 + up->nBaseAligned1 + up->nBaseAligned2)
-		   ) ;
+		  ) ;
+	  aceOutPercent (ao, 100.0 * up->nMID /(.0001 + up->nBaseAligned1 + up->nBaseAligned2)) ;
+	  aceOut (ao, "%\tof_aligned_bases\n") ;
 	  
 	  int isRna = 0 ;
-	  if (saSetGetAdaptors (0, &isRna, 0, run))
+	  if (saSetGetAdaptors (0, &isRna, 0, run, 0))
 	    aceOutf (ao, "%s\tStrategy\ti\t%d\n"
 		     , runNam
 		     , isRna
@@ -795,24 +807,16 @@ void saRunStatExport (const PP *pp, Array runStats)
 
 	  if (isRna > 0)
 	    {
-	      aceOutf (ao, "%s\tIntron_supports\tiiif\t%ld\t%ld\t%ld\t%.3f%%\n"
+	      aceOutf (ao, "%s\tIntron_supports\titititft\t%ld\tany\t%ld\tgt_ag\t%ld\tct_ac\t%.3f%%\tpositive_strand_supports\n"
 		       , runNam
-		       , up->nIntronSupportPlus + up->nIntronSupportMinus 
-		       , up->nIntronSupportPlus /* up->gt_ag_Support */
-		       , up->nIntronSupportMinus /* up->ct_ac_Support */
-		       , up->intronStranding
+		       , up->gt_ag_Support + up->ct_ac_Support 
+		       , up->gt_ag_Support
+		       , up->ct_ac_Support 
+		       , pp->runStranding[run]
 		       ) ;
 	      aceOutf (ao, "%s\tSupported_introns\tit\t%ld\tgt_ag seen once or other seen 3\n"
 		       , runNam
 		       , confirmedIntronsCountSites (pp, run, up)
-		       ) ;
-	      aceOutf (ao, "%s\tRaw_gt_ag_Support\ti\t%ld\n"
-		       , runNam
-		       , up->gt_ag_Support
-		       ) ;
-	      aceOutf (ao, "%s\tRaw_ct_ac_Support\ti\t%ld\n"
-		       , runNam
-		       , up->ct_ac_Support
 		       ) ;
 	    }
 	  aceOutf (ao, "%s\tMin_read_length\ti\t%d\n", runNam, up->p.minReadLength) ;
@@ -884,56 +888,68 @@ void saRunStatExport (const PP *pp, Array runStats)
 	    }
 	  
 	  for (int ii = 1 ; ii < 2 ; ii++)
-	    aceOutf (ao, "%s\tReads_Aligned_once\tif\t%ld\t%.3f\n"
+	    aceOutf (ao, "%s\tReads_Aligned_once\tift\t%ld\t%.3f\tof_aligned_reads\n"
 		     , runNam
 		     , up->nMultiAligned[ii]
 		     , 100.0 * up->nMultiAligned[ii]/(.000001 + up->nMultiAligned[0]) 
 		     ) ;
 	  for (int ii = 2 ; ii < 11 ; ii++)
 	    if (up->nMultiAligned[ii]) 
-	      aceOutf (ao, "%s\tReads_multi_aligned__%d\tif\t%ld\t%.3f\n"
+	      aceOutf (ao, "%s\tReads_multi_aligned__%d\tift\t%ld\t%.3f\tof_aligned_reads\n"
 		       , runNam, ii
 		       , up->nMultiAligned[ii]
 		       , 100.0 * up->nMultiAligned[ii]/(.000001 + up->nMultiAligned[0])
 		       ) ;
-	  
-	  for (int ii = 1 ; ii < 256 ; ii++)
-	    {
-	      if (up->nReadsAlignedPerTargetClass[ii])
-		aceOutf (ao, "%s\tReads_aligned_in_class_%c\tif\t%ld\t%.3f\n"
-			 , runNam, ii
-			 , up->nReadsAlignedPerTargetClass[ii]
-			 , 100.0 * up->nReadsAlignedPerTargetClass[ii]/(.000001 + up->nMultiAligned[0]) 
-			 ) ;
-	    }
+	  int n = up->nMultiAligned[0] - up->nMultiAligned[1] ;
+	  if (n)
+	    aceOutf (ao, "%s\tReads_aligned_several_times\tift\t%ld\t%.3f\tof_raw_reads\n"
+		   , runNam, n 
+		   , (100.0 * n)/(.000001 + up->p.nReads)
+		   ) ;
+
 	  for (int ii = 1 ; ii < 256 ; ii++)
 	    {
 	      if (up->nBasesAlignedPerTargetClass[ii])
-		aceOutf (ao, "%s\tBases_aligned_in_class_%c\tif\t%ld\t%.3f\n"
+		aceOutf (ao, "%s\tBases_aligned_in_class_%c\tift\t%ld\t%.3f\tof_aligned_bases_per_class\n"
 			 , runNam, ii
 			 , up->nBasesAlignedPerTargetClass[ii]
 			 , 100.0 * up->nBasesAlignedPerTargetClass[ii]/(.000001 + up->nBasesAlignedPerTargetClass[0]) 
 			 ) ;
 	    }
+	  int f0 = up->RF[0] ;
+	  int r0 = up->RR[0] ;
+	  int t0 = f0 + r0 ;
 	  for (int ii = 1 ; ii < 256 ; ii++)
 	    {
-	      if (up->nReadsAlignedPerTargetClass[ii])
-		{
-		  int f = up->GF[ii] ;
-		  int r = up->GR[ii] ;
-		  int t = f + r ;
-		  if (t)		  
-		    aceOutf (ao, "%s\tStranding_in_class_%c\tfii\t%.3f\t%ld\t%ld\n", runNam, ii
-			     , 100.0 * f/t, f, r
-			     ) ;
+	      int f = up->RF[ii] ;
+	      int r = up->RR[ii] ;
+	      int t = f + r ;
+	      if (t)
+		{	
+		  aceOutf (ao, "%s\tReads_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand\t%ld\tnegative_strand\t", runNam, ii, t, f, r) ;
+		  aceOutPercent (ao, (100.0*f) / t) ;
+		  aceOut (ao, "%\tpositive_strand_alignments\t") ;
+		  aceOutPercent (ao, (100.0*t) / t0) ;
+		  aceOutf (ao, "%\tof_all_classes\n") ;
 		}
 	    }
-	  if (up->gt_ag_Support + up->ct_ac_Support  > 10000)
+	  f0 = up->BF[0] ;
+	  r0 = up->BR[0] ;
+	  t0 = f0 + r0 ;
+	  for (int ii = 1 ; ii < 256 ; ii++)
 	    {
-	      aceOutf (ao, "%s\tStranding_in_class_I\tfii\t", runNam) ;
-	      aceOutPercent (ao, (100.0 * up->gt_ag_Support) / (up->gt_ag_Support + up->ct_ac_Support)) ;
-	      aceOutf (ao, "\t%ld\t%ld\n", up->gt_ag_Support, up->ct_ac_Support ) ;
-	    }	  
+	      long int f = up->BF[ii] ;
+	      long int r = up->BR[ii] ;
+	      long int t = f + r ;
+	      if (t)
+		{	
+		  aceOutf (ao, "%s\tBases_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand\t%ld\tnegative_strand\t", runNam, ii, t, f, r) ;
+		  aceOutPercent (ao, (100.0*f) / t) ;
+		  aceOut (ao, "%\tpositive_strand_alignments\t") ;
+		  aceOutPercent (ao, (100.0*t) / t0) ;
+		  aceOut (ao, "%\tof_all_classes\n") ;
+		}
+	    }
 	}
     }
   ac_free (h) ;

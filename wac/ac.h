@@ -71,7 +71,6 @@ Objects and lazy loading
 #include "peptide.h"
 #include <math.h>
 
-
 typedef struct ac_db *AC_DB;
 	/*
 	* a descriptor for an open database - freeing it

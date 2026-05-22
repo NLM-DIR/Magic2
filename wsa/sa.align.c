@@ -6,18 +6,20 @@
  * Authors: Jean Thierry-Mieg, Danielle Thierry-Mieg and Greg Boratyn, NCBI/NLM/NIH
  * Created April 18, 2025
 
- * This is public.
-
+ * This code is public.
 
  * This module extends seed hits to full alignments
  */
 
 /* #define ARRAY_CHECK */
 
-
 #include "sa.h"
 #define MAXJUMP 3
 #define MAXJUMP2 8
+
+#ifdef USEGPU
+#include "sa.gpusort.h"
+#endif
 
 /**************************************************************/
 /**************************************************************/
@@ -147,12 +149,12 @@ static void alignCheckSize (BB *bb, Array aa)
 {
   int ii, iMax = arrayMax (aa) ;
   int nD, nI ;
+  if (1) return ;
   for (ii = 0 ; ii < iMax ; ii++)
     {
       ALIGN *up = arrp (aa, ii, ALIGN) ;
       int dx = up->x2 - up->x1 + 1 ;
-      int da = up->a2 - up->a1 ;
-      da = (da > 0 ? da + 1 : -da+ 1 ) ;
+      int da = up->a2 - up->a1 + 1 ;
       nD = nI = 0 ;
       
       if (up->errors)
@@ -161,22 +163,24 @@ static void alignCheckSize (BB *bb, Array aa)
 	  for (jj = 0 ; jj < jMax ; jj++)
 	    {
 	      A_ERR *ep = arrp (up->errors, jj, A_ERR) ;
-	      switch (ep->type)
-		{
-		case TROU: nD += 1 ; break ;
-		case TROU_DOUBLE: nD += 2 ; break ;
-		case TROU_TRIPLE: nD += 3 ; break ;
-		case INSERTION: nI += 1 ; break ;
-		case INSERTION_DOUBLE: nI += 2 ; break ;
-		case INSERTION_TRIPLE: nI += 3 ; break ;
-		default: break ;
-		}
+	      if (ep->iShort + 1 >= up->x1 &&  ep->iShort + 1 <= up->x2)
+		switch (ep->type)
+		  {
+		  case TROU: nD += 1 ; break ;
+		  case TROU_DOUBLE: nD += 2 ; break ;
+		  case TROU_TRIPLE: nD += 3 ; break ;
+		  case INSERTION: nI += 1 ; break ;
+		  case INSERTION_DOUBLE: nI += 2 ; break ;
+		  case INSERTION_TRIPLE: nI += 3 ; break ;
+		  default: break ;
+		  }
 	    }
 	}
-      if (0 && da + nI != dx + nD)
-	messcrash ("\nRead %s dx=%d da=%d nI=%d nD=%d dA+nI-dx-nD=%d\n"
+      if (1 && (da + nI != dx + nD))
+	messcrash ("\nRead %s dx=%d da=%d nI=%d nD=%d dA+nI-dx-nD=%d a=%d/%d x=%d/%d\n"
 		   , dictName (bb->dict, up->read >> 1)
 		   , dx, da, nI, nD, da+nI-dx-nD
+		   , up->a1, up->a2, up->x1, up->x2
 		   ) ;
     }
   return ;
@@ -532,7 +536,7 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 			      vp->score += slBonus - di ;
 			      vp->chainScore += slBonus - di ;
 			      vp->chainX1 += di ;
-			      vp->chainA1 += (up->a1 < up->a2 ? di :- di) ;
+			      vp->chainA1 += di ;
 			    }
 			  SLS *zp = arrayp (bb->confirmedSLs, arrayMax (bb->confirmedSLs), SLS) ;
 			  zp->chrom = up->chrom ;
@@ -590,7 +594,7 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 			      vp->chainScore -= di ;
 			      vp->chainAli -= di ;
 			      vp->chainX1 += di ;
-			      vp->chainA1 += (up->a1 < up->a2 ? di :- di) ;
+			      vp->chainA1 += di ;
 			    }
 			  goto done ;
 			}
@@ -764,7 +768,7 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 			      vp->score += slBonus - di ;
 			      vp->chainScore += slBonus - di ;
 			      vp->chainX2 -= di ;
-			      vp->chainA2 -= (up->a1 < up->a2 ? di :- di) ;
+			      vp->chainA2 -= di ;
 			    }
 			  SLS *zp = arrayp (bb->confirmedSLs, arrayMax (bb->confirmedSLs), SLS) ;
 			  zp->chrom = up->chrom ;
@@ -823,7 +827,7 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 			  vp->chainScore -= di ;
 			  vp->chainAli -= di ;
 			  vp->chainX2 -= di ;
-			  vp->chainA2 -= (up->a1 < up->a2 ? di :- di) ;
+			  vp->chainA2 -= di ;
 			}
 		      goto done ;
 		    }
@@ -854,9 +858,10 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
   vTXT txt2 = bb->txt2 ;
   char *sep ;
   int xShort, xLong  ;
-  BOOL isUp = (up->a1 > up->a2) ;
+  BOOL isUp = (up->chrom & 0x1) ;
   const BOOL debug = FALSE ;
-
+  Array myDnaG = isUp ? dnaGR : dnaG ;
+  
   if (debug)
     aceDnaShowErr (up->errors) ;
   vtxtClear (txt1) ;
@@ -876,8 +881,8 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    {
 	      char cc1a, cc2a ;
 	      
-	      cc1a = arr (dnaG, (isUp ? xLong - 0 : xLong - 2), unsigned char) ;
-	      cc2a = arr (dnaG, (isUp ? xLong - 1 : xLong - 1), unsigned char) ;
+	      cc1a = arr (myDnaG, (isUp ? xLong - 0 : xLong - 2), unsigned char) ;
+	      cc2a = arr (myDnaG, (isUp ? xLong - 1 : xLong - 1), unsigned char) ;
 	      
 	      vtxtPrintf (txt1,"%s%d:%c%c>oo"
 			  , sep
@@ -914,133 +919,112 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    vtxtPrintf(txt1, "%s%d:%c>%c"
 		       , sep
 		       , xShort 
-		       , ccLR, ccS
+		       , ccL, ccS
 		       ) ;
 
 	    vtxtPrintf(txt2, "%s%d:%c>%c"
 		       , sep
 		       , isUp ? xLongR : xLong
-		       , ccL, ccSR
+		       , ccLR, ccSR
 		       ) ;
 	  }  
 	  break ;
 	case TROU: 
 	  {
-	    char *ss = "-", cc1L, cc1S, cc1LR, cc1SR ;
+	    char *ss = "-", cc1L, cc1S, cc1LR ;
 	    int da = isUp ? 1 : 0 ;
-	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
+	    unsigned char *cp = arrp(myDnaG, xLong - 1, unsigned char) ;
 	    
 	    cc1L = cp[0] ;
+	    cc1LR = isUp ? complementBase(cc1L) : cc1L ;
+	    cc1S = cp[0] ;
 	    
 	    if (isUp)
 	      while (cp[-1] == cp[0]) { da++; cp-- ;}
 	    if (da>1) ss = "*-" ;
 	    if (!isUp) { if (cp[-1] == cp[0]) ss = "*-" ; }
 	    
-	    cc1S = cp[0] ;
-	    
-	    cc1LR = isUp ? complementBase(cc1L) : cc1L ; 
-	    
-	    cc1SR = isUp ? complementBase(cc1S) : cc1S ; 
-	    
-	    cc1L = dnaDecodeChar[(int)cc1L] ;
-	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
-
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
-	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
+	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c"
 			, sep
-			, xShort + da
+			, xShort 
 			, ss
-			, cc1SR
+			, cc1S
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c"
 			, sep
-			, isUp ? xLongR : xLong
+			, isUp ? xLongR + da - 1 : xLong
 			, ss 
-			, cc1L
+			, cc1LR
 			) ;
 	  }
 	  break ;
 
 	case TROU_DOUBLE:
 	  {
-	    char *ss = "--", cc1L, cc2L, cc1S, cc2S, cc1LR, cc2LR, cc1SR, cc2SR ;
+	    char *ss = "--", cc1L, cc2L, cc1S, cc2S, cc1LR, cc2LR ;
 	    int da = isUp ? 1 : 0 ;
-	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
+	    unsigned char *cp = arrp(myDnaG, xLong - 1, unsigned char) ;
 	    
-	    cc1L = cp[0] ;
-	    cc2L = cp[1] ;
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
 	    
 	    if (isUp)
 	      while (cp[-1] == cp[1]) { da++; cp-- ;}
 	    if (da>1) ss = "*--" ;
 	    if (!isUp) { if (cp[-1] == cp[1]) ss = "*--" ; }
 	    
-	    cc1S = cp[0] ;
-	    cc2S = cp[1] ;
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
 	    
 	    cc1LR = isUp ? complementBase(cc2L) : cc1L ; 
 	    cc2LR = isUp ? complementBase(cc1L) : cc2L ;
 	    
-	    cc1SR = isUp ? complementBase(cc2S) : cc1S ; 
-	    cc2SR = isUp ? complementBase(cc1S) : cc2S ;
-	    
-	    cc1L = dnaDecodeChar[(int)cc1L] ;
-	    cc2L = dnaDecodeChar[(int)cc2L] ;
 	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
 	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
 
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
 	    cc2S = dnaDecodeChar[(int)cc2S] ;
-	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
-	    cc2SR = dnaDecodeChar[(int)cc2SR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c"
 			, sep
-			, xShort + da
+			, xShort
 			, ss
-			, cc1SR, cc2SR
+			, cc1S, cc2S
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c"
 			, sep
-			, isUp ? xLongR : xLong
+			, isUp ? xLongR + da - 2 : xLong
 			, ss 
-			, cc1L, cc2L
+			, cc1LR, cc2LR
 			) ;
 	  }
 	  break ;
 	case TROU_TRIPLE:
 	  {
-	    char *ss = "---", cc1L, cc2L, cc3L, cc1S, cc2S, cc3S, cc1LR, cc2LR, cc3LR , cc1SR, cc2SR, cc3SR ;
+	    char *ss = "---", cc1L, cc2L, cc3L, cc1S, cc2S, cc3S, cc1LR, cc2LR, cc3LR  ;
 	    int da = isUp ? 1 : 0 ;
-	    unsigned char *cp = arrp(dnaG, isUp ? xLongR - 1 : xLong - 1, unsigned char) ;
+	    unsigned char *cp = arrp(myDnaG, xLong - 1, unsigned char) ;
 	    
-	    cc1L = cp[0] ;
-	    cc2L = cp[1] ;
-	    cc3L = cp[2] ;
+	    cc1S = cp[0] ;
+	    cc2S = cp[1] ;
+	    cc3S = cp[2] ;
 	    
 	    if (isUp)
 	      while (cp[-1] == cp[2]) { da++; cp-- ;}
 	    if (da>1) ss = "*---" ;
 	    if (!isUp) { if (cp[-1] == cp[2]) ss = "*---" ; }
 	    
-	    cc1S = cp[0] ;
-	    cc2S = cp[1] ;
-	    cc3S = cp[2] ;
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+	    cc3L = cp[2] ;
 	    
 	    cc1LR = isUp ? complementBase(cc3L) : cc1L ; 
 	    cc2LR = isUp ? complementBase(cc2L) : cc2L ;
 	    cc3LR = isUp ? complementBase(cc1L) : cc3L ; 
 	    
-	    cc1SR = isUp ? complementBase(cc3S) : cc1S ; 
-	    cc2SR = isUp ? complementBase(cc2S) : cc2S ;
-	    cc3SR = isUp ? complementBase(cc1S) : cc3S ; 
-	    
-	    cc1L = dnaDecodeChar[(int)cc1L] ;
-	    cc2L = dnaDecodeChar[(int)cc2L] ;
-	    cc3L = dnaDecodeChar[(int)cc3L] ;
 	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
 	    cc2LR = dnaDecodeChar[(int)cc2LR] ;
 	    cc3LR = dnaDecodeChar[(int)cc3LR] ;
@@ -1048,54 +1032,47 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
 	    cc2S = dnaDecodeChar[(int)cc2S] ;
 	    cc3S = dnaDecodeChar[(int)cc3S] ;
-	    cc1SR = dnaDecodeChar[(int)cc1SR] ;
-	    cc2SR = dnaDecodeChar[(int)cc2SR] ;
-	    cc3SR = dnaDecodeChar[(int)cc3SR] ;
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c%c"
 			, sep
-			, xShort + da
+			, xShort 
 			, ss
-			, cc1SR, cc2SR, cc3SR
+			, cc1S, cc2S, cc3S
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c%c"
 			, sep
-			, isUp ? xLongR : xLong
+			, isUp ? xLongR  + da - 3 : xLong
 			, ss 
-			, cc1L, cc2L, cc3L
+			, cc1LR, cc2LR, cc3LR
 			) ;
 	  }
 	  break ;
 	case INSERTION: 
 	  {
-	    char *ss = "+", cc1S, cc1L, cc1LR ;
-	    xShort = isUp ? xShort - 1 : xShort ;
+	    char *ss = "+", cc1S, cc1LR ;
 	    unsigned char *cp = arrp(dna, xShort - 1, unsigned char) ;
 
+	    cc1S = cp[0] ;
+	    cc1LR = isUp ? complementBase(cc1S) : cc1S ;
 
-	    cc1L = cp[0] ;
-
+	    cc1S = dnaDecodeChar[(int)cc1S] ;
+	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
+	    
 	    int da = 0 ; 
 	    if (isUp)
-	      while (cp[0] == cp[1]) { da++; cp++ ;}
+	      while (cp[-1] == cp[0]) { da++; cp-- ;}
 	    if (da) ss = "*+" ;
 	    if (!isUp) { if (cp[-1] == cp[0]) ss = "*+" ; }
 
-	    cc1S = cp[0] ;
-	    cc1LR = isUp ? complementBase(cc1L) : cc1L ; 
-	    
-	    cc1S = dnaDecodeChar[(int)cc1S] ;
-	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
-
 	    vtxtPrintf (txt1, "%s%d:%s%c"
 			, sep
-			, xShort + da
+			, xShort
 			, ss
 			, cc1S
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c"
 			, sep
-			, isUp ? xLongR : xLong
+			, isUp ? xLongR + da + 1 : xLong
 			, ss 
 			, cc1LR
 			) ;
@@ -1106,26 +1083,22 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 	case INSERTION_DOUBLE:
 	  {
 	    char *ss = "++", cc1S, cc2S, cc1L, cc2L, cc1LR, cc2LR ;
-	    xShort = isUp ? xShort - 1 : xShort ;
 	    unsigned char *cp = arrp(dna, xShort - 1, unsigned char) ;
 
-
-	    cc1L = cp[0] ;
-	    cc2L = cp[1] ;
-
-	    int da = 0 ; 
-	    if (isUp)
-	      while (cp[0] == cp[2]) { da++; cp++ ;}
-	    if (da) ss = "*++" ;
-	    if (!isUp) { if (cp[-1] == cp[1]) ss = "*++" ; }
-	    
 	    cc1S = cp[0] ;
 	    cc2S = cp[1] ;
 
-	    cc1LR = isUp ? complementBase(cc2L) : cc1L ; 
+	    int da = 0 ; 
+	    if (isUp)
+	      while (cp[-1] == cp[1]) { da++; cp--;}
+	    if (da) ss = "*++" ;
+	    if (!isUp) { if (cp[-1] == cp[1]) ss = "*++" ; }
+
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+	    cc1LR = isUp ? complementBase(cc2L) : cc1L ;
 	    cc2LR = isUp ? complementBase(cc1L) : cc2L ;
 
-	    
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
 	    cc2S = dnaDecodeChar[(int)cc2S] ;
 	    cc1LR = dnaDecodeChar[(int)cc1LR] ;
@@ -1133,48 +1106,44 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c"
 			, sep
-			, xShort + da
+			, xShort
 			, ss
 			, cc1S
 			, cc2S
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c"
 			, sep
-			, isUp ? xLongR : xLong
+			, isUp ? xLongR  + da + 1 : xLong
 			, ss 
 			, cc1LR
 			, cc2LR
 			) ;
-	    
 	  }
 	  break ;
-	      
 	  
 	case INSERTION_TRIPLE:
 	  {
 	    char *ss = "+++", cc1S, cc2S, cc3S, cc1L, cc2L, cc3L, cc1LR, cc2LR, cc3LR ;
-	    xShort = isUp ? xShort - 2 : xShort ;
 	    unsigned char *cp = arrp(dna, xShort - 1, unsigned char) ;
-
-
-	    cc1L = cp[0] ;
-	    cc2L = cp[1] ;
-	    cc3L = cp[2] ;
-
-	    int da = 0 ;
-	    if (isUp)
-	      while (cp[0] == cp[3]) { da++; cp++ ;}
-	    if (da) ss = "*+++" ;
-	    if (!isUp) { if (cp[-1] == cp[2]) ss = "*+++" ; }
 
 	    cc1S = cp[0] ;
 	    cc2S = cp[1] ;
 	    cc3S = cp[2] ;
 
-	    cc1LR = isUp ? complementBase(cc3L) : cc1L ; 
+	    int da = 0 ;
+	    if (isUp)
+	      while (cp[-1] == cp[2]) { da++; cp-- ;}
+	    if (da) ss = "*+++" ;
+	    if (!isUp) { if (cp[-1] == cp[2]) ss = "*+++" ; }
+
+	    cc1L = cp[0] ;
+	    cc2L = cp[1] ;
+	    cc3L = cp[2] ;
+
+	    cc1LR = isUp ? complementBase(cc3L) : cc1L ;
 	    cc2LR = isUp ? complementBase(cc2L) : cc2L ;
-	    cc3LR = isUp ? complementBase(cc1L) : cc3L ; 
-	    
+	    cc3LR = isUp ? complementBase(cc1L) : cc3L ;
+
 	    cc1S = dnaDecodeChar[(int)cc1S] ;
 	    cc2S = dnaDecodeChar[(int)cc2S] ;
 	    cc3S = dnaDecodeChar[(int)cc3S] ;
@@ -1184,7 +1153,7 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 
 	    vtxtPrintf (txt1, "%s%d:%s%c%c%c"
 			, sep
-			, xShort + da
+			, xShort
 			, ss
 			, cc1S
 			, cc2S
@@ -1192,9 +1161,11 @@ static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array
 			) ;
 	    vtxtPrintf (txt2, "%s%d:%s%c%c%c"
 			, sep
-			, isUp ? xLongR : xLong
+			, isUp ? xLongR + da + 1 : xLong
 			, ss 
-			, cc1LR, cc2LR, cc3LR
+			, cc1LR
+			, cc2LR
+			, cc3LR
 			) ;
 	    
 	  }
@@ -1330,7 +1301,7 @@ static void alignClipErrorRight (ALIGN *vp, int errCost)
 
 /**************************************************************/
 
-static int alignLocateChains (Array bestAp, Array aa, int myRead)
+static int alignLocateChains (Array bestAp, Array aa, int myRead, BOOL cleanUp)
 {
   int i1, i2, jj, iMax = arrayMax (aa) ;
   ALIGN *up, *vp ;
@@ -1340,25 +1311,82 @@ static int alignLocateChains (Array bestAp, Array aa, int myRead)
     {
       for (i1 = i2 = jj = 0, up = vp = arrp (aa, 0, ALIGN) ; i1 < iMax ; i1++, up++)
 	{
-	  if (up->chain > 0 && up->a1 != up->a2)
+	  if (up->chain > 0 && up->a1 <= up->a2)
 	    {
 	      if (vp < up) *vp = *up ;
 	      if (vp->read == myRead && vp->chain > jj)
 		{
 		  jj = vp->chain ;
-		array (bestAp, jj, int) = i2 + 1 ;
+		  array (bestAp, jj, int) = i2 + 1 ;
 		}
 	      vp++ ; i2++ ;
 	    }
 	}
       iMax = arrayMax (aa) = i2 ;
     }
-      
+  
   up = arrayp (aa, iMax, ALIGN) ;
   memset (up, 0, sizeof (ALIGN)) ; /* force a null record */
   arrayMax (aa) = iMax ;
-
-  return iMax ;
+  
+  if (iMax)
+    {
+      int read = -1 ;
+      int bestScore = 0 ;
+      int bestAli = 0 ;
+      for (i1 = 0, up = arrp (aa, 0, ALIGN) ; i1 < iMax ; i1++, up++)
+	{
+	  if (up->read != myRead) continue ;
+	  int chain = up->chain ;
+	  int chainX1 = up->x1 ;
+	  int chainA1 = up->a1 ;
+	  int chainAli = up->x2 - up->x1 + 1 ;
+	  int x2 = up->x2 ;
+	  int a2 = up->a2 ;
+	  int chainScore = up->score ;
+	  read = up->read ;
+	  for (i2 = i1 + 1, vp = up + 1 ; i2 < iMax && vp->chain == chain && vp->read == read ; vp++, i2++)
+	    {
+	      if (vp->read != myRead) continue ;
+	      int x1 = vp->x1 ;
+	      chainScore += vp->score ;
+	      if (x1 < x2 + 1) chainScore -= x2 + 1 - x1 ;
+	      if (x1 < x2 +1) x1 = x2 + 1 ;
+	      if (vp->x2 > x2) x2 = vp->x2 ;
+	      if (x2 >= x1) chainAli += x2 - x1 + 1 ;
+	      if (vp->a2 > a2) a2 = vp->a2 ;
+	    }
+	  if (i2 > i1 + 1)
+	    {
+	      for (i2 = i1, vp = up ; i2 < iMax && vp->chain == chain ; vp++, i2++)
+		{
+		  if (vp->read != myRead) continue ;
+		  vp->chainX1 = chainX1 ;
+		  vp->chainX2 = x2 ;
+		  vp->chainA1 = chainA1 ;
+		  vp->chainA2 = a2 ;
+		  vp->chainAli = chainAli ;
+		  vp->chainScore = chainScore ;
+		}
+	    }
+	  if (read == myRead && chainScore - 8 * (i2 - i1) > bestScore)
+	    { bestScore = chainScore -8 * (i2 - i1) ; bestAli = chainAli ; }
+	  up = vp - 1 ;
+	  i1 = i2 - 1 ;
+	}
+      if (0 && cleanUp)  // very bad on iRefSeq38 kills 170 perfect alignments
+	{
+	  for (i1 = i2 = 0, up = vp = arrp (aa, 0, ALIGN) ; i1 < iMax ; i1++, up++)
+	    if (read != myRead || up->chainScore >= bestScore || (up->chainAli >= bestAli && up->chainScore >= bestScore - 100))
+	      {
+		if (vp < up) *vp = *up ;
+		vp++ ; i2++ ;
+	      }
+	  iMax = arrayMax (aa) = i2 ;
+	  iMax = alignLocateChains (bestAp, aa, myRead, 0) ;
+	}
+    }
+ return iMax ;
 } /* alignLocateChains */
 
 /**************************************************************/
@@ -1386,7 +1414,7 @@ static void alignAdjustIntrons (const PP *pp, BB *bb, Array bestAp, Array aa, in
 	}
     }
 
-  int iMax = alignLocateChains (bestAp, aa, myRead) ;
+  int iMax = alignLocateChains (bestAp, aa, myRead, FALSE) ;
   for (int ic = 1 ; ic < arrayMax (bestAp) ; ic++)
     {
       int k = array (bestAp, ic, int) ;
@@ -1396,8 +1424,10 @@ static void alignAdjustIntrons (const PP *pp, BB *bb, Array bestAp, Array aa, in
       int iv = k - 1, iw = iv + 1 ;
       if (up->chrom != chromA)
 	{
+	  int isUp = up->chrom & 0x1 ;
+	  Array dnas = isUp ? pp->bbG.dnasR : pp->bbG.dnas ;
 	  chromA = up->chrom ;
-	  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
+	  dnaG = arr (dnas, chromA >> 1, Array) ;
 	}
 
       wp = (iv < iMax - 1 && vp[1].chain == chain ? vp + 1 : 0) ;
@@ -1464,8 +1494,12 @@ static Array alignAdjustExonChainImage (const PP *pp, BB *bb, KEYSET ks, Array b
   int ia = 0, da ;
   char *cp, *cq ;
   int jj = up->a1 > 100 ? 100 : up->a1 - 1 ;
-  Array dnaG = arr (pp->bbG.dnas, up->chrom >> 1, Array) ;
+  int isUp = up->chrom & 0x1 ;
+  Array dnas = isUp ? pp->bbG.dnasR : pp->bbG.dnas ;
+  int chromA = up->chrom ;
+  Array dnaG = arr (dnas, chromA >> 1, Array) ;
   memset (zp, 0, sizeof(ALIGN)) ;
+  jj = 0 ;
   zp->x1 = up->x1 ;
   zp->a1 = jj + 1 ;
   
@@ -1550,6 +1584,24 @@ static Array alignAdjustExonChainImage (const PP *pp, BB *bb, KEYSET ks, Array b
     }
   zp->a2 = jj ;
   arrayMax (dnaI) = jj ;
+  cp = arrayp (dnaI, jj+100, char) ; /* make room */
+  cp = arrp (dnaI, jj, char) ;
+  vp-- ;
+  cq = arrp (dnaG, vp->a2 , char) ;
+  int k = arrayMax (dnaG) - vp->a2 ;
+  if (k > 100) k = 100 ;
+  if (k > 0)
+    {
+      memcpy (cp, cq, k) ;
+      arrayMax (dnaI) = jj + k ;
+    }
+  cp = arrp (dnaShort, up->x1 - 1, char) ;
+  cq = arrp (dnaI, 0,  char) ;
+  for (k = 8 ; k >= 0 ; k--)
+    if (up->a1 + k < up->a2 && cp[k] != cq[k])
+      break ;
+  if (k >= 0)
+    { zp->a1 += k + 2 ; zp->x1 += k + 2 ; }
   ac_free (h) ;
   return dnaI ;
 } /* alignAdjustExonChainImage */
@@ -1567,7 +1619,6 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
   /* align the read on the genomic image of the transcript */
   int x1 = zp.x1 ;
   int x2 = zp.x2,  a2 = zp.a2 ;
-  BOOL failed = FALSE ;
   
   zp.errors = errors ;
   arrayMax (zp.errors) = 0 ;
@@ -1584,19 +1635,16 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 			       , 0, zp.errors, maxJump2, -1, FALSE, 0) ; /* bio coordinates, jump 8 but do not extend */
     }
   zp.nErr = arrayMax (zp.errors) ;
-  alignClipErrorLeft (&zp, pp->errCost) ;
-  alignClipErrorRight (&zp, pp->errCost) ;
+  alignClipErrorLeft (&zp, bb->errCost) ;
+  alignClipErrorRight (&zp, bb->errCost) ;
   
   /* remap the fixed alignment in the alignment array */
   if (1 && ( zp.x1 < x1 + 10 && zp.x2 > x2 - 10 ))
     { /* success, otherwise stay on previous results */
       /* remap */
       int ii, iMax = arrayMax (aa) ;
-      int ja, dda = 0 ;
+      int ja ;
       ALIGN *vp, *up = arrp (aa, 0, ALIGN) ;
-      Array dnaG = arr (pp->bbG.dnas, up->chrom >> 1, Array) ;
-      int lnLong = arrayMax(dnaG) ;
-      int lnShort = arrayMax (dna) ;
       
       for (vp = up, ja = 1, ii = 0 ; ii < iMax ; ii++, vp++)
 	{
@@ -1623,44 +1671,41 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 		case INSERTION_DOUBLE: dx1 = 1 ; break ;
 		case INSERTION_TRIPLE: dx1 = 2 ; break ;
 		case TROU: dx1 = -1 ; break ;
-		case TROU_DOUBLE: dx1 = -1 ; break ;
-		case TROU_TRIPLE: dx1 = -1 ; break ;
+		case TROU_DOUBLE: dx1 = -2 ; break ;
+		case TROU_TRIPLE: dx1 = -3 ; break ;
+		case 0: continue ;
 		default : break ;
 		}
-	      if (es == vp->x1 && dx1 == -1)
-		{ vp->a1++ ; continue ; }
-	      if (es + dx1 >= vp->x1)
+	      if (es == vp->x1 && dx1 < 0)
+		{ vp->a1 -= dx1 ; continue ; }
+	      if (es + (dx1 < 0 ? 0 : dx1) >= vp->x1)
 		{
 		  if (es > vp->x2) break ;
 		  if (! vp->errors)
 		    vp->errors = arrayHandleCreate (8, A_ERR, bb->h) ;
 		  A_ERR *eq = arrayp (vp->errors, j++, A_ERR) ;
 		  *eq = *ep ;
-		  eq->iLong += dz ; /* + dda ; */
-		  switch (ep->type)
+		  ep->type = 0 ;  /* ep is consumed */
+		  eq->iLong += dz ; 
+		  switch (eq->type)
 		    {
-		    case INSERTION: dda++ ; ins++ ; break ;
-		    case INSERTION_DOUBLE: dda+=2 ; ins += 2 ; break ;
-		    case INSERTION_TRIPLE: dda+=3 ; ins += 3 ; break ;
-		    case TROU: dda-- ; del++ ; break ;
-		    case TROU_DOUBLE: dda-=2 ; del += 2 ; break ;
-		    case TROU_TRIPLE: dda-=3 ; del += 3 ; break ;
+		    case INSERTION: ins++ ; break ;
+		    case INSERTION_DOUBLE: ins += 2 ; break ;
+		    case INSERTION_TRIPLE:  ins += 3 ; break ;
+		    case TROU: del++ ; break ;
+		    case TROU_DOUBLE:  del += 2 ; break ;
+		    case TROU_TRIPLE: del += 3 ; break ;
 		    case ERREUR: sub++ ; break ;
 		    default : break ;
 		    }
-		  if (! isDown )
-		    {
-		      eq->iShort = lnShort - eq->iShort - 1 ;
-		      eq->iLong = lnLong - eq->iLong - 1 ;
-		    }
 		}
 	    }
-	  int dd = (vp->x2 - vp->x1 + 1 + del) - ((vp->a1 < vp->a2 ? vp->a2 - vp->a1 : vp->a1 - vp->a2) + 1 + ins) ;
+	  int dd = (vp->x2 - vp->x1 + 1 + del) - (vp->a2 - vp->a1 + 1 + ins) ;
 	  
-	  if (0)
+	  if (dd)
 	    {
-	      if (dd < 0) vp->x2 += dd ;
-	      if (dd > 0) vp->a2 -= dd ;
+	      if (dd > 0) vp->x2 -= dd ;
+	      if (dd < 0) vp->a2 += dd ;
 	    }
 	  ja++ ;
 	  vp->nErr = vp->errors ? arrayMax (vp->errors) : 0 ;
@@ -1672,7 +1717,6 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
       for (ii = 0 ; ii < iMax ; ii++)
 	array (aa, ii, ALIGN) = array (original, ii, ALIGN) ;
       arrayMax (aa) = iMax ;
-      failed = TRUE ;
     }
 
   /* merge */
@@ -1721,14 +1765,11 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
       arrayMax (aa) = jj ;
     }
 
-  /* count and flip the errors */
+  /* count errors */
   if (1)
     {
       int iMax = arrayMax (aa) ;
       ALIGN *vp = arrp (aa, 0, ALIGN) ;
-      Array dnaG = arr (pp->bbG.dnas, vp->chrom >> 1, Array) ;
-      int lnLong = arrayMax(dnaG) ;
-      int lnShort = arrayMax (dna) ;
       
       for (int ii = 0 ; ii < iMax ; ii++, vp++)
 	{
@@ -1738,25 +1779,6 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 	      A_ERR *ep = 0 ;
 	      int ieMax = arrayMax (vp->errors) ;
 	      vp->nErr = vp->nMID = ieMax ;
-	      if (failed && ! isDown) 
-		{
-		  if (0)
-		    for (int ie = 0 ; ie < ieMax ; ie++)
-		      { /* flip coordinates */
-			ep = arrp (vp->errors, ie, A_ERR) ;
-			ep->baseShort = complementBase(ep->baseShort & 0xf) ;
-			ep->iShort = lnShort - ep->iShort - 1 ;
-			ep->iLong = lnLong - ep->iLong - 1 ;
-		      }
-		  ep = arrp (vp->errors, 0, A_ERR) ;
-		  for (int ie = 0 ; ie < ieMax/2 ; ie++)
-		    { /* flip ordering */
-
-		      A_ERR ee = ep[ie] ;
-		      ep[ie] = ep[ieMax - ie - 1] ;
-		      ep[ieMax - ie - 1]  = ee ;
-		    }
-		}
 	      for (int ie = 0 ; ie < ieMax ; ie++)
 		{
 		  ep = arrp (vp->errors, ie, A_ERR) ;
@@ -1783,37 +1805,10 @@ static void alignAdjustExonChainDo (const PP *pp, BB *bb, Array bestAp, Array aa
 } /* alignAdjustExonChainDo */
 
 /**************************************************************/
-static void alignAdjustExonChainFlip (Array aa, int lnShort)
-{
-  ALIGN *up ;
-  int dummy, ii = 0, iMax = arrayMax (aa) ;
-  
-   /* flip each exon */
-  for (ii = 0, up = arrp (aa, 0, ALIGN) ; ii < iMax ; ii++, up++)
-    {
-      dummy = up->a1 ; up->a1 = up->a2 ; up->a2 = dummy ;
-      dummy = up->x1 ; up->x1 = up->x2 ; up->x2 = dummy ;
-
-      up->x1 = lnShort - up->x1 + 1 ;
-      up->x2 = lnShort - up->x2 + 1 ;
-    }
-
-  /* flip the order of the exons */
-  for (ii = 0, up = arrp (aa, 0, ALIGN) ; ii < iMax/2 ; ii++)
-    {
-      ALIGN wp = up[ii] ;
-      up[ii] = up[iMax - ii - 1] ;
-      up[iMax -ii - 1] = wp ;
-    }
-  return ;
-} /* alignAdjustExonChainFlip */
-
-/**************************************************************/
 	      
 static void alignAdjustExonChain (const PP *pp, BB *bb, Array bestAp, Array aa, int myRead, Array dna, Array errors, int maxJump, int maxJump2)
 {
   ALIGN *up = arrayp (aa, 0, ALIGN) ;
-  BOOL isDown = up->a1 <= up->a2 ? TRUE : FALSE ;
   AC_HANDLE h1 = 0 ;  
   /* count all errors */
   int nErr = 0 ;
@@ -1828,26 +1823,15 @@ static void alignAdjustExonChain (const PP *pp, BB *bb, Array bestAp, Array aa, 
       nErr += up->nErr ;
       nAli += da > 0 ? da + 1 : -da + 1 ;
     }
-  
+
+  up-- ;
+  if (up->chainX1 == 1 && up->chainX2 == up->readLength && (iMax == 1 || nErr < 1))
+    return ;
   if (! nErr && nAli >= lnShort)   /* elephant v88: >=,   v87:< was plain wrong*/
     return ;
 
-  if (! isDown)
-    { /* flip the chain so that it aligns on the plus strand */
-      h1 = ac_new_handle () ;
-      Array dnaR = dnaHandleCopy (dna, h1) ;
-      reverseComplement (dnaR) ;
-      dna = dnaR ;
-      alignAdjustExonChainFlip (aa, lnShort) ;
-    }
-
   /* analyse and edit the chain */
-  if (1) alignAdjustExonChainDo (pp, bb, bestAp, aa, myRead, dna, errors, nAli, nErr,  maxJump, maxJump2, isDown) ;
-  
-  if (! isDown)
-    { /* flip back the fixed chain */
-      alignAdjustExonChainFlip (aa, lnShort) ;
-    }
+  if (1) alignAdjustExonChainDo (pp, bb, bestAp, aa, myRead, dna, errors, nAli, nErr,  maxJump, maxJump2, TRUE) ;
   
   ac_free (h1) ;  
 } /* alignAdjustExonChain  */
@@ -1863,7 +1847,7 @@ static void alignAdjustExons (const PP *pp, BB *bb, Array bestAp, Array aaa, int
   Array errors = arrayHandleCreate (32, A_ERR, h1) ;
   
   arrayMax (aaa) = 0 ;
-  alignLocateChains (bestAp, aaOld, myRead) ;
+  alignLocateChains (bestAp, aaOld, myRead, FALSE) ;
   int icMax = arrayMax (bestAp) ; 
 
   for (int ic = 1 ; ic < icMax ; ic++)
@@ -1923,12 +1907,12 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
   int ii, iMax = arrayMax (aa) ;
   int ne2a = 0, ne2d = 0 ;
   int nMask = 1 ;
-  int errCost = pp->errCost ;
+  int errCost = bb->errCost ;
   long int jj = 0, jMax = introns ? bigArrayMax (introns) : 0 ;
   ALIGN *up, *up2 ;
   INTRONHIT *vp, *vp0 = jMax ? bigArrp (introns, 0, INTRONHIT) :  0 ;
 
-  if (0) alignCheckSize (bb, aa) ;
+  if (1) alignCheckSize (bb, aa) ;
   if (! jMax) return 0 ;
   if (0) return 0 ;
   if (jMax > 100)   return 0 ;
@@ -1938,25 +1922,25 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
   KEYSET chromCounts = keySetHandleCreate (h) ;
   KEYSET e2introns = keySetHandleCreate (h) ;
   
-  /* clean negative scores */
-  for (jj = ii = 0, up = up2 = arrp (aa, ii, ALIGN) ; ii < iMax ; ii++, up++)
+  /* clean negative scores and duplicates */
+  for (jj = ii = 0, up = arrp (aa, 0, ALIGN), up2 = up - 1 ; ii < iMax ; ii++, up++)
     {
-      ALIGN *vp = up2 - 1 ;
       int ali = up->x2 - up->x1 + 1 ;
       up->score = ali - up->nErr * errCost ;
       if (jj &&
-	  up->read == vp->read &&
-	  up->chrom == vp->chrom &&
-	  up->x1 == vp->x1 &&
-	  up->x2 == vp->x2 &&
-	  up->a1 == vp->a1 &&
-	  up->a2 == vp->a2
+	  up->read == up2->read &&
+	  up->chrom == up2->chrom &&
+	  up->x1 >= up2->x1 &&
+	  up->x2 <= up2->x2 &&
+	  up->a1 >= up2->a1 &&
+	  up->a2 <= up2->a2 &&
+	  up->nErr >= up2->nErr 
 	  )
 	continue ;
       if (up->score > 0)
 	{
+	  up2++ ;  jj++ ;
 	  if (up2 < up) *up2 = *up ;
-	  up2++ ; jj++ ;
 	}
     }
   iMax = arrayMax (aa) = jj ;
@@ -1969,7 +1953,6 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
       up = arrp (aa, ii, ALIGN) ;
       int chrom = up->chrom ;
       int read = up->read ;
-      BOOL isDown = up->a1 < up->a2 ? TRUE : FALSE ;
       
       up->mateChrom = ii + 1 ; /* original numerotation */
       jj = 0 ;
@@ -2016,36 +1999,20 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	  if (vp->chrom > chrom) break ;
 	  if (vp->x1 < up->x1) continue ;
 	  if (vp->x1 > up->x2) break ;
-	  if (isDown)
-	    {
 	      if (vp->a1 <= up->a2  && vp->a1 > up->a1 && vp->x1 <= up->x2 && vp->x1 > up->x1 )
 		{
 		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
 		  keySet (chromCounts, chrom)++ ;
+		  // printf("Intron candidate chrom %d a1 %d a2 %d\n", vp->chrom, vp->a1, vp->a2) ;
 		}
 	      if (vp->a2 < up->a2 && vp->a2 >= up->a1 && vp->x2 < up->x2 && vp->x2 >= up->x1)
 		{
 		  HIT *hp = bigArrayp (e2a, ne2a++, HIT) ;
 		  hp->a1 = ii ; hp->x1 = (int)jj ;
 		  keySet (chromCounts, chrom)++ ;
+		  // printf("Intron candidate chrom %d a1 %d a2 %d\n", vp->chrom, vp->a1, vp->a2) ;
 		}
-	    }
-	  else
-	    {
-	      if (vp->a1 >= up->a2 && vp->a1 < up->a1 && vp->x1 <= up->x2 && vp->x1 > up->x1 )
-		{
-		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
-		  hp->a1 = ii ; hp->x1 = (int)jj ;
-		  keySet (chromCounts, chrom)++ ;
-		}
-	      if (vp->a2 >= up->a2 && vp->a2 < up->a1 && vp->x2 < up->x2 && vp->x2 >= up->x1)
-		{
-		  HIT *hp = bigArrayp (e2d, ne2d++, HIT) ;
-		  hp->a1 = ii ; hp->x1 = (int)jj ;
-		  keySet (chromCounts, chrom)++ ;
-		}
-	    }
 	}
     }
   
@@ -2137,7 +2104,6 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
   for (ii = 0 ; ii < iMax ; ii++)
     {
       up = arrp (aa, ii, ALIGN) ;
-      BOOL isDown = up->a1 < up->a2 ? TRUE : FALSE ;
       if (up->mateA2 && up->mateA2 < (1 << nMask)) /* =>  (nMate2 == 1) */
 	{
 	  ALIGN *w1 = up, *w2 = arrp (aa, up->mateA2 -1, ALIGN) ;
@@ -2152,7 +2118,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 		    {
 		      int du = w1->x2 - wi->x1 ;
 		      w1->x2 += -du ;
-		      w1->a2 += (isDown ? -du : du) ;
+		      w1->a2 += -du ;
 		      if (w1->nErr)
 			{
 			  A_ERR *ep = arrp (w1->errors, 0, A_ERR) ;
@@ -2174,22 +2140,22 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 				    case ERREUR:
 				      break ;
 				    case TROU:
-				      w1->a2 += (isDown ? -1 : 1 ) ;
+				      w1->a2 += -1 ;
 				      break ;
 				    case TROU_DOUBLE:
-				      w1->a2 += (isDown ? -2 : 2) ;
+				      w1->a2 += -2 ;
 				      break ;
 				    case TROU_TRIPLE:
-				      w1->a2 += (isDown ? -3 : 3) ;
+				      w1->a2 += -3 ;
 				      break ;
 				    case INSERTION:
-				      w1->a2 += (isDown ? 1 : -1) ;
+				      w1->a2 += 1 ;
 				      break ;
 				    case INSERTION_DOUBLE:
-				      w1->a2 += (isDown ? 2 : -2) ;
+				      w1->a2 += 2 ;
 				      break ;
 				    case INSERTION_TRIPLE:
-				      w1->a2 += (isDown ? 3 : -3) ;
+				      w1->a2 += 3 ;
 				      break ;
 				    }
 				}
@@ -2201,7 +2167,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 		    {
 		      int du = wi->x2 - w2->x1 ;
 		      w2->x1 += du ;
-		      w2->a1 += (isDown ? du : -du) ;
+		      w2->a1 += du ;
 		      if (w2->nErr)
 			{ /* clip left errors, we assume there are no multiple indels in these positions DANGEROUS */
 			  A_ERR *ep = arrp (w2->errors, 0, A_ERR) ;
@@ -2213,11 +2179,11 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 				case TYPE80:
 				case AMBIGUE:
 				case ERREUR:
-				  if (ep->iShort + 1 < w1->x1)
+				  if (ep->iShort + 1 < w2->x1)
 				    k++ ;
 				  break ;
 				default:  /* indels are reported on a correct base */
-				  if (ep->iShort + 1 <= w1->x1)
+				  if (ep->iShort + 1 <= w2->x1)
 				    {
 				      k++ ;
 				      switch (ep->type)
@@ -2227,22 +2193,22 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 					case ERREUR:
 					  break ;
 					case TROU:
-					  w2->a1 -= (isDown ? -1 : 1 ) ;
+					  w2->a1 -= -1 ;
 					  break ;
 					case TROU_DOUBLE:
-					  w2->a1 -= (isDown ? -2 : 2) ;
+					  w2->a1 -= -2 ;
 					  break ;
 					case TROU_TRIPLE:
-					  w2->a1 -= (isDown ? -3 : 3) ;
+					  w2->a1 -= -3 ;
 					  break ;
 					case INSERTION:
-					  w2->a1 -= (isDown ? 1 : -1) ;
+					  w2->a1 -= 1 ;
 					  break ;
 					case INSERTION_DOUBLE:
-					  w2->a1 -= (isDown ? 2 : -2) ;
+					  w2->a1 -= 2 ;
 					  break ;
 					case INSERTION_TRIPLE:
-					  w2->a1 -= (isDown ? 3 : -3) ;
+					  w2->a1 -= 3 ;
 					  break ;
 					}
 				      break ;
@@ -2264,7 +2230,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	}
     }
  done:
-  if (0) alignCheckSize (bb, aa) ;
+  if (1) alignCheckSize (bb, aa) ;
   ac_free (h) ;
   return nMask ;
 } /* findIntronMates */
@@ -2286,7 +2252,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
   int maxIntron = pp->maxIntron ;
   int minAli = pp->minAli ;
   Array aaNew = 0 ;
-  int errCost = pp->errCost ;
+  int errCost = bb->errCost ;
   int bigErrCost = 8 ; /* errCost ; */
   int myRead = arrp (aa, 0, ALIGN)->read ;
   unsigned int mask = (1 << nMask) - 1 ;
@@ -2547,7 +2513,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
    */
   
   /* locate the chains */
-  iMax = alignLocateChains (bestAp, aa, myRead) ;
+  iMax = alignLocateChains (bestAp, aa, myRead, TRUE) ;
 
   if (iMax)
     {
@@ -2559,7 +2525,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
       /* adjust exons */
       if (1) alignAdjustExons (pp, bb, bestAp, aa, myRead, dna, maxJump, maxJump2) ;
       if (1) alignCheckSize (bb, aa) ;
-      iMax = alignLocateChains (bestAp, aa, myRead) ;
+      iMax = alignLocateChains (bestAp, aa, myRead, TRUE) ;
       
       /* Compute the clean chain score */
       bestChainScore = 0 ;
@@ -2619,7 +2585,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	  
 	  /* set the chain values in all exons */
 	  if (up->a1 > up->a2)
-	    { int dummy = chainA1 ; chainA1 = chainA2 ; chainA2 = dummy ; }
+	    { int dummy = chainA1 ; chainA1 = chainA2 ; chainA2 = dummy ; messcrash ("a1> a2"); }
 	  for (vp = up, jj = ii ; jj < iMax && vp->chain == chain ; jj++, vp++)
 	    {
 	      vp->chainScore = chainScore ;
@@ -2722,6 +2688,19 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 } /* alignSelectBestDynamicPath */
 
 /**************************************************************/
+
+static char *flipFeet (char *feet)
+{
+  char buf[6] ;
+  memcpy (buf, feet, 6) ;
+  feet[0] = ace_lower(complementLetter(buf[4])) ;
+  feet[1] = ace_lower(complementLetter(buf[3])) ;
+  feet[3] = ace_lower(complementLetter(buf[1])) ;
+  feet[4] = ace_lower(complementLetter(buf[0])) ;
+  return feet ;
+}
+  
+/**************************************************************/
 /* Establish chain scores, select best */
 static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array aa, int read, Array bestAp, ADAPTORS *adaptors)
 {
@@ -2779,7 +2758,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 
   /* create rafias == merge colinear chains as a  single chain with bubbles */
   arraySort (aa, saRafiaOrder) ;
-  iMax = alignLocateChains (bestAp, aa, read) ;
+  iMax = alignLocateChains (bestAp, aa, read, FALSE) ;
   BOOL clean = TRUE ;
   if (arrayMax (bestAp) > 2)
     {
@@ -2801,18 +2780,16 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    continue ;
 
 	  int chain2 = ap2->chain ;
-	  for (di2 = 1 ; i1 + di1 + di2 < iMax && ap2[di2].chain == chain2 ; di2++)
+	  for (di2 = 0 ; i1 + di1 + di2 < iMax && ap2[di2].chain == chain2 ; di2++)
 	    ;
-	  BOOL isDown = ap1->chainA2 > ap1->chainA1 ? TRUE : FALSE ;
-	  BOOL isDown2 = ap2->chainA2 > ap2->chainA1 ? TRUE : FALSE ;
-	  if (isDown != isDown2)
-	    continue ;
 	  int du = ap1->chainX2 - ap2->chainX1 + 1 ;  /* if > 0, there is a double cover */
-	  int da = isDown ? ap1->chainA2 - ap2->chainA1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
-	  int da2 = isDown ? ap2->chainX2 - ap1->chainX1 + 1 : ap2->chainA1 - ap1->chainA2 + 1 ;
+	  int da = ap1->chainA2 - ap2->chainA1 + 1 ;
+	  int da2 = ap2->chainX2 - ap1->chainX1 + 1 ;
 	  
 	  if (1)
 	    {  /* without this code, we have errors with the miRs */
+	      if (da2  <= ap2->chainAli + 5)
+		continue ;  // we do not gain enough to justify a rafia
 	      if (da > 0 && du >= ap1->chainAli)
 		{ /* kill chain ap1 */
 		  for (int i = 0 ; i < di1 ; i++)
@@ -2839,7 +2816,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (du > 0) /* clip the tail of ap1 */
 		{
 		  ap1[di1-1].x2 -= du ;
-		  ap1[di1-1].a2 -= (isDown ? du : -du) ;
+		  ap1[di1-1].a2 -= du ;
 		  newChainScore -= du ;
 		  newChainAli -= du ;
 		}
@@ -2853,7 +2830,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  ap1[i].chainX2 = ap2->chainX2 ;
 		  ap1[i].chainA2 = ap2->chainA2 ;
 		}
-	      for (int i = 0 ; i <= di2 ; i++)
+	      for (int i = 0 ; i < di2 ; i++)
 		{
 		  ap2[i].chain = ap1->chain ;
 		  ap2[i].chainScore = newChainScore ;
@@ -2871,7 +2848,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
   
   /* eliminate major overlaps  */
   arraySort (aa, saAlignOrder) ;
-  iMax = alignLocateChains (bestAp, aa, read) ;
+  iMax = alignLocateChains (bestAp, aa, read, FALSE) ;
   
   if (arrayMax (bestAp) > 2)
     for (int ic1 = 0 ; ic1 < arrayMax (bestAp) ; ic1++)
@@ -2912,47 +2889,17 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  }
       }
   if (! clean)
-    iMax = alignLocateChains (bestAp, aa, read) ;
+    iMax = alignLocateChains (bestAp, aa, read, FALSE) ;
 
 
 
   /* global statistics */
   /* stranding : once per target class */
-  memset (allTc, 0, sizeof (allTc)) ;
-  
-  for (int ic = 0 ; ic < arrayMax (bestAp) ; ic++)
-    {
-      int k = array (bestAp, ic, int) ;
-      if (! k) continue ;
-      ap = arrp (aa, k - 1, ALIGN) ;
-      if (read == ap->read && ! ap->next)
-	{
-	  int a1 = ap->a1 ;
-	  int a2 = ap->a2 ;
-	  int tc = ap->targetClass ;
-	  BOOL s = a1 < a2 ;
-
-	  if (ap->chrom & 0x1) s = !s ;
-	  if (! tc || allTc[tc])
-	    continue ;
-	  allTc[tc] = 1 ;
-	  if (ap->read & 0x1)
-	    s = !s ;
-	  if (ap->chrom & 0x1)
-	    s = !s ;
-
-	  if (s)
-	    bb->runStat.GF[tc]++ ;
-	  else
-	    bb->runStat.GR[tc]++ ;
-	}
-    }
   /* increase the block stats */
   nChains = 0 ;
   if (arrayMax (bestAp))
     {
       BOOL isComplex = FALSE ;
-      int tc0 = 0 ;
       nChains = 0 ;
       memset (allTc, 0, sizeof (allTc)) ;
       
@@ -2970,12 +2917,9 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (! ap)
 		{
 		  ap = vp ;
-		  tc0 = tc ;
-		  allTc[tc0] = 1 ;
 		  bb->nAli++ ;
 		  bb->runStat.nAlignments++ ;
 		  bb->runStat.nMultiAligned[0]++ ;
-		  bb->runStat.nReadsAlignedPerTargetClass[0]++ ;
 		  nChains = 1 ;
 		  if (ap->chainErr == 0 && ap->leftClip + ap->chainAli >= ap->rightClip)
 		    {
@@ -3009,7 +2953,21 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (! allTc[tc])
 		{
 		  allTc[tc] = 1 ;
-		  bb->runStat.nReadsAlignedPerTargetClass[tc]++ ;
+		  if ( (ap->chrom & 0x1) ^ (ap->read & 0x1))
+		    {
+		      bb->runStat.RR[0] += (allTc[0] == 0 ? 1 : 0) ;
+		      bb->runStat.RR[tc]++ ;
+		      bb->runStat.BR[0] += (allTc[0] == 0 ? vp->chainAli : 0) ;
+		      bb->runStat.BR[tc] += vp->chainAli ;
+		    }
+		  else
+		    {
+		      bb->runStat.RF[0] += (allTc[0] == 0 ? 1 : 0) ;
+		      bb->runStat.RF[tc]++ ;
+		      bb->runStat.BF[0] += (allTc[0] == 0 ? vp->chainAli : 0) ;
+		      bb->runStat.BF[tc] += vp->chainAli ;
+		    }
+		  allTc[0]= 1 ;
 		}
 	    }
 	}
@@ -3028,7 +2986,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
       ALIGN *bp ;
       int jj ;
       int intronBonus = 0 ;
-      int errCost = pp->errCost ;
+      int errCost = bb->errCost ;
       
       ap = arrp (aa, 0, ALIGN) ;
       /*   bitSet (bb->isAligned, ap->read) ; */
@@ -3039,14 +2997,13 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      { /* found one intron */
 
 		int chrom = ap->chrom ;
-		int a1 = ap->a1 ;
 		int a2 = ap->a2 ;
 		int x2 = ap->x2 ;
 		int b1 = bp->a1 ;
 		int y1 = bp->x1 ;
 		BOOL ok = TRUE ;
 		
-		if (a1 <10 || b1 < 10 || a2 < 10)
+		if (b1 < 10 || a2 < 10)
 		  continue ;
 		if (ap->errors)
 		  {
@@ -3073,11 +3030,10 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 
 		
 		INTRON *zp = arrayp (bb->confirmedIntrons, arrayMax (bb->confirmedIntrons), INTRON) ;
-		BOOL isReadDown = ((chrom & 0x1) ? FALSE : TRUE) ;
 		Array myDnaG = 0 ;
 		
 		zp->run = bb->run ;
-
+		zp->chrom = chrom ;
 		if (chrom != chromA)
 		  {
 		    chromA = chrom ;
@@ -3086,20 +3042,19 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		    dnaLength = arrayMax (dnaG) ;
 		  }
 
-		myDnaG = isReadDown ? dnaG : dnaGR ;
+		myDnaG = chrom & 0x1 ? dnaGR : dnaG ;
 		zp->a1 = a2 + 1 ;
 		zp->a2 = b1 - 1 ;
-		if (read & 0x1) bb->nIntronSupportMinus++ ;
-		else bb->nIntronSupportPlus++ ;
 		const char *cp = arrp (myDnaG, zp->a1 - 1, char) ;
-		zp->feet[4] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-		zp->feet[3] = dnaDecodeChar[(int)complementBase(cp[1])] ;
+		zp->feet[0] = dnaDecodeChar[(int)cp[0]] ;
+		zp->feet[1] = dnaDecodeChar[(int)cp[1]] ;
 		zp->feet[2] = '_' ;
 		cp = arrp (myDnaG, zp->a2 - 2, char) ;
-		zp->feet[1] = dnaDecodeChar[(int)complementBase(cp[0])] ;
-		zp->feet[0] = dnaDecodeChar[(int)complementBase(cp[1])] ;
+		zp->feet[3] = dnaDecodeChar[(int)cp[0]] ;
+		zp->feet[4] = dnaDecodeChar[(int)cp[1]] ;
 		zp->feet[5] = 0 ;
-		    
+		zp->chromLength = dnaLength ;
+
 		if (! strcmp (zp->feet, (read & 0x1) ? "ct_ac" : "gt_ag"))
 		  {
 		    bb->runStat.gt_ag_Support++ ;
@@ -3137,33 +3092,85 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  INTRON *zp1 = arrayp (bb->confirmedIntrons, ii, INTRON) ;
 	  INTRON *zp2 = arrayp (bb->confirmedIntrons, ii + 1, INTRON) ;
 	  
-	  if (zp1->chrom == zp2->chrom && zp1->n == zp2->n &&
+	  if (
 	      (
-	       (zp1->a1 < zp1->a2 && zp1->a2 < zp2->a1 && zp2->a1 < zp2->a2) ||
-	       (zp1->a1 > zp1->a2 && zp1->a2 > zp2->a1 && zp2->a1 > zp2->a2) 
-	       ) &&
-	      ! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gt_ag") 
-	      ) /* same chain chain */
+	       ((zp1->chrom & 0x1) == 0) &&
+	       zp1->chrom == zp2->chrom && zp1->n == zp2->n &&
+	       (zp1->a1 < zp1->a2 && zp1->a2 < zp2->a1 && zp2->a1 < zp2->a2)  &&
+	       (
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gc_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gc_ag"))  ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_gc") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_gc"))  
+		)
+	       )
+	      ||
+	      (
+	       (zp1->chrom & 0x1) &&
+	       zp1->chrom == zp2->chrom && zp1->n == zp2->n &&
+	       (zp1->a1 < zp1->a2 && zp2->a2 > zp1->a1 && zp2->a1 < zp2->a2)  &&
+	       (
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gc_ag") && ! strcmp (zp2->feet, "gt_ag")) ||
+		(! strcmp (zp1->feet, "gt_ag") && ! strcmp (zp2->feet, "gc_ag"))  ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_gc") && ! strcmp (zp2->feet, "ct_ac")) ||
+		(! strcmp (zp1->feet, "ct_ac") && ! strcmp (zp2->feet, "ct_gc"))  
+		)
+	       )
+	      ) /* same chain chain  good topology*/
 	    {
 	      DOUBLEINTRON *zzp = arrayp (bb->doubleIntrons, arrayMax (bb->doubleIntrons), DOUBLEINTRON) ;
-	      zzp->chrom = zp1->chrom ;
+	      zzp->chromLength = zp1->chromLength ;
 	      zzp->run = bb->run ;
-	      zzp->n = 1 ;
-	      zzp->a1 = zp1->a1 ; zzp->a2 = zp1->a2 ;
-	      zzp->b1 = zp2->a1 ; zzp->b2 = zp2->a2 ;
-	      memcpy (zzp->feet1, zp1->feet, 6) ;
-	      memcpy (zzp->feet2, zp2->feet, 6) ;
+
+	      if (zp1->chrom & 0x1)
+		{
+		  zzp->nR = 1 ;
+		  zzp->chrom = zp1->chrom & (~0x1) ;
+		  zzp->a1 = dnaLength - zp2->a2 + 1 ; zzp->a2 = dnaLength - zp2->a1 + 1 ;
+		  zzp->b1 = dnaLength - zp1->a2 + 1 ; zzp->b2 = dnaLength - zp1->a1 + 1 ;
+		  memcpy (zzp->feet1, zp2->feet, 6) ; flipFeet (zzp->feet1) ;
+		  memcpy (zzp->feet2, zp1->feet, 6) ; flipFeet (zzp->feet2) ;
+		}
+	      else
+		{
+		  zzp->n = 1 ;
+		  zzp->chrom = zp1->chrom ;
+		  zzp->a1 = zp1->a1 ; zzp->a2 = zp1->a2 ;
+		  zzp->b1 = zp2->a1 ; zzp->b2 = zp2->a2 ;
+		  memcpy (zzp->feet1, zp1->feet, 6) ;
+		  memcpy (zzp->feet2, zp2->feet, 6) ;
+		}
 	    }
 	}
       
-  /* reset the count which was overlaoded with chain */
+
+      intronMax = arrayMax (bb->confirmedIntrons) ;
       for (ii = intronMaxOld ; ii < intronMax ; ii++)
 	{
-	  INTRON *zp1 = arrayp (bb->confirmedIntrons, ii, INTRON) ;
-	  zp1->n = 1 ;
+	  /* flip and reset the count which was overloaded with chain */
+	  INTRON *zp = arrayp (bb->confirmedIntrons, ii, INTRON) ;
+	  if (zp->chrom & 0x1)
+	    {
+	      int chromLength = zp->chromLength ;
+	      int a1 = zp->a1 ;
+	      zp->a1 = chromLength - zp->a2 + 1 ;
+	      zp->a2 = chromLength - a1 + 1 ;
+	      flipFeet (zp->feet) ;	  
+	      if (read & 0x1)   { zp->n = 1 ; zp->nR = 0 ; }
+	      else { zp->n = 0 ; zp->nR = 1 ; } 
+	    }
+	  else
+	    {
+	      if (read & 0x1)   { zp->n = 0 ; zp->nR = 1 ; }
+	      else { zp->n = 1 ; zp->nR = 0 ; } 
+	    }
 	}
     }
-
+  
   /* format the errors, must come after register introns since here we destroy the errors */
   iMax = arrayMax (aa) ;
   if (iMax)
@@ -3203,6 +3210,12 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      ap->chainA1 = dnaLength - ap->chainA1 + 1 ;
 	      ap->chainA2 = dnaLength - ap->chainA2 + 1 ;
 	    }
+	  else
+	    {
+	      int dummy = ap->mateA1 ;
+	      ap->mateA1 = dnaLength - ap->mateA2 + 1 ;
+	      ap->mateA2 = dnaLength - dummy  + 1 ;
+	    }
 	}
 
   /* register the alignments */
@@ -3238,7 +3251,6 @@ static void alignDoOneRead (const PP *pp, BB *bb
   long int ii, iMax = bigArrayMax (hits), kMax = 0 ;
   int a1, a2, x1, x2 ;
   int b1 = 0, b2 = 0, y1 = 0, y2 = 0, ha1 = 0, readOld = 0, chromOld = 0, readA = 0, chromA = 0, read1 = 0, iiGood = 0 ;
-  BOOL isDownOld = TRUE ;
   Array dna = 0, dnaG = 0, dnaGR = 0 ;
   Array dnaG1 = 0, dnaGR1 = 0 ;
   Array introns = arrayHandleCreate (32, ALIGN, bb->h) ;
@@ -3248,7 +3260,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
     HIT * restrict h1 ;
     int r1 = 0, nh1 = 0, chrom1 = 0 ;
   */
-  int errCost = pp->errCost ;
+  int errCost = bb->errCost ;
   /*   unsigned int uu = 0 ; */
   int donor = 0, acceptor = 0 ;
   int intronBonus  = 1 ; /* this is a coodinate bonus, not a score bonus */
@@ -3338,16 +3350,12 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  isDown = TRUE ;
 	  dnaG1 = dnaGR ; dnaGR1 = dnaG ;
 	}
-
+      if (! isDown) messcrash ("idown =0") ;
       if (! isIntronDown)
 	{ donor = - donor ; acceptor = - acceptor ; }
-      if (1 && read == readOld && chrom == chromOld && isDown == isDownOld &&
+      if (1 && read == readOld && chrom == chromOld && 
 	  x1 >= y1 && x2 <= y2 && hit->a1 < ha1 + 3 &&   
-	  (
-	   (isDown && a1 >= b1 && a2 <= b2) ||
-	   (! isDown && a1 <= b1 && a2 >= b2)
-	   )
-	  &&
+	  a1 >= b1 && a2 <= b2 &&
 	  nTargetRepeats >= (nTargetRepeatsOld >> 1)
 	  )
 	{
@@ -3367,7 +3375,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	  int a0 = a1, x0 = x1 ;
 	  if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tbefore align\t%s\t%u\n"
 			      , ii, read, x1, x2, chrom, a1, a2, dictName (pp->bbG.dict, chrom >> 1), hit->a1) ;
-	  if (alignExtendHit (dna, dnaG1, dnaGR1, err, isDown, chromLength, &a1, &a2, &x1, &x2, errCost, DA, errMax, 22, maxJump))
+	  if (alignExtendHit (dna, dnaG1, dnaGR1, err, TRUE, chromLength, &a1, &a2, &x1, &x2, errCost, DA, errMax, 22, maxJump))
 	    {
 	      if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tAccepted\t%s, u=%u, nErr=%d, DA=%d\n"
 				  , ii, read, x1, x2, chrom, a1, a2
@@ -3395,7 +3403,6 @@ static void alignDoOneRead (const PP *pp, BB *bb
 		ap->errors = arrayHandleCopy (err, bb->h) ;
 	      readOld = read ;
 	      chromOld = chrom ;
-	      isDownOld = isDown ;
 	      nTargetRepeatsOld = nTargetRepeats ;
 	      b1 = a1 ; b2 = a2 ; y1 = x1 ; y2 = x2 ; ha1 = hit->a1 ; iiGood = ii ;
 	    }
@@ -3443,14 +3450,8 @@ static int pairOrder2 (const void *va, const void *vb)
   const PAIR *up = va ;
   const PAIR *vp = vb ;
   int n ;
-  n = up->score - vp->score ; if (n) return -n ;
-  n = up->j2 - vp->j2 ; if (n) return n ;
   n = up->db - vp->db ; if (n) return n ;
-  n = up->j1 - vp->j1 ; if (n) return n ;
-  n = up->chrom - vp->chrom ; if (n) return n ;
-  n = up->a1 - vp->a1 ; if (n) return n ;
-  n = up->a2 - vp->a2 ; if (n) return n ;
-
+  
   return 0 ;
 } /* pairOrder */
 
@@ -3515,11 +3516,12 @@ static void alignDoOnePair (const PP *pp, BB *bb
   iMax = arrayMax (aaa) ;
   array (aaa, iMax, ALIGN).read = 0 ; /* impose a zero terminal record */
   arrayMax (aaa) = iMax ;
-
+  int chromA = 0 ;
+  int dnaLength = 0 ;
   if (bestAp2) /* we have a pair, good  example polyA_B_1 read 144/145*/
     {
-      alignLocateChains (bestAp1, aaa, read1) ;
-      alignLocateChains (bestAp2, aaa, read2) ;
+      alignLocateChains (bestAp1, aaa, read1, FALSE) ;
+      alignLocateChains (bestAp2, aaa, read2, FALSE) ;
       
       int iMax1 = arrayMax (bestAp1) ;
       int iMax2 = arrayMax (bestAp2) ;
@@ -3531,13 +3533,13 @@ static void alignDoOnePair (const PP *pp, BB *bb
 	  int i1, i2 ;
 	  int jj = 0 ;
 	  ALIGN *up, *vp ;
+	  int bestDb = 99999999 ;
 	  int bestScore = 0 ;
 	  BOOL isCompatiblePair = FALSE ;
 	  BOOL isCirclePair = FALSE ;
 	  
 	  for (i1 = 1 ; i1 < iMax1 ; i1++)
 	    {
-	      int bestDb = 99999999 ;
 	      int j1 = arr (bestAp1, i1, int) ;
 	      if (!j1) continue ;
 	      up = arrp (aaa, j1 - 1, ALIGN) ;
@@ -3549,75 +3551,72 @@ static void alignDoOnePair (const PP *pp, BB *bb
 		  vp = arrp (aaa, j2 - 1, ALIGN) ;
 		  if ((up->chrom ^ vp->chrom) == 0x1)
 		    {
-		      int da = vp->chainA1 - up->chainA1 ;
-		      int db = vp->chainA2 - up->chainA2 ;
-		      int score = up->chainScore + vp->chainScore ;
-		      if ((up->chrom & 0x1) == 1) { da = -da ; db = -db ; }
-		      if (da > 0 && db < 1000000 && db <= bestDb && score >= bestScore) /* true pair */
+		      BOOL isDown = vp->chrom & 0x1 ;
+		      ALIGN *uq, *vq ;
+		      if ((up->chrom >> 1) != chromA)
 			{
+			  chromA = up->chrom >> 1 ;
+			  Array dna = arr (pp->bbG.dnas, chromA, Array) ;
+			  dnaLength = dna ? arrayMax (dna) : 0 ;
+			}
+		      
+		      /* switch to positive strand coordinates with uq in positive orientation --->   and vq in negative orientation <---- */
+		      if (isDown)
+			{ uq = up ; vq = vp ; }
+		      else
+			{ uq = vp ; vq = up ; } 
+		      int uA1 = uq->chainA1 ;
+		      int vA1 = dnaLength - vq->chainA1 + 1 ;
+		      int uA2 = uq->chainA2 ;
+		      int vA2 = dnaLength - vq->chainA2  +  1;
+
+		      int da = vA1 - uA1 ;
+		      int db = vA2 - uA2 ;
+		      int score = up->chainScore + vp->chainScore ;
+		      if (da > -10000 && db < 1000000 && db <= bestDb && score >= bestScore) /* true pair */
+			{
+			  if (da < 0)
+			    {  isCirclePair = TRUE ;  continue ; }
+
 			  bestDb = db ;
 			  if (score > bestScore) bestScore = score ;
 			  px = arrayp (pairs, jj++, PAIR) ;
-			  px->j1 = j1 - 1 ;
-			  px->j2 = j2 - 1 ;
-			  px->chrom = up->chrom ;
-			  px->a1 = up->chainA1 ;
-			  px->a2 = vp->chainA1 ;
+			  px->j1 = isDown ? j1 - 1 : j2 - 1 ;
+			  px->j2 = isDown ? j2 - 1 : j1 - 1 ;
+			  px->chrom = chromA ;
+			  px->a1 = uA1 ;
+			  px->a2 = vA2 ;
 			  px->da = da ;
 			  px->db = db ;
 			  px->score = score ;
 			}
-		      if (da < 0 && da > -10000 && score >= bestScore)
-			isCirclePair = TRUE ;
 		    }
 		}
 	    }
-	
 	  int jMax = jj ;
 	  if (jMax)
 	    {
-	      int j1, j2 ;
-	      PAIR *px0 = arrayp (pairs, 0, PAIR), *qx = 0 ;
+	      int j1 ;
+	      PAIR *px0 = arrayp (pairs, 0, PAIR)  ;
 	      int kk = 0 ;
+	      int bestScore, bestDb ;
 	      Array aaa1 = arrayHandleCreate (arrayMax (aaa), ALIGN, h) ;
 	      
+	      /* keep best scores */
+	      arraySort (pairs, pairOrder) ;
+	      px0 = arrayp (pairs, 0, PAIR)  ;
+	      for (j1 = 0, bestScore = px0->score ; j1 < jMax ; j1++)
+		if (px0[j1].score < bestScore)
+		  break ;
+	      jMax = arrayMax (pairs) = j1 ;
+
 	      /* keep closest pairs */
 	      arraySort (pairs, pairOrder2) ;
-	      for (j1 = 0 ; j1 < jMax ; j1++)
-		{
-		  px = px0 + j1 ;
-		  for (j2 = j1 + 1, qx = px + 1 ; j2 < jMax && qx->j2 == px->j2 ; j2++, qx++)
-		    if (qx->db > px->db) qx->score = 0 ;
-		  j1 = j2 - 1 ;
-		}
-
-	      /* keep best scores */
-	      for (j1 = j2 = 0, px = qx = px0 ; j1 < jMax ; j1++, px++)
-		if (px->score == bestScore)
-		  {
-		    if (j2 < j1) *qx = *px ;
-		    j2++ ; qx++ ;
-		  }
-	      jMax = arrayMax (pairs) = j2 ;
-
-	      /* keep closest pairs */
-	      arraySort (pairs, pairOrder) ;
-	      for (j1 = 0 ; j1 < jMax ; j1++)
-		{
-		  px = px0 + j1 ;
-		  for (j2 = j1 + 1, qx = px + 1 ; j2 < jMax && qx->j1 == px->j1 ; j2++, qx++)
-		    if (qx->db > px->db) qx->score = 0 ;
-		  j1 = j2 - 1 ;
-		}
-
-	      /* keep best scores */
-	      for (j1 = j2 = 0, px = qx = px0 ; j1 < jMax ; j1++, px++)
-		if (px->score == bestScore)
-		  {
-		    if (j2 < j1) *qx = *px ;
-		    j2++ ; qx++ ;
-		  }
-	      jMax = arrayMax (pairs) = j2 ;
+	      px0 = arrayp (pairs, 0, PAIR)  ;
+	      for (j1 = 0, bestDb = px0->db ; j1 < jMax ; j1++)
+		if (px0[j1].db > 200 && px0[j1].db > 2 * bestDb)  /* negative bestDb (overlapping reads) must not reject itself  */
+		  break ;
+	      jMax = arrayMax (pairs) = j1 ;
 
 	      for (j1 = 0, px = px0 ; j1 < jMax ; j1++, px++)
 		{
@@ -3684,8 +3683,8 @@ static void alignDoOnePair (const PP *pp, BB *bb
       arraySort (aaa, saAlignOrder) ;
       arrayCompress (aaa) ;
 
-      alignLocateChains (bestAp1, aaa, read1) ;
-      if (bestAp2) alignLocateChains (bestAp2, aaa, read2) ;
+      alignLocateChains (bestAp1, aaa, read1, FALSE) ;
+      if (bestAp2) alignLocateChains (bestAp2, aaa, read2, FALSE) ;
       
 
       alignDoRegisterOnePair (pp, bb, aaaa, aaa, read1, bestAp1, adaptors) ;
@@ -3716,9 +3715,10 @@ void saAlignDo (const PP *pp, BB *bb)
   BOOL SMS = bb->sms ? TRUE : FALSE ;
   
   /* in pilot block, bb->isRna defaults to 0=RNA */
+  bb->errCost = pp->errCost ;
   bb->isRna = 0 ;
   if (1) 
-    while (! saSetGetAdaptors (0, &(bb->isRna), &adaptors, bb->run))
+    while (! saSetGetAdaptors (0, &(bb->isRna), &adaptors, bb->run, &(bb->errCost)))
       {
 	if (bb->lane <= 1) break ; /* pilot block proceeds */
 	sleep (1) ;                /* all other blocks wait */
@@ -3781,7 +3781,14 @@ void saAlignDo (const PP *pp, BB *bb)
 	  diii = nn ;
 	}
       hits = bb->hits ;
-      
+
+      if (nn)
+	{
+	  HIT *up = bigArrayp (hits, 0, HIT) ;
+	  int read = up->read >> 1 ;
+	  if (! read || read > dictMax (bb->dict))
+	    nn = 0 ;
+	}
       if (nn >= 1) /* this read has n+1 hit */
 	{ /* create  a copy of the hits of that read */
 	  h2 = bigArrayp (hits, nn - 1, HIT) ; /* make room */
@@ -3898,6 +3905,7 @@ void saAlignDo (const PP *pp, BB *bb)
 		  /* switch chroms and reorder */
 		  if (0) hits2 = bb->hits ;
 		  bb->gpu += saSort (hits2, 2) ; /* hitReadOrder */
+
 		  if (0)  showCountChroms (countChroms) ;
 
 		  alignDoOnePair (pp, bb, aaa, hits2, aa, err, &adaptors) ;
@@ -3914,13 +3922,17 @@ void saAlignDo (const PP *pp, BB *bb)
       int isRna = 1 ;
       long int baseAligned = bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2 ;
       long int iSupport = bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support ;
-      if (0) iSupport = bb->runStat.nIntronSupportPlus + bb->runStat.nIntronSupportMinus ;
       if (3 * baseAligned > 100000 * pp->BMAX && 4000 * iSupport < baseAligned)
 	isRna = -1 ;
-      if (saReadAdaptors (&adaptors, &(bb->runStat), TRUE))
-	saSetGetAdaptors (1, &isRna, &adaptors, bb->run) ;
+      if (pp->userErrCost)
+	bb->errCost = pp->userErrCost ;
       else
-	saSetGetAdaptors (1, &isRna, 0, bb->run) ;
+	if (bb->errCost == 4 && 100 * bb->runStat.nErr < 1 * (bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2))
+	  bb->errCost = 8 ;
+      if (saReadAdaptors (&adaptors, &(bb->runStat), TRUE))
+	saSetGetAdaptors (1, &isRna, &adaptors, bb->run, &(bb->errCost)) ;
+      else
+	saSetGetAdaptors (1, &isRna, 0, bb->run, &(bb->errCost)) ;
       if (1)
 	{
 	  if (! redo && ((isRna < 0 && bb->isRna >= 0) || (isRna > 0 && bb->isRna < 0)))
@@ -3930,11 +3942,11 @@ void saAlignDo (const PP *pp, BB *bb)
 	}
       if (0 && redo == 0) redo = 1 ;
       bb->isRna = isRna ;
-      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld %ld   gc_ag=%d %d  baseAli = %ld\n"
+      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld   baseAli = %ld errCost = %d\n"
 	       , bb->lane, isRna
-	       , bb->runStat.nIntronSupportPlus, bb->runStat.nIntronSupportMinus
-	       , bb->runStat.gt_ag_Support, bb->runStat.ct_ac_Support
-	       ,  bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2
+	       , bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support
+	       , bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2
+	       , bb->errCost
 	       ) ;
     }
   
@@ -3954,6 +3966,14 @@ void saAlignDo (const PP *pp, BB *bb)
       goto secondPass ;
     }
   bigArrayDestroy (bb->hits) ;
+#ifdef USEGPU9999
+  saGPUFreeHostBuffer (bb->sms->base) ;
+  bb->sms->base = 0 ;
+#endif
+  
+  bigArrayDestroy (bb->sms) ;
+  bb->hits = bb->sms = 0 ;
+  
   ac_free (h) ;
   if (0) showPairs (0) ; /* for compile happiness */
 

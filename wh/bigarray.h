@@ -36,7 +36,6 @@ typedef struct BigArrayStruct
     BOOL lock ; /* a locked array cannot be destroyed or reallocated */
     long int readOnly ; /* original size, cannot be modified */
     void *map ;         /* address to be unmapped */
-    char *trueBase ;    /* true unaligned alloc, can be freed */
     const char *fName ;
     int fd ; /* file descriptor */
   } *BigArray ;

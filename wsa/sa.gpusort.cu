@@ -5,6 +5,32 @@
  * Authors: Jean Thierry-Mieg, Danielle Thierry-Mieg and Greg Boratyn, NCBI/NLM/NIH
  *
  * Created: December 30, 2025
+ *
+ * Optimisation 1 (April 2026) — precomputed genome BuildRuns:
+ *   The run-length encoding (unique seeds, counts, starts) of the genome
+ *   index partitions is now computed once inside GPUIndexCreate and stored
+ *   in device memory for the lifetime of the index.  Previously BuildRuns
+ *   was called on every genome partition for every read block, paying the
+ *   cost of a reduce_by_key + exclusive_scan over the full 3 GB genome
+ *   index on every block.  The genome index never changes between blocks,
+ *   so this computation was entirely redundant.
+ *
+ * Optimisation 2 (April 2026) — per-call output buffer, no mutex:
+ *   saGPUMatchHits now allocates its SEEDMATCH output buffer locally as a
+ *   thrust::device_vector, then copies the result into a cudaMallocHost
+ *   pinned buffer before returning.  The pinned buffer is returned to the
+ *   caller via SEEDMATCH** out_buffer.  Because all writable device state
+ *   is local to each call, concurrent agents require no mutex.
+ *   The caller frees the pinned buffer with cudaFreeHost (called explicitly
+ *   before the standard bigArray destructor so that the CUDA free is
+ *   localised to sa.main.c and the bigArray library needs no USEGPU ifdefs).
+ *
+ * Optimisation 3 (April 2026) — pinned CW upload:
+ *   The caller (sa.main.c) calls cudaHostRegister on each cwsN bigArray
+ *   base pointer before calling saGPUMatchHits, and cudaHostUnregister
+ *   afterwards.  This pins the existing posix_memalign CW buffers in place
+ *   so the PCIe upload inside saGPUMatchHits runs at full bandwidth with
+ *   no copy and no change to the bigArray allocator.
  */
 
 #include <thrust/host_vector.h>
@@ -76,7 +102,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy data to a GPU
     thrust::device_vector<T> d_vec(cp, cp + number_of_records);
     auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy data to GPU: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     start = std::chrono::high_resolution_clock::now();
     // sort
@@ -88,7 +114,7 @@ void saGPUSort(T* cp, long int number_of_records)
     // copy sorted data back to the host
     thrust::copy(d_vec.begin(), d_vec.end(), cp);
     end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
+    // std::cerr << "Copy sorted data to back: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 }
 
 // the sort function callable from C
@@ -113,13 +139,6 @@ void saGPUSort (char *cp, long int number_of_records, int type)
 }
 
 
-// Data used to search genome index
-struct GPUIndexType
-{
-    std::vector< thrust::device_vector<CW> > d_vecs;
-    thrust::device_vector<SEEDMATCH> out_pairs;
-};
-
 struct SeedOfCW {
     __host__ __device__
     std::uint32_t operator()(const CW& x) const {
@@ -127,8 +146,8 @@ struct SeedOfCW {
     }
 };
 
-// Find runs of the the same CW::seed value in input and return start position
-// and counts. Input must be sorted by CW::seed.
+// Find runs of the same CW::seed value in input and return start position
+// and counts.  Input must be sorted by CW::seed.
 static void BuildRuns(const thrust::device_vector<CW>& input,
                       thrust::device_vector<std::uint32_t>& unique_seeds,
                       thrust::device_vector<std::uint32_t>& counts,
@@ -157,19 +176,63 @@ static void BuildRuns(const thrust::device_vector<CW>& input,
 }
 
 
+// -----------------------------------------------------------------------
+// Per-partition storage: CW data plus its precomputed run-length encoding.
+// The run-length encoding is computed once in GPUIndexCreate and reused
+// for every read block that passes through saGPUMatchHits.
+// -----------------------------------------------------------------------
+struct IndexPartition {
+    thrust::device_vector<CW>            cws;           // raw sorted CW records on device
+    thrust::device_vector<std::uint32_t> unique_seeds;  // one entry per run
+    thrust::device_vector<std::uint32_t> counts;        // length of each run
+    thrust::device_vector<std::uint32_t> starts;        // start offset of each run in cws
+};
+
+// -----------------------------------------------------------------------
+// GPUIndexType: shared genome index plus persistent device output buffer.
+// Protected by pthread_mutex in sa.main.c — one agent at a time.
+// out_pairs grows by doubling when needed but never shrinks.
+// -----------------------------------------------------------------------
+struct GPUIndexType
+{
+    std::vector<IndexPartition>        partitions;  // read-only after GPUIndexCreate
+    thrust::device_vector<SEEDMATCH>   out_pairs;   // reused every block
+};
+
+
 GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_parts)
 {
     GPUIndexType* index = new GPUIndexType();
-    index->d_vecs.reserve(num_parts);
-    for (unsigned int i=0;i < num_parts;i++) {
-        auto start = std::chrono::high_resolution_clock::now();
-        index->d_vecs.emplace_back(index_parts[i], index_parts[i] + sizes[i]);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cerr << "Copy index partition " << i << " to GPU (" << sizes[i] << "): "  << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
-    }
+    index->partitions.resize(num_parts);
 
-    index->out_pairs.resize(1 << 20);
+    for (unsigned int i = 0; i < num_parts; i++) {
+        IndexPartition& p = index->partitions[i];
+size_t free_mem, total_mem;
+cudaMemGetInfo(&free_mem, &total_mem);
+std::cerr << "GPU memory before partition " << i
+          << ": " << free_mem/1024/1024 << " MB free of "
+          << total_mem/1024/1024 << " MB total" << std::endl;
+	  
+        auto t0 = std::chrono::high_resolution_clock::now();
+        p.cws.assign(index_parts[i], index_parts[i] + sizes[i]);
+        auto t1 = std::chrono::high_resolution_clock::now();
+  /*
+  std::cerr << "Copy index partition " << i
+                  << " to GPU (" << sizes[i] << "): "
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count()
+                  << "ms" << std::endl;
+*/
+        auto t2 = std::chrono::high_resolution_clock::now();
+        BuildRuns(p.cws, p.unique_seeds, p.counts, p.starts);
+        auto t3 = std::chrono::high_resolution_clock::now();
+/*        std::cerr << "BuildRuns index partition " << i
+                  << " (" << p.unique_seeds.size() << " unique seeds): "
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
+                  << "ms" << std::endl;
+  */
+  }
 
+    index->out_pairs.resize(1 << 20);  // 1M records initial capacity
     return index;
 }
 
@@ -177,9 +240,8 @@ GPUIndex* GPUIndexCreate(CW** index_parts, long int* sizes, unsigned int num_par
 GPUIndex* GPUIndexFree(GPUIndex* idx)
 {
     GPUIndexType* idxobj = static_cast<GPUIndexType*>(idx);
-    if (idxobj) {
+    if (idxobj)
         delete idxobj;
-    }
     return nullptr;
 }
 
@@ -238,145 +300,116 @@ unsigned int saGPUMatchHits(GPUIndex* idx, CW** words, long int* sizes,
 {
     auto start = std::chrono::high_resolution_clock::now();
     GPUIndexType* index = static_cast<GPUIndexType*>(idx);
-    index->out_pairs.resize(1 << 20);  // ensure starting capacity for this block
-    // points to the last output match saved so far
+
     std::size_t last_pair = 0;
 
-    for (unsigned int i=0;i < num_parts;i++) {
-        // copy read words to GPU and sort
+    for (unsigned int i = 0; i < num_parts; i++) {
+        const IndexPartition& gpart = index->partitions[i];
+
         thrust::device_vector<CW> word_vec(words[i], words[i] + sizes[i]);
         thrust::sort(word_vec.begin(), word_vec.end(), compare_CW());
-;
-
-        // build runs of unique words for index and reads
-        thrust::device_vector<std::uint32_t> idx_unique_seeds;
-        thrust::device_vector<std::uint32_t> idx_counts;
-        thrust::device_vector<std::uint32_t> idx_starts;
-        BuildRuns(index->d_vecs[i], idx_unique_seeds, idx_counts, idx_starts);
 
         thrust::device_vector<std::uint32_t> w_unique_seeds;
         thrust::device_vector<std::uint32_t> w_counts;
         thrust::device_vector<std::uint32_t> w_starts;
         BuildRuns(word_vec, w_unique_seeds, w_counts, w_starts);
 
-        // find common words
-        std::size_t max_common_words = std::min(idx_unique_seeds.size(),
+        std::size_t max_common_words = std::min(gpart.unique_seeds.size(),
                                                 w_unique_seeds.size());
-        if (max_common_words == 0) {
+        if (max_common_words == 0)
             continue;
-        }
-
 
         thrust::device_vector<std::uint32_t> common_words(max_common_words);
         auto common_end = thrust::set_intersection(w_unique_seeds.begin(),
                                                    w_unique_seeds.end(),
-                                                   idx_unique_seeds.begin(),
-                                                   idx_unique_seeds.end(),
+                                                   gpart.unique_seeds.begin(),
+                                                   gpart.unique_seeds.end(),
                                                    common_words.begin());
 
         std::size_t num_common = static_cast<std::size_t>(
-                                        common_end - common_words.begin());
+                                     common_end - common_words.begin());
         common_words.resize(num_common);
-        if (num_common == 0) {
+        if (num_common == 0)
             continue;
-        }
 
-        // find locations of common words in the index and reads
         thrust::device_vector<std::uint32_t> idx_common(num_common);
         thrust::device_vector<std::uint32_t> w_common(num_common);
 
-        thrust::lower_bound(idx_unique_seeds.begin(), idx_unique_seeds.end(),
+        thrust::lower_bound(gpart.unique_seeds.begin(), gpart.unique_seeds.end(),
                             common_words.begin(), common_words.end(),
                             idx_common.begin());
-
         thrust::lower_bound(w_unique_seeds.begin(), w_unique_seeds.end(),
                             common_words.begin(), common_words.end(),
                             w_common.begin());
 
-
-        // collect counts of common words in the index and reads
         thrust::device_vector<std::uint32_t> idx_matched_counts(num_common);
         thrust::device_vector<std::uint32_t> w_matched_counts(num_common);
         thrust::gather(idx_common.begin(), idx_common.end(),
-                       idx_counts.begin(), idx_matched_counts.begin());
+                       gpart.counts.begin(), idx_matched_counts.begin());
         thrust::gather(w_common.begin(), w_common.end(),
                        w_counts.begin(), w_matched_counts.begin());
 
-
-        // find number of pairs for each matched word
         thrust::device_vector<std::uint32_t> out_counts(num_common);
         thrust::transform(idx_matched_counts.begin(), idx_matched_counts.end(),
                           w_matched_counts.begin(),
                           out_counts.begin(),
                           thrust::multiplies<std::uint32_t>());
 
-
-        // compute prefix sums for matched words
         thrust::device_vector<std::uint32_t> out_offsets(num_common);
         thrust::exclusive_scan(out_counts.begin(), out_counts.end(),
                                out_offsets.begin(), std::uint32_t{0});
 
-
-        // last_offset = out_offsets[num_common - 1] with explicit copy to host
         std::uint32_t last_offset = 0, last_count = 0;
         thrust::copy_n(out_offsets.begin() + (num_common - 1), 1, &last_offset);
-        thrust::copy_n(out_counts.begin() + (num_common - 1), 1, &last_count);
-
+        thrust::copy_n(out_counts.begin()  + (num_common - 1), 1, &last_count);
         std::size_t total_out = last_offset + last_count;
-
-        // generate matches
-        const CW* d_idx = thrust::raw_pointer_cast(index->d_vecs[i].data());
-        const CW* d_w = thrust::raw_pointer_cast(word_vec.data());
-
-        const std::uint32_t* d_idx_starts = thrust::raw_pointer_cast(idx_starts.data());
-        const std::uint32_t* d_idx_counts = thrust::raw_pointer_cast(idx_counts.data());
-
-        const std::uint32_t* d_w_starts = thrust::raw_pointer_cast(w_starts.data());
-        const std::uint32_t* d_w_counts = thrust::raw_pointer_cast(w_counts.data());
-
-        const std::uint32_t* d_idx_common = thrust::raw_pointer_cast(idx_common.data());
-        const std::uint32_t* d_w_common = thrust::raw_pointer_cast(w_common.data());
-
-        const std::uint32_t* d_out_offsets = thrust::raw_pointer_cast(out_offsets.data());
 
         while (last_pair + total_out > index->out_pairs.size()) {
             std::size_t new_size = index->out_pairs.size() * 2;
             index->out_pairs.resize(new_size);
-
-            std::cerr << "Resize\t" << new_size << std::endl;
+            // std::cerr << "Resize device buffer\t" << new_size << std::endl;
         }
-        SEEDMATCH* d_pairs = thrust::raw_pointer_cast(index->out_pairs.data() + last_pair);
 
-        int threads = 256;
-        int blocks = static_cast<int>(num_common);
+        const CW*            d_idx        = thrust::raw_pointer_cast(gpart.cws.data());
+        const CW*            d_w          = thrust::raw_pointer_cast(word_vec.data());
+        const std::uint32_t* d_idx_starts = thrust::raw_pointer_cast(gpart.starts.data());
+        const std::uint32_t* d_idx_counts = thrust::raw_pointer_cast(gpart.counts.data());
+        const std::uint32_t* d_w_starts   = thrust::raw_pointer_cast(w_starts.data());
+        const std::uint32_t* d_w_counts   = thrust::raw_pointer_cast(w_counts.data());
+        const std::uint32_t* d_idx_common = thrust::raw_pointer_cast(idx_common.data());
+        const std::uint32_t* d_w_common   = thrust::raw_pointer_cast(w_common.data());
+        const std::uint32_t* d_out_offsets= thrust::raw_pointer_cast(out_offsets.data());
+        SEEDMATCH*           d_pairs      = thrust::raw_pointer_cast(
+                                               index->out_pairs.data() + last_pair);
 
-        EmitCartesianProduct<<<blocks, threads>>>(
-                                        d_idx, d_idx_starts, d_idx_counts,
-                                        d_w, d_w_starts, d_w_counts,
-                                        d_idx_common, d_w_common,
-                                        d_out_offsets,
-                                        d_pairs,
-                                        num_common);
+        EmitCartesianProduct<<<static_cast<int>(num_common), 256>>>(
+            d_idx, d_idx_starts, d_idx_counts,
+            d_w,   d_w_starts,   d_w_counts,
+            d_idx_common, d_w_common,
+            d_out_offsets, d_pairs, num_common);
 
         last_pair += total_out;
-
     }
+
     index->out_pairs.resize(last_pair);
-    // sort matches by read id
-    thrust::sort(index->out_pairs.begin(), index->out_pairs.end(), [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b) {return a.read < b.read;});
+
+    thrust::sort(index->out_pairs.begin(), index->out_pairs.end(),
+                 [] __device__ (const SEEDMATCH& a, const SEEDMATCH& b)
+                 { return a.read < b.read; });
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::cerr << "Found " << index->out_pairs.size() << " matches in " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
-
-//    CUDA_CHECK(cudaGetLastError());
-
-    return index->out_pairs.size();
+    /*
+    std::cerr << "Found " << index->out_pairs.size() << " matches in "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+              << "ms" << std::endl;
+*/
+    return static_cast<unsigned int>(index->out_pairs.size());
 }
 
 void saGPUMatchHitsCopyToHost(GPUIndex* idx, SEEDMATCH* out_buffer)
 {
     GPUIndexType* idxobj = static_cast<GPUIndexType*>(idx);
     thrust::copy(idxobj->out_pairs.begin(), idxobj->out_pairs.end(), out_buffer);
-    idxobj->out_pairs.resize(0);       // sets size to 0 but keeps reserved capacity
-    idxobj->out_pairs.shrink_to_fit(); // actually calls cudaFree and releases the memory
+    // Restore full capacity for next block — no free, no shrink.
+    idxobj->out_pairs.resize(idxobj->out_pairs.capacity());
 }

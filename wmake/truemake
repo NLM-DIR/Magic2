@@ -206,7 +206,7 @@ FREE_OBJS = freesubs.o  freeout.o messubs.o \
 TS_FREE_OBJS = acein.o aceout.o utils.o vtxt.o strsubs.o msort.o vcgi.o cgi.o \
 	dict.o heap.o liste.o keyset.o memsubs.o bump.o \
 	randsubs.o timesubs.o channel.o \
-	arraysub.o bigarraysub.o matrix.o matrix_slice.o polynome.o dnacode.o sambam.o topology.o wigglelib.o
+	arraysub.o bigarraysub.o matrix.o matrix_slice.o polynome.o dnacode.o sambam.o topology.o wigglelib.o bgzf.o
 
 GRAPH_OBJS = graphcon.o graphsub.o graphps.o graphswf.o graphsvg.o graphselect.o \
 	graphascii.o graphprint.o filquery.o graphgd.o graphcolour.o graphramp.o \

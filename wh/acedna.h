@@ -184,6 +184,7 @@ int oligoEntropy (unsigned const char *dna, int ln, int minEntropy) ;
  /* if TRUE, use the jumper adapted to the sequencing technology 
   * Ilm is the default 
   */
+void aceDnaSetPaddedJumper (BOOL ok) ; /* No indel, use if maxError = 0 */
 void aceDnaSetIlmJumper (BOOL ok) ;   /* Illumina */
 void aceDnaSetSolidJumper (BOOL ok) ; /* LIF/SolID transition csfasta DNA */
 void aceDnaSetRocheJumper (BOOL ok) ;

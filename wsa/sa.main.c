@@ -2,7 +2,9 @@
  * sa.main.c : sortalign RNA aligner
 
  * Created April 18, 2025
- * In collaboration with Greg Boratyn, NCBI
+ * Authors: Danielle Thierry-Mieg, Gean Thierry-Mieg, Greg Boratyn, NCBI/NLM/NIH
+
+ * This code is public.
 
  * A new RNA aligner with emphasis on parallelisation by multithreading and channels, and memory locality
 
@@ -36,6 +38,18 @@
 #include <immintrin.h>
 #endif /* __SSE2__ */
 
+/* Minimal CUDA runtime declarations needed by plain C callers.
+ * (including cuda_runtime.h directly in a .c file pulls in C++-only constructs)
+ */
+typedef int cudaError_t;
+int  cudaSetDevice        (int device);
+int  cudaGetDeviceCount   (int *count);
+int  cudaHostRegister     (void *ptr, size_t size, unsigned int flags);
+int  cudaHostUnregister   (void *ptr);
+
+#define cudaHostRegisterDefault  0x00U
+
+  
 
 static int NN = 1 ;
 
@@ -136,11 +150,10 @@ static void npCounter (const void *vp)
     {
       channelGet (pp->npChan, &nPuts, int) ;
       nn += nPuts ;
-      printf ("--- %s: npCounter Parsed %d/%d files\t%d blocs\tcumul %d blocks to be analysed\n",
+      fprintf (stderr, "--- %s: npCounter Parsed %d/%d files\t%d blocs\tcumul %d blocks to be analysed\n",
 	      timeBufShowNow (tBuf), ++n, nf, nPuts, nn) ;
     }
-  printf ("--- %s: npCounter Processed %d files, closing pcChan at %d blocks\n", timeBufShowNow (tBuf), nf, nn) ;
-  channelCloseSource  (pp->plChan) ;
+  fprintf (stderr, "--- %s: npCounter Processed %d files, plChan should process %d blocks\n", timeBufShowNow (tBuf), nf, nn) ;
   NTODO = nn ; /* this is global but there is no other place where we wrtie this variable */
   return ;
 } /* npCounter */
@@ -182,7 +195,13 @@ static void readParser (const void *vp)
   RC rc ;
   
   while (channelGet (pp->fpChan, &rc, RC))
-    saSequenceParse (pp, &rc, 0, 0, 0) ;
+    {
+      if (0)
+	saSequenceParse (pp, &rc) ;
+      else
+	saParse (pp, &rc) ;
+    }
+  channelCloseSource  (pp->plChan) ;
   return ;
 } /* Readparser */
 
@@ -662,7 +681,9 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
   BigArray hits = 0 ;
   BigArray intronHits = 0 ;
   long int nn = 0, k = 0, kk = 0 ;
+  int targetMax = dictMax (pp->bbG.dict) << 1 ;
 
+  int chromA = 0, chromLength = 0 ;
   const long unsigned int mask26 = (1L << 26) - 1 ;
   const int seedLength = pp->seedLength ;
   const int intronBonus = 1 ;
@@ -681,7 +702,9 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
     {
       long int a1, x1 ;
       HIT *hit = 0 ;
-      
+
+      if (!smp->target || smp->target > targetMax)
+	continue ;
       /* success, non intron case */
       if (((smp->targetFlags >> 31) & 0x1) == 0x0)
 	{
@@ -690,7 +713,7 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 	  int nTargetRepeats = smp->targetFlags ;
 	  
 	  if (1 && nTargetRepeats > maxTargetRepeats)
-			continue ;
+	    continue ;
 	  /* report at most absoluteMax (i.e. 31) */
 	  if (nTargetRepeats >= absoluteMax)
 	    nTargetRepeats = absoluteMax - 1 ; 
@@ -807,7 +830,19 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 	      intronHit->x2 = x1 + 1 ;
 	      intronHit->a2 = a1 - 1 ; /* first base of intron */
 	      intronHit->a1 = a1 + da ; /* last base of intron */
-	      
+
+	      if (intronHit->chrom != chromA)
+		{
+		  chromA = intronHit->chrom ;
+		  Array dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
+		  chromLength = arrayMax (dnaG) ;
+		}
+	      if (1)
+		{
+		  intronHit->a1 = chromLength - intronHit->a1 + 1 ;
+		  intronHit->a2 = chromLength - intronHit->a2 + 1 ;
+		}
+
 	      /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
 	      nn++ ;
 	      hit = bigArrayp (hits, k++, HIT) ;
@@ -1215,7 +1250,8 @@ static void wholeWork (const void *vp)
 {
   BB bb = {0} ;
   const PP *pp = vp ;
-  BB bbG = pp->bbG;
+  BB bbG = pp->bbG ;
+  long int nReads = 0, nnReads = 0 ;
   char tBuf[25] ;
 
   clock_t  t1, t2, t01, t02 ;
@@ -1232,14 +1268,25 @@ static void wholeWork (const void *vp)
   while (channelGet (pp->lcChan, &bb, BB))
     {
       long int nn = 0 ;
-      int ii;
 
       t1 = clock () ;
-      /* code words */
-      saSequenceParseGzBuffer (pp, &bb) ;
-      saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
 
-      if (pp->debug) printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld bases against %ld target bases\n", timeBufShowNow (tBuf), pp->agent, bb.lane, bb.length, bbG.length) ;
+      bb.readerAgent = pp->agent ;
+      /* code words */
+      if (bb.gzBuffer) /* fasta buffer method 2025 */
+	saParseGzBuffer (pp, &bb) ;
+      else if (bb.r1Buffer) /* fasta buffer method 2026 */
+	saScan (pp, &bb) ;
+      saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
+      
+      if (pp->debug)
+	{
+	  nReads = bigArrayMax (bb.dnas) / 2 - 1 ;  /* dnas contains dna and dnaR */
+	  nnReads += nReads ;
+	  printf ("+++ %s: Start wholeWork agent %d, lane %d, %ld nSeqs %ld reads %ld cumul %ld bases against %ld target bases\n"
+		  , timeBufShowNow (tBuf), pp->agent, bb.lane
+		  , bb.nSeqs, nReads, nnReads, bb.length, bbG.length) ;
+	}
 
       /* sort words */
       for (int k = 0 ; k < NN ; k++)
@@ -1274,37 +1321,33 @@ static void wholeWork (const void *vp)
 		bigArraySort (bb.sms, seedMatchOrder) ;
 	    }
 #else
-
-      /* Find max number of matching words to preallocate memory. This is
-       *   overestimated, but prevents memory copy.
-       */
-	  for (int k = 0 ; k < NN ; k++)
-	    {
-	      words[k] = bigArrayp(bb.cwsN[k], 0, CW) ;
-	      sizes[k] = bigArrayMax(bb.cwsN[ k]) ;
-	    }
+           /* Register each CW partition as pinned, transfer, then unregister.
+	    * cudaHostRegister pins the existing posix_memalign buffer in place —
+           * no copy, no new allocation, full PCIe bandwidth for the upload.
+           */
+          for (int k = 0 ; k < NN ; k++)
+            {
+              words[k] = bigArrayp (bb.cwsN[k], 0, CW) ;
+              sizes[k] = bigArrayMax (bb.cwsN[k]) ;
+            }
 
 	  if (1)pthread_mutex_lock (&gpu_mutex) ;
-	  /* find matching seeds */
-	  if (! pp->bbG.gpu_idx)
-	    messcrash ("No target GPU index") ;
-	  long int N = saGPUMatchHits(pp->bbG.gpu_idx, words, sizes, NN) ;
-	  
-	  for (int k = 0 ; k < NN ; k++)
-	    { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ;}
-	  
-      /*
-	allocate host memory for seed matches, number of records
-      */
-	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
-	  bigArrayMax(bb.sms) = N ;
+	  long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN) ;
+          for (int k = 0 ; k < NN ; k++)
+            { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ; }	  
 
-      /* copy matching seeds to the host */
-	  saGPUMatchHitsCopyToHost(pp->bbG.gpu_idx, bigArrayp(bb.sms, 0, SEEDMATCH));
+ 	  /*
+	    allocate host memory for seed matches, number of records
+	  */
+	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
+	  bigArrayMax (bb.sms) = N ;
+	  fprintf (stderr, "waiting for %ld  sms\n", N) ;	   
+	  saGPUMatchHitsCopyToHost (pp->bbG.gpu_idx, bigArrayp (bb.sms, 0, SEEDMATCH)) ;
+	  fprintf (stderr, "received %ld  sms\n", N) ;	   
 	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
 #endif
 	}
-
+      //  bigArrayMax(bb.sms) = 1 ;
       saAlignDo (pp, &bb) ;
 
       t2 = clock () ;
@@ -1355,13 +1398,13 @@ static void reportRunStats (PP *pp, Array runStats)
   printf ("\n#:Reads_aligned\t%ld\t%.3f%%", s0->nMultiAligned[0], 100.0 * s0->nMultiAligned[0]/ (0.0000001 + s0->p.nReads)) ;
   printf ("\n#:PerfectReads\t%ld\t%.2f%%", s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(s0->p.nReads + .000001)) ;
 
-  printf ("\n#:Reads supporting introns %ld, plus %ld, minus %ld, stranding %.2f%%\n"
-	  , s0->nIntronSupportPlus + s0->nIntronSupportMinus 
-	  , s0->nIntronSupportPlus
-	  , s0->nIntronSupportMinus
+  printf ("\n#:Introns_supports %ld, gt_ag %ld, ct_ac %ld, stranding %.2f%%\n"
+	  , s0->gt_ag_Support + s0->ct_ac_Support 
+	  , s0->gt_ag_Support
+	  , s0->ct_ac_Support 
 	  , s0->intronStranding
 	  ) ;
-  printf ("\n#:SupportedIntrons\t%ld", s0->nSupportedIntrons) ;
+  printf ("\n#:Supported_introns\t%ld", s0->nSupportedIntrons) ;
 
 
   printf ("\n\n#:Bases\t%ld", s0->p.nBase1 + s0->p.nBase2) ;
@@ -1618,6 +1661,7 @@ int main (int argc, const char *argv[])
   AC_HANDLE h ;
   int nAgents = 10 ;
   int channelDepth = 2 ;
+  int bestGpu = -1 ;
   mytime_t t0, t1 ;
   
   freeinit () ; 
@@ -1671,20 +1715,19 @@ int main (int argc, const char *argv[])
 	  p.split_pairs = getCmdLineBool (&argc, argv, "--split_pairs") ;
 	  p.interleaved = getCmdLineBool (&argc, argv, "--interleaved") ;
 	  
-	  getCmdLineFloat (&argc, argv, "--maxGB", &(p.maxSraGb)) ;
-	  if (p.maxSraGb < 0)
-	    saUsage ("--maxGB parameter should be positive", argc, argv) ;
+	  if (getCmdLineFloat (&argc, argv, "--maxGB", &(p.maxSraGb)) )
+	    if (p.maxSraGb <= 0)
+	      saUsage ("--maxGB parameter should be positive", argc, argv) ;
 
 	  /*****************  Check tat all parameters have been parsed *******************/
 	  if (argc > 1)
 	    saUsage (0, argc, argv) ;
-	  
 	  cp = strnew (sraID, h) ;
 	  while (cp)
 	    {
 	      char *cq = strchr (cp, ',') ;
 	      if (cq) *cq = 0 ;
-	      saSequenceParseSraDownload (&p, cp) ;
+	      saParseSraDownload (&p, cp) ;
 	      cp = cq ? cq + 1 : 0 ;
 	    }
 	  exit (0) ;
@@ -1717,7 +1760,7 @@ int main (int argc, const char *argv[])
    * adding --numactl to the command line to prevent recursion.
    *
    * If a CUDA-capable GPU is detected, magic2_gpu is spawned instead of magic2,
-   * passing --gpu-device=N to select the device with the most free memory.
+   * passing --gpu_device=N to select the device with the most free memory.
    * This respawn happens even on single-node machines where NUMA binding is not needed.
    *
    * This system could be useful in other C programs using multithreading and large memory.
@@ -1757,7 +1800,7 @@ int main (int argc, const char *argv[])
 
 	  /* Tell magic2_gpu which device to use.                           */
 	  if (ngpu > 0 && bestDev >= 0)
-	    vtxtPrintf (txt, " --gpu-device=%d", bestDev) ;
+	    vtxtPrintf (txt, " --gpu_device=%d", bestDev) ;
 
 	  fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 	  return system (vtxtPtr (txt)) ;
@@ -1768,6 +1811,11 @@ int main (int argc, const char *argv[])
 
   /************  debugging modules, ignore ****************/
 
+  fprintf (stderr, "# ") ;
+  for (int i = 0 ; i < argc ; i++)
+    fprintf (stderr, " %s", argv[i]) ;
+  fprintf (stderr, "\n") ;
+  
   getCmdLineText (h, &argc, argv, "-o", &(p.outFileName)) ;
 
   p.gzi = getCmdLineBool (&argc, argv, "--gzi") ;   /* decompress input files (implicit for files named .gz) */
@@ -1910,6 +1958,12 @@ int main (int argc, const char *argv[])
   p.createIndex = getCmdLineText (h, &argc, argv, "--createIndex", &(p.indexName)) ;
   p.noJump = getCmdLineBool (&argc, argv, "--noJump") ;
   
+  getCmdLineInt (&argc, argv, "--gpu_device", &bestGpu) ;
+#ifdef USEGPU
+  if (bestGpu >= 0)
+     cudaSetDevice (bestGpu) ;
+#endif
+
   if (p.createIndex)
     {
       if (! p.tFileName && ! p.tConfigFileName)
@@ -1979,13 +2033,17 @@ int main (int argc, const char *argv[])
   /* action options ***/
   p.wiggle = getCmdLineBool (&argc, argv, "--wiggles") ;
   p.wiggleEnds = getCmdLineBool (&argc, argv, "--wiggleEnds") ;
+  p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
+  getCmdLineInt (&argc, argv, "--wiggleStep", &(p.wiggle_step)) ;
+
   p.snps = getCmdLineBool (&argc, argv, "--snp") ;
+  p.blink = getCmdLineBool (&argc, argv, "--blink") ;
+  p.blinkLn = 8 ;
+  getCmdLineInt (&argc, argv, "--blinkLn", &(p.blinkLn)) ;
 
   getCmdLineText (h, &argc, argv, "--adaptor1", &(p.rawAdaptor1R)) ;
   getCmdLineText (h, &argc, argv, "--adaptor2", &(p.rawAdaptor2R)) ;
 
-  p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
-  getCmdLineInt (&argc, argv, "--wiggleStep", &(p.wiggle_step)) ;
 
   if (0) { p.sam = TRUE ; p.wiggle = TRUE ; p.wiggleEnds = FALSE ;}
   /*****************  sequence file names and their formats  ************************/
@@ -2049,7 +2107,9 @@ int main (int argc, const char *argv[])
 
   /* defaults */
   nAgents = 3 * nCPU/2 ; /* was 3 * nCPU / 2 ;   number of aligner agents */
-  p.nBlocks = 4 * nCPU/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
+  if (nAgents > maxThreads)
+    nAgents = maxThreads / 2 ;
+  p.nBlocks = 3 * nAgents/2 ; /* was 3 * nCPU / 2 ;  max number of BB blocks processed in parallel */
   
   if (! getCmdLineInt (&argc, argv, "--nAgents", &(nAgents)))
     getCmdLineInt (&argc, argv, "--nA", &(nAgents)) ;
@@ -2095,8 +2155,8 @@ int main (int argc, const char *argv[])
   p.splice = TRUE ;
   if (getCmdLineBool (&argc, argv, "--no_splice"))
     p.splice = FALSE ;
-  p.errCost = 4 ; /* was 8 */
-  getCmdLineInt (&argc, argv, "--errCost", &(p.errCost)) ;
+  p.errCost = 4 ; /* was 4 */
+  getCmdLineInt (&argc, argv, "--errCost", &(p.userErrCost)) ;
   getCmdLineInt (&argc, argv, "--errMax", &(p.errMax)) ;
   getCmdLineInt (&argc, argv, "--minScore", &(p.minScore)) ;
   getCmdLineInt (&argc, argv, "--minAli", &(p.minAli)) ;
@@ -2106,11 +2166,14 @@ int main (int argc, const char *argv[])
   p.maxIntron = 1000000 ;
   getCmdLineInt (&argc, argv, "--maxIntron", &(p.maxIntron)) ;
 
+  if (p.userErrCost) p.errCost = p.userErrCost ;
   if (p.minScore < 0) p.minScore = 0 ;
   if (p.minAli < 0) p.minAli = 30 ;
   if (p.minAliPerCent < 0) p.minAliPerCent = 0 ;
   if (p.minAli < p.minScore) p.minAli = p.minScore ;
-
+  if (p.errMax == 0)
+    aceDnaSetPaddedJumper (TRUE) ; /* No indel, use if maxError = 0 */
+ 
   p.BMAX = 3 ;
   getCmdLineInt (&argc, argv, "--bMax", &(p.BMAX)) ;
   if (p.BMAX < 1) p.BMAX = 1 ;
@@ -2158,7 +2221,7 @@ int main (int argc, const char *argv[])
   if (p.createIndex)
     { /* The human genome index consumes around 18 Gigabytes of RAM */
       if (p.maxTargetRepeats <= 0)
-	p.maxTargetRepeats = 31 ;  /* was 81  31 12 */
+	p.maxTargetRepeats = 81 ;  /* was 81  31 12 */
 
       saTargetIndexCreate (&p) ;
       goto done ;
@@ -2200,7 +2263,7 @@ int main (int argc, const char *argv[])
       channelDebug (p.npChan, debug, "npChan") ;
       p.gmChan = channelCreate (1, BB, p.h) ;
       channelDebug (p.gmChan, debug, "gmChan") ;
-      p.plChan = channelCreate (1, BB, p.h) ;
+      p.plChan = channelCreate (3, BB, p.h) ;
       channelDebug (p.plChan, debug, "plChan") ;
       p.lcChan = channelCreate (channelDepth, BB, p.h) ;
       channelDebug (p.lcChan, debug, "lcChan") ;
@@ -2238,7 +2301,7 @@ int main (int argc, const char *argv[])
        * and recurssibvely all program layers
        * to close after having processed N BB blocks
        */
-      wego_go (npCounter, &p, PP) ; channelAddSources (p.plChan, 1) ;
+      wego_go (npCounter, &p, PP) ; 
       /* Read preprocessing agents, they do not require the genome */
       for (int pass = 0 ; pass < 2 ; pass++)
 	for (int i = 0 ; i < p.nFiles && i < nAgents && i < 10 ; i++)
@@ -2246,7 +2309,7 @@ int main (int argc, const char *argv[])
 	    if (pass) fprintf (stderr, "Launch readParser %d\n", i) ;
 	    p.agent = i ;
 	    
-	    if (pass) wego_go (readParser, &p, PP) ; else channelAddSources (p.npChan, 1) ;
+	    if (pass) wego_go (readParser, &p, PP) ; else channelAddSources (p.plChan, 1) ;
 	  }
       for (int pass = 0 ; pass < 2 ; pass++)
 	for (int i = 0 ; i < nAgents && i < p.nBlocks ; i++)
@@ -2372,8 +2435,6 @@ int main (int argc, const char *argv[])
       aliDx += bb.aliDx ;
       if (bb.cpuStats)
 	saCpuStatCumulate (cpuStats, bb.cpuStats) ;
-      bb.runStat.nIntronSupportPlus = bb.nIntronSupportPlus ;
-      bb.runStat.nIntronSupportMinus = bb.nIntronSupportMinus ;
 	
       if (bb.run)
 	{
@@ -2433,8 +2494,8 @@ int main (int argc, const char *argv[])
 	  bb.stop = timeNow () ;
 	  timeDiffSecs (bb.start, bb.stop, &ns) ;
 	  if (1)
-	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.1g strategy %d\n"
-		   ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.isRna) ; 
+	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.3g errCost %d strategy %d\n"
+		     ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.errCost, bb.isRna) ; 
 	}
       ac_free (bb.h) ;
     }
@@ -2450,12 +2511,14 @@ int main (int argc, const char *argv[])
       saIntronsExport (&p, p.confirmedIntrons) ; /* before wiggleExport to restrand the gene expression */ 
       saDoubleIntronsExport (&p, p.doubleIntrons) ;
     }
+
+  GeneCounts gcs = {0} ;
   if (p.wiggle)
-    saWiggleExport (&p, nAgents) ;
+    gcs = saWiggleExport (&p, nAgents) ;
   if (p.debug) saCpuStatExport (&p, cpuStats) ;
   saPolyAsExport (&p, p.confirmedPolyAs) ;
   saSLsExport (&p, p.confirmedSLs) ;
-  saRunStatExport (&p, p.runStats) ; /* must come afer PolyAsExport and IntronsExport */
+  saRunStatExport (&p, p.runStats, gcs) ; /* must come afer PolyAsExport and IntronsExport */
   
   wego_log ("Done") ;
   wego_flush () ; /* flush the wego logs to stderr */
@@ -2485,6 +2548,7 @@ int main (int argc, const char *argv[])
     reportRunStats (&p, p.runStats) ;
   if (p.align)
     reportRunErrors (&p, p.runStats, runErrors) ;
+
   if (p.bam) ac_free (p.bamHandle) ;
   /* release memory */
   if (p.bbG.dnas)
@@ -2505,10 +2569,10 @@ int main (int argc, const char *argv[])
     }
   /* wego_log is the thread-safe way to pass messages to stderr */
   if (p.justStats && p.outFileName)  system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)) ;
-  saSetGetAdaptors (-999999, 0, 0, 0) ;
+  saSetGetAdaptors (-999999, 0, 0, 0, 0) ;
   oligoEntropy (0, -999999, 0) ;
-  ac_free (p.h) ;
-  if (0)   ac_free (h) ; /* blocks on channel cond destroy */
+
+  if (p.debug)   ac_free (h) ; /* blocks on channel cond destroy */
   return 0 ;
 }
 

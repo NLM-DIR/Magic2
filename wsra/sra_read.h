@@ -26,6 +26,12 @@ typedef struct SRAReadBatch
     /* Reverese reads in FASTA or FASTQ format (do not deallocate the buffer) */
     const char* seq2;
 
+    /* Number of bytes in the forward read buffer (seq) */
+    long unsigned int size;
+
+    /* Number of bytes in the reverse read buffser (seq2) */
+    long unsigned int size2;
+
     /* Number of bases read in the batch */
     long unsigned int num_bases;
 

@@ -152,11 +152,37 @@ setenv SV     v95.81.18M.e4.apr12     # idem, fixed adaptors (100 ->256 min coun
 setenv SVlast v95.81.18M.e4.apr12
 setenv SV     v96.81.18M.e4.apr19     # idem, +radix sorting and use --nB = 2*nCPU --nA=3/2 nCPU
 setenv SVlast v96.81.18M.e4.apr19
-setenv SV     v97.81.18M.e4.apr20     # all ali seen as positive strand
+setenv SV     v97.81.18M.e4.apr20     # all ali seen as positive strand I hope i used the GPU for 011  on biogpu21
 setenv SVlast v97.81.18M.e4.apr20
+#setenv SV     v98.81.18M.e4.may1     # all ali seen as positive strand I hope i used the CPU for 011 on biogpu21
+#setenv SVlast v98.81.18M.e4.may1
+setenv SV     v99.81.18M.e4.may1     # all ali seen as positive strand, back on farm
+setenv SVlast v99.81.18M.e4.may1
+setenv SV     v100.81.18M.e4.may5     # all ali seen as positive strand final, back on farm, pairs are wrong all paired end sampples die
+setenv SVlast v100.81.18M.e4.may5
+setenv SV     v101.81.18M.e4.may6     # all ali seen as positive strand final, back on farm, pairs should be fixed 
+setenv SVlast v101.81.18M.e4.may6
+setenv SV     v102.81.18M.e4.may13     # all ali seen as positive strand final, back on farm, pairs should be fixed 
+setenv SVlast v102.81.18M.e4.may13    # i tried to optimize the fasta parser gz pigz and bgzf, nothing was useful
+setenv SV     v103.81.18M.e4.may15     # all ali seen as positive strand final, back on farm, pairs should be fixed 
+setenv SVlast v103.81.18M.e4.may15    # i tried to optimize the fasta parser gz pigz and bgzf, nothing was useful
+setenv SV     v104.81.18M.e4.may15     # maybe we fixed all sam errors
+setenv SVlast v104.81.18M.e4.may15    # 
+setenv SV     v105.81.18M.e4.may17     # maybe we fixed all sam errors errcost 8
+setenv SVlast v105.81.18M.e4.may17    # 
+setenv SV     v106.81.18M.e4.may19     # maybe we fixed all sam errors errcost 8
+setenv SVlast v106.81.18M.e4.may19    # 
+setenv SV     v107.81.18M.e4.may20     # new sa.parse
+setenv SVlast v107.81.18M.e4.may20    # 
+setenv SV     v108.81.18M.e4.may20     # new sa.parse fixed the pairs
+setenv SVlast v108.81.18M.e4.may20    # 
+setenv SV     v109.81.18M.e4.may20     # new sa.parse fixed the pairs
+setenv SVlast v109.81.18M.e4.may20    # 
+setenv SV     v110.81.18M.e4.may22     # intron mates intronHit orientation fixednew sa.parse fixed the pairs
+setenv SVlast v110.81.18M.e4.may22    # 
 
 if ($SV == $SVlast) then
-  \cp  /home/mieg/ace/bin.LINUX_4_OPT/sortalign bin/sortalign.$SV
+  \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
   if (-e bin.nativeZZZ/sortalign) \cp bin.native/sortalign bin/sortalign.$SV
   touch bin/wsa.$SV.toto
   \rm -rf bin/wsa.$SV*
@@ -166,7 +192,7 @@ endif
 \cp bin/sortalign.$SV bin/sortalign
 
 setenv NOINTRONSEEDS 0
-setenv EXPORTSAM 0
+setenv EXPORTSAM 1
 setenv EXPORTWIGGLES 0
 setenv EXPORTWIGGLEENDS 0
 setenv seedLength 16
@@ -255,8 +281,8 @@ setenv wormRuns "  Worm_RNA_150PE "
 setenv monkeyRuns "Chimpanzee_0.92pc Macaque_2.69pc PTMacaque_2.71pc Baboon_2.92pc Marmoset_3.14 SquirrelMonkey_3.08pc MouseLemur_2.64pc"
 setenv baruzzoRuns "HG19t1_0.543pc HG19t2_1.186pc HG19t3_6.024pc"
 
-setenv allRuns "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns  $monkeyRuns  $baruzzoRuns "
-setenv runs    "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns  $monkeyRuns  $baruzzoRuns "
+setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns "
+setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns   "
 
 
 # setenv runs "RNA_PolyA_AB_1_97G"
@@ -974,7 +1000,8 @@ foreach run ($runs)
         # scripts/submit $method/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2" local
 	touch RESULTS/$method/$run/toto
 	\rm RESULTS/$method/$run/*
-        scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  64G
+	scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  64G
+        # scripts/submit RESULTS/$method/$run/$run "Aligners/$method/align.tcsh $method $run $target $read_1 $read_2"  local
         if (-e RESULTS/$method/$run/s2g.samSats) \rm RESULTS/$method/$run/s2g.samSats
         if (-e RESULTS/$method/$run/$run.s2g.samSats) \rm RESULTS/$method/$run/$run.s2g.samSats
         if (-e RESULTS/$method/$run/$run/s2g.samSats) \rm RESULTS/$method/$run/$run/s2g.samSats
@@ -1113,7 +1140,7 @@ date
     endif
 
     if (-e RESULTS/$mm/$run/$run/$run.sam && ! -e RESULTS/$mm/$run/samTools.stats) then
-      samtools stats RESULTS/$mm/$run/$run/$run.sam > RESULTS/$mm/$run/$run/samTools.stats
+      # samtools stats RESULTS/$mm/$run/$run/$run.sam > RESULTS/$mm/$run/$run/samTools.stats
     endif
     # cat RESULTS/$mm/$run/$run/samTools.stats | gawk -f scripts/sam_stats.awk > RESULTS/$mm/$run/s2g.samTools.txt  
 
@@ -1288,9 +1315,9 @@ foreach tag (Non_compatible_pairs)
       echo "$run\t$mm\tf\t0" >> toto.tag
     end
   end
-  echo "\n%% Non compatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
+  echo "\n% Non compatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($5) >= 1 && $3 == tag) {printf("%s\t%s\tt\t%s\n", $1,$2,$5);}}' tag=$tag >> toto.tag
-   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "%% Non compatible pairs" >> COMPARE/samStats.$SV.txt
+   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "% Non compatible pairs" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
@@ -2110,7 +2137,7 @@ foreach target (T2T GRCh38 HG19)
 	endif
       end
     end
-    cat $IDB/introns.tsf | sort | gawk -F '\t' '/^#/{next;}{if($2 != old){old=$2;split(old,aa,"__");split(aa[2],bb,"_");a1=bb[1];a2=bb[2];if(a1<100 || a2<100){old=0;next;}ln=a2-a1;if(ln<0)ln=-ln;ln+=1;printf("\nIntron %s\nIntron\nIntMap %s %d %d\nLength %d\n", old,aa[1],a1,a2, ln);}printf("de_duo %s__%s %d\n",$1,$3,$5);}END{printf("\n");}' > $IDB/introns.$SV.ace
+    cat $IDB/introns.tsf | sort | gawk -F '\t' '/^#/{next;}{if($2 != old){old=$2;split(old,aa,"__");split(aa[2],bb,"_");a1=bb[1];a2=bb[2];if(a1<100 || a2<100){old=0;next;}ln=a2-a1;if(ln<0)ln=-ln;ln+=1;printf("\nIntron %s\nIntron\nIntMap %s %d %d\nLength %d\n", old,aa[1],a1,a2, ln);}printf("de_duo %s__%s %d\n",$1,$3,$5+$6);}END{printf("\n");}' > $IDB/introns.$SV.ace
     tace $IDB  <<EOF
       query find intron de_duo
       edit -D de_duo

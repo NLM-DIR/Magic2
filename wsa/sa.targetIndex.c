@@ -74,7 +74,7 @@ Array saTargetParseConfig (PP *pp)
 		       , line
 		       , pp->tConfigFileName
 		       ) ;
-	  if (! strchr ("GMCREATIBV", cc))
+	  if (! strchr ("GMCREIBV", cc))
 	    messcrash ("\n\nThe target class must be specified as a single character [GMCREATIBV], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
 		       , cc
 		       , line
@@ -409,6 +409,58 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
   return aa ;
 } /* GenomeAddSkips */
 
+/********************************************************************************************************************/
+
+static void saParseTarget (const PP *pp, TC *tc, BB *bbG)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  Array dna = 0 ;
+  DnaFormat format = tc->format ;
+  const char *fileName = tc->fileName ;
+  ACEIN ai = 0 ;
+  vTXT txt = vtxtHandleCreate (h) ;
+  int n = 0, nn, line = 0 ;
+
+  if (format != FASTA)
+    messcrash ("Target sequence files must be provided in fasta format\n", fileName) ;
+  
+  ai = aceInCreate (fileName, 0, h) ;
+  if (!ai)
+    messcrash ("\ncannot read target file %s", fileName) ;
+  aceInSpecial (ai, "\n") ;
+
+  while (aceInCard (ai))
+    {
+      char *cp = aceInPos (ai) ;
+      line++ ;
+      if (!cp || ! *cp || *cp == '/' || *cp == '#')
+	continue ;
+      if (*cp == '>')
+	{
+
+	  vtxtClear (txt) ;
+	  vtxtPrintf (txt, "%c.%s", tc->targetClass, cp + 1) ;
+	  dictAdd (bbG->dict, vtxtPtr (txt), &nn) ;
+	  vtxtClear (txt) ;
+	  n = 0 ;
+	  dna = array (bbG->dnas, nn, Array) = arrayHandleCreate ((0x1 << 28), unsigned char, bbG->h) ;
+	  continue ;
+	}
+      /* parse the dna */
+      cp-- ;
+      while (*++cp)
+	{
+	  unsigned char cc = dnaEncodeChar[(int)(*cp)] ;
+	  if (cc)
+	    array (dna, n++, unsigned char) = cc ;
+	  else
+	    messcrash ("Bad character %c line %n of target fasta file %s\n", cc, line, fileName) ;
+	}
+    }
+  
+  ac_free (h) ;
+} /* saParseTarget */
+  
 /**************************************************************/
 /* parse, code, sort the genome and create the index on disk
  * the human index takes around 18 GigaBytes
@@ -450,6 +502,12 @@ static long int saTargetIndexCreateDo (PP *pp)
       nTc++ ;
     }
 
+  bbG->h = ac_new_handle () ;
+  bbG->length = 0 ;
+  bbG->dict = dictHandleCreate (1024, bbG->h) ;
+  bbG->dnas = arrayHandleCreate (1024, BigArray, bbG->h) ;
+  bbG->cpuStats = arrayHandleCreate (128, CpuSTAT, bbG->h) ;
+	
   for (int nn = 0, ntc = 0 ; nn < nMax ; nn++)
     {
       tc = arrayp (tArray, nn, TC) ;
@@ -467,7 +525,7 @@ static long int saTargetIndexCreateDo (PP *pp)
       rc.fileName1 = tc->fileName ;
       rc.format = tc->format ;
       rc.run = nn + 1 ;
-      saSequenceParse (pp, 0, tc, bbG, ntc == nTc ? 2 :1 ) ; /* 2 for last non-intron target */
+      saParseTarget (pp, tc, bbG) ;
       step = (bbG->length < 1<<20) ? 2 : 4 ;
       if (pp->tStep)
 	step = pp->tStep ;
@@ -481,6 +539,27 @@ static long int saTargetIndexCreateDo (PP *pp)
 	  fprintf (stderr, "=== Allocated %d Mb, max %d Mb\n", mem, mx) ;
 	}
     }
+
+  /* create the REVERSE COMPLEMENT of the GENOME */
+  int iMax = bbG->nSeqs ;
+  globalDnaCreate (bbG) ;
+  bbG->globalDnaR = bigArrayHandleCopy (bbG->globalDna, bbG->h) ;
+      
+  bbG->dnasR = arrayHandleCreate (iMax, Array, bbG->h) ;
+  unsigned char *cp0 = bigArrayp (bbG->globalDnaR, 0, unsigned char) ;
+  for (int ii = 1 ; ii <= iMax ; ii++)
+    {
+      Array dnaR = arrayHandleCreate (8, unsigned char, bbG->h) ;
+      unsigned int x1 = bigArr (bbG->dnaCoords, 2*ii, unsigned int) ;      /* offset of this DNA */
+      unsigned int x2 = bigArr (bbG->dnaCoords, 2*ii + 1, unsigned int) ;
+      messfree (dnaR->base) ;
+      arrayLock (dnaR) ;
+      dnaR->base = (char *) cp0 + x1 ;
+      dnaR->max = dnaR->dim = x2 - x1 ;
+      reverseComplement (dnaR)  ;             /* complement in place */
+      array (bbG->dnasR, ii, Array) = dnaR ;
+    }
+
   for (int nn = 0 ; nn < nMax ; nn++)
     {
       tc = arrayp (tArray, nn, TC) ;

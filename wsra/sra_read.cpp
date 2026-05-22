@@ -69,6 +69,12 @@ int SraGetReadBatch(SRAReadBatch* sra, long int num_bases, int quality_scores,
     size_t num_bases_read = 0;
     bool is_paired;
     SraObj* sra_obj = static_cast<SraObj*>(sra->sra_obj);
+
+    sra->seq = nullptr;
+    sra->seq2 = nullptr;
+    sra->size = static_cast<long unsigned int>(0);
+    sra->size2 = static_cast<long unsigned int>(0);
+
     if (split_spot) {
         stringstream ss1;
         stringstream ss2;
@@ -83,8 +89,14 @@ int SraGetReadBatch(SRAReadBatch* sra, long int num_bases, int quality_scores,
         sra_obj->buff.first = std::move(ss1.str());
         sra_obj->buff.second = std::move(ss2.str());
 
-        sra->seq = !sra_obj->buff.first.empty() ? sra_obj->buff.first.c_str() : nullptr;
-        sra->seq2 = !sra_obj->buff.second.empty() ? sra_obj->buff.second.c_str() : nullptr;
+        if (!sra_obj->buff.first.empty()) {
+            sra->seq = sra_obj->buff.first.c_str();
+            sra->size = static_cast<unsigned long int>(sra_obj->buff.first.size());
+        }
+        if (!sra_obj->buff.second.empty()) {
+            sra->seq2 = sra_obj->buff.second.c_str();
+            sra->size2 = static_cast<unsigned long int>(sra_obj->buff.second.size());
+        }
     }
     else {
         stringstream ss;
@@ -96,7 +108,11 @@ int SraGetReadBatch(SRAReadBatch* sra, long int num_bases, int quality_scores,
         }
 
         sra_obj->buff.first = std::move(ss.str());
-        sra->seq = !sra_obj->buff.first.empty() ? sra_obj->buff.first.c_str() : nullptr;
+
+        if (!sra_obj->buff.first.empty()) {
+            sra->seq = sra_obj->buff.first.c_str();
+            sra->size = static_cast<unsigned long int>(sra_obj->buff.first.size());
+        }
      }
 
     sra->num_bases = num_bases_read;

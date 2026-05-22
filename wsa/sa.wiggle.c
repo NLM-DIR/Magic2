@@ -342,8 +342,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   int run = nw / (2 * chromMax) ;
   int chrom = (nw % (2 * chromMax)) ;
-  int np = array(pp->runStats, run, RunSTAT).nIntronSupportPlus ;
-  int nm = array(pp->runStats, run, RunSTAT).nIntronSupportMinus ;
+  int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
+  int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
   char flip = (pp->antiStrand || (! pp->strand && nm > 3 && 100*nm > 80*(nm+np))) ? 0x1 : 0x0 ;  ;  
   char strand = ( nw & 0x1) ^ flip ? 'r' : 'f' ;
   long int ii, iMax = 0 ;
@@ -744,7 +744,7 @@ static float geneIndex (const PP *pp, GC *gc)
 
 /**************************************************************/
 
-static long int wiggleExportGeneCounts (const PP *pp)
+static GeneCounts wiggleExportGeneCounts (const PP *pp)
 {
   AC_HANDLE h = ac_new_handle () ;
   int nw, wMax = arrayMax (pp->wiggles) ;
@@ -753,6 +753,7 @@ static long int wiggleExportGeneCounts (const PP *pp)
   long int igc = 0, jgc, igcMax = 0, nnn = 0 ;
   GC *gc, *gc2 ; 
   char tBuf[25] ;
+  GeneCounts gcs = {0} ;
   
   fprintf (stderr, "%s: start geneCounts export\n", timeBufShowNow (tBuf)) ;
   
@@ -801,10 +802,10 @@ static long int wiggleExportGeneCounts (const PP *pp)
 	       , geneIndex (pp, gc)
 	       , gc->boxCount/720, gc->exonCount/720
 	       ) ;
-  
+
   fprintf (stderr, "%s: stop geneCounts export total count %ld\n", timeBufShowNow (tBuf), nnn/720) ;
   ac_free (h) ;
-  return nnn ;
+  return gcs ;
 } /* wiggleExportGeneCounts */
 
 /**************************************************************/
@@ -895,13 +896,14 @@ static void wiggleExportWiggleStats (PP *pp)
 /**************************************************************/
 /**************************************************************/
 
-void saWiggleExport (PP *pp, int nAgents)
+GeneCounts saWiggleExport (PP *pp, int nAgents)
 {
   AC_HANDLE h = ac_new_handle () ;
   int wMax = arrayMax (pp->wiggles) ;
   BOOL debug = FALSE ;
   char tBuf[25] ;
-
+  GeneCounts gcs = {0} ;
+  
   pp->wiggleCumuls = arrayHandleCreate (wMax, long int, h) ;
   pp->cdss = arrayHandleCreate (wMax, long int, h) ;
   pp->utrs = arrayHandleCreate (wMax, long int, h) ;
@@ -955,12 +957,12 @@ void saWiggleExport (PP *pp, int nAgents)
   fprintf (stderr, "%s: stop wiggle export\n", timeBufShowNow (tBuf)) ;
 
   if (pp->geneBoxes)
-    wiggleExportGeneCounts (pp) ;
+    gcs = wiggleExportGeneCounts (pp) ;
 
   wiggleExportWiggleStats (pp) ;
   
   ac_free (h) ;
-  return ;
+  return gcs ;
 }
 
 /**************************************************************/

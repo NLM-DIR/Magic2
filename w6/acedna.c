@@ -476,16 +476,18 @@ void aceDnaShowErr (Array err)
 /********************************************************************/
 
 /* in a padded system, there should be no insert delete ? */
-#ifdef JUNK
+
 static JUMP paddedJumper [] = {
 { 1, 1, 0, 0 }   /* default is punctual */
 } ;
-#endif
+
 
 static int useJumper = 0 ;
 
 void aceDnaSetIlmJumper (BOOL ok)
 { useJumper = ok ? 1 : 0 ; }
+void aceDnaSetPaddedJumper (BOOL ok)
+{ useJumper = ok ? -1 : 0 ; }
 void aceDnaSetSolidJumper (BOOL ok)
 { useJumper = ok ? 2 : 0 ; }
 void aceDnaSetRocheJumper (BOOL ok)
@@ -501,6 +503,7 @@ static JUMP jumpN [] = {{1000,0,0,0}} ;  /* a kludge, to jump ambiguities */
   /* dna1 = short, dna2 = long */
 
 JUMP jumper [] = {  /* called from abifix.c */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 12, 0},    /* ponctuel */
@@ -535,6 +538,7 @@ JUMP jumper [] = {  /* called from abifix.c */
 } ;
 
 JUMP editGenomeJumper [] = {  /* called from dna2dna -editGenome */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 80, 1},    /* insert in 1 */
  {0, 1, 80, 1},    /* trou in 1 */
  {1, 1, 80, 1},    /* ponctuel */
@@ -547,6 +551,7 @@ JUMP editGenomeJumper [] = {  /* called from dna2dna -editGenome */
 } ;
 
 JUMP ilmJumper [] = {  /* called from abifix.c */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 12, 0},    /* ponctuel */
@@ -568,6 +573,7 @@ JUMP ilmJumper [] = {  /* called from abifix.c */
 
 
 static JUMP solidJumper [] = {  /* called from abifix.c */
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 10, 0},    /* ponctuel */
@@ -670,6 +676,7 @@ static JUMP deleteJumper [] = {
  * au jumper nanopore utilise en depuis juin 2020
  */
 static JUMP pacbioJumper [] = {
+ {1, 1,  4, 0},    /* pontuel if ok apres */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
  {1, 1, 12, 0},    /* ponctuel */
@@ -739,9 +746,9 @@ static JUMP pacbioJumperOld
 #endif
 
 static JUMP nanoporeJumper [] = {
+ {1, 1, 4, 0},    /* ponctuel */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
- {1, 1, 12, 0},    /* ponctuel */
 
  {1, 0, 8, 0},    /* insert in 1 */
  {0, 1, 8, 0},    /* trou in 1 */
@@ -878,6 +885,9 @@ Array aceDnaTrackErrors (Array  dna1, int pos1, int *pp1,
   
   switch (useJumper)
     {
+    case -1: /* No indels, good choice if maxError = 0 */
+      activeJumper = paddedJumper ;
+      break ;
     case 1: /* illumina */
       activeJumper = ilmJumper ;
       break ;
@@ -1487,34 +1497,33 @@ Array aceDnaDoubleTrackErrors (Array  dna1, int *x1p, int *x2p, BOOL isDown,
       if (maxErrorOld == -3)
 	{ maxError = -3 ; doExtend = doExtendOld ; }
 
-      u1 = *x1p - 1 ; u2 = *a1p - 1 ; /* C type coord of first base */
-      if (err1 && arrayMax (err1))
-	{
-	  ep = arrp (err1, 0, A_ERR) ;
-	  *a1p = ep->iLong  + 1 ;
-	  *x1p = ep->iShort + 1 ;
-	  /* *a1p *x2p is the C coord base after the first error */
-	  if (*x1p > 1 && *a1p > 1)
+      if (maxErrorOld != -3)
+	{  /* extend left */
+	  u1 = *x1p - 1 ; u2 = *a1p - 1 ; /* C type coord of first base */
+	  if (err1 && arrayMax (err1))
 	    {
-	      u1 = *x1p - 1 ; u2 = *a1p - 1 ; /* C type coord of first error */
+	      ep = arrp (err1, 0, A_ERR) ;
+	      *a1p = ep->iLong  + 1 ;
+	      *x1p = ep->iShort + 1 ;
+	      /* *a1p *x2p is the C coord base after the first error */
+	      if (*x1p > 1 && *a1p > 1)
+		{
+		  u1 = *x1p - 1 ; u2 = *a1p - 1 ; /* C type coord of first error */
+		}
 	    }
+	  if (maxErrorOld == -2)
+	    { maxError = -2 ; doExtend = TRUE ; }
+	  if ((u1 > y1 - 1 && u2 > b1 - 1) || doExtend)
+	    {
+	      int uz1 = u1 - 1, uz2 = u2 - 1 ;
+	      u1 = y1 - 1; u2 = b1 - 1 ;
+	      err2 = arrayCreate (5, A_ERR) ;
+	      err2 = aceDnaTrackErrorsBackwards (dna1, uz1, &u1, dna2, uz2, &u2, NNp, err2, maxJump, maxError, doExtend) ;
+	      *x1p = u1 + 1 ; *a1p = u2 + 1 ;
+	    }
+	  if (maxErrorOld == -2)
+	    { maxError = -2 ; doExtend = doExtendOld ; }
 	}
-      if (maxErrorOld == -2)
-	{ maxError = -2 ; doExtend = TRUE ; }
-      if (maxErrorOld == -3)
-	{ maxError = -2 ; doExtend = FALSE ; }
-      if ((u1 > y1 - 1 && u2 > b1 - 1) || doExtend)
-	  {
-	    int uz1 = u1 - 1, uz2 = u2 - 1 ;
-	    u1 = y1 - 1; u2 = b1 - 1 ;
-            err2 = arrayCreate (5, A_ERR) ;
-	    err2 = aceDnaTrackErrorsBackwards (dna1, uz1, &u1, dna2, uz2, &u2, NNp, err2, maxJump, maxError, doExtend) ;
-	    *x1p = u1 + 1 ; *a1p = u2 + 1 ;
-	  }
-      if (maxErrorOld == -2)
-	{ maxError = -2 ; doExtend = doExtendOld ; }
-      if (maxErrorOld == -3)
-	{ maxError = -3 ; doExtend = doExtendOld ; }
       j = 0 ; 
       if (err2 && arrayMax (err2))
 	for (i = arrayMax (err2) - 1 ; i >= 0 ; i--)

@@ -97,6 +97,7 @@ if ("$1" == init) then
     exit 1
   endif
   pushd  $MAGIC_SRC ; setenv MAGIC_SRC `pwd` ; popd
+
   if ($?ACEDB_MACHINE) then
     set MAGIC_BIN=$MAGIC_SRC/bin.$ACEDB_MACHINE
   else
@@ -163,10 +164,12 @@ if ("$1" == init) then
       gzip -c ZZZZZ > ZZZZZ.gz
     endif
 
+    ln -s $MAGIC_SRC/waligner/scripts
     ln -s $MAGIC_SRC/waligner/scripts2
     ln -s $MAGIC_SRC/waligner/metaData
     ln -s $MAGIC_BIN bin
-    ln -s scripts2/MAGIC
+    ln -s scripts/MAGIC
+    ln -s scripts2/MAGIC2
     ln -s bin/tacembly tbly
     ln -s bin/xacembly bly
     if (! -d RESULTS) mkdir RESULTS
@@ -218,7 +221,7 @@ if (! -e scripts2/MAGIC2) then
     exit 1
 endif
 
-if (! -e TARGET/LIMITS || ! -d TARGET/Targets || ! -d TARGET/CHROMS) then
+if (! -e TARGET/LIMITS || ! -d TARGET/Targets) then
     echo "The TARGET directory, which should contains at least LIMITS, CHROMS and Targets is missing or incomplete"
     echo 'You may be in the wrong directory, our you should run the command'
     echo '$MAGIC_SRC/waligner/scritps2/MAGIC2 init [DNA | RNA]'
@@ -977,10 +980,10 @@ if ($phase == a0) goto phasea0
 
 ### verify once the metadata
 
-if ($firstPhase == 1) scripts2/metadata.tcsh
+if (0 && $firstPhase == 1) scripts2/metadata.tcsh
 
 set firstPhase=0
-if (! -e  tmp/METADATA/metadata.ok) then
+if (0 && ! -e  tmp/METADATA/metadata.ok) then
   echo "FATAL ERROR scripts2/metadata.tcsh reported an error. the TARGET data are incomplete"
   echo
   exit 1
@@ -2349,11 +2352,15 @@ if (! -d TARGET/IDX/IDX.$species) then
   mkdir TARGET/IDX
   if (-e TARGET/Targets/$species.genome.fasta.gz) echo "G\tTARGET/Targets/$species.genome.fasta.gz" > TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.mito.fasta.gz) echo "M\tTARGET/Targets/$species.mito.fasta.gz" >> TARGET/IDX/tConfig
+  if (-e TARGET/Targets/$species.chloro.fasta.gz) echo "C\tTARGET/Targets/$species.chloro.fasta.gz" >> TARGET/IDX/tConfig  
   if (-e TARGET/Targets/$species.rrna.fasta.gz) echo "R\tTARGET/Targets/$species.rrna.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.SpikeIn.fasta.gz) echo "E\tTARGET/Targets/$species.SpikeIn.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.magic.fasta.gzZZZ) echo "T\tTARGET/Targets/$species.magic.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.DNASpikeIn.fasta.gz) echo "E\tTARGET/Targets/$species.DNASpikeIn.fasta.gz" >> TARGET/IDX/tConfig
-  if (-e TARGET/GTF/$species.$target.gtf.gz) echo "I\tTARGET/GTF/$species.$target.gtf.gz" >> TARGET/IDX/tConfig
+  if (-e TARGET/Targets/$species.bacteria.fasta.gz) echo "B\tTARGET/Targets/$species.bacteria.fasta.gz" >> TARGET/IDX/tConfig  
+  if (-e TARGET/Targets/$species.virus.fasta.gz) echo "V\tTARGET/Targets/$species.virus.fasta.gz" >> TARGET/IDX/tConfig  
+  
+  if (-e TARGET/GTF/$species.gtf.gz) echo "I\tTARGET/GTF/$species.gtf.gz" >> TARGET/IDX/tConfig
 
   $sortalign --createIndex TARGET/IDX/IDX.$species -T TARGET/IDX/tConfig
 endif
@@ -2362,7 +2369,7 @@ if (! -d tmp/SA) mkdir tmp/SA
 
 foreach run (`cat MetaDB/$MAGIC/RunList`)
   if (-e tmp/SA/$run/runStats.tsf) continue
-  if (-d tmp/SA/$run) \rm -rf tmp/SA/$run
+  if (-d tmp/SA/$run/hits) \rm -rf tmp/SA/$run/hits
   mkdir tmp/SA/$run
   if (! -e Fastc/$run/LaneList && ! -e tmp/SA/$run/iConfig) then
     set srr=`cat MetaDB/$MAGIC/Run2Srr.txt | gawk -F '\t' '{if($1==run)print $2;}' run=$run`

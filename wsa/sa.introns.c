@@ -327,10 +327,10 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   int i, j, nE ;
   int bestN, bestI = -1, bestJ = -1 ;
   int dy = 0 ;  /* dy > 0 recouvrement, dy < 0: trou dans le read */
-  BOOL isDown = (vp->a1 < vp->a2 ? TRUE : FALSE ) ;
-  int da = isDown ? vp->a2 - wp->a1 + 1: wp->a1 - vp->a2 + 1 ;
+  BOOL isDown = (vp->a1 <= vp->a2 ? TRUE : FALSE ) ;
+  int da = vp->a2 - wp->a1 + 1 ;
   /* int day = dy - da ; */
-  
+  if (! isDown) { messerror ("isDown should be true read %s\n", dictName (bb->dict, vp->read >> 1)) ;  return  ;} 
   if (0 && da < 4 && da > -4 && dy < 4 && dy > -4 && vp->chrom == wp->chrom)
     {
       /* merge the 2 alignments */
@@ -343,8 +343,8 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    vp->errors = arrayHandleCreate (20, A_ERR, bb->h) ;
 	}
       vp->nErr = arrayMax (vp->errors) ;
-      /*       int dz = dy - (isDown ? da : -da) ; */
-      if (dy) /* create an error at th new junction */
+
+      if (dy) /* create an error at the new junction */
 	{
 	  epX = arrayp (vp->errors, vp->nErr++, A_ERR) ;
 	  epX->iShort = wp->x1 - 1 ;
@@ -375,7 +375,28 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
     {
       int dx = vp->x1 - wp->x1 ;
       wp->x1 = vp->x1 ;
-      wp->a1 += (isDown ? dx : -dx ) ;  /* correct only if there are no indel in [wp->a1,wp->a1+dx] segment */
+      wp->a1 += dx ;  /* correct only if there are no indel in [wp->a1,wp->a1+dx] segment */
+            if (nEy)  /* we need to correct wp->a1 for the clipped errors */
+	{
+	  int dda = 0 ;
+	  epY = arrp (wp->errors, 0, A_ERR) ;
+	  for (int i = 0 ; i < nEy && epY->iShort + 1 <= wp->x1 ; i++, epY++)
+	    {
+	      if (epY->iShort + 1 < wp->x1 - dx) continue ;
+	      switch (epY->type)
+		{
+		case INSERTION: dda++ ; break ;
+		case INSERTION_DOUBLE: dda += 2 ; break ;
+		case INSERTION_TRIPLE: dda += 3 ; break ;
+		case TROU: dda-- ; break ;
+		case TROU_DOUBLE: dda -= 2 ; break ;
+		case TROU_TRIPLE: dda -= 3 ; break ;
+		default: break ;
+		}
+	    }
+	  wp->a1 -= dda ;
+	}
+
     }
   dy = vp->x2 - wp->x1 + 1 ;
   if (dy > 0 && nEx + nEy > 0)
@@ -394,6 +415,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	}
       nE = zEx + zEy ;
       bestN = nE ;
+      if (bestI == nEx) zX = vp->x2 ;
       int cI = bestI, cJ = bestJ ;
       int cY1 = y1, cX2 = zX ;
       
@@ -428,24 +450,25 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    {
 	      epY = arrp (wp->errors, j, A_ERR) ;
 	      zY = epY->iShort + 2  ; /* first good base starting from the right */
-	      switch (epY->type)
- 		{   /* we need to adjust the coordinates */
-		case INSERTION:
-		  break ;
-		case INSERTION_DOUBLE:
-		  zY+= 1 ;
-		  break ;
-		case INSERTION_TRIPLE:
-		  zY += 2 ;
-		  break ;
-		case TROU:
-		case TROU_DOUBLE:
-		case TROU_TRIPLE:
-		  zY -- ;
-		  break ;
-		default:
-		  break ;
-		}
+	      if (1)  // no adjustment we are in read coordinates
+		switch (epY->type)
+		  {   /* we need to adjust the coordinates */
+		  case INSERTION:
+		    break ;
+		  case INSERTION_DOUBLE:
+		    zY+= 1 ;
+		    break ;
+		  case INSERTION_TRIPLE:
+		    zY += 2 ;
+		    break ;
+		  case TROU:
+		  case TROU_DOUBLE:
+		  case TROU_TRIPLE:
+		    zY -- ;
+		    break ;
+		  default:
+		    break ;
+		  }
 
 	      if (zY <= cX2 + 1)
 		{  /* eating this Y error is favorable */
@@ -481,9 +504,8 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    {
 	      epX = arrp (vp->errors, bestI, A_ERR) ;
 	      vp->x2 = epX->iShort ;  /* last exact base bio coords */
-	      /* vp->a2 = epX->iLong + (isDown ? 0 : 2) ; */
-	      int zA = epX->iLong + (isDown ? 0 : 0) ;
-	      vp->a2 = (vp->chrom & 0x1 ?  arrayMax(dnaG) - zA + 1 : zA) ;
+	      int zA = epX->iLong ;
+	      vp->a2 = zA ;
 	    }
 	  nEx = bestI ;
 	  vp->nErr = arrayMax (vp->errors) = nEx ;
@@ -523,7 +545,7 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	      break ;
 	    }
 	  wp->x1 = zY + dY + 1 ;  /* bio coords */
-	  wp->a1 = (isDown ?  zA + dA + 1 : arrayMax(dnaG) - zA - dA) ;
+	  wp->a1 = zA + dA + 1 ;
 	  wp->nErr -= bestJ + 1 ;
 	  if (wp->nErr)
 	    for (j = 0, epY = arrp (wp->errors, 0, A_ERR) ; j < wp->nErr ; epY++, j++)
@@ -567,29 +589,6 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
       if (donor && vp->a2 == donor - 1)
 	foundDonor = TRUE ;
     }
-  else
-    {
-      isReadDown = FALSE ;
-      donor = vp->donor ;
-      acceptor = wp->acceptor ;
-
-      if (donor < 0)
-	{ donor = - donor ; acceptor = -acceptor ; }
-      if (donor == 0 && acceptor < 0)
-	{ acceptor = - acceptor ; }
-      if (donor && donor < acceptor)
-	donor = acceptor = 0 ;
-      
-      if (dy > 0 && donor && vp->a2 <= donor && vp->a2 >= donor - dy + 1)
-	
-	{  /* move back to the canonical donor site */
-	  dy = donor - vp->a2 + 1 ;
-	  vp->x2 -= dy ;
-	  vp->a2 += dy ;
-	}      
-      if (donor && vp->a2 == donor + 1)
-	foundDonor = TRUE ;
-    }
 
   /* alternativelly  trim if possible the wp->x2 start of the second  exon on a known 'acceptor' */
   dy = vp->x2 - wp->x1 + 1 ;
@@ -609,25 +608,6 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	    {
 	      vp->x2 -= dy ;
 	      vp->a2 -= dy ;
-	    }
-	}
-    }
-  else if (!isReadDown && acceptor)
-    {
-      if (dy > 0 && wp->a1 > acceptor - 1 && wp->a1 - dy <= acceptor - 1)
-	{
-	  dy = wp->a1 - acceptor + 1 ;
-	  wp->x1 += dy ;
-	  wp->a1 -= dy ;
-	}
-      if (wp->a1 == acceptor - 1)
-	{
-	  foundAcceptor = TRUE ;
-	  dy = vp->x2 - wp->x1 + 1 ;
-	  if (dy > 0) /* trim vp->x2 */
-	    {
-	      vp->x2 -= dy ;
-	      vp->a2 += dy ;
 	    }
 	}
     }
@@ -696,75 +676,32 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
 	  acceptor = wp->a1 - 1 ;
 	}	    
     }
-  else if (dy > 0 && !isReadDown && ! foundDonor && !foundAcceptor && wp->a1 > dy && vp->a2 > 3) 
-    {
-      /* move backwards on the genome */
-      unsigned char *cp = arrp (dnaG, wp->a1 - dy, unsigned char) ; /* the base just after vp->a2 - dy */
-      unsigned char *cq = arrp (dnaG, vp->a2 - 3, unsigned char) ; /* the base 2 bases before wp->a1 - dy */
-      int bestI = -1 ;
-      if (bb->runStat.gt_ag_Support < bb->runStat.ct_ac_Support)
-	{     /* favor gt_ag over ct_ac */
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == C_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == G_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == T_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	}
-      else
-	{ /* favor ct_ac over gt_ag */
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == T_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_ && cq[i] == G_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == G_ && cp[i+1] == C_ && cq[i] == A_ && cq[i+1] == G_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cp[i] == C_ && cp[i+1] == T_)
-	      { bestI = i ; goto ok2 ; }
-	  for (int i = 0 ; i <= dy ; i++)
-	    if (cq[i] == A_ && cq[i+1] == C_)
-	      { bestI = i ; goto ok2 ; }
-	}
-    ok2:
-      if (bestI >= 0)
-	{
-	  dy -= bestI ;
-	  wp->x1 += dy ;
-	  wp->a1 -= dy ;
-	  donor = vp->a2 - 1 ;
-	  
-	  dy = bestI ;
-	  vp->x2 -= dy ;
-	  vp->a2 += dy ;
-	  acceptor = wp->a1 + 1 ;
-	}	    
-    }
   
  done:   /* In any case trim the second exon a bouts francs */
   dy = vp->x2 - wp->x1 + 1 ;
   if (dy > 0)
     { 
       wp->x1 += dy ;
-      wp->a1 += (wp->a1 < wp->a2 ? dy : -dy) ;
+      wp->a1 += dy ;
+      if (nEy)  /* we need to correct wp->a1 for the clipped errors */
+	{
+	  int dda = 0 ;
+	  epY = arrp (wp->errors, 0, A_ERR) ;
+	  for (int i = bestJ + 1 ; i < nEy && epY->iShort + 1 < wp->x1 ; i++, epY++)
+	    {	      
+	      switch (epY->type)
+		{
+		case INSERTION: dda++ ; break ;
+		case INSERTION_DOUBLE: dda += 2 ; break ;
+		case INSERTION_TRIPLE: dda += 3 ; break ;
+		case TROU: dda-- ; break ;
+		case TROU_DOUBLE: dda -= 2 ; break ;
+		case TROU_TRIPLE: dda -= 3 ; break ;
+		default: break ;
+		}
+	    }
+	  wp->a1 -= dda ;
+	}
     }
 
   dy = vp->x2 - wp->x1 + 1 ;
@@ -867,11 +804,10 @@ static char *flipFeet (char *feet)
 {
   char buf[6] ;
   memcpy (buf, feet, 6) ;
-  feet[0] = complementLetter(buf[4]) ;
-  feet[1] = complementLetter(buf[3]) ;
-  feet[3] = complementLetter(buf[1]) ;
-  feet[4] = complementLetter(buf[0]) ;
-
+  feet[0] = ace_lower(complementLetter(buf[4])) ;
+  feet[1] = ace_lower(complementLetter(buf[3])) ;
+  feet[3] = ace_lower(complementLetter(buf[1])) ;
+  feet[4] = ace_lower(complementLetter(buf[0])) ;
   return feet ;
 }
   
@@ -879,119 +815,62 @@ static char *flipFeet (char *feet)
 
 void saIntronStranding (PP *pp, Array aa)
 {
-  INTRON *zp, *zpR ;
+  INTRON *zp ;
   int runMax = dictMax (pp->runDict) + 1 ;
-  int nGt_ag[runMax] ;
-  int nCt_ac [runMax] ;
-  int cGood[runMax][12] ;
-  int cOther [runMax][12] ;
-  int k  ;
   float minS = 100 ;
   int run, ii, iMax = arrayMax (aa) ;
   float *s0 = pp->runStranding ;
-  
-  memset (nGt_ag, 0, sizeof (nGt_ag)) ;
-  memset (nCt_ac, 0, sizeof (nCt_ac)) ;
-  memset (cGood, 0, sizeof (cGood)) ;
-  memset (cOther, 0, sizeof (cOther)) ;
-  
-  if (iMax)
-    for (ii = 0, zp = arrp (aa, ii, INTRON) ; ii < iMax ; ii++, zp++)
-      {
-	for (char *cp = zp->feet ; *cp ; cp++)
-	*cp = ace_lower ((int)*cp) ;
-	if (! strcmp (zp->feet, "gt_ag"))
-	  {
-	    k = zp->n + zp->nR ;
-	    nGt_ag[zp->run]++ ;
-	    cGood[zp->run][k < 12 ? k : 11]++ ;
-	  }
-	else if (! strcmp (zp->feet, "ct_ac"))
-	  {
-	    k = zp->n + zp->nR ;
-	    nCt_ac[zp->run]++ ;
-	    cGood[zp->run][k < 12 ? k : 11]++ ;
-	  }
-	else
-	  {
-	    k = zp->n + zp->nR ;
-	    cOther[zp->run][k < 12 ? k : 11]++ ;
-	  }
-      }
-  
-  /* check ratio of Good/Other to find the threshold */
-  for (run = 0 ; run < runMax ; run++)
+  long int np0 = 0, nm0 = 0 ;
+  if (! iMax)
+    return ;
+
+  for (run = 1 ; run < runMax ; run++)
     {
-      /* cumul by coverage */
-      for (k = 1 ; k < 12 ; k++)
-	{	
-	  cGood[run][k] += cGood[run][k-1] ;
-	  cOther[run][k] += cOther[run][k-1] ;
-	}
-    }
-  for (run = 0 ; run < runMax ; run++)
-    {
-      s0[run] = array(pp->runStats, run, RunSTAT).intronStranding = 100.0 * (nGt_ag[run] + 1.0) / (nGt_ag[run] + nCt_ac[run] + .0001) ;
-      
+      int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
+      int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
+      s0[run] = 100.0 * (np + 0.01) / (np + nm + 0.0000001) ;
+      np0 += np ; nm0 += nm ;
       if (pp->strand)
 	s0[run] = 100 ;
       else if (pp->antiStrand)
 	s0[run] = 0 ;
-      if (s0[run] < minS && nCt_ac[run])
-	minS = s0[run] ;
+      array(pp->runStats, run, RunSTAT).intronStranding = s0[run] ;
+      if (s0[run] < minS) minS = s0[run] ;
     }
+  s0[0] = 100.0 * (np0 + 0.01) / (np0 + nm0 + 0.0000001) ;
+  if (pp->strand)
+    s0[0] = 100 ;
+  else if (pp->antiStrand)
+    s0[0] = 0 ;
   
-  if (minS < 70) /* flip needed */
+  if (1)
     {
       for (ii = 0, zp = arrp (aa, ii, INTRON) ; ii < iMax ; ii++, zp++)
 	{
-	  if (s0[zp->run] < 40)
+	  if (s0[zp->run] > 60 && zp->nR > zp->n)
 	    {  /* flip the whole run */
 	      int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
 	      flipFeet (zp->feet) ;
+	      int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
 	    }
-	  else if (s0[zp->run] < 60)  
+	  else if (s0[zp->run] < 40 && zp->nR < zp->n)
+	    {  /* flip the whole run */
+	      int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
+	      flipFeet (zp->feet) ;
+	      int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
+	    }
+	  else if (s0[zp->run] <= 60 &&  s0[zp->run] >=40)
 	    {  /* non stranded case, choose for every intron */
 	      if (! strcmp (zp->feet, "ct_ac") || ! strcmp (zp->feet, "ct_gc"))
 		{
 		  int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
 		  flipFeet (zp->feet) ;
+		  int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
 		}
 	    }
 	}
     }
   
-  /* compute the anti counts */
-  if (iMax)
-    {
-      array (aa, 2*iMax -1, INTRON).n = 0 ;
-      for (ii = 0, zp = arrp (aa, ii, INTRON), zpR = zp + iMax ; ii < iMax ; ii++, zp++, zpR++)
-	{
-	  *zpR = *zp ;
-	  zpR->a1 = zp->a2 ; zpR->a2 = zp->a1 ; 
-	  zpR->nR = zp->n ; zpR->n = zp->nR ; zpR->feet[0] = 0 ;
-	}
-      /* merged counts and antiCounts */
-      for (run = 0 ; run < runMax ; run++)
-	{
-	  array(pp->runStats, run, RunSTAT).nIntronSupportPlus = 0 ;
-	  array(pp->runStats, run, RunSTAT).nIntronSupportMinus = 0 ;
-	}
-      iMax = confirmedIntronsCompress (aa) ;
-      for (ii = 0, zp = arrp (aa, ii, INTRON); ii < iMax ; ii++, zp++)
-	{
-	  array(pp->runStats, zp->run, RunSTAT).nIntronSupportPlus +=  (s0[zp->run] < 40 ? zp->nR : zp->n) ;
-	  array(pp->runStats, zp->run, RunSTAT).nIntronSupportMinus += (s0[zp->run] < 40 ? zp->n : zp->nR) ;
-	  array(pp->runStats, 0, RunSTAT).nIntronSupportPlus += (s0[zp->run] < 40 ? zp->nR : zp->n) ;
-	  array(pp->runStats, 0, RunSTAT).nIntronSupportMinus += (s0[zp->run] < 40 ? zp->n : zp->nR) ;
-	}
-      for (run = 0 ; run < runMax ; run++)
-	{
-	  int np = array(pp->runStats, run, RunSTAT).nIntronSupportPlus ;
-	  int nm = array(pp->runStats, run, RunSTAT).nIntronSupportMinus ;
-	  array(pp->runStats, run, RunSTAT).intronStranding = 100.0 * np / (np + nm + 0.0000001) ;
-	}
-    }
   return ;
 } /* saIntronStranding */
 
@@ -1025,7 +904,7 @@ void saIntronsExport (PP *pp, Array aaa)
 	  else if (!strcasecmp (up->feet, "gc_ag"))
 	    min = 2 ;
 
-	  if (0 && up->n + up->nR >= min)
+	  if (1 && up->n + up->nR >= min)
 	    aceOutf (ao, "%s__%d_%d\t%s\tiit\t%d\t%d\t%s\n"
 		     , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2
 		     , dictName (pp->runDict, up->run)
@@ -1063,8 +942,10 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 	  int min = 2 ;
 	  if (! up->feet1[0])
 	    continue ;
-	  if (s0[up->run] < 40 || /* flip whole run */
-	      (s0[up->run] < 40 && (! strcasecmp (up->feet1, "ct_ac") || ! strcasecmp (up->feet2, "ct_ac")))
+	  if (
+	      (s0[up->run] > 60 && up->nR > up->n) ||
+	      (s0[up->run] < 40 && up->nR < up->n) ||
+	      (s0[up->run] <= 60 &&  s0[up->run] >=40 && (!strcasecmp (up->feet1, "ct_ac") || !strcasecmp (up->feet1, "ct_gc")))
 	      ) /* flip needed */
 	    {
 	      if (!strcasecmp (up->feet1, "ct_ac") && !strcasecmp (up->feet2, "ct_ac"))
@@ -1073,11 +954,12 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 		min = 1 ;
 	      else if (!strcasecmp (up->feet1, "ct_ac") && !strcasecmp (up->feet2, "ct_gc"))
 		min = 1 ;
-	      if (up->n >= min)
-		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+	      if (up->n + up->nR >= min)
+		aceOutf (ao, "AA: %f  %s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+			 , s0[up->run]
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->b2, up->b1, up->a2, up->a1
 			 , dictName (pp->runDict, up->run)
-			 , up->n, up->nR
+			 , up->nR, up->n
 			 , flipFeet (up->feet2)
 			 , flipFeet (up->feet1)
 			 ) ;
@@ -1090,8 +972,9 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 		min = 1 ;
 	      else if (!strcasecmp (up->feet1, "gt_ag") && !strcasecmp (up->feet2, "gc_ag"))
 		min = 1 ;
-	      if (up->n >= min)
-		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+	      if (up->n + up->nR >= min)
+		aceOutf (ao, "BB: %f %s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+			 , s0[up->run]
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2, up->b1, up->b2
 			 , dictName (pp->runDict, up->run)
 			 , up->n, up->nR
