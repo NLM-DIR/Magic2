@@ -149,7 +149,7 @@ static void alignCheckSize (BB *bb, Array aa)
 {
   int ii, iMax = arrayMax (aa) ;
   int nD, nI ;
-  if (0) return ;
+  if (1) return ;
   for (ii = 0 ; ii < iMax ; ii++)
     {
       ALIGN *up = arrp (aa, ii, ALIGN) ;

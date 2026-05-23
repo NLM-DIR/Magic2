@@ -83,7 +83,7 @@ typedef struct saParseStruct {
  */
 
 /* public functions */
-SAPARSE *sraParseGet (const char *srrId, int BMAX, format (fasta/fastq) ;
+SAPARSE *sraParseGet (const char *srrId, int BMAX, int format) ; // format = 0/1  (fasta/fastq)
 void sraParseClose (SAPARSE *saParse) ;  // free or recycle the buffers
 
 
