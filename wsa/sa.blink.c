@@ -16,8 +16,35 @@
 
 
 /********************************************************************************************************************/
-/*************************** encode SAPARSE into standard dna arrays ************************************************/
+/*************************** construct combs of alternate parity of length KMAX in a dna ****************************/
 /********************************************************************************************************************/
+/* ln must be odd and se select the strand based on the central letter */
+static kmerCountOne (Array dna, Array kmers, int ln)
+{
+  int i, iMax = dna ? arrayMax (dna) : 0 ;
+  int iMax2 ;
+  const unsigned char *cp = iMax ? arrayp (dna, 0, unsigned char) ;
+  unsigned long w0 = 0, w1 = 0, w1r = 0 ;
+  int dn = 2 * (ln - 1) ;
+  unsigned long mask = ((unsigned long) 1) << (2 * ln) - 1 ;
+  unsigned long mask2 = ((unsigned long) 1) << (2 * ln) - 3 ; 
+  if (cp)
+    {
+      for (i = 0, iMax2 = iMax - 2 * ln + 1 ; i < iMax2 ; i++, cp++)
+	{
+	  w0 = ((w0 << 2) | (cp[0] & 0x3)) & mask ;
+	  w1 = ((w1 << 2) | (cp[1] & 0x3)) & mask ;
+	  w0r = ((w0r >> 2) & mask2) | (((cp[1] ^ 0x3) & 0x3) << dn) ;
+	  w1r = ((w1r >> 2) & mask2) | (((cp[1] ^ 0x3) & 0x3) << dn) ;
+	}
+      if (i >= ln)
+	{ /* words are complete */
+
+	}
+    }
+} /* kmerCount */
+
+  static kmerCount (PP *pp, BB *bb, Array kmers)
 /*
  * sa.kmer_bitmap.c
  *

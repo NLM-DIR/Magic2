@@ -54,9 +54,9 @@ static int saScanDnaEncode (BB *bb)
       maxDnaLn = (n > maxDnaLn ? n : maxDnaLn) ;
       nn += n ;
     }
-  sap->nBases = nn ;
-  bb->runStat.p.minReadLength = sap->minDnaLn = minDnaLn ;
-  bb->runStat.p.minReadLength = sap->maxDnaLn = maxDnaLn ;
+
+  bb->runStat.p.minReadLength = minDnaLn ;
+  bb->runStat.p.minReadLength = maxDnaLn ;
   
   return nn ;
 } /* saScanDnaEncode */
