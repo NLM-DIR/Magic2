@@ -439,7 +439,7 @@ void    stackClear (Stack s) ;
 #define stackNext(stk,type) (*((type*)(  ((stk)->pos += STACK_ALIGNMENT ) - \
                                              STACK_ALIGNMENT ))  )
 #define stackSkip(stk) ((stk)->pos += STACK_ALIGNMENT )
-#endif
+#endif 
 
 #if STACK_DOUBLE_ALIGNMENT > STACK_ALIGNMENT
 void ustackDoublePush(Stack stk, double x);
