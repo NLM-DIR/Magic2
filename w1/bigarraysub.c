@@ -44,7 +44,9 @@ static char * bigArrayAlloc (long int n, int size)
 {
   mysize_t nn = (mysize_t) n * size ;
   char *cp = NULL ;
-  posix_memalign ((void**)&cp, 64, nn) ;
+  int error = posix_memalign ((void**)&cp, 64, nn) ;
+  if (error)
+    messcrash ("bigArrayAlloc cannot allocate %ld bytes, sorry, no more RAM", n) ;
   memset (cp, 0, nn) ;
   return cp ;
 } /* bigArrayAlloc */
