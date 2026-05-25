@@ -182,6 +182,8 @@ setenv SV     v110.81.18M.e4.may22     # intron mates intronHit orientation fixe
 setenv SVlast v110.81.18M.e4.may22    # 
 setenv SV     v111.81.18M.e4.may22     # intron mates intronHit orientation fixednew sa.parse fixed the pairs
 setenv SVlast v111.81.18M.e4.may22    # 
+setenv SV     v112.81.18M.e4.may24     # details plus iStep == tStep
+setenv SVlast v112.81.18M.e4.may24    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV

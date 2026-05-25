@@ -39,7 +39,6 @@ static int exportOneSamExon (BB *bb, BOOL isDown, vTXT cigar, ALIGN *ap, int *nM
     for (iii = 0 ; iii < iMax ; iii++)
       {
 	ii = isDown ? iii : iMax - iii - 1 ;
-	ii= iii ; 
 	ep = arrp (errors, ii, A_ERR)  ;
 	int xShort = ep->iShort + 1 ;
 	int xLong = isDown ? ep->iLong + 1 : arrayMax (dnaG) - ep->iLong ;

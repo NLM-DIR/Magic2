@@ -84,7 +84,7 @@ int saRafiaOrder (const void *va, const void *vb)
   int n ;
   n = up->read - vp->read ; if (n) return n ;
   n = up->chrom - vp->chrom ; if (n) return n ;
-  n = up->chainA1 + up->chainX1 - vp->chainA1+ vp->chainX1  ; if (n) return n ;
+  n = (up->chainA1 - up->chainX1) - (vp->chainA1 - vp->chainX1)  ; if (n) return n ;
   n = up->chainX1 - vp->chainX1  ; if (n) return n ;
   n = up->chainX2 - vp->chainX2  ; if (n) return n ;
   n = up->x1 - vp->x1  ; if (n) return n ;
@@ -2383,7 +2383,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
       /* find the top of the chain */
       up = arrp (aa, bestI1, ALIGN) ;
       chainScore = up->score ;
-      chainAli = up->chainAli ;
+      chainAli = up->ali ;
       while (up->previous)
 	{
 	  vp = arrp (aa, up->previous - 1, ALIGN) ;
@@ -2513,7 +2513,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
    */
   
   /* locate the chains */
-  iMax = alignLocateChains (bestAp, aa, myRead, TRUE) ;
+  iMax = alignLocateChains (bestAp, aa, myRead, FALSE) ;
 
   if (iMax)
     {
@@ -2523,6 +2523,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
       if (1) alignAdjustIntrons (pp, bb, bestAp, aa, myRead) ;
       if (1) alignCheckSize (bb, aa) ;
       /* adjust exons */
+      iMax = alignLocateChains (bestAp, aa, myRead, TRUE) ;
       if (1) alignAdjustExons (pp, bb, bestAp, aa, myRead, dna, maxJump, maxJump2) ;
       if (1) alignCheckSize (bb, aa) ;
       iMax = alignLocateChains (bestAp, aa, myRead, TRUE) ;
@@ -2788,6 +2789,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  
 	  if (1)
 	    {  /* without this code, we have errors with the miRs */
+	      if (da2  <= ap1->chainAli + 5)
+		continue ;  // we do not gain enough to justify a rafia
 	      if (da2  <= ap2->chainAli + 5)
 		continue ;  // we do not gain enough to justify a rafia
 	      if (da > 0 && du >= ap1->chainAli)

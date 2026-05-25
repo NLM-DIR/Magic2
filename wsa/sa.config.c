@@ -645,7 +645,7 @@ int saConfigCheckTargetIndex (PP *pp)
     }
   
   if (!pp->iStep)   /* pp->tStep is always even */
-    pp->iStep = (pp->tStep > 1 ? pp->tStep / 2 : 1) ;
+    pp->iStep = (pp->tStep > 1 ? pp->tStep / 1 : 1) ;  // was tStep/2 but this is negative on iRefSeq
 
   ac_free (h) ;
   return NN ;

@@ -121,6 +121,36 @@ static void showAli (Array aligns)
 } /* showAli */
 
 /**************************************************************/
+
+static void showBigAli (BigArray aligns)
+{
+  if (aligns)
+    {
+      long int ii, iMax = bigArrayMax (aligns) ;
+      
+      for (ii = 0 ; ii < iMax && ii < 100 ; ii++)
+	{
+	  ALIGN *ali = bigArrp (aligns, ii, ALIGN) ;
+	  if (ali->score)
+	    printf (".. chain %d\tchainScore %d\tchainErr %d chainAli %d\tscore %d\tr=%u : %d:%d/%d\tchr=%u : %d:%d/%d\tnErr %d\t %d::p %d n %d\tDA %d:%d\tMates %d:%d  a1-x1=%d\n"
+		    , ali->chain, ali->chainScore
+		    , ali->chainErr, ali->chainAli
+		    , ali->score
+		    , ali->read, ali->x0, ali->x1, ali->x2
+		    , ali->chrom, ali->a0, ali->a1, ali->a2
+		    , ali->nErr
+		    , ali->id, ali->previous, ali->next
+		    , ali->donor, ali->acceptor
+		    , ali->mateA1, ali->mateA2
+		    , ali->a1 - ali->x1
+		    ) ;
+	}
+      printf (".........\n") ;
+    }
+  return ;
+} /* showBigAli */
+
+/**************************************************************/
 /* a0 = a1 - x1 is the putative position of base 1 of the read 
  * It also works for the negative strand (a1 < 0, x1 > 0).
  */
@@ -1174,11 +1204,14 @@ static void export (const void *vp)
   bb = (BB) {0} ;
   while (channelGet (pp->aeChan, &bb, BB))
     {
+      BigArray aa = bb.aligns ;
       t1 = clock () ;
-      if (bb.aligns && bigArrayMax (bb.aligns))
+      if (0)
+	showBigAli(aa) ;
+      if (aa && bigArrayMax (aa))
 	{
 	  if (pp->sam || pp->bam || pp->hitsFormat || pp->tabular)
-	    bigArraySort (bb.aligns, saAlignOrder) ;
+	    bigArraySort (aa, saAlignOrder) ;
 	  if (pp->hitsFormat)
 	    exportDo (pp, &bb) ;
 	  if (pp->tabular)
@@ -1193,7 +1226,7 @@ static void export (const void *vp)
 	      saSamExport (ao, aoe, pp, &bb) ;
 	    }
 	  t2 = clock () ;
-	  saCpuStatRegister ("8.Export_ali", pp->agent, bb.cpuStats, t1, t2, bb.aligns ? bigArrayMax (bb.aligns) : 0) ;
+	  saCpuStatRegister ("8.Export_ali", pp->agent, bb.cpuStats, t1, t2, aa ? bigArrayMax (aa) : 0) ;
 	  n = channelCount (pp->plChan) ;
 	  nG += bb.length / 1.0e+9 ;
 	  ++nn ;
@@ -2493,7 +2526,7 @@ int main (int argc, const char *argv[])
 	  char tBuf[25], tBuf2[25] ;
 	  bb.stop = timeNow () ;
 	  timeDiffSecs (bb.start, bb.stop, &ns) ;
-	  if (1)
+	  if (0)
 	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.3g errCost %d strategy %d\n"
 		     ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.errCost, bb.isRna) ; 
 	}
@@ -2538,9 +2571,9 @@ int main (int argc, const char *argv[])
   if (1 || p.debug) printf ("Skips: 0=%ld, %d=%ld, %d=%ld, %d=%ld, %d=%ld, found=%ld, notFound=%ld\n",
 			    skips0, step1, skips1, step2, skips2, step3, skips3, step4, skips4, skipsFound, skipsNotFound);
   if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nCPU=%d nAgents=%d nBlocks=%d NN=%d BMAX=%d\n"
-			    , nCPU
 			    , p.seedLength, p.tStep, p.iStep
 			    , p.maxTargetRepeats, p.tMaxTargetRepeats
+			    , nCPU
 			    , nAgents, p.nBlocks, NN, p.BMAX
 			    ) ;
   if (p.gpu) printf ("GPU called %d times\n", p.gpu) ;
