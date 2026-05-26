@@ -62,8 +62,8 @@ Three principles govern all architectural decisions:
 
 \begin{enumerate}
 \item \textbf{Cache efficiency.}
-      The dominant cost in large-scale genomic computation is data
-      movement, not arithmetic.
+      The dominant cost in large-scale genomic computations is data
+      movements, not arithmetics.
       All core algorithms are designed to generate long sequential
       memory-access patterns rather than random accesses, keeping
       working data inside CPU caches and saturating memory bandwidth.
@@ -94,8 +94,8 @@ defining all structures and function prototypes is \texttt{wsa/sa.h}.
 
 \subsection{Memory hierarchy and its consequences}
 
-Modern CPUs execute arithmetic in approximately one nanosecond when
-operands reside in L1 or L2 cache, but fetching the same data from
+Modern CPUs execute each elementary operation in approximately one nanosecond when
+the operands reside in L1 or L2 cache, but fetching the same data from
 main RAM typically costs 60--100\,ns on current x86 processors.
 A page fault to disk costs milliseconds.
 Because large genomic datasets far exceed cache capacity, algorithm
@@ -106,7 +106,7 @@ short read, rapidly identify the small number of genomic loci where
 alignment is likely.
 Hash tables offer $O(1)$ average lookup, but on a multi-gigabyte
 genome index each lookup jumps to a quasi-random memory address,
-triggering cache misses and TLB faults.
+triggering cache misses and page faults.
 Measured latency per seed commonly reaches 100--300\,ns, turning a
 theoretically fast algorithm into a memory-bandwidth bottleneck.
 
@@ -119,8 +119,8 @@ Magic2 adopts a \emph{sort--merge} paradigm:
 \item Sort both lists by seed value using a hard-coded cache-efficient radix sort
       (Section~\ref{sec:sort}).
 \item Join the two sorted lists by simultaneous linear traversal: both
-      pointers advance monotonically, so the entire join operates from
-      CPU cache.
+  pointers advance monotonically, so the entire join operates strongly favors
+  CPU cache and pre-fetching.
 \end{enumerate}
 
 This approach is not novel in principle; it underlies high-performance
@@ -131,9 +131,9 @@ Its roots lie in classical external sorting and merge-join algorithms
 algorithms~\citep{frigo1999}.
 
 
-The key trade-off is replacing n individually cheap but cache hostile random hash look ups
-by  $O(n \log n)$
-sorting followed by $O(n)$ sequential merging
+The key trade-off is replacing $O(n)$ cache hostile random hash look ups
+by  two cache friendly operations: $O(n \log n)$
+sorting followed by $O(n)$ sequential merging.
 The merge step is so cache-friendly that it runs at near-memory-bandwidth
 speed, far outpacing hash-table approaches on large genomes.
 
@@ -153,7 +153,7 @@ through \emph{channels} --- bounded, self-synchronising queues implemented
 in \texttt{wchannels/channel.c}, closely following the paradigm of
 Go channels.
 
-A channel has a fixed capacity.
+A channel is typed and has a fixed capacity.
 An agent inserting into a full channel blocks until space is available;
 an agent extracting from an empty channel blocks until data arrives.
 This built-in backpressure eliminates explicit locks and condition
@@ -171,7 +171,7 @@ processed.
 \subsection{Pipeline topology}
 
 The master thread enqueues descriptors of independent data blocks
-(each up to \texttt{bMax}\,Mb, default 3\,Mb) into a shared input
+containing up to \texttt{bMax}\ Mega-bases (default 3\,Mb) into a shared input
 channel.
 A pool of agents retrieves blocks from this channel, executes the
 complete per-block pipeline (seed identification, alignment extension,
@@ -194,7 +194,7 @@ Agents never wait on one another; all synchronisation emerges from
 channel blocking and closure.
 The main program defines the pipeline topology by creating channels,
 setting source counts, launching agents, and seeding the input channel
-but does not contain any explict calls to the low level
+but neither the main program nor the agents contain any explict calls to the low level
 unix semaphores and other synchronization tools.
 
 \subsection{NUMA-aware execution}
@@ -235,8 +235,7 @@ keeping each individual table within 32 bits.
 
 Continuous (ungapped) $k$-mers are preferred over spaced seeds: spaced
 seeds are counterproductive for indel-prone technologies (Nanopore,
-PacBio) because indels disrupt the seed span more severely than
-substitutions affect the covered bases.
+PacBio) because indels in the spacers disrupt the spaced-seeds.
 
 \subsection{Strand-agnostic seed generation}
 
@@ -270,7 +269,7 @@ processing requires no further regrouping.
 
 To reduce index size without sacrificing alignment sensitivity, seeds
 are sub-sampled using a \emph{rolling-min-hash}: a round-robin buffer
-of size $p$ (default 5) stores the hash of $Z$ at recent positions;
+of size $p$ (default 4) stores the hash of $Z$ at recent positions;
 only the position with the minimum hash among the last $p$ values is
 retained as a seed.
 This guarantees:
@@ -278,13 +277,13 @@ This guarantees:
   \item average inter-seed spacing of $p/2$ positions;
   \item maximum gap of $p$ positions;
   \item near-perfect synchronisation between read and genome seeds
-        (in practice alignment begins by the second seed with $p = 5$).
+        (in practice alignment begins by the second seed even when $p <= 8$).
 \end{itemize}
 
-\subsection{Multiplicity filtering and jump encoding}
+\subsection{Target multiplicity filtering and jump encoding}
 
-After collection, seeds are sorted (Section~\ref{sec:sort}) and their
-genomic multiplicity (number of occurrences) is counted.
+After collection, target seeds are sorted (Section~\ref{sec:sort}) and their
+multiplicity (number of occurrences in per target) is counted.
 Seeds with multiplicity $> Q$ (default 81) are discarded to limit
 spurious hits from repetitive elements; empirical tests showed $Q = 31$
 gives higher specificity while $Q = 81$ slightly reduces false negatives
@@ -292,13 +291,12 @@ at acceptable cost in index size and runtime.
 
 Jump information is then embedded directly in the seed records: every
 256th seed stores pointers to future seeds at distances
-$n_1 \times 256$, $n_2 \times 256$, $n_3 \times 256$, enabling
+$n_1 \times 256$, $n_2 \times 256$, $n_4 \times 256$, enabling
 fast skip-ahead during the merge step.
 
-The filtered, jump-augmented table is written to disk in compact binary
-format for memory-mapped access during production alignment.
-Seed records are 16\,bytes each (Section~\ref{sec:gpu_structs}) and are
-accumulated into large pre-allocated blocks to minimise \texttt{malloc}
+The filtered, jump-augmented taget table is written to disk in compact binary
+format for later memory-mapped access during production alignment.
+Seed records are 16\,bytes each (Section~\ref{sec:gpu_structs}).
 overhead.
 
 \subsection{Junction seeds from annotated splice sites}
@@ -331,39 +329,10 @@ Junction seeds are merged with the genomic table, sorted, and stored
 in the same binary format.
 
 %% ===============================================================
-\section{Radix sort}
-\label{sec:sort}
-
-\textbf{[PLACEHOLDER --- to be drafted in the next session
-using \texttt{wsa/sa.sort.c} as reference.]}
-
-\medskip
-Key points to cover:
-\begin{itemize}
-  \item 3-pass radix sort implementation (April~2026 optimisation).
-  \item Cache efficiency: why radix sort outperforms comparison-based
-        sorts on this data.
-  \item GPU offload via CUDA Thrust (optional, silent fallback to CPU);
-        see Section~\ref{sec:gpu}.
-  \item Benchmark: 15\,\% reduction in elapsed and CPU time on large
-        datasets observed after optimisation.
-  \item Dedicated sort--merge step for combining read and genome seed
-        tables.
-\end{itemize}
 
 %% ===============================================================
-\section{GPU acceleration: seed sorting and genome join}
+\section{Sorting, joining and optional GPU acceleration}
 \label{sec:gpu}
-
-\subsection{Overview}
-
-When an NVIDIA GPU is available, Magic2 offloads two steps of the
-seed-matching pipeline to the device via CUDA Thrust
-(\texttt{wsa/sa.gpusort.cu}): sorting each block's read-seed table,
-and joining it against the pre-loaded genome index.
-GPU use is activated at compile time (\texttt{-DUSEGPU}) and detected
-at run time; execution falls back silently to the CPU radix sort
-(Section~\ref{sec:sort}) when no compatible device is present.
 
 \subsection{Data structures}
 \label{sec:gpu_structs}
@@ -390,24 +359,106 @@ The 16-byte size is deliberate: four \texttt{CW} records fill one
 64-byte cache line exactly, which is optimal for both the CPU radix
 sort and GPU coalesced memory access.
 
-The join product is a \texttt{SEEDMATCH} struct (32\,bytes, 32-byte
-aligned): the four \texttt{CW} fields of the matching read seed
-followed by the four \texttt{CW} fields of the matching genomic seed,
-Both \texttt{CW} and \texttt{SEEDMATCH} are declared in
-\texttt{wsa/sa.common.h} and shared between the C pipeline and the
-CUDA translation unit, so no data conversion is required at the
-CPU--GPU boundary.
+\section{Radix sort}
+\label{sec:sort}
 
-\subsection{Genome index upload}
+\textbf{[PLACEHOLDER --- to be drafted in the next session
+using \texttt{wsa/sa.sort.c} as reference.]}
+
+\medskip
+Key points to cover:
+\begin{itemize}
+  \item 3-pass radix sort implementation (April~2026 optimisation).
+  \item Cache efficiency: why radix sort outperforms comparison-based
+        sorts on this data.
+  \item GPU offload via CUDA Thrust (optional, silent fallback to CPU);
+        see Section~\ref{sec:gpu}.
+  \item Benchmark: 15\,\% reduction in elapsed and CPU time on large
+        datasets observed after optimisation.
+  \item Dedicated sort--merge step for combining read and genome seed
+        tables.
+\end{itemize}
+
+\subsection {Genome index loading and joining}
 
 The filtered genome index (Section~\ref{sec:seeds}) is partitioned
 into $NN$ sub-tables (16 or 32, indexed by the least-significant
 base pair(s) of the seed value).
-At the start of a run, \texttt{GPUIndexCreate} transfers all partitions
-to GPU device memory, where they reside for the duration of alignment.
-Keeping the full index on device eliminates repeated host-side access
-to the multi-gigabyte memory-mapped index during the alignment phase;
-the CPU alignment stage never touches the genome index directly.
+At the start of a run, all partitions are memory mapped.
+The read seeds and genome seed records are identical.
+
+Both tables are scanned in parallel, advancing the pointer
+on the side of the lower seed. When there is a coincindence,
+the local Cartesian product of all entries with the matching seed
+is emitted as 64 bytes SEEDMATCH structs, by simply joining
+the 2 matching records. This table is then sorted by read (hence
+automaticaly by pairs).
+
+\subsection{Optional GPU acceleration}
+
+When an NVIDIA GPU is available, Magic2 offloads three steps of the
+seed-matching pipeline to the device via CUDA Thrust
+(\texttt{wsa/sa.gpusort.cu}): sorting the read-seed table,
+and joining it against the pre-loaded genome index,
+then sorting the table of SEEDMATCH.
+
+GPU use is activated at compile time (\texttt{-DUSEGPU}) and detected
+at run time; execution falls back silently to the CPU radix sort
+(Section~\ref{sec:sort}) when no compatible device is present.
+If a GPU is present, the genome seed-index is transfered to the GPU
+prior to the calculation of the first data block and discarded from
+the CPU side.
+
+All structure declarations are shared and since both the CPU and the GPU use 64-bytes aligned buffer.
+no data conversion is required at the CPU--GPU boundary.
+
+\subsection{Latency hiding through channel-based concurrency}
+
+The GPU call in each agent is synchronous: the agent blocks on the
+device until the sorted \texttt{SEEDMATCH} table is ready, then
+resumes.
+No asynchronous CUDA streams, double-buffering, or explicit staging
+logic are required.
+
+The standard GPU programming approach to this problem uses CUDA
+streams with asynchronous transfers (\texttt{cudaMemcpyAsync}):
+while the device processes block $N$, the host prepares and begins
+transferring block $N+1$ into a second buffer, so that the PCIe
+transfer latency of one block is overlapped with the GPU computation
+of the next.
+This \emph{double-buffering} pattern is effective but requires the
+programmer to manage two buffer sets, carefully sequence stream
+operations, and reason explicitly about which synchronisation points
+are safe --- a non-trivial engineering burden that is easy to get
+wrong silently.
+
+Magic2 avoids this complexity entirely.
+The agent pool, coordinated by bounded blocking channels, provides
+CPU--GPU overlap as a natural consequence of its concurrency model.
+While one agent is blocked waiting for the GPU, all other agents
+continue executing their own blocks on CPU --- extracting seeds,
+extending alignments, writing coverage tracks, and accumulating
+junction and QC tables.
+The blocked agent simply parks at what is, from the pipeline's
+perspective, an ordinary blocking-channel operation, indistinguishable
+from blocking on an empty input queue.
+Provided the number of active agents is sufficient to keep both the
+GPU and the CPU cores occupied --- a condition that holds automatically
+given Magic2's block-size and agent-count defaults --- GPU transfer and
+sort latency is fully overlapped with productive CPU work on other
+blocks, with no GPU-specific orchestration code in the pipeline at all.
+
+The channel library (\texttt{wchannels/channel.c}) is a direct C
+implementation of Go's channel semantics~\citep{donovan2015go},
+themselves rooted in Hoare's Communicating Sequential
+Processes~\citep{hoare1978csp}.
+It was written to bring Go's concurrency model to an existing
+700{,}000-line C codebase that could not be migrated to Go.
+Go programmers obtain the same GPU-latency-hiding property for free
+from the goroutine scheduler, which parks a goroutine blocked on a
+channel and runs another in its place.
+Magic2's agent/channel architecture replicates this behaviour in C,
+without any GPU-specific orchestration code in the pipeline.
 
 \subsection{Per-block GPU pipeline}
 
@@ -478,53 +529,6 @@ Within each block the GPU executes the following steps.
 
 \end{enumerate}
 
-\subsection{Latency hiding through channel-based concurrency}
-
-The GPU call in each agent is synchronous: the agent blocks on the
-device until the sorted \texttt{SEEDMATCH} table is ready, then
-resumes.
-No asynchronous CUDA streams, double-buffering, or explicit staging
-logic are required.
-
-The standard GPU programming approach to this problem uses CUDA
-streams with asynchronous transfers (\texttt{cudaMemcpyAsync}):
-while the device processes block $N$, the host prepares and begins
-transferring block $N+1$ into a second buffer, so that the PCIe
-transfer latency of one block is overlapped with the GPU computation
-of the next.
-This \emph{double-buffering} pattern is effective but requires the
-programmer to manage two buffer sets, carefully sequence stream
-operations, and reason explicitly about which synchronisation points
-are safe --- a non-trivial engineering burden that is easy to get
-wrong silently.
-
-Magic2 avoids this complexity entirely.
-The agent pool, coordinated by bounded blocking channels, provides
-CPU--GPU overlap as a natural consequence of its concurrency model.
-While one agent is blocked waiting for the GPU, all other agents
-continue executing their own blocks on CPU --- extracting seeds,
-extending alignments, writing coverage tracks, and accumulating
-junction and QC tables.
-The blocked agent simply parks at what is, from the pipeline's
-perspective, an ordinary blocking-channel operation, indistinguishable
-from blocking on an empty input queue.
-Provided the number of active agents is sufficient to keep both the
-GPU and the CPU cores occupied --- a condition that holds automatically
-given Magic2's block-size and agent-count defaults --- GPU transfer and
-sort latency is fully overlapped with productive CPU work on other
-blocks, with no GPU-specific orchestration code in the pipeline at all.
-
-The channel library (\texttt{wchannels/channel.c}) is a direct C
-implementation of Go's channel semantics~\citep{donovan2015go},
-themselves rooted in Hoare's Communicating Sequential
-Processes~\citep{hoare1978csp}.
-It was written to bring Go's concurrency model to an existing
-700{,}000-line C codebase that could not be migrated to Go.
-Go programmers obtain the same GPU-latency-hiding property for free
-from the goroutine scheduler, which parks a goroutine blocked on a
-channel and runs another in its place.
-Magic2's agent/channel architecture replicates this behaviour in C,
-without any GPU-specific orchestration code in the pipeline.
 
 %% ===============================================================
 \section{Alignment extension}
