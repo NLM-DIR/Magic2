@@ -28,7 +28,7 @@
 static int saScanDnaEncode (BB *bb)
 {
   Array dnas = bb->dnas ;
-  SAPARSE *sap = bb->saParse ;
+  //  SAPARSE *sap = bb->saParse ;
   int nn = 0 ;
   int ii, iMax = arrayMax (dnas) ;
   Array *dnap = iMax ? arrp (dnas, 0, Array) : 0 ;
@@ -56,7 +56,7 @@ static int saScanDnaEncode (BB *bb)
     }
 
   bb->runStat.p.minReadLength = minDnaLn ;
-  bb->runStat.p.minReadLength = maxDnaLn ;
+  bb->runStat.p.maxReadLength = maxDnaLn ;
   
   return nn ;
 } /* saScanDnaEncode */
@@ -101,10 +101,10 @@ static Array saScanVirtualDnasArrayCreate (BB *bb)
  * On return buf (or buf+1 if prefix) is the clean name for the pair stripping /1
  * Returns number of consumed char, including \n
  */
-static int readScanId (unsigned char *buf, char prefix, int *suffixp)
+static int readScanId (unsigned char *buf, char prefix, int *suffixp, int *idLnp)
 {
   unsigned char *cp = buf, *cq ;    
-  int ln = 0 ;
+  int ln = 0, idLn = 0 ;
   
   if (prefix)
     {
@@ -121,13 +121,17 @@ static int readScanId (unsigned char *buf, char prefix, int *suffixp)
     {
       *cq = 0 ;
       ln = cq - buf + 1 ;
+      idLn = cq - cp ;
     }
   else
-    ln = ustrlen (buf) ;
-
+    {
+      ln = ustrlen (buf) ;
+      idLn = ln - 1 ;
+    }
+  
   if (suffixp)
     {
-      int n = ustrlen (cp) ;
+      int n = idLn ;
       *suffixp  = 0 ;
       if (n > 2)
 	{
@@ -136,9 +140,11 @@ static int readScanId (unsigned char *buf, char prefix, int *suffixp)
 	    {
 	      *suffixp = cq[1] - '0' ;
 	      *cq = 0 ;
+	      idLn -= 2 ;
 	    }
 	}
     }
+  *idLnp = idLn ;
   return ln ;
 } /* readScanId */
 
@@ -147,35 +153,17 @@ static int readScanId (unsigned char *buf, char prefix, int *suffixp)
  * accept a full single line of fastq quality factors
  * Returns number of consumed char, including \n
  */
-static int readScanQualId (unsigned char *buf)
+static int readScanQual (unsigned char *buf, int *qLnp)
 {
-  int ln = 0 ;
+  int ln1 = 0, ln2 = 0, qLn = 0 ;
   unsigned char *cq ;
-
-  /* scan the quality identifier and drop it */
+  
+  /* skip the quality identifier line */
   cq = ustrchr (buf, '\n') ;
-  if (cq)
-    {
-      *cq = 0 ;
-      ln = cq - buf + 1 ;
-    }
-  else
-    ln = ustrlen (buf) ;
-  return ln ;
-} /* readScanQualId */
+  ln1 = cq ? (int)(cq - buf + 1) : ustrlen (buf) ;
+  if (cq) *cq = 0 ;
 
-/******************************************************************/
-/* readScanQual
- * accept a full single line of fastq quality factors
- * Returns number of consumed char, including \n
- */
-static int readScanQual (unsigned char *buf)
-{
-  int ln1 = 0, ln2 = 0 ;
-  unsigned char *cq ;
-
-  ln1 = readScanQualId (buf) ;
-  /* scan quality */
+  /* scan quality line */
   if (ln1)
     {
       cq = ustrchr (buf + ln1, '\n') ;
@@ -183,10 +171,15 @@ static int readScanQual (unsigned char *buf)
 	{
 	  *cq = 0 ;
 	  ln2 = cq - buf - ln1 + 1 ;
+	  qLn = cq - (buf + ln1) ;
 	}
       else
-	ln2 = ustrlen (buf + ln1) ;
+	{
+	  ln2 = ustrlen (buf + ln1) ;
+	  qLn = ln2 ;
+	}
     }
+  *qLnp = qLn ;
   return ln1 + ln2 ;
 } /* readScanQual */
 
@@ -195,9 +188,9 @@ static int readScanQual (unsigned char *buf)
  * accept full lines untill terminal 0 or > or @
  * Returns number of consumed char, including \n
  */
-static int readScanDna (unsigned char *buf)
+static int readScanDna (unsigned char *buf, int *dnaLnp)
 {
-  int ln = 0 ;
+  int ln = 0, dnaLn = 0 ;
   unsigned char *cp = buf - 1, *cq = buf ;
 
   while (*++cp)
@@ -216,8 +209,10 @@ static int readScanDna (unsigned char *buf)
  done:
   *cq = 0 ;
   ln = cp - buf + 1 ;
+  dnaLn = cq - buf ;
+  *dnaLnp = dnaLn ;
   return ln ;
-} /* readScanDna */
+} /* readScanDnaOld */
 
 /********************************************************************************************************************/
 
@@ -227,13 +222,14 @@ static int saRegisterId (BB *bb, unsigned char *cp, char prefix, Array idArray, 
   int nR = arrayMax (dnaRecords) ;
   DnaRecord *r  = arrayp (dnaRecords, nR, DnaRecord) ;
   int suffix = 0 ;
-  int nn = readScanId (cp, prefix, bb->nPairs ? &suffix : 0) ;
-  int k, ln = ustrlen (cp + 1) ;
+  int ln = 0 ;
+  int nn = readScanId (cp, prefix, bb->nPairs ? &suffix : 0, &ln) ;
+  int k ;
   if (0)
     {
       r->xId = arrayMax (idArray) + 1 ;
       unsigned char *cq = arrayp (idArray, r->xId + ln + 1, unsigned char) ;  /* make room */
-      cq = arrayp (idArray, r->xId, unsigned char) ; 
+      cq = arrp (idArray, r->xId, unsigned char) ; 
       memcpy (cq, cp + 1, ln + 1) ;
     }
   dictAdd (bb->dict, (char *)(cp + 1), &k) ;
@@ -264,14 +260,15 @@ static int saRegisterDna (BB *bb, unsigned char *cp, Array dnaArray, int type)
   Array dnaRecords = bb->dnaRecords ; 
   int nR = arrayMax (dnaRecords) ;
   DnaRecord *r  = arrayp (dnaRecords, nR - 1, DnaRecord) ;
-
-  int nn = readScanDna (cp) ;
+  int ln = 0 ;
+  
+  int nn = readScanDna (cp, &ln) ;
   r->xDna = arrayMax (dnaArray) + 1 ;
   r->xDna += 15 ; r->xDna &= ~0xf ;  /* align on 16 bytes boundary */
-  int ln = ustrlen (cp) ;
+  // int ln = ustrlen (cp) ;
   r->dnaLn = ln ;
   unsigned char *cq = arrayp (dnaArray, r->xDna + ln + 1, unsigned char) ;  /* make room */
-  cq = arrayp (dnaArray, r->xDna, unsigned char) ; 
+  cq = arrp (dnaArray, r->xDna, unsigned char) ; 
   memcpy (cq, cp, ln + 1) ;
 
   bb->nSeqs++ ;
@@ -292,15 +289,15 @@ static int saRegisterQuality (BB *bb, unsigned char *cp, Array qualityArray)
   Array dnaRecords = bb->dnaRecords ; 
   int nR = arrayMax (dnaRecords) ;
   DnaRecord *r  = arrayp (dnaRecords, nR - 1, DnaRecord) ;
-
-  int nn = readScanQual (cp) ;
+  int ln = 0 ;
+  
+  int nn = readScanQual (cp, &ln) ;
 
   if (qualityArray)  /* we may not need the qualities */
     {
-      int ln = ustrlen (cp) ;
       r->xQual = arrayMax (qualityArray) + 1 ;
       unsigned char *cq = arrayp (qualityArray, r->xQual + ln + 1, unsigned char) ;  /* make room */
-      cq = arrayp (qualityArray, r->xQual, unsigned char) ; 
+      cq = arrp (qualityArray, r->xQual, unsigned char) ; 
       memcpy (cq, cp, ln + 1) ;
     }
   return nn ;
@@ -448,7 +445,7 @@ static void saParseFastac (const PP *pp, RC *rc)
   CHAN *chan = pp->plChan ;
   gzFile file = 0 ;
   BOOL debug = FALSE ;
-  
+
   DnaFormat format = rc->format ;
   const char *fileName1 = rc->fileName1 ;
   char tBuf[25] ;
@@ -465,131 +462,163 @@ static void saParseFastac (const PP *pp, RC *rc)
     }
 
   t1 = clock () ;
-  
-  file = gzopen (fileName1, "r");
+
+  file = gzopen (fileName1, "r") ;
   if (! file)
     messcrash ("\ncannot gzopen target file %s", fileName1) ;
 
   while (!done)
     {
-      int err = 0 ;                    
+      int err = 0 ;
       int bytes = gzread (file, buffer + pos, BMAX - pos) ;
       unsigned char *cp, *cq ;
 
       bytes += pos ;
       if (bytes < BMAX)
-	{
-	  done = TRUE ;
-	  if (! gzeof (file)) 
-	    messcrash ("Error %s in gzread %s", gzerror (file, & err), fileName1) ;                
+        {
+          done = TRUE ;
+          if (! gzeof (file))
+            messcrash ("Error %s in gzread %s", gzerror (file, &err), fileName1) ;
         }
       else
-	{
-	  /* search for beginning of last probably partial sequence */
-	  cp = buffer + bytes ; /* just after last byte read */
-	  pos = 0 ;
-	moveBack:
-	  cp-- ;  
-	  while (cp > buffer && *cp != '\n')
-	    cp-- ;
-	  if (cp == buffer)
-	    messcrash ("saParseFastac (%s) found a read > BMAX=%d", fileName1, BMAX) ;
-	  if (cp[1] != prefix)
-	    goto moveBack ;
+        {
+          /* -----------------------------------------------------------
+           * Find the boundary of the last complete record in [buffer, buffer+bytes).
+           * We scan backward for a '\n' immediately followed by the record
+           * prefix ('>' or '@'), then apply format-specific checks.
+           * cp is updated to the found '\n' on each retry so we never
+           * re-scan bytes we have already examined.
+           * ----------------------------------------------------------- */
+          unsigned char *end = buffer + bytes ;   /* one past last valid byte  */
+          unsigned char *lo  = buffer + 1 ;       /* never retreat past here   */
+          cp = end ;
+          pos = 0 ;
 
-	  switch (format)
-	    {
-	    default: break ;
-	    case FASTA2:
-	      cq = ustrchr (cp+1, '\n') ;
-	      if (!cq) /* not a full ID, cannot decide if this is a read 1. Move back 1 record */
-		goto moveBack ;
-	      if (cq[-1] != '1') /* not read 1 of a pair */
-		goto moveBack ;
-	      break ;
-	    case FASTQ:
-	    case FASTQ2:
-	      /* i need to be sure that I am on a new record, not on a quality line */
-	      cq = cp - 2 ;
-	      while (cq > buffer && *cq != '\n' && dnaDecodeChar[(int)(*cp)])
-		cq-- ;
-	      if (*cq == '\n') /* we were on a sequence line, we need to move back again */
-		goto moveBack ;
-	      if (format == FASTQ2)
-		{
-		  cq = ustrchr (cp+1, '\n') ;
-		  if (!cq) /* not a full ID, cannot decide if this is a read 1. Move back 1 record */
-		    goto moveBack ;
-		  if (cq[-1] != '1') /* not read 1 of a pair */
-		    goto moveBack ;
-		}
-	    }
+        moveBack:
+          /* Portable backward scan for '\n' in [lo, cp) */
+          {
+            unsigned char *scan = cp - 1 ;
+            while (scan >= lo && *scan != '\n')
+              scan-- ;
+            if (scan < lo)
+              messcrash ("saParseFastac (%s) found a read > BMAX=%d", fileName1, BMAX) ;
+            cp = scan ;   /* cp now points at the '\n' before the candidate record */
+          }
+          if (cp[1] != prefix)
+            goto moveBack ;
 
-	  cp++ ;  /* move behind \n */
-	  pos = buffer + bytes - cp ; /* number of bytes to preserve */
+          switch (format)
+            {
+            default: break ;
 
-	  memcpy (buffer2, cp, pos) ; /* copy the remnant */
-	  bytes -= pos ;
-	  cp[0] = 0 ;
-	}
+            case FASTA2:
+              cq = ustrchr (cp + 1, '\n') ;
+              if (!cq)          /* ID line not complete -- move back one record */
+                goto moveBack ;
+              if (cq[-1] != '1') /* not read 1 of a pair */
+                goto moveBack ;
+              break ;
+
+            case FASTQ:
+            case FASTQ2:
+              /* Confirm we are on an id line, not a quality line.
+               * Find the line that precedes cp (i.e. the line ending at cp-1).
+               * If every character of that line is a valid DNA character then
+               * cp is pointing at a sequence line, not an id line -- move back.
+               */
+              {
+                unsigned char *prev = cp - 1 ;
+                while (prev > lo && *prev != '\n')
+                  prev-- ;
+                /* [prev+1 .. cp-1] is the previous line */
+                unsigned char *ps = prev + 1 ;
+                BOOL prevIsDna = (ps < cp) ;    /* assume true, falsify below */
+                while (ps < cp && prevIsDna)
+                  {
+                    if (!dnaDecodeChar[(int)(*ps)])
+                      prevIsDna = FALSE ;
+                    ps++ ;
+                  }
+                if (prevIsDna)  /* previous line is all-DNA => cp is on a sequence line */
+                  goto moveBack ;
+              }
+              if (format == FASTQ2)
+                {
+                  cq = ustrchr (cp + 1, '\n') ;
+                  if (!cq)          /* ID line not complete */
+                    goto moveBack ;
+                  if (cq[-1] != '1') /* not read 1 of a pair */
+                    goto moveBack ;
+                }
+              break ;
+            }
+
+          cp++ ;                            /* step past '\n' to first byte of record */
+          pos   = end - cp ;               /* bytes of the partial record to preserve */
+          memcpy (buffer2, cp, pos) ;      /* save remnant                            */
+          bytes = (int)(cp - buffer) ;     /* bytes to process this round             */
+          cp[0] = 0 ;                      /* terminate the block for the parser      */
+        }
+
       nBytes += bytes ;
       if (nBytes <= 0)
-	messcrash ("No sequence found in file %s\n", fileName1) ;
-      
+        messcrash ("No sequence found in file %s\n", fileName1) ;
 
       /* create a data block */
       bb = &b ;
       memset (bb, 0, sizeof (BB)) ;
       bb->h = ac_new_handle () ;
-	  
-      bb->rc.format = format ;
-      bb->rc.pairedEnd = pairedEnd ;
-      bb->rc.jump5r1 = rc ? rc->jump5r1 : 0 ;
-      bb->rc.jump5r2 = rc ? rc->jump5r2 : 0 ;      
 
-      bb->run = rc ? rc->run : 0 ;
+      bb->rc.format   = format ;
+      bb->rc.pairedEnd = pairedEnd ;
+      bb->rc.jump5r1  = rc ? rc->jump5r1 : 0 ;
+      bb->rc.jump5r2  = rc ? rc->jump5r2 : 0 ;
+
+      bb->run   = rc ? rc->run : 0 ;
       bb->start = timeNow () ;
       /*
-	bb->lane = atomic_fetch_add (rc ? &(rc->lane) : &lane, 1) + 1 ;
+        bb->lane = atomic_fetch_add (rc ? &(rc->lane) : &lane, 1) + 1 ;
       */
-
       bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
 
-      bb->cpuStats = arrayHandleCreate (128, CpuSTAT, bb->h) ;
-      bb->rc.fileName1 = fileName1 ;
+      bb->cpuStats      = arrayHandleCreate (128, CpuSTAT, bb->h) ;
+      bb->rc.fileName1  = fileName1 ;
+
       /* copy the buffer */
       bb->r1Buffer = halloc (bytes + 32, bb->h) ;
       memcpy (bb->r1Buffer, buffer, bytes) ;
       if (1)
-	bb->r1Buffer[bytes] = '0' ;
+        bb->r1Buffer[bytes] = '0' ;
       else
-	{
-	  for (int i = 0 ; i < 32 ; i++)
-	    bb->r1Buffer[bytes+i] = 0 ;
-	}
+        {
+          for (int i = 0 ; i < 32 ; i++)
+            bb->r1Buffer[bytes + i] = 0 ;
+        }
       bb->r1Buffer[bytes] = '\n' ;
+
       /* position the remnant */
       if (! done) memcpy (buffer, buffer2, pos) ;
       bb->nSeqs = 100 ;  /* a guess */
-      
-      /* export the databalock to the channel */
+
+      /* export the data block to the channel */
       nPuts++ ;
       channelPut (chan, bb, BB) ;
     }
-  channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
-  
+  channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks across all sequenceParser agents */
+
   gzclose (file) ;
   ac_free (h) ;
-  
+
   t2 = clock () ;
   saCpuStatRegister ("2.FastaSequenceParser", pp->agent, bb->cpuStats, t1, t2, nBytes) ;
 
   if (debug)
     {
-     int lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 0) ;
-     printf ("--- %s: Stop FastaSequenceParser %d blocks %ld bytes file %s\n", timeBufShowNow (tBuf), lane, nBytes, fileName1) ;
+      int lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 0) ;
+      printf ("--- %s: Stop FastaSequenceParser %d blocks %ld bytes file %s\n",
+              timeBufShowNow (tBuf), lane, nBytes, fileName1) ;
     }
-  
+
   return ;
 } /* saParseFastac */
 

@@ -184,6 +184,10 @@ setenv SV     v111.81.18M.e4.may22     # intron mates intronHit orientation fixe
 setenv SVlast v111.81.18M.e4.may22    # 
 setenv SV     v112.81.18M.e4.may24     # details plus iStep == tStep
 setenv SVlast v112.81.18M.e4.may24    # 
+setenv SV     v113.81.18M.e4.may25     # details plus iStep == tStep
+setenv SVlast v113.81.18M.e4.may25    # 
+setenv SV     v114.81.18M.sam.may25     # with sam
+setenv SVlast v114.81.18M.sam.may25    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -196,7 +200,7 @@ endif
 \cp bin/sortalign.$SV bin/sortalign
 
 setenv NOINTRONSEEDS 0
-setenv EXPORTSAM 0
+setenv EXPORTSAM 1
 setenv EXPORTWIGGLES 0
 setenv EXPORTWIGGLEENDS 0
 setenv seedLength 16

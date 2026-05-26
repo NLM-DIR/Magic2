@@ -459,7 +459,7 @@ BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCost
   static Array isSets = 0 ;
   static Array isRnas = 0 ;
   int isSet = TRUE ;
-  static int errCost = 8 ;  
+  static int errCost = 4 ;  
   pthread_mutex_lock(&adaptor_mutex);
 
   if (aaa == 0)

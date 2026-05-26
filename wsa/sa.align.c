@@ -269,6 +269,29 @@ static void mergeErrors (Array aa, Array bb, unsigned int flip)
   return ;
 } /* mergeErrors */
 
+/*************************************************************************************/
+
+static BOOL chenillette (Array  dnaArray, int x, int width, int *dxLp, int *dxRp)
+{
+  const unsigned char *ccp ;
+  unsigned char chenille[width], *cp ;
+  int i, jL, jR ;
+  const unsigned char *dna = arrp (dnaArray, 0, unsigned char) ;
+  
+  memcpy (chenille, dna + x, width) ; 
+  /* move left */
+  for (ccp = dna + x, i = 0, jL = -1, cp = chenille ; *cp == *ccp && i + x >= 0 ; 
+       ccp--, i--, cp = chenille + ((x*width+i) % width))
+    jL++ ;
+  /* move right */
+  for (ccp = dna + x + width, i = jR = 0, cp = chenille ; *cp == *ccp ; 
+       ccp++, i++, cp = chenille + (i % width))
+    jR++ ;
+
+  *dxLp = jL ; *dxRp = jR ;
+  return jL + jR >= width ? TRUE : FALSE ;
+} /* chenillette */
+
 /**************************************************************/
 
 static BOOL alignExtendHit (Array dna, Array dnaG, Array dnaGR, Array err
@@ -286,8 +309,8 @@ static BOOL alignExtendHit (Array dna, Array dnaG, Array dnaGR, Array err
 
   errMax = (0 && DA) ? 0 : errMax ; /* avec 1: on perd les centres des exons */
   
-  if (DA == 0x1) errMax = -2 ; /* extend right */
-  if (DA == 0x2) errMax = -3 ; /* extend left */
+  if (DA == 0x1) errMax = -2 ; /* extend left */
+  if (DA == 0x2) errMax = -3 ; /* extend right */
 
   if (! isDown)
     {
@@ -309,9 +332,47 @@ static BOOL alignExtendHit (Array dna, Array dnaG, Array dnaGR, Array err
     return FALSE ;
   if (*a1p > *a2p && (a1 < a2 || a1 < *a1p || a2 > *a2p))
     return FALSE ;
+  nerr = arrayMax (err) ;
+  /* chenillette */
+  if (nerr)
+    {
+      A_ERR *up = arrp (err, 0, A_ERR) ;
+      for (int i = 0 ; i < nerr ; i++, up++)
+	{
+	  int dxL = 0, dxR = 0 ;
+	  switch (up->type)
+	    {
+	    case INSERTION:
+	      if (chenillette (dna, up->iShort, 1, &dxL, &dxR))
+		{ up->iShort += dxR ; up->iLong += dxR ; }
+	      break ;
+	    case INSERTION_DOUBLE: 
+	      if (chenillette (dna, up->iShort, 2, &dxL, &dxR))
+		{ up->iShort += dxR ; up->iLong += dxR ; }
+	      break ;
+	    case INSERTION_TRIPLE: 
+	      if (chenillette (dna, up->iShort, 3, &dxL, &dxR))
+		{ up->iShort += dxR ; up->iLong += dxR ; }
+	      break ;
+	    case TROU: 
+	      if (chenillette (dnaG, up->iLong, 1, &dxL, &dxR))
+		{ up->iShort += dxR ; up->iLong += dxR ; }
+	      break ;
+	    case TROU_DOUBLE: 
+	      if (chenillette (dnaG, up->iLong, 2, &dxL, &dxR))
+		{ up->iShort += dxR ; up->iLong += dxR ; }
+	      break ;
+	    case TROU_TRIPLE: 
+	      if (chenillette (dnaG, up->iLong, 3, &dxL, &dxR))
+		{ up->iShort += dxR ; up->iLong += dxR ; }
+	      break ;
+	    default : break ;
+	    }
+	}
+    }
+	  
   /* reclip */
   /* clip left errors */
-  nerr = arrayMax (err) ;
   if (nerr)
     {
       int i, j, y1 = x1 - 1, y2 = x2 - 1 ;  /* natural coordinates */
@@ -3474,7 +3535,7 @@ static void showPairs (Array pairs)
 	      ) ;
       
     } /* showPairs */
-}
+} /* showPairs */
 
 /**************************************************************/
 static void alignDoOnePair (const PP *pp, BB *bb
@@ -3922,16 +3983,18 @@ void saAlignDo (const PP *pp, BB *bb)
   if (bb->lane <= 5)
     {
       /* guess RNA/DNA on the concept that 4000 aligned bases should give us one intron support */
+      redo = FALSE ;
       int isRna = 1 ;
-      long int baseAligned = bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2 ;
+      long int nErr = bb->runStat.nErr ;
+      long int baseAligned = bb->aliDx ;
       long int iSupport = bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support ;
       if (3 * baseAligned > 100000 * pp->BMAX && 4000 * iSupport < baseAligned)
 	isRna = -1 ;
       if (pp->userErrCost)
 	bb->errCost = pp->userErrCost ;
       else
-	if (bb->errCost == 4 && 100 * bb->runStat.nErr < 1 * (bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2))
-	  bb->errCost = 8 ;
+	if (bb->errCost == 4 && 100 * nErr < 1 * baseAligned)
+	  { bb->errCost = 8 ; redo = TRUE ; }
       if (saReadAdaptors (&adaptors, &(bb->runStat), TRUE))
 	saSetGetAdaptors (1, &isRna, &adaptors, bb->run, &(bb->errCost)) ;
       else
@@ -3940,16 +4003,17 @@ void saAlignDo (const PP *pp, BB *bb)
 	{
 	  if (! redo && ((isRna < 0 && bb->isRna >= 0) || (isRna > 0 && bb->isRna < 0)))
 	    redo = TRUE ;
-	  else
-	    redo = FALSE ;
 	}
       if (0 && redo == 0) redo = 1 ;
       bb->isRna = isRna ;
-      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld   baseAli = %ld errCost = %d\n"
+      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld   baseAli = %ld err = %ld bAli = %ld errCost = %d %s. \n"
 	       , bb->lane, isRna
 	       , bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support
 	       , bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2
+	       , nErr 
+	       , baseAligned
 	       , bb->errCost
+	       , redo ? "REDO" : ""
 	       ) ;
     }
   

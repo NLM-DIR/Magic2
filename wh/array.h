@@ -423,7 +423,7 @@ void    stackClear (Stack s) ;
 			     *(type *)((stk)->ptr) = (x) , (stk)->ptr += sizeof(type)) )
 #define pop(stk,type)    (  ((stk)->ptr -= sizeof(type)) >= (stk)->a->base ? \
 			    *((type*)((stk)->ptr)) : \
-                          (messcrash ("User stack underflow"), 0) )
+                          (messcrash ("User stack underflow"), *((type*)0)) )
 #define stackNext(stk,type) (*((type*)(  (stk)->pos += sizeof(type) )  - 1 )  )
 #define stackSkip(stk) ((stk)->pos += sizeof(int) )
 
@@ -435,11 +435,11 @@ void    stackClear (Stack s) ;
 			     *(type *)((stk)->ptr) = (x) , (stk)->ptr += STACK_ALIGNMENT) )
 #define pop(stk,type)    (  ((stk)->ptr -= STACK_ALIGNMENT) >= (stk)->a->base ? \
 			    *((type*)((stk)->ptr)) : \
-                          (messcrash ("User stack underflow"), 0) )
+                          (messcrash ("User stack underflow"), *((type*)0)) )
 #define stackNext(stk,type) (*((type*)(  ((stk)->pos += STACK_ALIGNMENT ) - \
                                              STACK_ALIGNMENT ))  )
 #define stackSkip(stk) ((stk)->pos += STACK_ALIGNMENT )
-#endif 
+#endif
 
 #if STACK_DOUBLE_ALIGNMENT > STACK_ALIGNMENT
 void ustackDoublePush(Stack stk, double x);
