@@ -503,11 +503,9 @@ static JUMP jumpN [] = {{1000,0,0,0}} ;  /* a kludge, to jump ambiguities */
   /* dna1 = short, dna2 = long */
 
 JUMP jumper [] = {  /* called from abifix.c */
- {1, 1,  4, 0},    /* pontuel if ok apres */
+  {1, 1,  4, 0},    /* substitution */
  {1, 0, 10, 0},    /* insert in 1 */
  {0, 1, 10, 0},    /* trou in 1 */
- {1, 1, 12, 0},    /* ponctuel */
-
  {1, 0, 8, 0},    /* insert in 1 */
  {0, 1, 8, 0},    /* trou in 1 */
  {2, 0, 10, 0}, 

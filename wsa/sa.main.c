@@ -2178,7 +2178,7 @@ int main (int argc, const char *argv[])
 
   p.minLength = -20 ;  /* use a negative default to differentiate from a user's values */
   p.minEntropy = -20 ;
-  getCmdLineInt (&argc, argv, "--minLength", &(p.minLength)) ;
+  getCmdLineInt (&argc, argv, "--minReadLength", &(p.minLength)) ;
   getCmdLineInt (&argc, argv, "--minEntropy", &(p.minEntropy)) ;
 
   p.minAli = p.minAliPerCent = p.minScore = -1 ;

@@ -38,6 +38,22 @@
 
 \begin{document}
 \maketitle
+
+\begin{abstract}
+Magic2 is a high-throughput aligner for RNA-seq and DNA-seq reads,
+supporting short reads (Illumina) and long reads (Nanopore, PacBio),
+developed at the National Library of Medicine, NIH.
+This document is a technical reference describing the algorithms,
+data structures, parallel execution model, and output formats that
+constitute the Magic2 implementation.
+It is intended as supplementary material to the main benchmarking
+paper, which reports alignment accuracy and throughput comparisons
+against HISAT2, STAR, and minimap2; readers interested primarily
+in results should consult that paper.
+Developers and advanced users wishing to understand, extend, or
+port Magic2 will find the full design rationale here.
+\end{abstract}
+
 \tableofcontents
 \clearpage
 
@@ -46,7 +62,9 @@
 \label{sec:overview}
 
 Magic2 is a complete rewrite and extension of the earlier Magic-BLAST
-aligner, developed at the National Library of Medicine (NLM), NIH.
+aligner~\citep{boratyn2019}, developed at the National Library of Medicine (NLM), NIH,
+itself building on the AceView gene and transcript annotation
+system~\citep{thierrymieg2006}.
 It aligns short (Illumina) and long (Nanopore, PacBio) RNA-seq or
 DNA-seq reads against an annotated or unannotated reference genome,
 and in a single pass produces alignments, gene-expression counts,
@@ -88,11 +106,18 @@ The source code is available at
 The main entry point is \texttt{wsa/sa.main.c}; the central header
 defining all structures and function prototypes is \texttt{wsa/sa.h}.
 
+This document is a technical reference covering algorithms, data
+structures, parallel execution, and output formats.
+Benchmark results comparing Magic2 to current aligners are reported
+in the accompanying main paper; a separate user guide covers
+installation, index construction, and everyday usage.
+
 %% ===============================================================
 \section{Hardware constraints and the sort--merge paradigm}
 \label{sec:hardware}
 
 \subsection{Memory hierarchy and its consequences}
+\label{sec:memory}
 
 Modern CPUs execute each elementary operation in approximately one nanosecond when
 the operands reside in L1 or L2 cache, but fetching the same data from
@@ -111,6 +136,7 @@ Measured latency per seed commonly reaches 100--300\,ns, turning a
 theoretically fast algorithm into a memory-bandwidth bottleneck.
 
 \subsection{The sort--merge alternative}
+\label{sec:sortmerge}
 
 Magic2 adopts a \emph{sort--merge} paradigm:
 \begin{enumerate}
@@ -146,6 +172,7 @@ to a GPU
 \label{sec:parallel}
 
 \subsection{Channel library}
+\label{sec:channels}
 
 Magic2 exploits multiple cores through a clean, lock-free framework
 in which independent worker threads (\emph{agents}) communicate solely
@@ -169,6 +196,7 @@ regardless of the number of agents or the order in which blocks are
 processed.
 
 \subsection{Pipeline topology}
+\label{sec:topology}
 
 The master thread enqueues descriptors of independent data blocks
 containing up to \texttt{bMax}\ Mega-bases (default 3\,Mb) into a shared input
@@ -198,6 +226,7 @@ but neither the main program nor the agents contain any explict calls to the low
 unix semaphores and other synchronization tools.
 
 \subsection{NUMA-aware execution}
+\label{sec:numa}
 
 During its initialisation, Magic2 analyses the harware
 and counts the number of CPUs, nodes and eventual GPU.
@@ -214,10 +243,87 @@ For debugging, \texttt{--debug} forces fully serial execution
 parallelism.
 
 %% ===============================================================
+\section{Pilot-block inference and run-time adaptation}
+\label{sec:pilot}
+
+\subsection{The problem: alignment parameters depend on the data}
+\label{sec:pilot_problem}
+
+Several alignment decisions that strongly affect accuracy cannot be
+made before reading the data: whether the library is RNA or DNA,
+whether reads are short (Illumina) or long (Nanopore, PacBio),
+what the dominant sequencing strand is, and what adapter sequences
+were ligated.
+Requiring the user to supply these parameters manually is error-prone
+and unnecessary, because the data itself carries all the evidence
+needed to infer them.
+
+\subsection{Pilot blocks}
+\label{sec:pilot_blocks}
+
+As the input file is parsed, the read-parser emits a continuous
+stream of data blocks (\emph{BB}), each carrying up to \texttt{bMax}
+megabases (default 3\,Mb).
+The first five blocks are designated \emph{pilot blocks}.
+They enter the agent pool and are aligned immediately, before any
+global parameters are frozen.
+
+On completion of each pilot block, Magic2 tallies the evidence
+accumulated so far:
+\begin{itemize}
+  \item \textbf{Read type.} Long reads with frequent indels indicate
+        Nanopore or PacBio; short, low-indel reads indicate Illumina.
+  \item \textbf{Library type.} A significant fraction of reads
+        spanning GT-AG or CT-AC boundaries identifies the library as
+        RNA; the absence of such signals indicates DNA.
+  \item \textbf{Strand.}
+        Many RNA-seq protocols are strand-specific: 99\,\% of reads
+        may align consistently to one mRNA strand.
+        The ratio of GT-AG (sense) to CT-AC (antisense) intron signals
+        measures this directly and sets the strand bias used in all
+        subsequent alignments.
+  \item \textbf{Adapter sequences.}
+        Unaligned 3$'$ overhangs are accumulated into per-position
+        base-frequency histograms (Section~\ref{sec:adapters}).
+        Once the histogram is sufficiently populated the adapter
+        consensus is called.
+\end{itemize}
+
+Once any single pilot block has provided enough evidence --- in
+practice one block of 3\,Mb is usually sufficient for a high-depth
+run --- all inferred parameters are frozen and broadcast to all agents.
+
+\subsection{Reprocessing and zero read loss}
+\label{sec:pilot_reprocess}
+
+If a pilot block was aligned before a parameter was finalised (for
+example, before the adapter was known), it is silently reprocessed
+from scratch with the final parameters before its results are
+committed.
+All subsequent blocks, including the remaining pilot blocks still
+in the channel, proceed directly with the final parameters.
+No reads are discarded or excluded from the output: the pilot phase
+is entirely transparent to the user.
+
+\subsection{Benefit}
+\label{sec:pilot_benefit}
+
+The pilot mechanism means that a single undecorated command such as
+\begin{lstlisting}
+magic2 -i SRR122334 -x IDX -o output
+\end{lstlisting}
+produces fully optimised alignments regardless of library
+preparation, sequencing platform, or adapter chemistry.
+Strand bias in particular is exploited globally: a 99\,\%
+strand-specific RNA library is handled as accurately as one where
+the strand was declared explicitly on the command line.
+
+%% ===============================================================
 \section{Seed generation and genome indexing}
 \label{sec:seeds}
 
 \subsection{Seed encoding}
+\label{sec:seed_encoding}
 
 Magic2 uses exact $k$-mer seeds of length $k \le 19$, encoded as
 32-bit unsigned integers (2\,bits per base, so 16\,bases fill exactly
@@ -238,6 +344,7 @@ seeds are counterproductive for indel-prone technologies (Nanopore,
 PacBio) because indels in the spacers disrupt the spaced-seeds.
 
 \subsection{Strand-agnostic seed generation}
+\label{sec:strand_agnostic}
 
 To halve index size and enable strand-agnostic matching, both the
 forward $k$-mer $S$ and its reverse complement $C$ are computed
@@ -266,6 +373,7 @@ The alignment stage therefore receives tables in which read-pair
 processing requires no further regrouping.
 
 \subsection{Subsampling}
+\label{sec:subsampling}
 
 To reduce index size without sacrificing alignment sensitivity, seeds
 are sub-sampled using a \emph{rolling-min-hash}: a round-robin buffer
@@ -281,6 +389,7 @@ This guarantees:
 \end{itemize}
 
 \subsection{Target multiplicity filtering and jump encoding}
+\label{sec:multiplicity}
 
 After collection, target seeds are sorted (Section~\ref{sec:sort}) and their
 multiplicity (number of occurrences in per target) is counted.
@@ -300,6 +409,7 @@ Seed records are 16\,bytes each (Section~\ref{sec:gpu_structs}).
 overhead.
 
 \subsection{Junction seeds from annotated splice sites}
+\label{sec:junction_seeds}
 
 When a GFF/GTF annotation is supplied, Magic2 supplements genomic seeds
 with \emph{junction seeds} spanning annotated exon--exon boundaries,
@@ -362,24 +472,31 @@ sort and GPU coalesced memory access.
 \section{Radix sort}
 \label{sec:sort}
 
-\textbf{[PLACEHOLDER --- to be drafted in the next session
-using \texttt{wsa/sa.sort.c} as reference.]}
+Radix sort runs in $O(n)$ time and generates purely sequential memory
+accesses, making it strictly preferable to comparison-based sorts once
+the table exceeds cache capacity.
 
-\medskip
-Key points to cover:
-\begin{itemize}
-  \item 3-pass radix sort implementation (April~2026 optimisation).
-  \item Cache efficiency: why radix sort outperforms comparison-based
-        sorts on this data.
-  \item GPU offload via CUDA Thrust (optional, silent fallback to CPU);
-        see Section~\ref{sec:gpu}.
-  \item Benchmark: 15\,\% reduction in elapsed and CPU time on large
-        datasets observed after optimisation.
-  \item Dedicated sort--merge step for combining read and genome seed
-        tables.
-\end{itemize}
+Magic2's implementation (\texttt{wsa/sa.sort.c}) sorts the 32-bit
+\texttt{seed} field of 16-byte \texttt{CW} records in three passes
+with bit-widths of 11, 11, and 10.
+All three frequency histograms are accumulated in a single linear scan
+before any data movement, so the table is read sequentially exactly
+four times in total.
+The scatter passes ping-pong between the source array and a
+128-byte-aligned scratch buffer; the sorted result lands in the
+scratch buffer with no final copy.
+On SSE2-capable processors each 16-byte record is moved by a single
+\texttt{\_mm\_load/store\_si128} instruction, with a portable
+\texttt{memcpy} fallback elsewhere.
+
+This design replaced an earlier merge-sort and reduced elapsed and CPU
+time by approximately 15\,\% on large human datasets.
+When a GPU is available the sort is offloaded to
+\texttt{thrust::sort} (Section~\ref{sec:gpu}), superseding the CPU
+path entirely for the seed-matching phase.
 
 \subsection {Genome index loading and joining}
+\label{sec:index_load}
 
 The filtered genome index (Section~\ref{sec:seeds}) is partitioned
 into $NN$ sub-tables (16 or 32, indexed by the least-significant
@@ -395,6 +512,7 @@ the 2 matching records. This table is then sorted by read (hence
 automaticaly by pairs).
 
 \subsection{Optional GPU acceleration}
+\label{sec:gpu_accel}
 
 When an NVIDIA GPU is available, Magic2 offloads three steps of the
 seed-matching pipeline to the device via CUDA Thrust
@@ -413,6 +531,7 @@ All structure declarations are shared and since both the CPU and the GPU use 64-
 no data conversion is required at the CPU--GPU boundary.
 
 \subsection{Latency hiding through channel-based concurrency}
+\label{sec:latency_hiding}
 
 The GPU call in each agent is synchronous: the agent blocks on the
 device until the sorted \texttt{SEEDMATCH} table is ready, then
@@ -461,72 +580,50 @@ Magic2's agent/channel architecture replicates this behaviour in C,
 without any GPU-specific orchestration code in the pipeline.
 
 \subsection{Per-block GPU pipeline}
+\label{sec:gpu_pipeline}
 
-Magic2's alignment pipeline processes independent data blocks of up to
-\texttt{bMax}\,Mb through a pool of agents coordinated by channels
-(Section~\ref{sec:parallel}).
 GPU acceleration is applied at the block level: each agent, upon
-receiving a block, calls the GPU for seed sorting and joining, then
-proceeds to CPU-side alignment extension once the device returns.
-Within each block the GPU executes the following steps.
+receiving a block, offloads the seed-matching phase to the device,
+then resumes CPU-side alignment extension once the device returns.
+The genome seed index is resident in device memory throughout the
+run, having been transferred once before the first block is
+processed; the CPU no longer needs to memory-map the full 22\,GB
+index during alignment.
+
+Within each block the GPU performs the following steps in sequence:
 
 \begin{enumerate}
-
 \item \textbf{Read-seed sort.}
-      For each of the $NN$ seed partitions of the current block, the
-      \texttt{CW} array produced by CPU seed extraction is copied to
-      device memory and sorted by seed value using
-      \texttt{thrust::sort} with a device comparator that orders
-      records by the \texttt{seed} field.
-
-\item \textbf{Run-length encoding.}
-      \texttt{thrust::reduce\_by\_key} compresses both the (resident)
-      genome partition and the (freshly sorted) read partition into
-      compact vectors of unique seed values with their start offsets
-      and run lengths.
-      This step replaces the linear merge traversal used in the CPU
-      sort--merge path with a fully parallel reduction.
+      The read seeds extracted from the current block are sorted on
+      the device by seed value, producing the same ordered table that
+      the CPU radix sort would deliver
+      (Section~\ref{sec:sort}).
 
 \item \textbf{Common-seed identification.}
-      \texttt{thrust::set\_intersection} finds seed values present in
-      both the genome partition and the read-block partition.
-      \texttt{thrust::lower\_bound} then locates each common seed in
-      the respective run-length tables, yielding the start offset and
-      count for each matching group in both the index and the reads.
+      The sorted read-seed table is intersected with the resident
+      genome index to find all seed values present in both.
+      For each common value the set of matching genome positions and
+      the set of matching read positions are identified.
 
-\item \textbf{Cartesian-product emission.}
-      For each common seed value with $m$ genomic occurrences and $n$
-      read occurrences, the CUDA kernel
-      \texttt{EmitCartesianProduct} writes $m \times n$
-      \texttt{SEEDMATCH} records to a pre-allocated output buffer.
-      The kernel is launched with one thread block per common seed and
-      up to 256 threads per block; each thread handles one or more
-      pairs $(i_{\text{genome}},\, j_{\text{read}})$ from the
-      Cartesian product.
-      Output positions are determined by an exclusive prefix scan
-      (\texttt{thrust::exclusive\_scan}) over per-seed pair counts,
-      ensuring contiguous, conflict-free writes with no atomic
-      operations.
+\item \textbf{Match-record emission.}
+      For each common seed with $m$ genomic occurrences and $n$ read
+      occurrences, all $m \times n$ candidate hit pairs are written to
+      a match table in parallel, using a prefix-scan to assign output
+      positions without atomic operations.
 
 \item \textbf{Sort by read pair.}
-      The completed \texttt{SEEDMATCH} table is sorted on the GPU by
-      the \texttt{read} name field using \texttt{thrust::sort}.
-      Because of the paired-read encoding (Section~\ref{sec:paired_encoding}),
-      mate~1 ($n \ll 1$) and mate~2 ($(n \ll 1) \mid 1$) of each pair
-      differ only in the least-significant bit of the \texttt{nam}
-      field; sorting by this value simultaneously groups all candidate
-      hits by read pair and places mate~1 immediately before mate~2
-      within each pair.
-      This final GPU sort delivers a table that is directly consumable
-      by the CPU alignment stage with no further reordering.
+      The match table is sorted by read identifier.
+      Because of the paired-end encoding
+      (Section~\ref{sec:paired_encoding}), this simultaneously groups
+      hits by read pair and places mate~1 immediately before mate~2,
+      delivering a table directly consumable by the CPU alignment
+      stage with no further reordering.
 
 \item \textbf{Return to CPU.}
-      The sorted \texttt{SEEDMATCH} table is copied back to host memory.
-      The CPU extension stage (Section~\ref{sec:align}) processes one
-      read pair at a time, extending each candidate seed match into a
-      full alignment and performing splice-junction analysis, without
-      any further access to the genome index.
-
+      The sorted match table is copied back to host memory.
+      All subsequent processing --- alignment extension, splicing,
+      scoring --- proceeds on the CPU without any further access to
+      the genome index.
 \end{enumerate}
 
 
@@ -534,90 +631,778 @@ Within each block the GPU executes the following steps.
 \section{Alignment extension}
 \label{sec:align}
 
-\textbf{[PLACEHOLDER --- to be drafted in a future session
-using \texttt{wsa/sa.align.c} as reference.]}
+The alignment extension stage receives \texttt{SEEDMATCH} records ---
+pairs of (genome coordinate, read coordinate) for matching $k$-mers
+($k \approx 18$), sorted by read pair.
+Two flavours exist: standard genomic seeds, and junction seeds which
+each produce two glue points (a donor and an acceptor on either side
+of an annotated intron boundary).
 
-\medskip
-Key points to cover:
-\begin{itemize}
-  \item Banded Smith--Waterman extension from seed anchors.
-  \item Error cost model (\texttt{errCost}=4, \texttt{errRateMax}=12\,\%).
-  \item Handling of mismatches vs.\ indels for short vs.\ long reads.
-  \item \texttt{minAli}=30, \texttt{minScore}=30 thresholds.
-  \item Multi-mapping and \texttt{maxTargetRepeats}=81.
-\end{itemize}
+\subsection{Strand resolution}
+\label{sec:strand_resolution}
+
+Seeds are strand-agnostic: chromosome and read identifiers encode
+strand implicitly --- odd identifiers ($2n+1$) indicate the complement
+was selected, even ($2n$) the forward strand.
+The XOR \texttt{(chrom \textasciicircum\ read) \& 1} therefore
+determines whether read and chromosome are antiparallel or parallel.
+This flag is extracted and dropped; from this point all processing
+uses the positive-strand read (\texttt{dnaR}) against either
+\texttt{dnaG} or \texttt{dnaGR}, both memory-mapped at initialisation.
+
+\subsection{Clustering and locus selection}
+\label{sec:clustering}
+
+For each read, glue points may scatter across many chromosomes but
+cluster into one or a few genuine loci.
+Loci are scored by glue-point count, with seeds of high genomic
+multiplicity (recorded in the \texttt{SEEDMATCH} record) down-weighted.
+Junction seeds are tallied separately and contribute additional
+evidence for a specific splice structure.
+Within each candidate locus, glue points are sorted by chromosome,
+strand, then by the diagonal value $a - x$ (genome coordinate minus
+read coordinate); in the absence of indels all seeds from the same
+exon share the same diagonal.
+
+\subsection{Seed extension: the jumper algorithm}
+\label{sec:jumper}
+
+Starting from each seed match, Magic2 extends the alignment using the
+\emph{jumper} algorithm, first described in the AceView human-genome
+aligner~\citep{aceview} and subsequently used in
+Magic-BLAST~\citep{magicblast}, to which we refer for a full
+description.
+
+Extension proceeds base by base: if \texttt{*cp \& *cq != 0} (a
+bitwise test that handles IUPAC ambiguity codes), both the read
+pointer \texttt{cp} and the genome pointer \texttt{cq} advance by~1.
+On a mismatch, a \emph{jumper table} is consulted.
+Each row encodes one error hypothesis as a triple
+\texttt{(dx, da, n)}: advance the read pointer by \texttt{dx} and the
+genome pointer by \texttt{da}, then require \texttt{n} consecutive
+matching bases for the hypothesis to be accepted.
+The table covers substitutions, insertions, and deletions of up to
+\texttt{MAXJUMP}=3 bases (Table~\ref{tab:jumper}); a sentinel entry
+\texttt{\{1,\,1,\,0\}} with $n=0$ is always accepted and terminates
+the search without a special exit condition.
+Extension halts when the error density over a short window exceeds the
+budget defined by \texttt{errCost}=4 and \texttt{errRateMax}=12\,\%,
+or when the sequence ends.
+
+\begin{table}[h]
+\centering
+\caption{Jumper table (representative rows; fourth column not used in Magic2).}
+\label{tab:jumper}
+\small
+\begin{tabular}{rrl}
+\toprule
+\texttt{dx} & \texttt{da} & meaning \\
+\midrule
+1 & 1 & substitution \\
+1 & 0 & insertion in read (1 base) \\
+0 & 1 & deletion in read (1 base) \\
+2 & 0 & insertion (2 bases) \\
+0 & 2 & deletion (2 bases) \\
+$\vdots$ & $\vdots$ & $\vdots$ \\
+10 & 0 & insertion (10 bases) \\
+0 & 10 & deletion (10 bases) \\
+1 & 1 & sentinel (always accepted) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The jumper algorithm is strictly linear and cache-friendly, and can
+drift freely along any diagonal --- unlike banded Smith--Waterman,
+which is constrained to a fixed band and cannot follow a read that
+accumulates locally clustered errors.
+Smith--Waterman is optimal only under the assumption that sequencing
+errors are independently distributed, a hypothesis that does not hold
+in practice (polymerase slippage, homopolymer runs, and
+cycle-dependent quality decay are all correlated).
+The jumper table can be tuned to match observed error profiles;
+\texttt{MAXJUMP}=3 is appropriate for Illumina reads and may be
+relaxed for Nanopore data.
+
+\subsection{Junction-seed inward extension}
+\label{sec:junction_inward}
+
+Junction-seed glue points are extended inward toward the exon body:
+the donor glue point (at the 3$'$ end of the upstream exon) is
+extended 3$'{\to}$5$'$, and the acceptor glue point (at the 5$'$ end
+of the downstream exon) is extended 5$'{\to}$3$'$.
+Together they define a candidate alignment split across the intron
+without ever examining the intronic sequence, which is absent from
+the read.
+A seed hit is considered redundant if it falls within $\pm 3$
+diagonals of an already-extended fragment; hits further off-diagonal
+are extended independently to accommodate small indels.
+
+\subsection{Dynamic programming --- best exon path}
+\label{sec:dp}
+
+\paragraph{Input.}
+The input to the DP is a list of candidate exon fragments for a
+single read, each carrying: read and chromosome identifiers,
+genomic and read-space coordinates, and the error table produced
+by the jumper algorithm (Section~\ref{sec:jumper}).
+Fragments are sorted by their 5$'$ genomic coordinate before the
+DP begins.
+
+\paragraph{DAG construction and path extension.}
+The DP maintains a list of active paths, initially empty.
+It scans candidate exons from 5$'$ to 3$'$ and at each step
+attempts to append the current exon to every existing path whose
+topology is compatible: the new exon must lie downstream on the
+same chromosome and strand, with a genomic gap consistent with
+an intron or with direct adjacency.
+When a compatible path is found, the exon is appended and the
+path score is updated as the running sum of individual exon
+scores, ignoring overlaps in read coordinates for now
+(those are resolved later by the adjunct-introns step,
+Section~\ref{sec:adjunct_introns}).
+A new single-exon path is also started at each exon, so that
+paths beginning at any position are considered.
+
+\paragraph{Pruning --- optimality in a DAG.}
+The candidate set naturally forms a directed acyclic graph (DAG):
+multiple paths can converge on the same exon from different
+upstream histories.
+When two paths can both be extended by the same next exon, they
+represent two routes between a common start and a common
+continuation point.
+The path with the lower running score is pruned at this point.
+This pruning is optimal: because all future extensions apply
+identically to both paths, the lower-scoring path can never
+overtake the higher-scoring one regardless of what follows.
+Pruning keeps the active path list small and prevents combinatorial
+explosion on reads that cross regions with many overlapping
+fragment candidates.
+
+\paragraph{Output and downstream refinement.}
+At the end of the scan, the surviving paths are passed to the
+adjunct-introns and adjunct-exons steps
+(Sections~\ref{sec:adjunct_introns}--\ref{sec:scoring}),
+which resolve overlaps, optimise splice boundaries, realign
+against the genomic shadow, and compute final scores.
+Only then are paths ranked and the best retained.
+Some human genes have exact paralogues or occur in tandem repeats
+in the genome; reads from these loci will genuinely map to multiple
+locations with equal scores and are reported as multi-mapping
+alignments.
+This is expected and correct behaviour: the multi-mapping rate is
+a property of the genome annotation, not an aligner artefact.
+
+\subsection{Adjunct-introns: splice-boundary optimisation}
+\label{sec:adjunct_introns}
+
+After the dynamic-programming pass, each exon fragment still carries
+its raw jumper-extension coordinates and has not been clipped at
+splice boundaries.
+The adjunct-introns step processes every successive pair of exon
+fragments along a path.
+
+\paragraph{Intron size threshold.}
+Magic2 does not call introns below 30 bases.
+No confirmed human intron shorter than 30 bases is known, and
+short genomic gaps in an alignment are more parsimoniously explained
+by sequencing deletions: a 6-base gap is reported as two successive
+3-base deletions and penalised accordingly in the score.
+Above 30 bases, a gap becomes an intron candidate, but confidence
+is graded rather than binary.
+Magic2 counts, for each candidate gap-length threshold $t$, the
+fraction of gaps at or above $t$ that carry a canonical GT-AG (or
+CT-AC) signal.
+As $t$ increases this fraction rises; the threshold is set at the
+point where the slope of that curve falls to~1 (i.e.\ where raising
+the threshold further gains no additional enrichment for canonical
+signals).
+This adaptive procedure is described in detail in the Magic-BLAST
+paper~\citep{boratyn2019}; Magic2 inherits and extends it.
+An intron is considered reliable if it either carries a GT-AG signal
+or is supported by multiple independent reads.
+
+\paragraph{Intron scoring bonus/penalty.}
+Once a gap is confirmed as an intron, its contribution to the
+alignment score is adjusted by one additional \texttt{errCost} unit
+depending on the library type inferred during the pilot phase
+(Section~\ref{sec:pilot}).
+In RNA mode the intron receives a bonus of $+\texttt{errCost}$:
+a spliced alignment is rewarded relative to an unspliced one,
+favouring genuine gene models.
+In DNA mode the intron receives a penalty of $-\texttt{errCost}$:
+a genomic gap is treated with mild suspicion, which disfavours
+retroposon insertions and other spurious long-range matches that
+would otherwise masquerade as spliced alignments.
+The net effect is that the same scoring framework handles both
+RNA-seq and DNA-seq libraries correctly without any mode-specific
+code paths.
+Two adjacent exon fragments often overlap in read coordinates: both
+extensions reached into the intron and claimed the same read bases.
+The overlap is resolved by choosing a clip point --- a position in
+read space at which the left fragment ends and the right fragment
+begins --- that minimises the total number of errors (substitutions
+plus indels of up to 3 bases) summed across both fragments.
+In low-complexity regions the overlap can span 30 or more bases
+with errors on both sides, so this joint minimisation is essential
+for accurate boundary placement.
+
+\paragraph{Splice-signal selection.}
+Once the optimal clip point is identified, the genomic gap between
+the two fragments defines a candidate intron.
+If a junction seed hit is available for this locus, its annotated
+boundary is adopted directly without further search.
+Otherwise, Magic2 slides the clip point within a small window around
+the error minimum and scores the dinucleotides at the resulting
+donor and acceptor sites, applying the following preference order:
+\begin{enumerate}
+  \item GT-AG (canonical sense) or CT-AC (canonical antisense),
+        chosen according to the strand established during the pilot
+        phase (Section~\ref{sec:pilot});
+  \item GC-AG (less common but well-documented);
+  \item any other dinucleotide pair, scored by error count alone.
+\end{enumerate}
+For non-stranded libraries both GT-AG and CT-AC are considered
+equally at step~1, and the one consistent with the lower error
+count is preferred.
+The final clip point therefore simultaneously minimises alignment
+errors and maximises splice-signal evidence.
+
+\subsection{Adjunct-exons: shadow realignment}
+\label{sec:adjunct_exons}
+
+After intron boundaries are fixed, the path coordinates are used
+to extract the \emph{genomic shadow} of the read: the exact genomic
+sequence spanned by the alignment, with introns removed.
+The full read is then realigned against this personalised reference
+using the jumper algorithm.
+
+This second pass resolves two classes of residual error.
+First, a short gap in the read that was previously interpreted as
+a sequencing indel may, when viewed against the shadow, be
+recognisable as a mis-measured intron boundary; adding two to
+five missing genomic bases from the better-supported side can
+create a clean GT-AG signal that was invisible in the original
+alignment.
+Second, errors near exon boundaries are sometimes
+artefacts of the clip point rather than true mismatches; realignment
+against the shadow redistributes them correctly.
+
+After shadow realignment, all mismatches and indels are re-projected
+into exonic read coordinates, and the final alignment score is
+computed (Section~\ref{sec:scoring}).
+This is the score used for all downstream comparisons.
+
+\subsection{Alignment scoring}
+\label{sec:scoring}
+
+The score of a single-read alignment path is:
+\[
+  s = A - \texttt{errCost} \times E
+\]
+where $A$ is the number of aligned bases in read coordinates
+(each read base counted once, regardless of how many exons it spans),
+$E$ is the total number of errors (substitutions plus indels of
+1--3 bases), and \texttt{errCost}=4 is the default penalty per error.
+Genomic gaps of 4--29 bases are treated as deletions and contribute
+to $E$ (a 6-base gap counts as two successive 3-base deletions,
+penalised as $2 \times \texttt{errCost}$).
+Gaps of 30 bases or more are candidates for introns and do not
+contribute to $E$; their status is confirmed by splice-signal
+evidence and support count as described in
+Section~\ref{sec:adjunct_introns}.
+
+\subsection{Pair scoring and multi-mapping resolution}
+\label{sec:pair_scoring}
+
+For paired-end libraries, the two mates of a pair are scored jointly.
+If both mates align at the same locus with correct relative
+orientation and a plausible insert size, their individual scores are
+summed to form a \emph{pair score}.
+The pair score is then compared across all candidate loci for that
+read pair.
+
+Consider a pair that aligns at two loci (both mates present at each)
+and also has an orphan alignment of one mate at a third locus.
+The orphan is discarded: a validated pair score always dominates a
+single-mate score, because the joint alignment provides roughly
+twice the evidence.
+All loci whose pair score equals the best pair score are retained as
+equally supported placements; this set is reported as the
+multi-mapping output for that pair.
+
+For single-end libraries there are no pair scores; the best
+individual score (or all tied-best scores) is retained.
+
+Reads or pairs whose best score falls below \texttt{minScore}=30
+or whose aligned length is below \texttt{minAli}=30 are discarded.
+
+\subsection{Long-read rafias}
+\label{sec:rafias}
+
+Nanopore and PacBio reads are long enough to span many exons in a
+single read, but their error rate is substantially higher than
+Illumina and their errors are not uniformly distributed: certain
+sequence motifs, homopolymer runs, and locally low-complexity
+regions can produce a stretch of 30 to several hundred bases that
+cannot be reliably matched to the genome.
+In such cases the dynamic-programming step may produce two separate
+paths for what is biologically a single continuous alignment: for
+example, exons 1--7 on the left and exons 9--14 on the right, with
+a gap in between that no seed covers.
+
+If the two paths share a unique genomic locus, have consistent
+orientation, and the unmatched read region is shorter than the
+genomic gap between the two flanking exon groups, Magic2 merges
+them into a single structure called a \emph{rafia}.
+The unmatched central portion is called the \emph{bubble}.
+The bubble is assumed to correspond to a real genomic region between
+the flanking exons --- perhaps a difficult-to-sequence segment or
+a region absent from the current genome assembly --- but its
+precise internal coordinates are unknown.
+
+\paragraph{Scoring.}
+Bubble bases are not penalised as substitutions.
+The alignment score is computed from the matched flanking exons
+only, exactly as for a standard path
+(Section~\ref{sec:scoring}).
+This prevents a long unsequenceable stretch from artificially
+depressing the score of an otherwise high-quality alignment.
+
+\paragraph{BAM output.}
+No single standard CIGAR operator can represent a bubble: the read
+bases are present and real, but their precise genomic location is
+unknown within a large reference span.
+Magic2 encodes a rafia using a compound \texttt{I}/\texttt{N} pair
+placed at the bubble boundary:
+\begin{center}
+\texttt{700M\,200I\,3000N\,500M}
+\end{center}
+where \texttt{700M} and \texttt{500M} stand for the left and right
+exon groups (each expanding to their own \texttt{M}/\texttt{I}/\texttt{D}
+operations in practice), \texttt{200I} records the 200 bubble bases
+as present in the read but not consumed from the reference, and
+\texttt{3000N} records the 3000-base reference span that is skipped.
+The adjacency of \texttt{200I3000N} signals that these two events
+are coupled: the 200 read bases are not a sequencing insertion but
+an unlocatable fragment sitting somewhere within the 3000-base
+genomic region.
+The full read sequence is preserved in the \texttt{SEQ} field
+across all bases, so scoring and downstream re-analysis are
+unaffected.
+
+This encoding is syntactically valid under the SAM specification,
+which does not forbid adjacent \texttt{I} and \texttt{N} operators.
+Tools that compute read length as the sum of read-consuming
+operators will recover the correct length.
+Some tools that interpret \texttt{I} strictly as a short sequencing
+insertion may flag the record; this is a known limitation of the
+BAM format for long-read structural variants.
+
+\textbf{[TODO --- implement and verify this CIGAR encoding for
+rafias in \texttt{wsa/sa.sam.c}, and test against samtools,
+IGV, and any downstream tools used in the Magic2 pipeline.]}
+
+Rafias are rarely encountered in Illumina data: short reads that
+hit an unreadable stretch typically fail to align altogether rather
+than producing two flanking paths.
 
 %% ===============================================================
-\section{Intron boundary optimisation, poly(A) detection, and
-         splice-leader identification}
+\section{Adapter detection and trimming}
+\label{sec:adapters}
+
+Adapter sequences may be supplied via \texttt{--adaptor1}/\texttt{--adaptor2}
+or the run manifest, but this is not required.
+In practice, the exact adapter sequence as it appears in sequenced reads
+is frequently unknown to the user, owing to the complexity of modern
+library constructions.
+Magic2 therefore infers adapter sequences directly from the data.
+
+\subsection{Overhang accumulation}
+\label{sec:overhang}
+
+After alignment, the unaligned 3$'$ tail of a read --- the overhang ---
+is a candidate adapter fragment.
+Magic2 accumulates four per-position base-frequency histograms over
+overhangs, one for each possible first overhang base (A, T, G, C).
+The split is necessary because the first overhang base has a 25\,\%
+probability of matching the genomic sequence by chance, which
+otherwise shifts the composite histogram and obscures the adapter
+signal.
+
+To reconstruct the adapter consensus, the histogram with the highest
+total count is selected (say, the A histogram, implying the adapter
+begins with A).
+The most frequent second base is then identified (say, G), and the
+G sub-histogram, shifted by one position, is added to the A histogram.
+The resulting composite histogram is extremely clean: on real datasets,
+base prevalence at each of the first $\sim$40 adapter positions
+typically exceeds 70\,\% (Figure~\ref{fig:adaptor_histo}).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{adaptor_histogram}
+\caption{Per-position base-frequency of 3$'$ unaligned overhangs
+(run A\_Total\_151PE), after splitting by first overhang base and compositing.
+\textbf{(a)}~Read~1 (TruSeq adapter): the four bases alternate sharply between
+positions, each dominant base reaching 88--94\,\%, unambiguously encoding the
+29-nt consensus shown above the panel.
+\textbf{(b)}~Read~2 (degenerate adapter): dominant-base fractions range from
+50--80\,\%, consistent with a partially randomised ligation sequence;
+the adapter family is nonetheless uniquely identified.
+Colours: A\,=\,green, T\,=\,red, G\,=\,orange, C\,=\,blue.
+The coloured sequence above each panel is the adapter inferred by Magic2.}
+\label{fig:adaptor_histo}
+\end{figure}
+
+\subsection{Pilot blocks and reprocessing}
+\label{sec:adapter_pilot}
+
+Adapter inference is part of the broader pilot-block mechanism
+described in Section~\ref{sec:pilot}.
+Once the adapter consensus is called, any pilot block that was
+processed without it is reprocessed from scratch; no reads are lost.
+
+\subsection{Trimming and alignment extension}
+\label{sec:trimming}
+
+Once an adapter is known, each read's overhang is compared to it.
+If enough bases match, the alignment is clipped back to the exact
+genomic position where the adapter begins, effectively extending the
+reported alignment.
+In the Magic2 output format the trimmed bases are exported as clipped,
+and the extension bases are reported in upper case rather than lower
+case.
+A read that aligns fully up to the recognised adapter boundary, with
+no mismatches in the genomic portion, is counted as a
+\emph{perfect alignment}.
+
+\subsection{RNA-mode extras: poly(A) detection}
+\label{sec:polya}
+
+RNA mode and strand bias are inferred during the pilot phase
+(Section~\ref{sec:pilot}).
+Once the strand is established, a
+poly(A) tail is sought at the 3$'$ end of forward reads and a poly(T)
+tail at the 5$'$ end of reverse reads, the two being equivalent by
+symmetry.
+Tails carrying at least eight consecutive A (or T) residues are
+recorded, accumulated across reads, and reported as candidate poly(A)
+addition sites.
+
+\subsection{Trans-splice leader detection (\textit{C.~elegans})}
+\label{sec:tsl}
+
+In \textit{C.~elegans} the majority of mRNAs acquire a short,
+stereotyped sequence at their 5$'$ end by trans-splicing: the
+\emph{splice leader} (SL).
+SL sequences are highly conserved and serve as extremely reliable
+markers of transcription start sites.
+Magic2 searches for SL sequences at the same positions used for
+adapter detection: the 5$'$ end of forward reads and the 3$'$ end
+of reverse reads.
+The 12 known \textit{C.~elegans} SL sequences (SL1--SL12) are
+hard-coded in the program~\citep{blumenthal2002}.
+Reads carrying a recognised SL are trimmed at the SL boundary,
+the SL identity is recorded, and the counts are reported in the
+TSF output, providing a direct census of trans-splicing activity
+across the transcriptome.
+
+SL detection is activated by specifying the target organism in the
+run configuration.
+The recommended mechanism is a \texttt{Species=worm} entry in the
+\texttt{-T} target configuration file, which keeps species-specific
+settings alongside the genome index rather than on the command line.
+A \texttt{--species worm} command-line override is also accepted for
+convenience.
+
+%% ===============================================================
+\section{Intron boundary optimisation and splice-signal scoring}
 \label{sec:introns}
 
-\textbf{[PLACEHOLDER --- to be drafted in a future session
-using \texttt{wsa/sa.introns.c} as reference.]}
-
-\medskip
-Key points to cover:
-\begin{itemize}
-  \item Splice-signal scoring (GT-AG, AT-AC, non-canonical).
-  \item \texttt{maxIntron}=1{,}000{,}000\,bases.
-  \item Poly(A)/poly(T) tail detection algorithm.
-  \item Trans-spliced leader (SL) detection in \textit{C.~elegans}.
-  \item Strand inference from splice signals.
-\end{itemize}
+Intron detection, boundary optimisation, splice-signal scoring,
+the dynamic intron-size threshold, and the RNA/DNA scoring
+adjustment are all handled during the adjunct-introns step
+described in Section~\ref{sec:adjunct_introns}.
+The maximum reportable intron size is \texttt{maxIntron}=1{,}000{,}000
+bases; gaps above this limit are not called as introns regardless
+of splice-signal evidence.
+Strand inference from the GT-AG versus CT-AC intron balance is
+performed during the pilot phase (Section~\ref{sec:pilot}) and
+used throughout.
 
 %% ===============================================================
 \section{Output formats}
 \label{sec:outputs}
 
-\textbf{[PLACEHOLDER --- to be drafted in a future session.]}
+\subsection{Alignment: SAM and BAM}
+\label{sec:sambam}
 
-\medskip
-Key points to cover:
-\begin{itemize}
-  \item BAM output (\texttt{wsa/sa.sam.c}): default; standard downstream
-        compatibility.
-  \item \texttt{.hits} compact format (\texttt{wsa/sa.tabular.c}):
-        available via \texttt{--hits}; faster I/O for internal pipelines.
-  \item TSF (Tag--Sample Format): tab-separated, columns are
-        run\,/\,tag\,/\,format-code\,/\,data; format codes
-        \texttt{i}=integer, \texttt{f}=float, \texttt{t}=text;
-        files need not be sorted; directly concatenable for merging;
-        can produce 2-D tables compatible with Excel via \texttt{tsf.c}.
-  \item Wiggle/coverage tracks (\texttt{wsa/sa.wiggle.c}):
-        strand-specific; read-start/end profiles for TSS/TES detection.
-  \item QC metrics table (\texttt{wsa/sa.stats.c}).
-\end{itemize}
+Magic2 writes alignments in SAM or BAM format (\texttt{wsa/sa.sam.c}).
+The SAM writer is self-contained: it produces a fully valid SAM file
+with no dependency on any external library.
+BAM output is requested via \texttt{--bam}: Magic2 checks whether
+\texttt{samtools view} is available in \texttt{PATH} and, if so,
+pipes its SAM output through \texttt{samtools view -bS} to produce
+a compressed BAM file.
+If \texttt{samtools} is not found, Magic2 falls back silently to
+uncompressed SAM and reports the fallback to the user.
+This keeps the binary free of any link-time dependency on
+\texttt{htslib} or \texttt{samtools}.
 
-%% ===============================================================
-\section{Quality-control metrics}
-\label{sec:qc}
+\subsection{Compact hits format}
+\label{sec:hits}
 
-\textbf{[PLACEHOLDER --- to be drafted in a future session
-using \texttt{wsa/sa.stats.c} as reference.]}
+The \texttt{.hits} format (\texttt{wsa/sa.tabular.c}), selected via
+\texttt{--hits}, is a compact tab-separated alignment format designed
+for internal Magic2 pipelines where BAM compatibility is not required.
+It is faster to write and parse than SAM and represents multi-exon
+alignments more compactly.
 
-\medskip
-Key points to cover:
-\begin{itemize}
-  \item Mapping-class fractions: CDS, UTR, intron, intergenic,
-        mitochondrial.
-  \item Strand-specificity score.
-  \item Concordant-pair rate; insert-size distribution.
-  \item Mismatch distribution (per-cycle and global).
-  \item Perfect-alignment count (zero-mismatch, zero-indel reads).
-  \item Adapter detection and trimming statistics.
-  \item All metrics emitted in TSF format; directly comparable
-        across runs.
-\end{itemize}
+\subsection{TSF: Tag--Sample Format}
+\label{sec:tsf}
+
+All scalar outputs --- expression counts, intron support tables,
+poly(A) sites, QC metrics, adaptor profiles --- are exported in
+TSF (Tag--Sample Format): a plain tab-separated file with columns
+\texttt{run\,/\,tag\,/\,format-code\,/\,value}, where format codes
+are \texttt{i}~(integer), \texttt{f}~(float), and \texttt{t}~(text).
+TSF files need not be sorted; multiple TSF files can be concatenated
+directly to merge runs; and the \texttt{tsf.c} library can pivot any
+TSF file into a two-dimensional table compatible with Excel.
+
+\subsection{Coverage tracks (wiggle / BigWig)}
+\label{sec:wiggle}
+
+Coverage profiles are exported strand-specifically by
+\texttt{wsa/sa.wiggle.c} in the UCSC \emph{fixedStep} wiggle format
+(\texttt{.BF.gz}), which is the most compact text wiggle encoding.
+Each chromosome block opens with a header line of the form
+\begin{lstlisting}
+fixedStep chrom=chr1 start=1 step=10
+\end{lstlisting}
+followed by one coverage value per line per step position.
+The step size is chosen automatically from genome length: 1 for
+small genomes (bacteria, yeast) and 10 for large genomes (human,
+mouse), consistent with Magic2's general policy of deriving all
+internal parameters from the data rather than requiring user input.
+The step can be overridden with \texttt{--wiggle\_step~N} when a
+specific resolution is needed.
+Read-start and read-end profiles are also available for
+transcription-start-site (TSS) and transcription-end-site (TES)
+analysis.
+
+The current standard for genome browsers (UCSC, IGV, Ensembl) is
+BigWig: an indexed binary format.
+BigWig cannot be produced natively without linking the UCSC Kent
+library, which Magic2 deliberately avoids.
+The recommended workflow is therefore identical to the BAM strategy:
+Magic2 checks whether \texttt{wigToBigWig} is available in
+\texttt{PATH} and, if so, pipes the fixedStep wiggle output through
+it, also writing the required chromosome-sizes file from the genome
+index.
+If the tool is absent, the compressed fixedStep file is kept.
+\texttt{wigToBigWig} is distributed as a standalone static binary
+by UCSC (\url{https://hgdownload.cse.ucsc.edu/admin/exe/}) and is
+also installable via \texttt{conda install ucsc-wigtobigwig}.
+
+\textbf{[TODO: implement the \texttt{wigToBigWig} pipe and
+chromosome-sizes export in \texttt{wsa/sa.wiggle.c}.]}
+
+\subsection{Intron support tables}
+\label{sec:intron_tables}
+
+Intron evidence is exported in two TSF files per run.
+
+\textbf{Single-intron table} (\texttt{introns.tsf}).
+Each record identifies one intron and one run.
+The tag field encodes the intron as
+\texttt{chrom\_\_donor\_acceptor}, where the double underscore
+separates the chromosome name from the two boundary coordinates
+and a single underscore separates donor from acceptor.
+Negative coordinates indicate the antisense strand.
+The format code is \texttt{iit} (two integers, one text):
+\texttt{n}~(number of supporting reads on the annotated strand),
+\texttt{nR}~(reads on the opposite strand), and
+\texttt{feet}~(splice signal, e.g.\ \texttt{gt\_ag},
+\texttt{ct\_ac}, \texttt{gc\_ag}).
+A typical record is:
+\begin{lstlisting}
+chr1__146546_138479   A_Total_151PE   iit   4   0   gt_ag
+\end{lstlisting}
+The chromosome name is taken verbatim from the genome FASTA file
+and the optional GTF annotation; it appears unchanged in all
+output files, so coordinates are unambiguous across tools.
+
+\textbf{Double-intron table} (\texttt{double\_introns.tsf}).
+Each record reports a pair of introns observed within the same
+read.
+This is more informative than single-intron support alone: a read
+spanning two consecutive introns confirms the intervening exon as
+a genuine transcribed unit, providing direct exon-connectivity
+evidence for transcript reconstruction.
+The tag encodes both introns as
+\texttt{chrom\_\_a1\_a2\_\_\_b1\_b2} (triple underscore between
+the two intron coordinate pairs).
+The format code is \texttt{iitt}: \texttt{n}, \texttt{nR},
+\texttt{feet1}, \texttt{feet2}.
+
+Both files are directly convertible to Excel-compatible tables via:
+\begin{lstlisting}
+tsf -i introns.tsf -I tsf -O table -o introns_table.txt
+\end{lstlisting}
+and can be merged across runs by simple concatenation, since TSF
+files require no sorting.
+
+\subsection{Poly(A) addition sites}
+\label{sec:polya_output}
+
+Candidate poly(A) addition sites are exported in \texttt{polyA.tsf}.
+Each record identifies one site, one run, and one strand.
+The tag field has the form \texttt{G.chrom\_\_position}, where
+\texttt{G} denotes a genomic locus (as opposed to a gene model
+coordinate), the chromosome name is verbatim from the FASTA, and
+the position is the last aligned base before the poly(A) tail.
+The format code is \texttt{ti} (one text, one integer):
+\texttt{Strand} (\texttt{+} or \texttt{-}) and \texttt{n}
+(number of reads with a poly(A) or poly(T) tail ending at this
+position).
+A typical record is:
+\begin{lstlisting}
+G.chr1__1304288   A_Total_151PE   ti   +   5
+\end{lstlisting}
+Sites supported by only one read are retained in the file but
+should be treated with caution; reliable poly(A) sites typically
+accumulate tens to hundreds of reads at a single nucleotide
+position, reflecting the precision of cleavage-and-polyadenylation.
+
+\subsection{Error profile}
+\label{sec:error_profile}
+
+The per-run substitution and indel profile is exported in
+\texttt{errorProfile.tsf}.
+The format code is \texttt{i} throughout; the tag encodes the
+error type directly.
+The 12 substitution types are named \texttt{X>Y} (reference base
+to observed base, e.g.\ \texttt{A>G}); diagonal entries
+(\texttt{A>A} etc.) are always zero by construction and serve as
+a consistency check.
+Insertions and deletions of one base are counted separately by
+the inserted or deleted base (\texttt{InsA}, \texttt{DelT},
+etc.).
+\texttt{Any} gives the total error count across all categories.
+A typical file:
+\begin{lstlisting}
+A_Total_151PE   Any    i   4880463
+A_Total_151PE   A>G    i   299012
+A_Total_151PE   G>T    i   581599
+A_Total_151PE   InsA   i   73057
+A_Total_151PE   DelA   i   52330
+\end{lstlisting}
+This profile characterises the sequencing technology rather than
+the biology: the balance between transitions (\texttt{A>G},
+\texttt{G>A}, \texttt{C>T}, \texttt{T>C}) and transversions
+(\texttt{A>C}, \texttt{A>T}, \texttt{G>C}, \texttt{G>T},
+\texttt{C>A}, \texttt{C>G}, \texttt{T>A}, \texttt{T>G}) in the
+mismatch table reflects the error chemistry of the sequencer, not
+the underlying SNP or mutation spectrum.
+The profile is useful for comparing sequencing quality across runs,
+for detecting systematic chemistry artefacts, and for tuning the
+\texttt{errCost} parameter for non-Illumina technologies.
+
+\subsection{Run statistics}
+\label{sec:runstats}
+
+The file \texttt{runStats.tsf} collects all global alignment
+statistics for a run in a single TSF file (\texttt{wsa/sa.stats.c}).
+The header comment records the index used, seed length, maximum
+repeats, and error cost, providing a self-contained audit trail.
+
+Unlike the other TSF files, \texttt{runStats.tsf} uses
+multi-value format codes (\texttt{ift}, \texttt{iftift},
+\texttt{itititft}, \ldots) that pack several related numbers and
+labels into one record.
+This keeps the file human-readable as a flat list while allowing
+the \texttt{tsf} tool to expand it into a table.
+Tags with zero counts are sometimes omitted.
+
+The main categories are as follows.
+
+\paragraph{Pair and read counts.}
+\texttt{Pairs}, \texttt{Aligned\_pairs}, \texttt{Compatible\_pairs}
+(correct orientation and insert size), \texttt{Circle\_pairs}
+(both mates on the same strand --- a library artefact),
+and \texttt{Non\_compatible\_pairs}.
+At read level: \texttt{Aligned\_reads}, \texttt{Unaligned\_reads},
+\texttt{Perfect\_reads} (zero mismatches, zero indels),
+\texttt{Partial\_reads} (one mate aligned), and
+\texttt{Complex\_reads} (unusual alignment structure).
+\texttt{Low\_entropy\_reads} counts reads filtered out before
+alignment due to insufficient sequence complexity.
+
+\paragraph{Base counts.}
+\texttt{Bases} gives total, R1, and R2 base counts as three integers
+(\texttt{iii}).
+\texttt{Aligned\_bases} gives total, R1, and R2 aligned counts
+each with their percentage of raw bases (\texttt{ififift}).
+
+\paragraph{Error summary.}
+\texttt{Errors} gives the total error count and its percentage of
+aligned bases.
+\texttt{Mismatches\_and\_InDels} gives the subset of errors that
+are substitutions or short indels (1--3 bases), excluding
+intron-spanning gaps.
+The full per-type breakdown is in \texttt{errorProfile.tsf}
+(Section~\ref{sec:outputs}).
+
+\paragraph{Adapter and clipping statistics.}
+\texttt{Clipped\_3prime\_Adaptor\_read1} records the number of
+reads trimmed and the inferred adapter sequence.
+\texttt{Clipped\_polyA} and \texttt{Clipped\_polyT} count reads
+trimmed at a poly(A) or poly(T) tail.
+
+\paragraph{Intron statistics.}
+\texttt{Intron\_supports} gives the total number of intron-spanning
+reads, broken down by splice signal (GT-AG, CT-AC, other) and the
+fraction on the positive strand.
+\texttt{Supported\_introns} gives the number of distinct intron
+loci passing the reliability threshold (GT-AG seen once, or any
+signal seen at least three times).
+
+\paragraph{Multi-mapping distribution.}
+\texttt{Reads\_Aligned\_once} through
+\texttt{Reads\_multi\_aligned\_\_10} give the number and percentage
+of reads aligning to exactly 1, 2, \ldots, 10 loci.
+\texttt{Reads\_aligned\_several\_times} is the total fraction with
+more than one alignment.
+
+\paragraph{Target-class breakdown.}
+Magic2 aligns against one or more named target classes defined in
+the index (Section~\ref{sec:seeds}).
+The standard classes are \texttt{G} (genomic, the primary genome),
+\texttt{M} (mitochondrial), and \texttt{R} (repeat / ribosomal RNA).
+For each class, \texttt{Reads\_aligned\_in\_class\_X} and
+\texttt{Bases\_aligned\_in\_class\_X} give total counts, positive-
+and negative-strand breakdowns, the positive-strand fraction, and
+the percentage of all aligned reads or bases.
+The strand balance within each class is informative: in a stranded
+RNA-seq library, class G reads show roughly 50/50 strand split
+across the whole genome but strong strand bias within individual
+genes, while class R reads are nearly all on one strand because
+ribosomal RNA transcription is unidirectional.
 
 %% ===============================================================
 \section{Automatic parameter selection}
 \label{sec:autoconfig}
 
-\textbf{[PLACEHOLDER --- to be drafted in a future session
-using \texttt{wsa/sa.config.c} as reference.]}
+Magic2 derives all internal parameters from the hardware and data
+rather than requiring user configuration.
+Hardware auto-configuration (NUMA node selection, CPU count, agent
+and block counts) is described in Section~\ref{sec:parallel}.
+Data auto-configuration (read type, library type, strand, adapter
+sequences) is described in Section~\ref{sec:pilot}.
+The resulting defaults are listed below for reference; all can be
+overridden on the command line when needed.
 
-\medskip
-Confirmed defaults (April 2026):
 \begin{center}
 \begin{tabular}{ll}
 \toprule
@@ -629,7 +1414,8 @@ Parameter & Default \\
 Index step               & 6 (genomes $>1$\,Mb) \\
 Alignment step (\texttt{iStep}) & \texttt{tStep}/2 \\
 \texttt{seedLength}      & 16 (genomes $<1$\,Gb); 18 (human/mouse) \\
-\texttt{maxTargetRepeats}& 81 \\
+\texttt{maxTargetRepeats}& 81 (Section~\ref{sec:multiplicity}) \\
+\texttt{wiggle\_step}    & 1 (small genomes); 10 (human/mouse) \\
 \texttt{minAli}          & 30 \\
 \texttt{minScore}        & 30 \\
 \texttt{maxIntron}       & 1{,}000{,}000\,bases \\
@@ -667,24 +1453,61 @@ Migration to GitHub Actions with matrix builds for all three target
 platforms is planned.
 
 %% ---------------------------------------------------------------
+\section{Current status and roadmap}
+\label{sec:roadmap}
+
+\subsection{Implemented and tested}
+
+The following components are fully implemented and have been
+validated on human, mouse, and \textit{C.~elegans} RNA-seq datasets:
+sort--merge alignment, radix sort, Go-style channel parallelism,
+NUMA-aware respawning, pilot-block inference, adapter detection and
+trimming, splice-boundary optimisation (adjunct-introns,
+Section~\ref{sec:adjunct_introns}), shadow realignment
+(adjunct-exons, Section~\ref{sec:adjunct_exons}), poly(A)
+detection, trans-splice leader detection, SAM output, TSF output,
+fixedStep wiggle output, intron and double-intron tables, error
+profile, and run statistics.
+Optional GPU acceleration via CUDA is implemented and tested on
+NVIDIA hardware; execution falls back silently to the CPU path on
+machines without a compatible device.
+
+\subsection{Implemented, verification pending}
+
+Two output features are coded but require testing against standard
+downstream tools before the first public release:
+\begin{itemize}
+  \item \textbf{Rafia BAM encoding.}
+        The compound \texttt{200I3000N} CIGAR strategy for long-read
+        bubbles (Section~\ref{sec:rafias}) needs to be implemented
+        and verified against samtools, IGV, and downstream tools
+        (see \texttt{wsa/sa.sam.c}).
+  \item \textbf{BigWig export.}
+        The \texttt{wigToBigWig} pipe and automatic chromosome-sizes
+        file (Section~\ref{sec:wiggle}) need to be implemented in
+        \texttt{wsa/sa.wiggle.c}.
+\end{itemize}
+
+\subsection{Planned}
+
+The following are design decisions made but not yet implemented:
+\begin{itemize}
+  \item GitHub Actions CI with matrix builds for Linux x86-64,
+        Linux ARM, and macOS, replacing the current Travis CI
+        configuration.
+  \item Automated GitHub Releases attaching pre-built binaries
+        and documentation when a version tag is pushed.
+  \item A regression test suite running a small reference dataset
+        and comparing outputs to stored expected results.
+  \item Verification that Magic2 runs correctly inside Docker
+        containers (currently untestable at NCBI for security
+        reasons).
+  \item A standalone TSF library reference
+        (\texttt{magic2\_tsf\_reference.tex}).
+\end{itemize}
+
+%% ---------------------------------------------------------------
 \bibliographystyle{naturemag}
 \bibliography{magic2_refs}
 
 \end{document}
-@book{donovan2015go,
-  author    = {Donovan, Alan A. A. and Kernighan, Brian W.},
-  title     = {The {Go} Programming Language},
-  publisher = {Addison-Wesley Professional},
-  year      = {2015},
-  isbn      = {978-0134190440}
-}
-
-@article{hoare1978csp,
-  author  = {Hoare, C. A. R.},
-  title   = {Communicating Sequential Processes},
-  journal = {Communications of the {ACM}},
-  volume  = {21},
-  number  = {8},
-  pages   = {666--677},
-  year    = {1978}
-}
