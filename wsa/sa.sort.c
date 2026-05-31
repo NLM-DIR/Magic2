@@ -30,9 +30,9 @@
 #include <time.h>
 #endif
 
-#ifdef USEGPU
+#ifdef USE_GPU
 #include "sa.gpusort.h"
-#endif /* USEGPU */
+#endif /* USE_GPU */
 
 /**************************************************************/
 /**************************************************************/
@@ -198,7 +198,7 @@ static BOOL newInsertionSort (char *b, mysize_t n, int s, int (*cmp)(const void 
   return clean ;
 } /* newInsertionSort */
 
-/* #ifndef USEGPU */
+/* #ifndef USE_GPU */
 /* recursivelly split the table
  * the partially sorted data oscillate between b and buf
  * they end up correctly in b because for small n
@@ -326,7 +326,7 @@ static BOOL saSortDo (char *b, long int nn, int s, char *buf, BOOL hitIsTarget, 
 
     return clean ;
 } /* saSortDo */
-/* #endif // USEGPU */
+/* #endif // USE_GPU */
 
 /**************************************************************/
 // static int saRadixSort (void *base, size_t N, size_t stride, int keyIndex) ;
@@ -389,7 +389,7 @@ int saSort (BigArray aa, int type)
   timespec_get(&start, TIME_UTC);
 #endif
   
-#ifdef USEGPU
+#ifdef USE_GPU
   if (! done && type < 3 && (size_t)N * s > (1 << 20))
     {
       usedGPU = 1 ;

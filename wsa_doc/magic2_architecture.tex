@@ -758,8 +758,8 @@ an intron or with direct adjacency.
 When a compatible path is found, the exon is appended and the
 path score is updated as the running sum of individual exon
 scores, ignoring overlaps in read coordinates for now
-(those are resolved later by the adjunct-introns step,
-Section~\ref{sec:adjunct_introns}).
+(those are resolved later by the adjust-introns step,
+Section~\ref{sec:adjust_introns}).
 A new single-exon path is also started at each exon, so that
 paths beginning at any position are considered.
 
@@ -780,8 +780,8 @@ fragment candidates.
 
 \paragraph{Output and downstream refinement.}
 At the end of the scan, the surviving paths are passed to the
-adjunct-introns and adjunct-exons steps
-(Sections~\ref{sec:adjunct_introns}--\ref{sec:scoring}),
+adjust-introns and adjust-exons steps
+(Sections~\ref{sec:adjust_introns}--\ref{sec:scoring}),
 which resolve overlaps, optimise splice boundaries, realign
 against the genomic shadow, and compute final scores.
 Only then are paths ranked and the best retained.
@@ -792,13 +792,13 @@ alignments.
 This is expected and correct behaviour: the multi-mapping rate is
 a property of the genome annotation, not an aligner artefact.
 
-\subsection{Adjunct-introns: splice-boundary optimisation}
-\label{sec:adjunct_introns}
+\subsection{Adjust-introns: splice-boundary optimisation}
+\label{sec:adjust_introns}
 
 After the dynamic-programming pass, each exon fragment still carries
 its raw jumper-extension coordinates and has not been clipped at
 splice boundaries.
-The adjunct-introns step processes every successive pair of exon
+The adjust-introns step processes every successive pair of exon
 fragments along a path.
 
 \paragraph{Intron size threshold.}
@@ -867,8 +867,8 @@ count is preferred.
 The final clip point therefore simultaneously minimises alignment
 errors and maximises splice-signal evidence.
 
-\subsection{Adjunct-exons: shadow realignment}
-\label{sec:adjunct_exons}
+\subsection{Adjust-exons: shadow realignment}
+\label{sec:adjust_exons}
 
 After intron boundaries are fixed, the path coordinates are used
 to extract the \emph{genomic shadow} of the read: the exact genomic
@@ -909,7 +909,7 @@ penalised as $2 \times \texttt{errCost}$).
 Gaps of 30 bases or more are candidates for introns and do not
 contribute to $E$; their status is confirmed by splice-signal
 evidence and support count as described in
-Section~\ref{sec:adjunct_introns}.
+Section~\ref{sec:adjust_introns}.
 
 \subsection{Pair scoring and multi-mapping resolution}
 \label{sec:pair_scoring}
@@ -1121,8 +1121,8 @@ convenience.
 
 Intron detection, boundary optimisation, splice-signal scoring,
 the dynamic intron-size threshold, and the RNA/DNA scoring
-adjustment are all handled during the adjunct-introns step
-described in Section~\ref{sec:adjunct_introns}.
+adjustment are all handled during the adjust-introns step
+described in Section~\ref{sec:adjust_introns}.
 The maximum reportable intron size is \texttt{maxIntron}=1{,}000{,}000
 bases; gaps above this limit are not called as introns regardless
 of splice-signal evidence.
@@ -1462,9 +1462,9 @@ The following components are fully implemented and have been
 validated on human, mouse, and \textit{C.~elegans} RNA-seq datasets:
 sort--merge alignment, radix sort, Go-style channel parallelism,
 NUMA-aware respawning, pilot-block inference, adapter detection and
-trimming, splice-boundary optimisation (adjunct-introns,
-Section~\ref{sec:adjunct_introns}), shadow realignment
-(adjunct-exons, Section~\ref{sec:adjunct_exons}), poly(A)
+trimming, splice-boundary optimisation (adjust-introns,
+Section~\ref{sec:adjust_introns}), shadow realignment
+(adjust-exons, Section~\ref{sec:adjust_exons}), poly(A)
 detection, trans-splice leader detection, SAM output, TSF output,
 fixedStep wiggle output, intron and double-intron tables, error
 profile, and run statistics.

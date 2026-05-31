@@ -631,6 +631,7 @@ static int wego_new_thread (void)
 {
   pthread_t thread;
   struct threadrunner *t;
+  pthread_attr_t attr ;   
   static int thread_id = 1;
   int error = 0 ;
   int ok = 0 ;
@@ -648,7 +649,11 @@ static int wego_new_thread (void)
   pthread_mutex_init(&t->semaphore,NULL);
   
   pthread_mutex_lock(&thread_startup_lock);
-  error = pthread_create(&thread, NULL, wego_threadrunner, (void *)t) ;
+  pthread_attr_init (&attr) ;                              /* initialise it */
+  pthread_attr_setstacksize (&attr, 8 * 1024 * 1024) ;
+  error = pthread_create(&thread, &attr, wego_threadrunner, (void *)t) ; /* pass &attr not NULL */
+  pthread_attr_destroy (&attr) ;                          /* clean up */
+
   if (! error)
     {
       pthread_cond_wait(&thread_startup_condition, &thread_startup_lock);

@@ -116,6 +116,10 @@ if ($species == dog) then
   set date=2017_06_21
   set ff='/home/mieg/ACEVIEWHELP/Dog_DATA/Dog_RNA_729_June22_2017_SraRunInfo.txt'
 endif
+if ($species == mays) then
+  set date=2026_0528
+  set ff='/home/mieg/ACEVIEWHELP/ZeaMaize_DATA/DNA.RNA.Histone.SraRunInfo.txt'
+endif
 if ($species == Campylobacter || $species == jejuni) then
   set date=2017_03_07
   set ff='/home/mieg/ACEVIEWHELP/Viruses_microbes_DATA/Campylobacter_Skesa_OXA_SraRunInfo.txt'
@@ -186,7 +190,7 @@ phaseSRR:
 if (! -d SRX_DB) then
   ln -s ~/ace/waligner/metaData
   ln -s ~/ace/waligner/scripts
-  ln -s ~/ace/bin.ICC_centos7 bin
+  ln -s ~/ace/bin.LINUX_4_OPT bin
   mkdir SRX_DB
   pushd  SRX_DB
     ln -s ../metaData/wspec.SRX wspec

@@ -16,6 +16,7 @@
  *   annotating transcripts starts and ends
  *
  */
+#define ARRAY_CHECK
 
 #define WIGGLETYPEMAX 2 /* strand */
 #include "sa.h"
@@ -346,7 +347,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
   char flip = (pp->antiStrand || (! pp->strand && nm > 3 && 100*nm > 80*(nm+np))) ? 0x1 : 0x0 ;  ;  
   char strand = ( nw & 0x1) ^ flip ? 'r' : 'f' ;
-  long int ii, iMax = 0 ;
+  long int ii, iMax = 0 ;   // THIS IS LINE 350
   long int cumul = 0, cumuls[8] = {0} ;
   unsigned int pos0 ;
   Array geneC = 0 ;
@@ -573,7 +574,7 @@ void wiggleExportAgent (const void *vp)
     }
   channelCloseSource (pp->wwDoneChan) ;
   return ;
-} /* wiggleExportAgent */
+} /* Wiggleexportagent */
 
 /**************************************************************/
 /**************************************************************/

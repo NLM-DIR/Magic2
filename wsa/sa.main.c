@@ -29,7 +29,6 @@
 
 
 #include "sa.h"
-#include "sa.gpusort.h"
 #include "sa.hardware_info.h"
 
 #ifdef __SSE2__
@@ -38,9 +37,11 @@
 #include <immintrin.h>
 #endif /* __SSE2__ */
 
+#ifdef USE_GPU
 /* Minimal CUDA runtime declarations needed by plain C callers.
  * (including cuda_runtime.h directly in a .c file pulls in C++-only constructs)
  */
+#include "sa.gpusort.h"
 typedef int cudaError_t;
 int  cudaSetDevice        (int device);
 int  cudaGetDeviceCount   (int *count);
@@ -48,6 +49,11 @@ int  cudaHostRegister     (void *ptr, size_t size, unsigned int flags);
 int  cudaHostUnregister   (void *ptr);
 
 #define cudaHostRegisterDefault  0x00U
+#endif
+
+#ifdef USE_TORCH
+#include "../wsa_torch/sa.torch.h"
+#endif
 
   
 
@@ -149,20 +155,6 @@ static void showBigAli (BigArray aligns)
     }
   return ;
 } /* showBigAli */
-
-/**************************************************************/
-/* a0 = a1 - x1 is the putative position of base 1 of the read 
- * It also works for the negative strand (a1 < 0, x1 > 0).
- */
-static int seedMatchOrder (const void *va, const void *vb)
-{
-  const SEEDMATCH *up = va ;
-  const SEEDMATCH *vp = vb ;
-  int n ;
-
-  n = ((up->read > vp->read) - (up->read < vp->read)) ; if (n) return n ;
-  return n ;
-} /* hitReadPosOrder */
 
 /**************************************************************/
 /**************************************************************/
@@ -267,306 +259,12 @@ void* f(void* arg) {
 #endif
 
 /**************************************************************/
-
-static long int  matchSeedsOld (const PP *pp, BB *bbG, BB *bb)
-{
-  BOOL useIntronSeeds = ! pp->ignoreIntronSeeds ;
-  BigArray hitsArray = bigArrayHandleCreate(64, BigArray, bb->h);
-  long int nn = 0, k = 0, kkk = 0 ;
-  int nHA = 0, hMax = 100000 ;
-  const long unsigned int mask26 = (1L << 26) - 1 ;
-  BigArray hits = bigArrayHandleCreate(hMax, HIT, bb->h);
-  bigArray (hitsArray, nHA++, BigArray) = hits ;
-  BigArray intronHits = 0 ;
-  const int seedLength = pp->seedLength ;
-  const int intronBonus = 1 ;
-  int absoluteMax = 0x1 << NTARGETREPEATBITS ;
-  int absoluteX1Max = 0x1 << ( 31 - 3 - NTARGETREPEATBITS) ;
-  int maxTargetRepeats = pp->maxTargetRepeats  ;
-  long int nIntronHits = 0 ;
-    
-  intronHits = bb->intronHits = bigArrayHandleCreate (10000, INTRONHIT, bb->h) ;
-  for (int kk = 0; kk < NN ; kk++)
-    {
-      long int i = 0, iMax = bigArrayMax (bbG->cwsN[kk]);
-      long int j = 0, jMax = bigArrayMax (bb->cwsN[kk]);
-
-
-      if (!iMax || !jMax)
-	continue ;
-      
-      unsigned int mask = step1 - 1 ;
-      const CW *restrict cw = bigArrp(bbG->cwsN[kk], 0, CW) ;
-      const CW *restrict rw = bigArrp(bb->cwsN[kk], 0, CW) ;
-      const CW *restrict cw1;
-      const CW *restrict cwMax = cw + iMax ;
-      HIT *restrict hit;
-
-
-      while  (i < iMax && j < jMax)
-	{
-	  if (0 && kk == 1 && rw->seed == 185667857)
-	    printf("(rw->seed == 185667857)\n") ;
-	  if ((i & mask) == 0)
-	    {
-	      if (rw->seed <= (unsigned int) cw->seed)
-		{
-		  cw++ ;
-		  i++ ;
-		  bb->skips0++;
-		  continue;
-		}
-	      else if (rw->seed <= (unsigned int) cw->pos)
-		{
-		  cw += step1 ;
-		  i += step1 ;
-		  bb->skips1++;
-		  continue;
-		}
-	      else if (rw->seed <= (unsigned int) cw->nam)
-		{
-		  cw += step2 ;
-		  i += step2 ;
-		  bb->skips2++;
-		  continue;
-		}
-	      else if (rw->seed <= (unsigned int) cw->intron)
-		{
-		  cw += step3 ;
-		  i += step3 ;
-		  bb->skips3++;
-		  continue;
-		}
-	      else
-		{
-		  cw += step4 ;
-		  i += step4 ;
-		  bb->skips4++;
-		  continue;
-		}
-	    }
-	  if (cw->seed < rw->seed)
-	    /* { int di = ((i & 0xf) == 0 && (cw+16)->seed < rw->seed ? 16 : 1) ; i += di ; cw += di ; bb->skipsNotFound++ ;  } */
- 	    { i++; cw++; bb->skipsNotFound++ ; } 
-	  else if (cw->seed > rw->seed)
-	    /* { int dj = ((j & 0xf) == 0 && (rw+16)->seed < cw->seed ? 16 : 1) ; j += dj ; rw += dj ; } */
-	    { j++ ; rw++ ; }
-	  else
-	    {
-	      long int a1, x1, i1 = i ;
-	      bb->skipsFound++ ;
-	      int nTargetRepeats = cw->intron ;
-	      
-	      if (0 &&   /* avoid, this kills the intron seeds */
-		  nTargetRepeats > maxTargetRepeats)
-		{ j++ ; rw++ ; continue ; }
-	      if (nTargetRepeats >= absoluteMax)
-		nTargetRepeats = absoluteMax - 1 ; /* we will report absoluteMax (i.e. 31) even is value is higher */
-
-	      for (cw1 = cw ; cw1 < cwMax ; i1++, cw1++)
-		{
-		  if ((i1 & mask) == 0)
-		    continue ;
-		  if (cw1->seed != rw->seed)
-		    break ;
-		  /* success, non intron case */
-		  if (((cw1->intron >> 31) & 0x1) == 0x0)
-		    {
-		      BOOL readUp = rw->nam & 0x1 ;
-		      BOOL chromUp = cw1->nam & 0x1 ;
-		      int nTargetRepeats = cw1->intron ;
-		      
-		      if (1 && nTargetRepeats > maxTargetRepeats)
-			continue ; 
-		      if (0 && useIntronSeeds) continue ;
-		      nn++ ;
-		      hit = bigArrayp (hits, k++, HIT) ;
-		      hit->read = rw->nam >> 1 ;
-		      a1 = cw1->pos ;
-		      x1 = rw->pos ;
-		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
-		      readUp = 0 ;
-		      if (! chromUp)  /* plus strand of the genome */
-			{
-			  hit->a1 =
-			    a1            /* position of the first base of the seed */
-			    - x1          /* locate the virtual position of base 0 of the read */
-			    + 1 ;         /* avoid zero */
-			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
-			}
-		      else    /* minus strand of the genome */
-			{
-			  hit->a1 =
-			    a1            /* position of the first base of the seed */
-			    + (seedLength - 1)  /* go the last base of the seed */
-			    + x1   /* locate the virtual position of base 0 of the read */
-			    + 1 ;  /* avoid zero */
-			  hit->x1 = x1 << 3 ;  /* reserve 3 bits for the intron seeds */
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | nTargetRepeats ;  /* all intron seeds are valuable */			
-			}
-		    }
-		  else  if (useIntronSeeds)  /* INTRON */
-		    {
-		      BOOL readUp = rw->nam & 0x1 ;
-		      BOOL chromUp = cw1->nam & 0x1 ; 
-		      INTRONHIT *intronHit = 0 ;
-		      unsigned int z = cw1->intron ;
-		      unsigned int isIntronDown = (z >> 28) & 0x4 ;
-		      int da1 =  z & 0xf ; /* nb of letters in first exon : 4....11 */
-		      int da  =  ((z >> 4) & mask26) ;  /* intron length < 32Mb */
-
-		      chromUp ^= readUp ; /* we want to be on strand plus of the read */
-		      readUp = 0 ;
-		      hit = 0 ;
-		      
-		      if (! chromUp)  /* plus strand on the read and on the genome */
-			{
-			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
-		          x1 = rw->pos + da1 ;  /* matching base on the read */
-			  
-			  /* Create a hit to the last two bases of the donor exon (x1-2 / a1-2) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 - 2) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x1             /* donor site */
-			    ;
-			  hit->a1 =
-			    (a1 - 2)            /* position of the first base of the seed */
-			    - (x1 - 2)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-
-			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
-			  intronHit->chrom =  cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->a1 = a1 - 1 ;  /* last base of first exon */
-			  intronHit->a2 = a1 + da ; /* first base of second exon */
-			  intronHit->x1 = x1 - 1 ;  /* last base of first exon */
-			  intronHit->x2 = x1 ;      /* first base of second exon */
-			  /* Create a hit to the first two bases of the acceptor exon (x1/ a1 + da) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam & 0xfffffffe ; /* to select plus strand, kill the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom |= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x2             /* acceptor site */
-			    ;
-			  hit->a1 =
-			    (a1 + da)            /* position of the first base of the seed */
-			    - (x1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  if (hit->x1 > absoluteX1Max)
-			    messcrash ("read coordinate x1=%d too large, please edit the source code", x1) ;
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			}
-
-		     else  /* plus strand on the read and minus strand  on the genome */
-			{
-			  a1 = cw1->pos ;       /* first base of intron in the genome, in bio coordinates */
-		          x1 = rw->pos + (seedLength - da1) - 1 ;  /* matching base on the read */
-			  
-			  intronHit = bigArrayp (intronHits, nIntronHits++, INTRONHIT) ;
-			  intronHit->chrom =  cw1->nam | 0x1 ; /* to select plus strand, kill the last bit */
-			  intronHit->read = rw->nam >> 1 ;
-			  intronHit->x1 = x1 ;
-			  intronHit->x2 = x1 + 1 ;
-			  intronHit->a1 = a1 - 1 ; /* first base of intron */
-			  intronHit->a2 = a1 + da ; /* last base of intron */
-			  
-			  /* Create a hit to the first two bases of the acceptor exon (x1+1,x1+2 / a1-1,a1-2) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 + 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x2             /* acceptor site */
-			    ;
-			  hit->a1 =
-			    (a1 - 1)       /* position of the first base of the seed */
-			    + (x1 + 1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			  
-			  /* Create a hit to the last two bases of the donor exon (x1-1,x1/ a1 + da+1,a1+da) */
-			  nn++ ;
-			  hit = bigArrayp (hits, k++, HIT) ;
-			  hit->read = rw->nam >> 1 ;
-			  hit->chrom = cw1->nam | 0x1 ; /* to select minus strand, set the last bit */
-			  if (0 && isIntronDown == 0) hit->chrom ^= 0x1 ; /* to cluster on the correct strand of the chroms */
-			  hit->x1 =
-			    ((x1 - 1) << 3)   /* reserve 3 bits for the intron seeds */
-			    | isIntronDown    /* bit 3 gives the intron strand */
-			    | 0x1             /* donor site */
-			    ;
-			  hit->a1 =
-			    (a1 + da + 1)            /* position of the first base of the seed */
-			    + (x1 - 1)          /* locate the virtual position of base 0 of the read */
-			    - intronBonus       /* prefer intron match to exon match */
-			    + 1 ;               /* avoid zero */
-			  hit->x1 = ( hit->x1 << NTARGETREPEATBITS) | 0x1 ;  /* all intron seeds are valuable */
-			}
-		    }
-		  else
-		    continue ;
-		  
-		  hit->chrom ^= (hit->read & 0x1) ; /* flip chrom for the second read of a pair */
-		  if (0 && rw->seed == 168430082)
-		    printf("(rw->seed == 168430082)\n") ;
-		
-		  if (k >= hMax)
-		    {
-		      bigArrayMax (hits) = k  ;
-		      hits = bigArrayHandleCreate(hMax, HIT, bb->h);
-		      bigArray (hitsArray, nHA++, BigArray) = hits ;
-		      kkk += k ;
-		      k = 0 ;
-		    }
-		}
-	      j++ ; rw++ ;
-	    }
-	}
-      bigArrayDestroy (bb->cwsN[kk]) ; /* the read words are no longer needed */
-      bigArrayMax (hits) = k ;
-      kkk += k ;
-    }
-  bb->hits = hitsArray ;
-
-  if (pp->debug)
-    fprintf (stderr, "..MatchSeedsOld found %ld matches\n", kkk) ;
-
-  return nn ;
-}  /* matchSeedsOld */
-
-/**************************************************************/
 /**************************************************************/
 /* join the readSeeds and the targetSeeds to create the matchedSeeds
  * this code is duplicated on the GPU
  */
 
-static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
+static long int  matchSeeds (const PP *pp, const BB *bbG, BB *bb)
 {
   BigArray sms = 0 ;
   long int nSm = 0 ;
@@ -693,7 +391,7 @@ static long int  matchSeeds (const PP *pp, BB *bbG, BB *bb)
 	      j++ ; rw++ ;
 	    }
 	}
-      bigArrayDestroy (bb->cwsN[kk]) ; /* the read words are no longer needed */
+      bigArrayDestroy (bb->cwsN[kk]) ; /* the read seeds are no longer needed */
     }
 
   if (pp->debug)
@@ -927,7 +625,7 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 
 /**************************************************************/
 /**************************************************************/
-
+#ifdef JUNK
 static void sortHitsFuse (const PP *pp, BB *bb)
 {
   BigArray aa = bb->hits ;
@@ -969,7 +667,7 @@ static void sortHitsFuse (const PP *pp, BB *bb)
     }
   return ;
 } /* sortHitsFuse */
-
+#endif
 /**************************************************************/
 /**************************************************************/
 #include <stdint.h>
@@ -1249,33 +947,119 @@ static void export (const void *vp)
   return ;
 } /* export */
 
-#ifdef USEGPU	  
+
+/**************************************************************/
+/**************************************************************/
+
+#ifdef USE_GPU
 static pthread_mutex_t gpu_mutex = PTHREAD_MUTEX_INITIALIZER ;
 
 GPUIndex* GPUIndexNew(const PP* p, BB* bbG)
 {
-    int i;
-    CW** index_parts = (CW**)malloc(NN * sizeof(CW*));
-    long int* sizes = (long int*)malloc(NN * sizeof(long int));
-
-    for (i=0;i < NN;i++) {
-        index_parts[i] = bigArrayp(bbG->cwsN[i], 0, CW);
-        sizes[i] = bigArrayMax(bbG->cwsN[i]);
+  CW *parts [NN] ;
+  long int sizes [NN] ;
+  
+  for (int k = 0 ; k < NN ; k++)
+    {
+      parts[k] = bigArrayp (bbG->cwsN[k], 0, CW);
+      sizes[k] = bigArrayMax (bbG->cwsN[k]) ;
     }
+  
+  GPUIndex* result = GPUIndexCreate(parts, sizes, NN);
+  
+  for (int k = 0 ; k < NN ; k++)    /* data are transferred, free on CPU */
+    { ac_free (bbG->cwsN[k]) ; bbG->cwsN[k] = 0 ; }	  
 
-    GPUIndex* result = GPUIndexCreate(index_parts, sizes, NN);
-
-    if (index_parts) {
-        free(index_parts);
-    }
-    if (sizes) {
-        free(sizes);
-    }
-
-    return result;
+  return result;
 }
+
+static BOOL saGpuSortJoinSort (const PP *pp, BB *bb)
+{
+  CW *parts[NN] ;
+  long int sizes[NN] ;
+  BOOL debug = TRUE ;
+  
+  for (int k = 0 ; k < NN ; k++)
+    {
+      parts[k] = bigArrayp (bb->cwsN[k], 0, CW);
+      sizes[k] = bigArrayMax (bb->cwsN[k]);
+    }
+	 
+  pthread_mutex_lock (&gpu_mutex) ;
+  char tBuf[25] ;
+  if (debug) fprintf (stderr, "%s: agent %d lane %d launch GPU\n", timeBufShowNow (tBuf), bb->readerAgent, bb->lane) ;	   
+  
+  /* Register each CW partition as pinned, transfer, then unregister.
+   * cudaHostRegister pins the existing posix_memalign buffer in place
+   * no copy, no new allocation, full PCIe bandwidth for the upload.
+   */
+  long int N = saGPUMatchHits (pp->bbG.gpu_idx, parts, sizes, NN) ;
+  for (int k = 0 ; k < NN ; k++)      /* data are transferred, free on CPU */
+    { ac_free (bb->cwsN[k]) ; bb->cwsN[k] = 0 ; }	  
+  
+  /* allocate host memory for seed matches, number of records */
+  bb->sms = bigArrayHandleCreateNoInit (N, SEEDMATCH, bb->h) ;
+  bigArrayMax (bb->sms) = N ;
+
+  saGPUMatchHitsCopyToHost (pp->bbG.gpu_idx, bigArrayp (bb->sms, 0, SEEDMATCH)) ;
+
+  if (debug) fprintf (stderr, "%s: agent %d lane %d received %ld  sms from GPU\n", timeBufShowNow (tBuf), bb->readerAgent, bb->lane, N) ;	   
+  pthread_mutex_unlock (&gpu_mutex) ;
+
+
+  return TRUE ;
+} /* saGpuSortJoinSort */
 #endif
 
+/**************************************************************/
+
+static void saCpuSortJoinSort (const PP *pp, BB *bb)
+{
+  long int nn = 0 ;
+  /* sort the read seeds */
+  for (int k = 0 ; k < NN ; k++)
+    if (bb->cwsN[k])
+      bb->gpu += saSort (bb->cwsN[k], 1) ; /* cwOrder */
+
+  /* match the sorted read seeds to the sorted target seeds */
+  if (bb->length)
+    nn = matchSeeds (pp, &(pp->bbG), bb) ;
+
+  /* sort the matches  */
+  if (nn)
+    saSort (bb->sms, 4) ;   /* faster than    bigArraySort (bb->sms, seedMatchOrder) ; */
+  return ;
+} /* saSortJoinSort */
+
+/**************************************************************/
+
+static void saSortJoinSort (const PP *pp, BB *bb)
+{
+  BOOL smsDone = FALSE ;
+
+#ifdef USE_GPU
+  /* This implemetation does not require to sort the bb->cwsN[]
+   * The sorting is done on the GPU
+   */
+  if (! smsDone && bb->length > (0x1 << 21))
+    smsDone = saGpuSortJoinSort (pp, bb) ;
+#endif   
+
+#ifdef USE_TORCH
+  /* This implemetation does not require to sort the bb->cwsN[]
+   * It does not merge sorted arrays but does a bucket search
+   * which is better for a GPU
+   */
+  if (! smsDone && bb->length > (0x1 << 21))
+    smsDone = saTorchJoinSort (pp, bb) ;  /* C++:  wsa_torch/sa.torch.cpp */
+#endif
+  
+  /* fall back on CPU */
+  if (! smsDone)   
+    saCpuSortJoinSort (pp, bb) ;
+
+  return;
+} /* saSortJoinSort */
 
 /**************************************************************/
 
@@ -1288,13 +1072,6 @@ static void wholeWork (const void *vp)
   char tBuf[25] ;
 
   clock_t  t1, t2, t01, t02 ;
-
-#ifdef USEGPU
-  /*   GPUIndex* gpu_idx = GPUIndexNew(pp, &bbG); */
-#endif
-  
-  CW** words = (CW**)malloc(NN * sizeof(CW*));
-  long int *sizes = (long int*)malloc(NN * sizeof(long int));
 
   t01 = clock () ;
 
@@ -1310,8 +1087,7 @@ static void wholeWork (const void *vp)
 	saParseGzBuffer (pp, &bb) ;
       else if (bb.r1Buffer) /* fasta buffer method 2026 */
 	saScan (pp, &bb) ;
-      saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
-      
+
       if (pp->debug)
 	{
 	  nReads = bigArrayMax (bb.dnas) / 2 - 1 ;  /* dnas contains dna and dnaR */
@@ -1321,66 +1097,8 @@ static void wholeWork (const void *vp)
 		  , bb.nSeqs, nReads, nnReads, bb.length, bbG.length) ;
 	}
 
-      /* sort words */
-      for (int k = 0 ; k < NN ; k++)
-	if (bb.cwsN[k])
-	  bb.gpu += saSort (bb.cwsN[k], 1) ; /* cwOrder */
-
-      
-      /* match hits */
-
-      if (0) /* old code before 2026_04_05 */
-	{
-	  if (bb.length)
-	    nn = matchSeedsOld (pp, &bbG, &bb) ;
-	  
-	  /* sorthits */
-	  if (pp->align && bb.hits)
-	    {
-	      sortHitsFuse (pp, &bb) ;
-	      bb.gpu += saSort (bb.hits, 3) ; /* hitPairOrder */
-	    }
-	}
-      else /* new code */
-	{
-#ifndef USEGPU	  
-	  if (bb.length)
-	    nn = matchSeeds (pp, &bbG, &bb) ;
-	  if (nn)
-	    {
-	      if (1)
-		saSort (bb.sms, 4) ;
-	      else
-		bigArraySort (bb.sms, seedMatchOrder) ;
-	    }
-#else
-           /* Register each CW partition as pinned, transfer, then unregister.
-	    * cudaHostRegister pins the existing posix_memalign buffer in place —
-           * no copy, no new allocation, full PCIe bandwidth for the upload.
-           */
-          for (int k = 0 ; k < NN ; k++)
-            {
-              words[k] = bigArrayp (bb.cwsN[k], 0, CW) ;
-              sizes[k] = bigArrayMax (bb.cwsN[k]) ;
-            }
-
-	  if (1)pthread_mutex_lock (&gpu_mutex) ;
-	  long int N = saGPUMatchHits (pp->bbG.gpu_idx, words, sizes, NN) ;
-          for (int k = 0 ; k < NN ; k++)
-            { ac_free (bb.cwsN[k]) ; bb.cwsN[k] = 0 ; }	  
-
- 	  /*
-	    allocate host memory for seed matches, number of records
-	  */
-	  bb.sms = bigArrayHandleCreate (N+1, SEEDMATCH, bb.h) ;
-	  bigArrayMax (bb.sms) = N ;
-	  fprintf (stderr, "waiting for %ld  sms\n", N) ;	   
-	  saGPUMatchHitsCopyToHost (pp->bbG.gpu_idx, bigArrayp (bb.sms, 0, SEEDMATCH)) ;
-	  fprintf (stderr, "received %ld  sms\n", N) ;	   
-	  if (1) pthread_mutex_unlock (&gpu_mutex) ;
-#endif
-	}
-      //  bigArrayMax(bb.sms) = 1 ;
+      saCodeSequenceSeeds (pp, &bb, pp->iStep) ;
+      saSortJoinSort (pp, &bb) ;
       saAlignDo (pp, &bb) ;
 
       t2 = clock () ;
@@ -1391,21 +1109,10 @@ static void wholeWork (const void *vp)
       t01 = t02 ;
     }
 
-#ifdef USEGPU777x
+#ifdef USE_GPU777x
   GPUIndexFree(pp->bbG.gpu_idx);
 #endif
   
-    if (words) {
-        free(words);
-        words = NULL;
-    }
-    if (sizes) {
-        free(sizes);
-        sizes = NULL;
-    }
-
-
-
   channelCloseSource (pp->aeChan) ;
   return ;
 } /* wholeWork */
@@ -1577,8 +1284,8 @@ void saUsage (char *message, int argc, const char **argv)
 	       "//    the format is .fastq (default) or .fasta (if --fasta is set)\n"
 	       "//    Paired end data are interleaved by default (.sample_12.fastq.gz) unless --split_pairs is set\n"
 	       "//    This command is optional, since sortalign provides direct SRA access\n"
-	       "//    --maxGB <int> : [default no limit]\n"
-	       "//      Limit the sraDownload to <int> Gigabases per SRR entry\n" 
+	       "//    --maxGB <float> : [default no limit]\n"
+	       "//      Limit the sraDownload to <float> Gigabases per SRR entry\n" 
 	       "//  --gzi\n"
 	       "//    Forces decompression of the input files, useful when piping into sortalign\n"
 	       "//    All files named *.gz are automatically decompressed\n"
@@ -1725,7 +1432,7 @@ int main (int argc, const char *argv[])
     }     
 
   p.debug  = getCmdLineBool (&argc, argv, "--debug") ;
-  
+      
   /**************************  SRA downloader *********************************/
   
   {{  /* --sraDownload SRR1,SRR2,,...
@@ -1779,10 +1486,18 @@ int main (int argc, const char *argv[])
 	}
     }}
 
+#ifdef USE_TORCH  
+  /* magic2_torch is called with this 'private' parameter
+   * from the NUMA block below to verify that torch really works
+   * before re-spawning the whole program to magic2_torch
+   */
+  // extern int saTorchProbe (void) ;
+  if (getCmdLineBool (&argc, argv, "--torch-probe"))
+      return saTorchProbe () ;
+#endif
   
 #ifdef __linux__
   /* ==================== LINUX ONLY ==================== */
-  
   /******************** Hardware optimizer: NUMA + GPU ******************************************/
   /******************** Pin threads to least-used node; select GPU binary if available **********/
   /*
@@ -1805,35 +1520,47 @@ int main (int argc, const char *argv[])
       isExecutableInPath ("numactl")   /* see w1/utils.c */
       )
     {
-      int node    = saGetBestNumaNode () ;   /* ~200 ms; -1 on single-node machine */
-      int bestDev = -1 ;
-      int ngpu    = saGetGpuInfo (&bestDev) ;
+      int node    = saGetBestNumaNode () ;   /* -1 on single-node machine */
+      int bestGpu = -1 ;
+      int ngpu    = saGetGpuInfo (&bestGpu) ;
 
-      if (node >= 0 || ngpu > 0)
+      if (node == -1) node = 0 ;    /* ~200 ms, always respawn for consistency */
+
+      if (node >= 0 || ngpu > 0)   
 	{
 	  /* Choose binary: magic2_gpu if GPU detected and binary is present,
 	   * otherwise magic2 (i.e. ourselves).                              */
 	  const char *binary = argv[0] ;
-	  if (ngpu > 0 && isExecutableInPath ("magic2_gpu"))
+	  if (ngpu > 0 && isExecutableInPath ("magic2_gpu")) 
 	    binary = "magic2_gpu" ;
-
+	  /* Verify magic2_torch runtime is fully operational before committing. */
+	  if (ngpu > 0 && isExecutableInPath ("magic2_torch"))
+	    {
+	      int probe_rc = system ("magic2_torch --torch-probe") ;
+	      if (probe_rc == 0)
+		binary = "magic2_torch" ;
+	      else
+		fprintf (stderr,
+			 "magic2_torch --torch-probe failed (rc=%d), falling back to magic2_gpu\n",
+			 probe_rc) ;
+	    }
 	  vTXT txt = vtxtHandleCreate (h) ;
 
-	  /* NUMA binding — always apply when node >= 0, even for GPU runs. */
+	  /* NUMA binding always apply when node >= 0, even for GPU runs. */
 	  if (node >= 0)
 	    vtxtPrintf (txt, "/usr/bin/numactl --cpunodebind=%d --membind=%d ", node, node) ;
 
-	  /* Binary and all original arguments.                             */
+	  /* Binary and all original arguments.*/
 	  vtxtPrintf (txt, "%s", binary) ;
 	  for (int i = 1 ; i < argc ; i++)
 	    vtxtPrintf (txt, " %s", argv[i]) ;
 
-	  /* Prevent recursion.                                             */
+	  /* Prevent recursion.                */
 	  vtxtPrintf (txt, " --numactl") ;
 
-	  /* Tell magic2_gpu which device to use.                           */
-	  if (ngpu > 0 && bestDev >= 0)
-	    vtxtPrintf (txt, " --gpu_device=%d", bestDev) ;
+	  /* Tell magic2  which device to use. */
+	  if (ngpu > 0 && bestGpu >= 0)
+	    vtxtPrintf (txt, " --gpu_device=%d", bestGpu) ;
 
 	  fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 	  return system (vtxtPtr (txt)) ;
@@ -1992,7 +1719,7 @@ int main (int argc, const char *argv[])
   p.noJump = getCmdLineBool (&argc, argv, "--noJump") ;
   
   getCmdLineInt (&argc, argv, "--gpu_device", &bestGpu) ;
-#ifdef USEGPU
+#ifdef USE_GPU
   if (bestGpu >= 0)
      cudaSetDevice (bestGpu) ;
 #endif
@@ -2033,6 +1760,7 @@ int main (int argc, const char *argv[])
 
   p.hitsFormat = TRUE ; /* default */
   p.introns = TRUE ; /* default */
+  p.all = getCmdLineBool (&argc, argv, "--all") ;
   p.sam = getCmdLineBool (&argc, argv, "--sam") ;
   p.bam = getCmdLineBool (&argc, argv, "--bam") ;
   p.tabular = getCmdLineBool (&argc, argv, "--tabular") ;
@@ -2106,6 +1834,14 @@ int main (int argc, const char *argv[])
   getCmdLineText (h, &argc, argv, "-r", &(p.runName)) ;
   getCmdLineText (h, &argc, argv, "--run", &(p.runName)) ;
 
+  if (p.all && ! p.createIndex)
+    {
+      p.align = TRUE ;
+      p.wiggle = TRUE ;  // implies geneCounts
+      p.wiggleEnds = TRUE ;
+      p.bam = TRUE ;
+    }
+  
   /***************** method name, only used in some output files, convenient when optimizing parameters */
   
   getCmdLineText (h, &argc, argv, "--method", &(p.method)) ;
@@ -2272,14 +2008,18 @@ int main (int argc, const char *argv[])
   array (p.runLanes, n - 1, atomic_int) = 0 ;
   array (p.runLanesDone, n - 1, atomic_int) = 0 ;
   
-  /* Set bonus for over represented sequences */
-  p.bonus['M'] = 4 ; /* mitochondria */
-  p.bonus['C'] = 4 ; /* chloroplast */
-  p.bonus['R'] = 8 ; /* rRNA */
-  p.bonus['E'] = 8 ; /* ERCC spikeIns */
-  p.bonus['A'] = 8 ; /* Adaptors */
-  p.bonus['B'] = -12 ; /* Bacteria */
-  p.bonus['V'] = -12 ; /* Virus */
+  /* Set bonus for over represented sequences
+   * For all classes with positive bonus
+   *   Their seeds are scanned with step 1
+   *   Their are masked out of the other target classes
+   */
+  p.bonus['M'] = 1 ; /* mitochondria */
+  p.bonus['C'] = 1 ; /* chloroplast */
+  p.bonus['R'] = 2 ; /* rRNA */
+  p.bonus['E'] = 2 ; /* ERCC spikeIns */
+  p.bonus['T'] = 2 ; /* Transposons */
+  p.bonus['B'] = -3 ; /* Bacteria */
+  p.bonus['V'] = -3 ; /* Virus */
 
 
   /******************** launch the multiprocessing ***************************************/
@@ -2429,10 +2169,7 @@ int main (int argc, const char *argv[])
     }
 
   int nDone = 0 ;
-#ifdef USEGPU
-  /* GPUIndex* gpu_idx = GPUIndexNew(&p, &(p.bbG)); */
-#endif
-  
+
   while (channelGet (p.doneChan, &bb, BB))
     {
       long int n = (bb.hits ? bigArrayMax (bb.hits) : 0) ;
@@ -2532,6 +2269,17 @@ int main (int argc, const char *argv[])
 	}
       ac_free (bb.h) ;
     }
+
+  for (int k = 0 ; k < NN ; k++)
+    {
+      if (p.bbG.cwsN && p.bbG.cwsN[k]) ac_free (p.bbG.cwsN[k]) ; 
+      if (p.bbG.cwsU && p.bbG.cwsU[k]) ac_free (p.bbG.cwsU[k]) ; 
+      if (p.bbG.cwsP && p.bbG.cwsP[k]) ac_free (p.bbG.cwsP[k]) ; 
+    }
+  ac_free (p.bbG.cwsN) ; 
+  ac_free (p.bbG.cwsU) ;
+  ac_free (p.bbG.cwsP) ; 
+
   {{
       int n = sizeof(float) * (1+dictMax (p.runDict)) ;
       p.runStranding = halloc (n, p.h) ;

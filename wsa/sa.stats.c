@@ -796,7 +796,7 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		   , up->nMID
 		  ) ;
 	  aceOutPercent (ao, 100.0 * up->nMID /(.0001 + up->nBaseAligned1 + up->nBaseAligned2)) ;
-	  aceOut (ao, "%\tof_aligned_bases\n") ;
+	  aceOut (ao, "%\tof_aligned_bases.\n") ;
 	  
 	  int isRna = 0 ;
 	  if (saSetGetAdaptors (0, &isRna, 0, run, 0))
@@ -807,14 +807,14 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 
 	  if (isRna > 0)
 	    {
-	      aceOutf (ao, "%s\tIntron_supports\titititft\t%ld\tany\t%ld\tgt_ag\t%ld\tct_ac\t%.3f%%\tpositive_strand_supports\n"
+	      aceOutf (ao, "%s\tIntron_supports\titititft\t%ld\tany\t%ld\tgt_ag\t%ld\tct_ac\t%.3f%%\tpositive_strand_supports.\n"
 		       , runNam
 		       , up->gt_ag_Support + up->ct_ac_Support 
 		       , up->gt_ag_Support
 		       , up->ct_ac_Support 
 		       , pp->runStranding[run]
 		       ) ;
-	      aceOutf (ao, "%s\tSupported_introns\tit\t%ld\tgt_ag seen once or other seen 3\n"
+	      aceOutf (ao, "%s\tSupported_introns\tit\t%ld\tgt_ag seen once or other seen at least 3 times.\n"
 		       , runNam
 		       , confirmedIntronsCountSites (pp, run, up)
 		       ) ;
@@ -926,11 +926,11 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 	      int t = f + r ;
 	      if (t)
 		{	
-		  aceOutf (ao, "%s\tReads_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand\t%ld\tnegative_strand\t", runNam, ii, t, f, r) ;
+		  aceOutf (ao, "%s\tReads_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand,\t%ld\tnegative_strand,\t", runNam, ii, t, f, r) ;
 		  aceOutPercent (ao, (100.0*f) / t) ;
-		  aceOut (ao, "%\tpositive_strand_alignments\t") ;
+		  aceOut (ao, "%\tpositive_strand_alignments,\t") ;
 		  aceOutPercent (ao, (100.0*t) / t0) ;
-		  aceOutf (ao, "%\tof_all_classes\n") ;
+		  aceOutf (ao, "%\tof_all_classes.\n") ;
 		}
 	    }
 	  f0 = up->BF[0] ;
@@ -943,11 +943,11 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 	      long int t = f + r ;
 	      if (t)
 		{	
-		  aceOutf (ao, "%s\tBases_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand\t%ld\tnegative_strand\t", runNam, ii, t, f, r) ;
+		  aceOutf (ao, "%s\tBases_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand,\t%ld\tnegative_strand,\t", runNam, ii, t, f, r) ;
 		  aceOutPercent (ao, (100.0*f) / t) ;
-		  aceOut (ao, "%\tpositive_strand_alignments\t") ;
+		  aceOut (ao, "%\tpositive_strand_alignments,\t") ;
 		  aceOutPercent (ao, (100.0*t) / t0) ;
-		  aceOut (ao, "%\tof_all_classes\n") ;
+		  aceOut (ao, "%\tof_all_classes.\n") ;
 		}
 	    }
 	}

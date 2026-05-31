@@ -21,7 +21,8 @@
  * The code is heavilly parallelized using the channel paradigm borrowed from the Go language
  */
 
-
+#ifndef SA_H_DEF
+#define SA_H_DEF
 /*
   #define ARRAY_CHECK
   #define MALLOC_CHECK
@@ -173,7 +174,9 @@ typedef struct bStruct {
   BigArray globalDnaR ;  /* concatenation of all reverse sequences, in the same order */
   BigArray msps ;        /* BigArray of seedmatches */
   BigArray hits ;        /* BigArray of read<->genome hits */
-  BigArray *cwsN ;         /* BigArray of codeWords */
+  BigArray *cwsN ;       /* BigArray of codeWords */
+  BigArray *cwsU ;       /* BigArray of unique codeWords */
+  BigArray *cwsP ;       /* BigArray of offsets of cwsU in cwsN */
   long unsigned nPairs ;
   long unsigned int nSeqs ;  /* number of sequences in bloc */
   long unsigned int length ; /* cumulated number of bases */
@@ -225,6 +228,7 @@ typedef struct pStruct {
   BOOL debug, gzi, gzo ;
   BOOL createIndex ;
   BOOL noJump ;
+  BOOL all ;
   BOOL align ;
   BOOL justStats ;
   BOOL wiggle ;
@@ -241,6 +245,8 @@ typedef struct pStruct {
   const char *tFileName ;
   const char *tConfigFileName ;
   const char *tFileBinaryCwsName ;
+  const char *tFileBinaryCwsUName ;
+  const char *tFileBinaryCwsPName ;
   const char *tFileBinaryDnaName ;
   const char *tFileBinaryDnaRName ;
   const char *tFileBinaryIdsName ;
@@ -375,6 +381,10 @@ typedef struct seedMatchStruct {
 } __attribute__((aligned(32))) SEEDMATCH ;
 
 #endif
+
+typedef struct nupStruct {
+  void *cwsN, *cwsU, *cwsP ;
+} NUP ;
 
 typedef struct countChromStruct {
   float weight ;
@@ -536,7 +546,7 @@ int saSamExport (ACEOUT ao, ACEOUT aoe, const PP *pp, BB *bb) ;
 ACEOUT saSamCreateFile (const PP *pp, BB *bb, BOOL isError, AC_HANDLE h) ; 
 
 /* sa.introns.c */
-void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)  ; 
+void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dna, Array dnaG)  ; 
 void saPolyAsExport (PP *pp, Array aaa) ;
 void saPolyAsCumulate (PP *pp, BB *bb) ;
 void saSLsExport (PP *pp, Array aaa) ;
@@ -595,6 +605,9 @@ BOOL saReadAdaptors (ADAPTORS *adaptors, RunSTAT *up, BOOL coded) ;
 void saAlign (const void *vp) ;
 void saAlignDo (const PP *pp, BB *bb) ;
 int saAlignOrder (const void *va, const void *vb) ;
+BOOL pushErrorsLeftRight (Array errors, Array dna, Array dnaG, BOOL left) ;
+#define pushErrorsLeft(errors_,dna_,dnaG_)  pushErrorsLeftRight(errors_,dna_,dnaG_,TRUE)
+#define pushErrorsRight(errors_,dna_,dnaG_) pushErrorsLeftRight(errors_,dna_,dnaG_,FALSE)
 
 /* sa.utils */
 int saBestNumactlNode (int *maxThreadsp) ;
@@ -608,7 +621,7 @@ void saDevHelp (void) ;
 /* sa.tests */
 void saCreateRandomGenome (PP *pp, int nMb) ;
 
-
+#endif
 /**************************************************************/
 /**************************************************************/
 /**************************************************************/

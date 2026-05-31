@@ -144,6 +144,9 @@ static int readScanId (unsigned char *buf, char prefix, int *suffixp, int *idLnp
 	    }
 	}
     }
+  /* clip on first space */
+  cq = ustrchr (cp, ' ') ;
+  if (cq) { *cq = 0 ; idLn = cq - cp ; }  
   *idLnp = idLn ;
   return ln ;
 } /* readScanId */

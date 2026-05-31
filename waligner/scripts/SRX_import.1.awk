@@ -83,17 +83,8 @@ function parseDate(d) {
 		if (z == "other" || z == "unspecified") $14 = "" ;
 		if (z == "MDA") $14 = "MDA often for single cell sequencing" ;
 		
-		printf ("Whole_genome") ;
+		printf ("sraWhole_genome") ;
 	    }
-
-	    z = "" ;
-	    if (length($13) > 0 && length($14) > 0) z = $13 ", " $14 ;
-	    else if (length($13) > 0) z = $13 ;
-	    else if (length($14) > 0) z = $14 ;
-
-	    if (length (z) > 0)
-		printf (" \"%s\"", z) ;
-	    printf ("\n") ;
 
 	    if ($15 == "METAGENOMIC") 
 		printf ("Microbiome\n") ;

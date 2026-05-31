@@ -15,7 +15,7 @@
 #################################################################
 
 NAME = LINUX
-COMPILER = gcc -g -O4 -fno-strict-aliasing -DACEDB4 -DUSEGPU
+COMPILER = gcc -g -O4 -fno-strict-aliasing -DACEDB4 -DUSE_GPU
 LINKER = nvcc
 
 LIBS = -lm

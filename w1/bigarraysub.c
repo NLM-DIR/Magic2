@@ -40,14 +40,14 @@ static mysize_t bigTotalNumberActive = 0 ;
 static Array reportBigArray = 0 ;
 static void uBigArrayFinalise (void *cp) ;
 
-static char * bigArrayAlloc (long int n, int size)
+static char * bigArrayAlloc (long int n, int size, BOOL zeroInit)
 {
   mysize_t nn = (mysize_t) n * size ;
   char *cp = NULL ;
   int error = posix_memalign ((void**)&cp, 64, nn) ;
   if (error)
     messcrash ("bigArrayAlloc cannot allocate %ld bytes, sorry, no more RAM", n) ;
-  memset (cp, 0, nn) ;
+  if (zeroInit) memset (cp, 0, nn) ;
   return cp ;
 } /* bigArrayAlloc */
 
@@ -55,7 +55,7 @@ static char * bigArrayAlloc (long int n, int size)
 /**************/
 
 #ifndef MEM_DEBUG
-  BigArray uBigArrayCreate (long int n, int size, AC_HANDLE handle)
+BigArray uBigArrayCreate (long int n, int size, AC_HANDLE handle, BOOL zeroInit)
 { mysize_t id = bigTotalNumberCreated++ ;
   BigArray neuf = (BigArray) handleAlloc (uBigArrayFinalise, 
 				   handle,
@@ -80,7 +80,7 @@ BigArray   uBigArrayCreate_dbg (long int n, int size, AC_HANDLE handle,
     n = 1 ;
   if (reportBigArray != (Array)2)
     bigTotalAllocatedMemory += n * size ;
-  neuf->base = bigArrayAlloc (n , size) ;
+  neuf->base = bigArrayAlloc (n , size, zeroInit) ;
   neuf->dim = n ;
   neuf->max = 0 ;
   neuf->size = size ;
@@ -184,7 +184,7 @@ void bigArrayStatus (mysize_t *nmadep, mysize_t *nusedp,  long int *memAllocp, l
 BigArray uBigArrayReCreate (BigArray a, long int n, int size)
 { 
   if (!bigArrayExists(a))
-    return  uBigArrayCreate(n, size, 0) ;
+    return  uBigArrayCreate(n, size, 0, TRUE) ;
 
   if(a->size != size)
     messcrash("Type  missmatch in uBigArrayRecreate, you should always "
@@ -201,7 +201,7 @@ BigArray uBigArrayReCreate (BigArray a, long int n, int size)
       a->dim = n ;
       if (reportBigArray != (Array)2)
 	bigTotalAllocatedMemory += n * size ;
-      a->base = bigArrayAlloc (n, size) ;
+      a->base = bigArrayAlloc (n, size, TRUE) ;
     }
   else
     memset(a->base,0,(mysize_t)(a->dim*size)) ;
@@ -309,7 +309,7 @@ void bigArrayExtend (BigArray a, long int n)
 
   if (reportBigArray != (Array)2)
     bigTotalAllocatedMemory += a->dim * a->size ;
-  base = bigArrayAlloc (a->dim, a->size) ;
+  base = bigArrayAlloc (a->dim, a->size, TRUE) ;
   
   memcpy (base, a->base,a->size*a->max) ;
   free (a->base) ;
@@ -374,7 +374,7 @@ char *uBigArray (BigArray a, long int i)
   if (bigArrayExists (a) && a->size)
     {
 #ifndef MEM_DEBUG
-      b = uBigArrayCreate (a->max, a->size, handle) ;
+      b = uBigArrayCreate (a->max, a->size, handle, TRUE) ;
 #else
 	  b = uBigArrayCreate_dbg (a->max, a->size, handle,
 				dbgPos(hfname, hlineno, __FILE__), __LINE__) ;
@@ -408,12 +408,12 @@ BigArray bigArrayTruncatedCopy (BigArray a, long int x1, long int x2)
        x1, x2) ;
   if (bigArrayExists (a) && a->size)
     { if (x2 - x1)
-	{ b = uBigArrayCreate (x2 - x1, a->size, 0) ;
+	{ b = uBigArrayCreate (x2 - x1, a->size, 0, TRUE) ;
 	  b->max = x2 - x1 ;
 	  memcpy(b->base, a->base + x1, b->max * b->size);
 	}
       else
-	b = uBigArrayCreate (10, a->size, 0) ;
+	b = uBigArrayCreate (10, a->size, 0, TRUE) ;
     }
   return b;
 }
@@ -1945,7 +1945,7 @@ static unsigned char *mmapCreate (const char *fName, long int *size, int *fdp, u
 BigArray uBigArrayMapRead (const char *fName, int recordSize, BOOL readOnly, AC_HANDLE h)
 {
   unsigned char *map = 0 ;
-  BigArray aa = uBigArrayCreate (8, recordSize, h) ;
+  BigArray aa = uBigArrayCreate (8, recordSize, h, FALSE) ;
   long int size = 0 ;
   int fd = -1 ;
   if (! fName)

@@ -188,6 +188,10 @@ setenv SV     v113.81.18M.e4.may25     # details plus iStep == tStep
 setenv SVlast v113.81.18M.e4.may25    # 
 setenv SV     v114.81.18M.sam.may25     # with sam
 setenv SVlast v114.81.18M.sam.may25    # 
+setenv SV     v115.81.18M.sam.may25     # sam  chenillettte
+setenv SVlast v115.81.18M.sam.may25    # 
+setenv SV     v116.81.18M.sam.may30     # new index masking in the genome the seeds of mito/transposons
+setenv SVlast v116.81.18M.sam.may30    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -1168,7 +1172,7 @@ date
       set exportitr="--exportIntronSupport"
 
       if (! -e RESULTS/$mm/$run/s2g.samTools.txt) then
-        samtools stats $sam | gawk -f scripts/sam_stats.awk > RESULTS/$mm/$run/s2g.samTools.txt &
+        # samtools stats $sam | gawk -f scripts/sam_stats.awk > RESULTS/$mm/$run/s2g.samTools.txt &
       endif
       touch RESULTS/$mm/$run/s2g.samStats
                                                 echo "bin/sam2gold --method $mm --run $run --samStats --nRawBases $nRawBases --nRawReads $nRawReads -i $sam -o RESULTS/$mm/$run/s2g --addReadPairSuffixForce $exportitr"

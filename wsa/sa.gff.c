@@ -464,8 +464,11 @@ long int saGffParser (PP *pp, TC *tc)
       /* debug introns creation
        *      dictAdd (bbG->dict, hprintf (h, "G.%s", cp), &chrom) ;
        */
-      if (! dictFind (bbG->dict, hprintf (h, "G.%s", cp), &chrom))
-	messcrash ("\nUnknown chromosome name %s, not matching the G targets, at line %d of file %s\n"
+      if (! dictFind (bbG->dict, hprintf (h, "G.%s", cp), &chrom) &&
+	  ! dictFind (bbG->dict, hprintf (h, "M.%s", cp), &chrom) &&
+	  ! dictFind (bbG->dict, hprintf (h, "C.%s", cp), &chrom)
+	  )
+	messcrash ("\nUnknown chromosome name ###%s###, not matching the G targets, at line %d of file %s\n"
 		   , cp
 		   , line
 		   , aceInFileName (ai)
@@ -729,7 +732,9 @@ long int saIntronParser (PP *pp, TC *tc)
 	continue ;
       chrom = 0 ; a1 = a2 = 0 ;
 
-      if (! dictFind (bbG->dict, hprintf (h, "G.%s", cp), &chrom))
+      if (! dictFind (bbG->dict, hprintf (h, "G.%s", cp), &chrom) &&
+	  ! dictFind (bbG->dict, hprintf (h, "M.%s", cp), &chrom) &&
+	  ! dictFind (bbG->dict, hprintf (h, "C.%s", cp), &chrom))
 	messcrash ("\nUnknown chromosome name %s, not matching the G targets, at line %d of file %s\n"
 		   , cp
 		   , line

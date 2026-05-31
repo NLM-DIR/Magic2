@@ -47,18 +47,19 @@ typedef struct BigArrayStruct
 #define BIG_ARRAY_MAGIC 2914574
 #define BIGSTACK_MAGIC 4318275
 #if !defined(MEM_DEBUG)
-  BigArray   uBigArrayCreate (long int n, int size, AC_HANDLE handle) ;
+BigArray   uBigArrayCreate (long int n, int size, AC_HANDLE handle, BOOL zeroInit) ;
   void    bigArrayExtend (BigArray a, long int  n) ;
   BigArray bigArrayCopy (BigArray a) ;
   BigArray bigArrayHandleCopy (BigArray a, AC_HANDLE handle) ;
 #else
-  BigArray   uBigArrayCreate_dbg (long int  n, int size, AC_HANDLE handle,
+BigArray   uBigArrayCreate_dbg (long int  n, int size, AC_HANDLE handle, BOOL zeroInit,
 			    const char *hfname,int hlineno) ;
   void    bigArrayExtend_dbg (BigArray a, long int n, const char *hfname,  int hlineno) ;
   BigArray	bigArrayCopy_dbg(BigArray a, const char *hfname,int hlineno) ; 
   BigArray	bigArrayHandleCopy_dbg(BigArray a, const char *hfname,int hlineno, AC_HANDLE handle) ; 
 #define bigArrayCopy(a) bigArrayCopy_dbg(a, __FILE__, __LINE__)
-#define uBigArrayCreate(n, s, h) uBigArrayCreate_dbg(n, s, h, __FILE__, __LINE__)
+#define uBigArrayCreate(n, s, h) uBigArrayCreate_dbg(n, s, h, TRUE, __FILE__, __LINE__)
+#define uBigArrayCreateNoInit(n, s, h) uBigArrayCreate_dbg(n, s, h, FALSE, __FILE__, __LINE__)
 #define bigArrayExtend(a, n ) bigArrayExtend_dbg(a, n, __FILE__, __LINE__)
 #define bigArrayHandleCopy(a,h) bigArrayHandleCopy_dbg(a, __FILE__, __LINE__, h)
 
@@ -72,8 +73,9 @@ void    uBigArrayDestroy (BigArray a);
 char    *uBigArray (BigArray a, long int index) ;
 char    *uBigArrCheck (BigArray a, long int index, int size) ;
 char    *uBigArrayCheck (BigArray a, long int index, int size) ;
-#define bigArrayCreate(n,type)	uBigArrayCreate(n,sizeof(type), 0)
-#define bigArrayHandleCreate(n,type,handle) uBigArrayCreate(n, sizeof(type), handle)
+#define bigArrayCreate(n,type)	uBigArrayCreate(n,sizeof(type), 0, TRUE)
+#define bigArrayHandleCreate(n,type,handle) uBigArrayCreate(n, sizeof(type), handle, TRUE)
+#define bigArrayHandleCreateNoInit(n,type,handle) uBigArrayCreate(n, sizeof(type), handle, FALSE)
 #define bigArrayReCreate(a,n,type)	uBigArrayReCreate(a,n,sizeof(type))
 #define bigArrayDestroy(x)		((x) ? uBigArrayDestroy(x), x=0, TRUE : FALSE)
 

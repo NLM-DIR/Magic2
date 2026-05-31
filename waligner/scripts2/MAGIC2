@@ -203,7 +203,7 @@ endif
 ## Verify that we are inside an initialized project directory
 
 if (! $?MAGIC) then
-  echo 'MAGIC2 should be set to the project name'
+  echo 'MAGIC should be set to the project name'
   exit 0
 endif
 
@@ -2354,15 +2354,18 @@ if (! -d TARGET/IDX/IDX.$species) then
   if (-e TARGET/Targets/$species.mito.fasta.gz) echo "M\tTARGET/Targets/$species.mito.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.chloro.fasta.gz) echo "C\tTARGET/Targets/$species.chloro.fasta.gz" >> TARGET/IDX/tConfig  
   if (-e TARGET/Targets/$species.rrna.fasta.gz) echo "R\tTARGET/Targets/$species.rrna.fasta.gz" >> TARGET/IDX/tConfig
+  if (-e TARGET/Targets/$species.transposons.fasta.gz) echo "T\tTARGET/Targets/$species.transposons.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.SpikeIn.fasta.gz) echo "E\tTARGET/Targets/$species.SpikeIn.fasta.gz" >> TARGET/IDX/tConfig
-  if (-e TARGET/Targets/$species.magic.fasta.gzZZZ) echo "T\tTARGET/Targets/$species.magic.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.DNASpikeIn.fasta.gz) echo "E\tTARGET/Targets/$species.DNASpikeIn.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.bacteria.fasta.gz) echo "B\tTARGET/Targets/$species.bacteria.fasta.gz" >> TARGET/IDX/tConfig  
   if (-e TARGET/Targets/$species.virus.fasta.gz) echo "V\tTARGET/Targets/$species.virus.fasta.gz" >> TARGET/IDX/tConfig  
   
-  if (-e TARGET/GTF/$species.gtf.gz) echo "I\tTARGET/GTF/$species.gtf.gz" >> TARGET/IDX/tConfig
+  if (-e TARGET/GTF/$species.gtf.gz) echo "A\tTARGET/GTF/$species.gtf.gz" >> TARGET/IDX/tConfig
 
   $sortalign --createIndex TARGET/IDX/IDX.$species -T TARGET/IDX/tConfig
+
+  echo " TARGET/IDX/IDX.$species is now ready "
+  exit 0
 endif
 
 if (! -d tmp/SA) mkdir tmp/SA
@@ -2381,7 +2384,7 @@ foreach run (`cat MetaDB/$MAGIC/RunList`)
   if (-e tmp/SA/$run/iConfig) then
     date > tmp/SA/$run/salign.out
     date > tmp/SA/$run/salign.err
-    echo "$sortalign -x TARGET/IDX/IDX.$species -I tmp/SA/$run/iConfig -o tmp/SA/$run --wiggles --wiggleEnds" >> tmp/SA/$run/salign.out
+    echo "$sortalign -x TARGET/IDX/IDX.$species -I tmp/SA/$run/iConfig -o tmp/SA/$run --sraCaching --wiggles --wiggleEnds" >> tmp/SA/$run/salign.out
     scripts/submit  tmp/SA/$run/salign "/usr/bin/time -f 'TIMING\tE\t%E\tU\t%U\tS\t%S\tM\t%M\tP\t%P' $sortalign -x TARGET/IDX/IDX.$species -I tmp/SA/$run/iConfig --species $species -o tmp/SA/$run --wiggles --wiggleEnds --gzo " 64G
   endif
 end

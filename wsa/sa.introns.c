@@ -317,7 +317,7 @@ int saSupportedIntrons (const PP *pp, int run)
 
 /**************************************************************/
 /* sliding intron, clip errors in overlap r636 r452 */
-void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)  
+void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dna, Array dnaG)  
 {
   A_ERR *epX, *epY ;
   int x2 = vp->x2 ;
@@ -330,7 +330,13 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dnaG)
   BOOL isDown = (vp->a1 <= vp->a2 ? TRUE : FALSE ) ;
   int da = vp->a2 - wp->a1 + 1 ;
   /* int day = dy - da ; */
-  if (! isDown) { messerror ("isDown should be true read %s\n", dictName (bb->dict, vp->read >> 1)) ;  return  ;} 
+  if (! isDown) { fprintf (stderr, "isDown should be true read %s\n", dictName (bb->dict, vp->read >> 1)) ;  return  ;}
+
+  if (nEx)
+    pushErrorsRight (vp->errors, dna, dnaG) ;
+  if (nEy)
+    pushErrorsLeft (wp->errors, dna, dnaG) ;
+  
   if (0 && da < 4 && da > -4 && dy < 4 && dy > -4 && vp->chrom == wp->chrom)
     {
       /* merge the 2 alignments */

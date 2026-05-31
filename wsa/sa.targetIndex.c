@@ -15,6 +15,11 @@
 
 #include "sa.h"
 
+#define USE_TORCH
+#ifdef USE_GPU
+#include "sa.gpusort.h"
+#endif
+
 /**************************************************************/
 /*************************************************************************************/
 /* check the existence of the target files
@@ -72,13 +77,14 @@ Array saTargetParseConfig (PP *pp)
 	    messcrash ("\n\nThe target class must be specified as a single character (A-Z), not %s,  at line %d of -T target config file %s\n Please try sortalign --help\n"
 		       , cp
 		       , line
-		       , pp->tConfigFileName
+		       , tConfigFileName
 		       ) ;
-	  if (! strchr ("GMCREIBV", cc))
+	  if (cc == 'I') cc = 'A' ;  /* back compatibility may 2026 to be removed later */
+	  if (! strchr ("GMCRTEBVA", cc))
 	    messcrash ("\n\nThe target class must be specified as a single character [GMCREATIBV], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
 		       , cc
 		       , line
-		       , pp->tConfigFileName
+		       , tConfigFileName
 		       ) ;
 	    
 	  tc = arrayp (tcs, nn++, TC) ;
@@ -89,7 +95,7 @@ Array saTargetParseConfig (PP *pp)
 	  if (!cp || !*cp || *cp == '#')
 	    messcrash ("\nNo file name at line %d of file -T %s\n try sortalign --help\n"
 		       , line
-		       , pp->tConfigFileName
+		       , tConfigFileName
 		       ) ;
 	  cr = filName (cp, 0, "r") ;
 	  if (! cr)
@@ -98,11 +104,11 @@ Array saTargetParseConfig (PP *pp)
 	    messcrash ("\nDuplicate target file name %s\n at line %d of file -T %s\n try sortalign --help\n"
 		       , cr
 		       , line
-		       , pp->tConfigFileName
+		       , tConfigFileName
 		       ) ;
 	  tc->fileName = strnew (cr, pp->h) ;
 	  tc->format = FASTA ; /* default */
-	  if (cc == 'I')
+	  if (cc == 'A')
 	    {
 	      if (strstr (cp, ".introns"))
 		tc->format = INTRONS ;
@@ -112,7 +118,7 @@ Array saTargetParseConfig (PP *pp)
 		messcrash ("\n\nThe Introns must be specified via a .gtf or a .gff file.\n try sortalign --help\n"
 			   , cp
 			   , line
-			   , pp->tConfigFileName
+			   , tConfigFileName
 		       ) ;
 	    }
 	  /* options */
@@ -209,6 +215,7 @@ void saDictMapWrite (DICT *dict, const char *fNam)
 } /* saDictMapWrite */
 
 /**************************************************************/
+/**************************************************************/
 
 static void storeTargetIndex (PP *pp, int tStep) 
 {
@@ -224,6 +231,17 @@ static void storeTargetIndex (PP *pp, int tStep)
       fNam = hprintf (h, "%s/cws.sortali.%d%s", pp->indexName, k, pp->noJump ? ".noJump" : "") ;
       bigArrayMapWrite (bbG->cwsN[k], fNam) ;
       nn += bigArrayMax (bbG->cwsN[k]) ;
+
+      if (bbG->cwsU[k])
+	{
+	  fNam = hprintf (h, "%s/cwsU.%d", pp->indexName, k) ;
+	  bigArrayMapWrite (bbG->cwsU[k], fNam) ;
+	}
+      if (bbG->cwsP[k])
+	{
+	  fNam = hprintf (h, "%s/cwsP.%d", pp->indexName, k) ;
+	  bigArrayMapWrite (bbG->cwsP[k], fNam) ;
+	}
     }
   fprintf (stderr, "genomeCreateBinary exported %ld seed records\n", nn) ;
 
@@ -256,7 +274,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 {
   long int iMax ; 
   long int jMax ; 
-  long int i, j ;
+  long int i, jj ;
   AC_HANDLE h = bb->h ;
   int maxRepeats = pp->maxTargetRepeats ;
   unsigned int intronMask = (0x1 << 31) ;    
@@ -264,89 +282,96 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
   CW *up, *vp, *wp, *upMax ;
   unsigned int wordMax = 0xffffffff ;
 
-  if (0)
-    {
-      int k = 0 ;
-      vp = bigArrp (cws, 0, CW) ;
-      for (j = 0 ; k < 6 && j < bigArrayMax(cws) ; j++, vp++)
-	{
-	  if (vp->nam == 44878)
-	    {
-	      k++ ;
-	      fprintf (stderr, "==++ %d %d %u\n", vp->nam, vp->pos, vp->seed) ;
-	    }
-	}
-    }
+  if (! maxRepeats)
+    maxRepeats = (0x1 << 20) ; // 1 mega 
+
   /* remove highly repeated words and register number of repeats */
   if (1)
     {
+      char bonus[256] ;
       long int ks[21], cumul = 0 ;
       up = bigArrp (cws, 0, CW) ;
-      vp = bigArrp (cws, 0, CW) ;
+      vp = bigArrp (cws, 0, CW) ; jj = 0 ;
 
+      for (i = 0 ; i < 256 ; i++)
+	{
+	  if (pp->bonus[i] > 0)
+	    bonus[i] = 1 ;
+	  else if (pp->bonus[i] < 0)
+	    bonus[i] = -1 ;
+	  else
+	    bonus[i] = 0 ;
+	}
       iMax = bigArrayMax (cws) ;
       upMax = up + iMax ;
       memset (ks, 0, sizeof(ks)) ;
-      for (i = 0, j = 0 ; i < iMax ; up++, i++)
+      for (i = 0 ; i < iMax ; up++, i++)
 	{
 	  /* int tc = *dictName(pp->bbG.dict,up->nam >> 1) ; */
-	  int m, n = 0, nI = 0, nR = 0 ;
+	  int m, n = 0, nI = 0, nR = 0, nG = 0, nB = 0 ;
 	  wp = up ;
 	  while (wp < upMax && wp->seed == up->seed)
 	    wp++ ;
 	  n = wp - up ;
 	  
-	  if (!maxRepeats || n < maxRepeats)
+	  for (wp = up, m = 0 ; m < n ; wp++, m++)
 	    {
-	      for (wp = up, m = 0 ; m < n ; wp++, m++)
+	      int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
+	      switch ((int)bonus[(int)tc])
 		{
-		  if (!(wp->intron & intronMask))
-		    wp->intron = n ;
-		  if (vp < wp)
-		    *vp = *wp ;
-		  j++ ; vp++ ;
+		case 0: /*  Genome */
+		  nG++ ;
+		  break ;
+		case 1: // rrna, mito, chloro, transposons
+		  nR++ ;
+		  break ;
+		case -1: // Bacteria
+		  nB++ ;
+		  break ;
 		}
+	      nI += ((wp->intron & intronMask) ? 1 : 0) ;
 	    }
 
-	  else /* start again and count separatelly the introns and the mito/rRNA */
+	  for (wp = up, m = 0 ; m < n ; wp++, m++)
 	    {
+	      BOOL ok = TRUE ;
+	      int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
 	      
-	      nI = nR = 0 ;
-	      for (wp = up, m = 0 ; m < n ; wp++, m++)
+	      switch ((int)bonus[(int)tc])
 		{
-		  int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
-		  nR += (tc == 'R' || tc == 'M' || tc == 'C' ? 1 : 0) ;
-		  nI += ((wp->intron & intronMask) ? 1 : 0) ;
+		case 0: // Genome
+		  if (nR || nG > maxRepeats) ok = FALSE ;
+		  if (ok && !(wp->intron & intronMask))
+		    wp->intron = nR + nG ;
+		  break ;
+		case 1: // // rrna, mito, chloro, transposons
+		  if (nR > maxRepeats) ok = FALSE ;
+		  if (ok && !(wp->intron & intronMask))
+		    wp->intron = nR ;
+		  break ;
+		case -1: // Bacteria
+		  if (nR || nG + nB > maxRepeats) ok = FALSE ;
+		  if (ok && !(wp->intron & intronMask))
+		    wp->intron = nR + nG + nB ;
+		  break ;
 		}
+
+	      if (0 && nI < maxRepeats && (wp->intron & intronMask))
+		ok = TRUE ;
 	      
-	      if (nI < maxRepeats || nR < maxRepeats)
+	      if (ok)
 		{
-		  for (wp = up, m = 0 ; m < n ; wp++, m++)
-		    {
-		      int tc = *dictName(pp->bbG.dict,wp->nam >> 1) ;
-		      if (nI < maxRepeats && (wp->intron & intronMask))
-			{
-			  if (vp < wp)
-			    *vp = *wp ;
-			  j++ ; vp++ ;
-			}
-			
-		      else if (nR < maxRepeats && (tc == 'R' || tc == 'M' || tc == 'C'))
-			{
-			  wp->intron = nR ;
-			  if (vp < wp)
-			    *vp = *wp ;
-			  j++ ; vp++ ;
-			}
-		    }
+		  if (vp < wp)
+		    *vp = *wp ;
+		  jj++ ; vp++ ;
 		}
-	    }
+	    }	      
 	  up += n - 1 ; i += n - 1 ;
 	  
 	  if (n > 20) n = 20 ;
 	  ks[n]++ ;
 	}
-      bigArrayMax (cws) = j ;
+      bigArrayMax (cws) = jj ;
 
       if (0)
 	{
@@ -364,15 +389,38 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
     }
   iMax = bigArrayMax (cws) ;
   if (! iMax) iMax = 1 ; /* insure non void */
-  long int jMax0 = iMax + iMax/mstep1 + 1 ;
-  aa = bigArrayHandleCreate (jMax0, CW, h) ;
-  /* add skipping info */
-  up = bigArrp (cws, 0, CW) ;
-  vp = bigArrayp (aa, jMax0 - 1, CW) ; 
-  vp = bigArrp (aa, 0, CW) ; jMax = 0 ;
-  for (long int ii = 0 ; ii < iMax ; ii += mstep1)
+
+  if (pp->noJump)
     {
-      if (! pp->noJump)
+      aa = bigArrayHandleCopy (cws, h) ;
+#ifdef USE_TORCH
+      BigArray cwsU = bigArrayCreate (iMax + 1, unsigned_int, h) ;
+      BigArray cwsP = bigArrayCreate (iMax + 1, unsigned_int, h) ;
+      unsigned int oldSeed = 0 ;
+      up = bigArrp (cws, 0, CW) ;
+      unsigned int nU = 0, nUMax = (0x1 << 31) ;
+      for (long int ii = 0 ; ii < iMax ; ii ++, up++)
+	{
+	  if (oldSeed && up->seed != odSeed)
+	    {
+	      if (iMax > nUMax) messcrash ("the genomic index partition is larger than 1G, please rerun with a larger -NN parameter (now NN = %d)", pp->bbG.NN) ;
+	      bigArray (cwsU, nU,  unsigned int) = up->seed ;
+	      bigArray (cwsP, nU,  unsigned int) = (unsigned int) ii ;
+	      nU++ ;
+	      oldSeed = up->seed ;
+	    }
+	}
+#endif
+    }
+  else
+    {
+      long int jMax0 = iMax + iMax/mstep1 + 1 ;
+      aa = bigArrayHandleCreate (jMax0, CW, h) ;
+      /* add skipping info */
+      up = bigArrp (cws, 0, CW) ;
+      vp = bigArrayp (aa, jMax0 - 1, CW) ; 
+      vp = bigArrp (aa, 0, CW) ; jMax = 0 ;
+      for (long int ii = 0 ; ii < iMax ; ii += mstep1)
 	{
 	  vp->intron = ii + mstep4 < iMax ? (up + mstep4)->seed : wordMax ;
 	  vp->nam = ii + mstep3 < iMax ? (up + mstep3)->seed : wordMax ;
@@ -381,31 +429,19 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 	  
 	  vp++ ;
 	  jMax++ ;
-	}
-      int k = iMax - ii ;
-      if (k > mstep1)
-	k = mstep1 ;
-      memcpy (vp, up, k * sizeof (CW)) ;
-      vp += k ; up += k ;
-      jMax += k ; 
-      if (jMax > jMax0)
-	messcrash ("add skipps error ") ;
-    }
-  bigArrayMax (aa) = jMax ;
 
-  if (0)
-    {
-      int k = 0 ;
-      vp = bigArrp (aa, 0, CW) ;
-      for (j = 0 ; k < 6 &&j < jMax ; j++, vp++)
-	{
-	  if (vp->nam == 44878)
-	    {
-	      k++ ;
-	      fprintf (stderr, "==== %d %d %u\n", vp->nam, vp->pos, vp->seed) ;
-	    }
+	  int k = iMax - ii ;
+	  if (k > mstep1)
+	    k = mstep1 ;
+	  memcpy (vp, up, k * sizeof (CW)) ;
+	  vp += k ; up += k ;
+	  jMax += k ; 
+	  if (jMax > jMax0)
+	    messcrash ("add skipps error ") ;
 	}
+      bigArrayMax (aa) = jMax ;
     }
+
   return aa ;
 } /* GenomeAddSkips */
 
@@ -437,10 +473,13 @@ static void saParseTarget (const PP *pp, TC *tc, BB *bbG)
 	continue ;
       if (*cp == '>')
 	{
-
+	  char *cq = strchr (cp, ' ') ; if (cq) *cq = 0 ;
 	  vtxtClear (txt) ;
 	  vtxtPrintf (txt, "%c.%s", tc->targetClass, cp + 1) ;
+	  /* clip chromosome names on first space */
 	  dictAdd (bbG->dict, vtxtPtr (txt), &nn) ;
+	  if (dna) fprintf (stderr, "\t%d bases\n", arrayMax (dna)) ;
+	  fprintf (stderr, ".... found target ###%s###", dictName (bbG->dict, nn)) ;
 	  vtxtClear (txt) ;
 	  n = 0 ;
 	  dna = array (bbG->dnas, nn, Array) = arrayHandleCreate ((0x1 << 28), unsigned char, bbG->h) ;
@@ -457,6 +496,7 @@ static void saParseTarget (const PP *pp, TC *tc, BB *bbG)
 	    messcrash ("Bad character %c line %n of target fasta file %s\n", cc, line, fileName) ;
 	}
     }
+  if (dna) fprintf (stderr, "\t%d bases\n", arrayMax (dna)) ;
   
   ac_free (h) ;
 } /* saParseTarget */
@@ -495,9 +535,7 @@ static long int saTargetIndexCreateDo (PP *pp)
   for (int nn = 0 ; nn < nMax ; nn++)
     {
       tc = arrayp (tArray, nn, TC) ;
-      if (tc->targetClass == 'I')
-	continue ; /* we need to parse the genome before the introns */
-      if (tc->targetClass == 'S')
+      if (tc->targetClass == 'A')
 	continue ; /* we need to parse the genome before the introns */
       nTc++ ;
     }
@@ -515,7 +553,7 @@ static long int saTargetIndexCreateDo (PP *pp)
       int step ;
 
       /* we need to parse the genome before the annotations */
-      if (tc->targetClass == 'I')
+      if (tc->targetClass == 'A')
 	continue ; 
       if (tc->targetClass == 'S')
 	continue ; 
@@ -541,7 +579,7 @@ static long int saTargetIndexCreateDo (PP *pp)
     }
 
   /* create the REVERSE COMPLEMENT of the GENOME */
-  int iMax = bbG->nSeqs ;
+  int iMax = bbG->nSeqs = arrayMax (bbG->dnas) ;
   globalDnaCreate (bbG) ;
   bbG->globalDnaR = bigArrayHandleCopy (bbG->globalDna, bbG->h) ;
       
@@ -564,7 +602,7 @@ static long int saTargetIndexCreateDo (PP *pp)
     {
       tc = arrayp (tArray, nn, TC) ;
 
-      if (tc->targetClass == 'I')
+      if (tc->targetClass == 'A')
 	{
 	  if (tc->format == INTRONS)
 	    saIntronParser (pp, tc) ;
@@ -740,14 +778,45 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
    * FALSE: read the data from disk into memory,
    *        100s slower in human
    */
+
   bbG->cwsN = halloc (NN * sizeof (BigArray), bbG->h) ;
   for (int k = 0 ; k < NN ; k++)
     {
       fNam = hprintf (h, "%s.%d", pp->tFileBinaryCwsName, k) ;
-      bbG->cwsN[k] = bigArrayMapRead (fNam, CW, READONLY, bbG->h) ; /* memory map the seed index */
+      bbG->cwsN[k] = bigArrayMapRead (fNam, CW, READONLY, 0) ; /* memory map the seed index */
       nn += bigArrayMax (bbG->cwsN[k]) ;
     }
 
+#ifdef USE_TORCH
+  bbG->gpu = 1 ;
+  BgiArray cwsU = 0, cwsP = 0 ;
+  
+  for (int k = 0 ; bbG->gpu && k < NN ; k++)
+    {
+      NUP mm ;
+      
+      fNam = hprintf (h, "%s.%d", pp->tFileBinaryCwsUName, k) ;
+      bbG->cwsU[k] = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed index */
+
+      fNam = hprintf (h, "%s.%d", pp->tFileBinaryCwsPName, k) ;
+      cwsP = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed offsets */
+
+      mm.cwsN = bigArrp (bbG->cwsN[k], 0, CW) ;
+      mm.cwsU = bigArrp (cwsU, 0, unsigned int) ;
+      mm.cwsP = bigArrp (cwsP, 0, unsigned int) ;
+      
+      if (! saTorchIndexUpload (&mm, 0 /* &meta */))
+	bbG->gpu = 0 ;
+      ac_free (bbG->cwsN[k]) ;
+      ac_free (cwsU) ;
+      ac_free (cwsP) ;
+    }
+  ac_free (bbG->cwsN) ;
+
+#endif
+  
+
+  
   fNam = pp->tFileBinaryDnaName ;
   bbG->globalDna = bigArrayMapRead (fNam, unsigned char, READONLY, bbG->h) ; /* memory map the DNA */
 
@@ -805,9 +874,6 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
 } /* genomeParseBinary */
 
 /**************************************************************/
-#ifdef USEGPU
-#include "sa.gpusort.h"
-#endif
 
 void saTargetIndexGenomeParser (const void *vp)
 {
@@ -825,7 +891,7 @@ void saTargetIndexGenomeParser (const void *vp)
   t2 = clock () ;
 
 
-#ifdef USEGPU
+#ifdef USE_GPU
   int NN = pp->nIndex ;
   CW** index_parts = halloc (NN * sizeof(CW*), h) ;
   long int *sizes = halloc (NN * sizeof(long int), h) ;
@@ -840,6 +906,7 @@ void saTargetIndexGenomeParser (const void *vp)
     { ac_free (bbG.cwsN[i]) ; bbG.cwsN[i] = 0 ; }
   
 #endif
+
 
   saCpuStatRegister ("1.GParserDone" , pp->agent, bbG.cpuStats, t1, t2, nn) ;
   channelPut (pp->gmChan, &bbG, BB) ;

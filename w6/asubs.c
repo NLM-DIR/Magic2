@@ -278,7 +278,7 @@ BigArray uBigArrayHandleGet(KEY key, int size, char *format, AC_HANDLE h)
   if (a && arrayMax (a))
     {
       int dx = size == 1 ? 1 : 0 ; /* zero terminate the dna */
-      b = uBigArrayCreate (arrayMax (a) + dx, size, h) ;
+      b = uBigArrayCreate (arrayMax (a) + dx, size, h, TRUE) ;
       bigArrayMax (b) = arrayMax (a) ;
       memcpy(b->base, a->base, a->max * a->size) ;
     }
