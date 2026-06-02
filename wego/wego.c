@@ -649,11 +649,15 @@ static int wego_new_thread (void)
   pthread_mutex_init(&t->semaphore,NULL);
   
   pthread_mutex_lock(&thread_startup_lock);
-  pthread_attr_init (&attr) ;                              /* initialise it */
-  pthread_attr_setstacksize (&attr, 8 * 1024 * 1024) ;
-  error = pthread_create(&thread, &attr, wego_threadrunner, (void *)t) ; /* pass &attr not NULL */
-  pthread_attr_destroy (&attr) ;                          /* clean up */
-
+  if (1)
+    {   /*20260531  test, but no advantage is visible */
+      pthread_attr_init (&attr) ;                              /* initialise it */
+      pthread_attr_setstacksize (&attr, 8 * 1024 * 1024) ;
+      error = pthread_create(&thread, &attr, wego_threadrunner, (void *)t) ; /* pass &attr not NULL */
+      pthread_attr_destroy (&attr) ;                          /* clean up */
+    }
+  else
+    error = pthread_create(&thread, NULL, wego_threadrunner, (void *)t) ; /* pass &attr not NULL */
   if (! error)
     {
       pthread_cond_wait(&thread_startup_condition, &thread_startup_lock);

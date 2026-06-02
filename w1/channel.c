@@ -125,6 +125,40 @@ void channelAddSources (CHAN *c, int nSources)
 } /* chanAddSources */
 
 /*******************************************************************************************************/
+/* channelSources must be called ONCE per channel, before any call to channelPut or channelClose */
+void channelSources (CHAN *c, int nSources)
+{
+  if (!c)
+    messcrash ("Bad call to channelSources CHAN c == NULL") ;
+
+  if (nSources <= 0)
+    messcrash ("Bad call to channelSources CHAN %s nSources %d <= 0)"
+	       , c && c->c.title[0] ? c->c.title : "no-name"
+	       , nSources
+	       ) ;
+
+  pthread_mutex_lock (&(c->c.mutex)) ;
+  if (c->c.debug)
+    fprintf (stderr, "channel %s set %d sources\n"
+	     , c->c.title[0] ? c->c.title : "no-name"
+	     , nSources
+	     ) ;
+  if (c->c.nSources)
+    messcrash ("channel %s set %d Sources called twice on same channel"
+	       , c->c.title[0] ? c->c.title : "no-name"
+	       , nSources
+	       ) ;
+  if (! c->c.isClosed)
+    c->c.nSources = nSources ;
+  else
+    messcrash ("channel %s Add %d Sources called on closed channel"
+	       , c->c.title[0] ? c->c.title : "no-name"
+	       , nSources
+	       ) ;
+  pthread_mutex_unlock (&(c->c.mutex)) ;
+} /* chanSources */
+
+/*******************************************************************************************************/
 
 void channelCloseSource (CHAN *c)
 {

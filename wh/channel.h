@@ -5,6 +5,7 @@
  * -------------------------------------------------------------------
  * Created: mars 2015, mieg
  *   May 2015: added channelClose and some technical extensions to support remote_channel
+ *   May 2026, removed channelClose, addel addSource seal, closeSource
  *-------------------------------------------------------------------
  */
 
@@ -49,6 +50,7 @@
  *           // the type of the variable should match the type of the channel
  *     Example 3 :
  *       double pi = 3.1415926535 ;
+ *       channelSeal (c) ;  // seal the number of sources, must be called before channelPut 
  *       channelPut (c, &pi, double) ;
  *           // Execution blocks if the channel buffer is full, 
  *           // Execution resumes when a record is consumed by another thread calling channelGet.
@@ -71,6 +73,7 @@
  *               printf("%f\n", sinus(channelGive(cx3, &x3, X3).y) ; // blocking 
  *        In thread 2 : // may happen before or after the request from thread 1 
  *               X3 aa = { 0, pi/6, 0 } ; // allocate and initialise an instance of X3
+ *               channelSeal (cx3) ;  // seal the number of sources, must be called before channelPut 
  *               channelPut (cx3, &aa, X3) ; // write a record on the channel.
  *          At that point, thread 1 will resume and print the value 1/2.
  *             
@@ -88,9 +91,10 @@
  *      Example 4b: // In this example we want to loop
  *        In thread 1 ;
  *               X3 x3  { 0, pi/3, 0 } ; // allocate and initialise an instance of X3
+ *               channelSeal (cx3) ;  // seal the number of sources, must be called before channelPut 
  *               for (i = 0; i < 10 ; i++)  // export 10 instances of x3,
  *                 channelPut (cx3, &x3, X3) ; // write a record on the channel.  
- *               channelClose (cx3) ;          // close the channel
+ *               channelCloseSource (cx3) ;    // decrement the number of source, if 0, close the channel
  *        In thread 2 : // may happen before or after the request from thread 1 
  *               X3 x3 ; // allocate an instance of struct x3Struct 
  *               while (channelGet (cx3, &x3, X3))  // write a record on the channel.
@@ -132,7 +136,7 @@
  *  and when all previously queued records have been consumed, channelMultiGet will return 0
        Example 5b:
          In thread 1:
-           channelClose (c) ;
+           channelCloseSource (c) ; // c closes when its source count decrements to 0
          In thread 2:
            while (channelMultiGet (c, vp, max, double)) 
              {
@@ -144,17 +148,24 @@
  *  At some point one of them, say a2, receive a inChannel isClosed message, while a1 is still running
  *  If a2 closes its outChannel, a1 will not be able to export to outChannel and data are lost
  *
- *  Solution : set and count sources, to insure that outChannel will accept all packets fro all its sources
+ *  Solution : set and count sources, to insure that outChannel will accept all packets from all its sources
+ *  This is implemented by two functions
+ *     channelAddSources (c, n) : Add n to the source count of c, optional if there is a single source
+ *     channelSeal (c) : seal the number of sources (and set it to 1 if channelAddSources was never called)
+ *  The call to channelSeal is mandatory and must preceed any call to channelPut. It is a way to
+ *  declare the topology of the program and insure that channel closure is not subject to a race condition
+ * 
+
        Example 6:
          Create n agents feeding out channel, and signal it
-	   channelAddSource (outChannel, n) ; // increase source count
-         In each agent a1, a2, ...
+	   channelAddSource (outChannel, N) ; // increase source count
+           channelSeal (outChannel) ;  // seal the number of sources, must be called before channelPut
+         In each agent a1, a2, ... aN    (the number N of agents must match the number N of sources)
            while (channelGet (inChannel, ...)
 	     { channelPut (outChannel) ;}
 	   channelCloseSource (outChannel) ;  // decrease source count
      // outChannel will actually close when the number of sources decreases to zero
      // This way, only the last running agent will actually close the  outChannel
-     //   However channelClose (outChannel) ; would still close unconditionnally 
 
  * DESTRUCTION
  * To destroy a channel and recover the associated memory, call ac_free on c or h
@@ -261,14 +272,14 @@ BOOL channelSelect (CHAN **ccc) ; /* ccc is a zero terminated list of channels
 				  * return 1 if one of them is probably ready
 				  * check which, using channelTryGet, as in example 6 above
 				  */
-void channelClose (CHAN *c) ;
 void channelDebug (CHAN *c, int debug, char *title) ; 
 
 int  channelCount (CHAN *c) ;  /* number of records received by channel c, negative is channel is still open */
 
+void channelSources (CHAN *c, int nSources) ; /* source_count = nSources */
 void channelAddSources (CHAN *c, int nSources) ; /* source_count += nSources */
 void channelCloseSource (CHAN *c) ; /* source_count -= 1, channel closes at zero */
-
+void channelClose (CHAN *c) ;       /* deprecated */
 
 void channelTest (int nn) ; /* This function should print on stdout the numbers 0, 1,2, 3... up to min(9,nn) */
 

@@ -192,6 +192,8 @@ setenv SV     v115.81.18M.sam.may25     # sam  chenillettte
 setenv SVlast v115.81.18M.sam.may25    # 
 setenv SV     v116.81.18M.sam.may30     # new index masking in the genome the seeds of mito/transposons
 setenv SVlast v116.81.18M.sam.may30    # 
+setenv SV     v117.82.18M.wig.jun1     # new index masking in the genome the seeds of mito/transposons
+setenv SVlast v117.82.18M.wig.jun1    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -204,13 +206,13 @@ endif
 \cp bin/sortalign.$SV bin/sortalign
 
 setenv NOINTRONSEEDS 0
-setenv EXPORTSAM 1
-setenv EXPORTWIGGLES 0
+setenv EXPORTSAM 0
+setenv EXPORTWIGGLES 1
 setenv EXPORTWIGGLEENDS 0
 setenv seedLength 16
 setenv seedLength 18
 setenv maxTargetRepeats 31
-setenv maxTargetRepeats 81
+setenv maxTargetRepeats 82
 
 
 
