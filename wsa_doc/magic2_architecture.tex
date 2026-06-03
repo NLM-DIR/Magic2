@@ -49,7 +49,8 @@ constitute the Magic2 implementation.
 It is intended as supplementary material to the main benchmarking
 paper, which reports alignment accuracy and throughput comparisons
 against HISAT2, STAR, and minimap2; readers interested primarily
-in results should consult that paper.
+in results should consult that paper; those wishing to apply
+Magic2 should consult the user guide.
 Developers and advanced users wishing to understand, extend, or
 port Magic2 will find the full design rationale here.
 \end{abstract}
@@ -67,9 +68,11 @@ itself building on the AceView gene and transcript annotation
 system~\citep{thierrymieg2006}.
 It aligns short (Illumina) and long (Nanopore, PacBio) RNA-seq or
 DNA-seq reads against an annotated or unannotated reference genome,
-and in a single pass produces alignments, gene-expression counts,
+augmented with its mitochondia, examplars of its ribosomal RNA precursor
+and main repeat elemets, and optionally its most frequent contaminants.
+In a single pass Magic2 produces alignments, gene-expression counts,
 intron-support tables, poly(A) addition sites, coverage tracks, and
-QC metrics.
+rich QC metrics.
 
 A posteriori, the name Magic2 can be parsed as
 \emph{Memory-Aware Genomic Integrative Computation} --- an
@@ -251,8 +254,11 @@ parallelism.
 
 Several alignment decisions that strongly affect accuracy cannot be
 made before reading the data: whether the library is RNA or DNA,
-whether reads are short (Illumina) or long (Nanopore, PacBio),
-what the dominant sequencing strand is, and what adapter sequences
+what is the sequencing technology (Illumina, PacBio, Nanopore ...),
+are the reads long or short, 
+single ends or paired, 
+what are the absolute and relative rates or substitutions and indels,
+which is the dominant sequencing strand, and what adapter sequences
 were ligated.
 Requiring the user to supply these parameters manually is error-prone
 and unnecessary, because the data itself carries all the evidence
@@ -271,7 +277,7 @@ global parameters are frozen.
 On completion of each pilot block, Magic2 tallies the evidence
 accumulated so far:
 \begin{itemize}
-  \item \textbf{Read type.} Long reads with frequent indels indicate
+  \item \textbf{Read type.} Long reads with relativelly frequent indels indicate
         Nanopore or PacBio; short, low-indel reads indicate Illumina.
   \item \textbf{Library type.} A significant fraction of reads
         spanning GT-AG or CT-AC boundaries identifies the library as
@@ -280,8 +286,9 @@ accumulated so far:
         Many RNA-seq protocols are strand-specific: 99\,\% of reads
         may align consistently to one mRNA strand.
         The ratio of GT-AG (sense) to CT-AC (antisense) intron signals
+        and the orientation of the mitochondrial reads
         measures this directly and sets the strand bias used in all
-        subsequent alignments.
+        subsequent interpretation of the alignments.
   \item \textbf{Adapter sequences.}
         Unaligned 3$'$ overhangs are accumulated into per-position
         base-frequency histograms (Section~\ref{sec:adapters}).
@@ -289,15 +296,15 @@ accumulated so far:
         consensus is called.
 \end{itemize}
 
-Once any single pilot block has provided enough evidence --- in
-practice one block of 3\,Mb is usually sufficient for a high-depth
-run --- all inferred parameters are frozen and broadcast to all agents.
+Once enough pilot blocks have provided good evidence --- in
+practice one block of 3\,Mb is usually sufficient for a high quality
+run --- all inferred parameters are frozen and used by all agents.
 
 \subsection{Reprocessing and zero read loss}
 \label{sec:pilot_reprocess}
 
 If a pilot block was aligned before a parameter was finalised (for
-example, before the adapter was known), it is silently reprocessed
+example, before the adapters were known), it is silently reprocessed
 from scratch with the final parameters before its results are
 committed.
 All subsequent blocks, including the remaining pilot blocks still
@@ -314,9 +321,9 @@ magic2 -i SRR122334 -x IDX -o output
 \end{lstlisting}
 produces fully optimised alignments regardless of library
 preparation, sequencing platform, or adapter chemistry.
-Strand bias in particular is exploited globally: a 99\,\%
-strand-specific RNA library is handled as accurately as one where
-the strand was declared explicitly on the command line.
+For example, strand bias is exploited globally: a 99\,\%
+strand-specific RNA library is handled exactly as if
+the user had explicitly declared the strand on the command line.
 
 %% ===============================================================
 \section{Seed generation and genome indexing}
@@ -330,7 +337,7 @@ Magic2 uses exact $k$-mer seeds of length $k \le 19$, encoded as
 32\,bits).
 The default $k$ is chosen automatically from genome size:
 \begin{itemize}
-  \item $k = 16$ for small genomes ($<1$\,Gb; e.g., \textit{C.~elegans},
+  \item $k = 16$ for small genomes below 1 gigabases, e.g. \textit{C.~elegans},
         \textit{D.~melanogaster});
   \item $k = 18$ for large genomes (human, mouse).
 \end{itemize}
@@ -346,17 +353,21 @@ PacBio) because indels in the spacers disrupt the spaced-seeds.
 \subsection{Strand-agnostic seed generation}
 \label{sec:strand_agnostic}
 
-To halve index size and enable strand-agnostic matching, both the
+To halve the index size and enable strand-agnostic matching, both the
 forward $k$-mer $S$ and its reverse complement $C$ are computed
 simultaneously using an incremental rolling update:
 \begin{align}
   S_{\text{new}} &= \bigl((S \ll 2) \mid b\bigr) \mathbin{\&} \text{mask} \\
   C_{\text{new}} &= \bigl((C \gg 2) \mid (b' \ll (k-2))\bigr) \mathbin{\&} \text{mask}
 \end{align}
-where $b$ is the next base (2-bit coded) and $b'$ its complement.
-The strand-agnostic value $Z = \min(S, C)$ is retained.
+where $b$ is the next base (2-bit coded) and $b'$ its complement,
+and $<<2$ or $>>2$ means that the k-mer is shifted left or right
+by 2 bits before insertion of the new base.
+The strand-agnostic minimal value $Z = \min(S, C)$ is retained.
 The coordinate is encoded as $(x \ll 1)$ if $S$ was chosen (forward
 strand) or $(x \ll 1 \mid 1)$ if $C$ was chosen (reverse strand).
+So x is even if the chosen seed $Z$ is extracted from the plus strand and
+odd if extracted from the minus strand.
 Ambiguous bases reset the rolling accumulator; a seed is emitted only
 after $k$ consecutive unambiguous bases.
 
@@ -377,7 +388,7 @@ processing requires no further regrouping.
 
 To reduce index size without sacrificing alignment sensitivity, seeds
 are sub-sampled using a \emph{rolling-min-hash}: a round-robin buffer
-of size $p$ (default 4) stores the hash of $Z$ at recent positions;
+of size $p$ (default 6) stores the hash of $Z$ at recent positions;
 only the position with the minimum hash among the last $p$ values is
 retained as a seed.
 This guarantees:
@@ -385,7 +396,7 @@ This guarantees:
   \item average inter-seed spacing of $p/2$ positions;
   \item maximum gap of $p$ positions;
   \item near-perfect synchronisation between read and genome seeds
-        (in practice alignment begins by the second seed even when $p <= 8$).
+        (in practice alignment begins by the second seed even when $p = 6$).
 \end{itemize}
 
 \subsection{Target multiplicity filtering and jump encoding}
@@ -395,18 +406,18 @@ After collection, target seeds are sorted (Section~\ref{sec:sort}) and their
 multiplicity (number of occurrences in per target) is counted.
 Seeds with multiplicity $> Q$ (default 81) are discarded to limit
 spurious hits from repetitive elements; empirical tests showed $Q = 31$
-gives higher specificity while $Q = 81$ slightly reduces false negatives
+gives slightly higher specificity while $Q = 81$ slightly reduces false negatives
 at acceptable cost in index size and runtime.
 
 Jump information is then embedded directly in the seed records: every
 256th seed stores pointers to future seeds at distances
-$n_1 \times 256$, $n_2 \times 256$, $n_4 \times 256$, enabling
+$n_1 \times 256$, $n_2 \times 256$, $n_3 \times 256$, $n_4 \times 256$, enabling
 fast skip-ahead during the merge step.
 
-The filtered, jump-augmented taget table is written to disk in compact binary
-format for later memory-mapped access during production alignment.
-Seed records are 16\,bytes each (Section~\ref{sec:gpu_structs}).
-overhead.
+The filtered, jump-augmented taget table is computed only once
+during index preparation and written to disk in compact binary
+format. It is later memory-mapped in shared read-only mode
+when aligning sequence data.
 
 \subsection{Junction seeds from annotated splice sites}
 \label{sec:junction_seeds}
@@ -417,7 +428,7 @@ improving detection of short exons with known junctions.
 
 For each annotated mRNA, all exons are concatenated \textit{in silico}
 to form a continuous spliced transcript.
-All $k$-mers straddling each junction with at least 4 bases on each
+All $k$-mers straddling a junction with at least 4 bases on each
 side ($k - 4$ starting positions per junction, with $p = 1$ so every
 valid position is used) are generated.
 For each such $k$-mer, two seed records with identical value $Z$ are
@@ -428,15 +439,15 @@ emitted:
         augmented with ancillary phase-shift information encoding the
         exact junction offset.
 \end{itemize}
-This dual-record strategy ensures that a single seed match near a
-junction can trigger extension on both sides of the splice site.
+This dual-record strategy ensures that a single seed match overlapping a
+junction can trigger two extensions, one on each side of the splice site.
 
 The additional index size is negligible: with $k = 18$ and
 $\sim$300{,}000 annotated human introns, $(k-4) \times 300{,}000$
-yields only a few million additional seeds, compared to
-$\sim$1 billion genomic seeds.
+yields only a few million additional seeds, compared to around 
+half a billion genomic seeds.
 Junction seeds are merged with the genomic table, sorted, and stored
-in the same binary format.
+together in the same binary files.
 
 %% ===============================================================
 
@@ -448,7 +459,6 @@ in the same binary format.
 \label{sec:gpu_structs}
 
 Seed records are \texttt{CW} structs (16\,bytes, 16-byte aligned),
-declared in \texttt{wsa/sa.common.h}:
 
 \medskip
 \begin{center}
@@ -457,7 +467,7 @@ declared in \texttt{wsa/sa.common.h}:
 Field & Type & Meaning \\
 \midrule
 \texttt{seed}   & \texttt{unsigned int} & 32-bit 16-mer seed \\
-\texttt{nam}    & \texttt{unsigned int} & read or chrom identifier\\
+\texttt{nam}    & \texttt{unsigned int} & sequence identifier and strand\\
 \texttt{pos}    & \texttt{unsigned int} & coordinate of first base of seed \\
 \texttt{flags}  & \texttt{unsigned int}  & auxiliary information \\
 \bottomrule
@@ -466,8 +476,8 @@ Field & Type & Meaning \\
 \medskip
 
 The 16-byte size is deliberate: four \texttt{CW} records fill one
-64-byte cache line exactly, which is optimal for both the CPU radix
-sort and GPU coalesced memory access.
+64-byte cache line exactly, which is optimal for both the CPU
+vectorized instructions and for GPU coalesced memory access.
 
 \section{Radix sort}
 \label{sec:sort}
@@ -489,27 +499,38 @@ On SSE2-capable processors each 16-byte record is moved by a single
 \texttt{\_mm\_load/store\_si128} instruction, with a portable
 \texttt{memcpy} fallback elsewhere.
 
-This design replaced an earlier merge-sort and reduced elapsed and CPU
-time by approximately 15\,\% on large human datasets.
-When a GPU is available the sort is offloaded to
-\texttt{thrust::sort} (Section~\ref{sec:gpu}), superseding the CPU
-path entirely for the seed-matching phase.
-
-\subsection {Genome index loading and joining}
+\subsection {Data loading and joining to the read-seeds with the target-seeds}
 \label{sec:index_load}
 
-The filtered genome index (Section~\ref{sec:seeds}) is partitioned
-into $NN$ sub-tables (16 or 32, indexed by the least-significant
-base pair(s) of the seed value).
-At the start of a run, all partitions are memory mapped.
-The read seeds and genome seed records are identical.
+The filtered multi-target index (Section~\ref{sec:seed_encoding}) is partitioned
+into $N$ sub-tables (16 or 32, indexed by the least-significant
+base pair(s) of the seed value) and
+all partitions are memory mapped. at the start of the program.
 
+The DNA or RNA sequences to be analyzed are
+read sequentially, or automatically streamed from the NCBI/SRA archives,
+and partitioned in blocks of
+approximately $bMax$ megabases (default 3Mb).
+As soon as a block is complete, its processing starts,
+and the block is discarded once it has been fully exploited.
+And since the number of active block is controlled
+by channelling back-pressure (Section-\ref{sec:channels}),
+an arbitrarilly long input file (say 1 Tb)
+can be analyzed on a 32 Gb machine.
+This also means that the latency when acquiring the fasta/fastq files
+is hidden behind the
+parallel processing of the already available data.
+
+For each block, the read seeds are constructed exactly as the target seeds
+(Section~\ref{sec:seed_encoding}), with the same pseudo-periodicity $p$
+or a divisor of $p$ (section \ref{sec:subsampling}), then sorted
+(Section~\ref{sec:sort}).
 Both tables are scanned in parallel, advancing the pointer
 on the side of the lower seed. When there is a coincindence,
 the local Cartesian product of all entries with the matching seed
 is emitted as 64 bytes SEEDMATCH structs, by simply joining
 the 2 matching records. This table is then sorted by read (hence
-automaticaly by pairs).
+automaticaly by pairs, section-\ref{sec:paired_encoding}).
 
 \subsection{Optional GPU acceleration}
 \label{sec:gpu_accel}
@@ -526,9 +547,9 @@ at run time; execution falls back silently to the CPU radix sort
 If a GPU is present, the genome seed-index is transfered to the GPU
 prior to the calculation of the first data block and discarded from
 the CPU side.
-
-All structure declarations are shared and since both the CPU and the GPU use 64-bytes aligned buffer.
-no data conversion is required at the CPU--GPU boundary.
+All structure declarations are shared and since both the CPU
+and the GPU use 64-bytes aligned buffers,
+no data conversion is required at the C/C++ CPU/GPU boundary.
 
 \subsection{Latency hiding through channel-based concurrency}
 \label{sec:latency_hiding}
@@ -555,17 +576,19 @@ Magic2 avoids this complexity entirely.
 The agent pool, coordinated by bounded blocking channels, provides
 CPU--GPU overlap as a natural consequence of its concurrency model.
 While one agent is blocked waiting for the GPU, all other agents
-continue executing their own blocks on CPU --- extracting seeds,
+continue executing their own blocks on CPU --- parsing fastq files,
 extending alignments, writing coverage tracks, and accumulating
 junction and QC tables.
 The blocked agent simply parks at what is, from the pipeline's
 perspective, an ordinary blocking-channel operation, indistinguishable
-from blocking on an empty input queue.
+from blocking on an empty input queue, or on loading a file from a disk.
 Provided the number of active agents is sufficient to keep both the
 GPU and the CPU cores occupied --- a condition that holds automatically
-given Magic2's block-size and agent-count defaults --- GPU transfer and
-sort latency is fully overlapped with productive CPU work on other
+given Magic2's block-size and agent-count defaults --- GPU latency
+is fully overlapped with productive CPU work on other
 blocks, with no GPU-specific orchestration code in the pipeline at all.
+After a while, the different agents spontaneously anti-synchronize and
+relativelly rarely require the GPU at the same time.
 
 The channel library (\texttt{wchannels/channel.c}) is a direct C
 implementation of Go's channel semantics~\citep{donovan2015go},
@@ -587,8 +610,8 @@ receiving a block, offloads the seed-matching phase to the device,
 then resumes CPU-side alignment extension once the device returns.
 The genome seed index is resident in device memory throughout the
 run, having been transferred once before the first block is
-processed; the CPU no longer needs to memory-map the full 22\,GB
-index during alignment.
+processed; the CPU no longer needs to memory-map the target index,
+about 22\,GB for the human genome, and can discard it.
 
 Within each block the GPU performs the following steps in sequence:
 
@@ -634,29 +657,33 @@ Within each block the GPU performs the following steps in sequence:
 The alignment extension stage receives \texttt{SEEDMATCH} records ---
 pairs of (genome coordinate, read coordinate) for matching $k$-mers
 ($k \approx 18$), sorted by read pair.
-Two flavours exist: standard genomic seeds, and junction seeds which
+Two flavours exist: standard genomic seeds
+(Section~\ref{sec:seed_encoding}),
+and junction seeds which
 each produce two glue points (a donor and an acceptor on either side
-of an annotated intron boundary).
+of an annotated intron boundary, section~\ref{sec:junction_seeds}).
 
 \subsection{Strand resolution}
 \label{sec:strand_resolution}
 
 Seeds are strand-agnostic: chromosome and read identifiers encode
-strand implicitly --- odd identifiers ($2n+1$) indicate the complement
-was selected, even ($2n$) the forward strand.
-The XOR \texttt{(chrom \textasciicircum\ read) \& 1} therefore
-determines whether read and chromosome are antiparallel or parallel.
+strand implicitly --- even identifiers $2n$) indicate the plus strand
+and odd identifiers $(2n+1)$ indicate the minus strand (section~\ref{sec:strand_agnostic}).
+The exclusive-or bitwise operation \texttt{(chrom \textasciicircum\ read) \& 1} therefore
+determines whether the read and the chromosome at the position
+indicated by their common seed are locally parallel or anti-parallel.
 This flag is extracted and dropped; from this point all processing
-uses the positive-strand read (\texttt{dnaR}) against either
-\texttt{dnaG} or \texttt{dnaGR}, both memory-mapped at initialisation.
+works only on parallel alingments by compairing the positive-strand of the read (\texttt{dnaR}) to either
+the original target sequence
+(\texttt{dnaG}) or to the target reverse-complemented sequence  (\texttt{dnaG\_RC}), both memory-mapped at initialisation.
 
 \subsection{Clustering and locus selection}
 \label{sec:clustering}
 
 For each read, glue points may scatter across many chromosomes but
 cluster into one or a few genuine loci.
-Loci are scored by glue-point count, with seeds of high genomic
-multiplicity (recorded in the \texttt{SEEDMATCH} record) down-weighted.
+Loci are scored by glue-point counts, with seeds of high genomic
+multiplicity (recorded in the \texttt{SEEDMATCH} record, section~\ref{sec:multiplicity}).) down-weighted.
 Junction seeds are tallied separately and contribute additional
 evidence for a specific splice structure.
 Within each candidate locus, glue points are sorted by chromosome,
@@ -674,42 +701,45 @@ Magic-BLAST~\citep{magicblast}, to which we refer for a full
 description.
 
 Extension proceeds base by base: if \texttt{*cp \& *cq != 0} (a
-bitwise test that handles IUPAC ambiguity codes), both the read
-pointer \texttt{cp} and the genome pointer \texttt{cq} advance by~1.
+bitwise test that handles IUPAC ambiguity codes: $R$ matches $A$ or $C$, and $N$ matches any letter),
+both the read pointer \texttt{cp} and the genome pointer \texttt{cq} advance by 1 base.
 On a mismatch, a \emph{jumper table} is consulted.
 Each row encodes one error hypothesis as a triple
 \texttt{(dx, da, n)}: advance the read pointer by \texttt{dx} and the
-genome pointer by \texttt{da}, then require \texttt{n} consecutive
-matching bases for the hypothesis to be accepted.
+genome pointer by \texttt{da}, if the following $n$ letters check as exact matches,
+otherwise try the next hypothesis.
 The table covers substitutions, insertions, and deletions of up to
-\texttt{MAXJUMP}=3 bases (Table~\ref{tab:jumper}); a sentinel entry
+10 bases (Table~\ref{tab:jumper});
+rows with $dx+da >k$ can be ignores, in many places Magic2 uses the limit $k=3$;
+a sentinel entry
 \texttt{\{1,\,1,\,0\}} with $n=0$ is always accepted and terminates
 the search without a special exit condition.
-Extension halts when the error density over a short window exceeds the
-budget defined by \texttt{errCost}=4 and \texttt{errRateMax}=12\,\%,
+Extension halts optionally on the first mismatch, or
+when more than 5 errors are detected over less than 10 bases,
 or when the sequence ends.
 
 \begin{table}[h]
 \centering
-\caption{Jumper table (representative rows; fourth column not used in Magic2).}
+\caption{Jumper table (representative rows)}
 \label{tab:jumper}
 \small
-\begin{tabular}{rrl}
+\begin{tabular}{rrrl}
 \toprule
-\texttt{dx} & \texttt{da} & meaning \\
+\texttt{dx} & \texttt{da} & check & meaning \\
 \midrule
-1 & 1 & substitution \\
-1 & 0 & insertion in read (1 base) \\
-0 & 1 & deletion in read (1 base) \\
-2 & 0 & insertion (2 bases) \\
-0 & 2 & deletion (2 bases) \\
-$\vdots$ & $\vdots$ & $\vdots$ \\
-10 & 0 & insertion (10 bases) \\
-0 & 10 & deletion (10 bases) \\
-1 & 1 & sentinel (always accepted) \\
+1 & 1 & 4 & substitution \\
+1 & 0 & 4 & insertion in read (1 base) \\
+0 & 1 & 4 & deletion in read (1 base) \\
+2 & 0 & 6 & insertion (2 bases) \\
+0 & 2 & 6 & deletion (2 bases) \\
+$\vdots$ & $\vdots$ & $\vdots$ & $\vdots$ \\
+10 & 0 & 12 & insertion (10 bases) \\
+0 & 10 & 12 & deletion (10 bases) \\
+1 & 1 & 0 & sentinel (always accepted) \\
 \bottomrule
 \end{tabular}
 \end{table}
+
 
 The jumper algorithm is strictly linear and cache-friendly, and can
 drift freely along any diagonal --- unlike banded Smith--Waterman,
@@ -719,9 +749,12 @@ Smith--Waterman is optimal only under the assumption that sequencing
 errors are independently distributed, a hypothesis that does not hold
 in practice (polymerase slippage, homopolymer runs, and
 cycle-dependent quality decay are all correlated).
-The jumper table can be tuned to match observed error profiles;
-\texttt{MAXJUMP}=3 is appropriate for Illumina reads and may be
-relaxed for Nanopore data.
+
+Another advantage is that one can define several jumper tables
+and select dynamically the most appropriate on a per-run or even per-read basis,
+or try several choices. When the observed number of indels is high,
+or if deletions are favored over insertions, or the contrary, Magic2
+can switch tables and can adapt the maximal acceptable value for $da+dx$.
 
 \subsection{Junction-seed inward extension}
 \label{sec:junction_inward}
@@ -745,6 +778,8 @@ The input to the DP is a list of candidate exon fragments for a
 single read, each carrying: read and chromosome identifiers,
 genomic and read-space coordinates, and the error table produced
 by the jumper algorithm (Section~\ref{sec:jumper}).
+A fragment may consist of several exon if a junction
+seed has been unambiguously recognized.
 Fragments are sorted by their 5$'$ genomic coordinate before the
 DP begins.
 
@@ -792,14 +827,53 @@ alignments.
 This is expected and correct behaviour: the multi-mapping rate is
 a property of the genome annotation, not an aligner artefact.
 
-\subsection{Adjust-introns: splice-boundary optimisation}
-\label{sec:adjust_introns}
+\section{Intron detection}
+\label{sec:adjust_introns_1}
 
-After the dynamic-programming pass, each exon fragment still carries
-its raw jumper-extension coordinates and has not been clipped at
-splice boundaries.
-The adjust-introns step processes every successive pair of exon
-fragments along a path.
+After the dynamic-programming pass, the successive fragments have not
+yet been clipped, their read coordinates very often overlap by a few bases
+and their target coordinates leak into true intronic regions.
+This is unavoidable since there is at least one chance in four
+that the last base of a true exon matches the first base of the intron,
+and one in four that the first base of the next exon matches the last base of the intron. In both cases
+the two successive fragments will overlap by at least one base.
+To locate the most probable correct boundaries and clip blunt-end
+the successive fragments the program works as follows.
+
+\subsection{Error minimisation}
+\label{sec:adjust_introns_1}
+Because the genome contains so many repetions at all scales,
+two successive fragments often overlap over dozens of bases or more.
+The code first searches the region where a blunt end clip would
+minimize the total number of remaing errors. In an ideal situation
+where the sequencing is perfectly accurate, there would be no mismatch
+in the exonic regions but possibly several where the fragments
+leak into the intronic region. In such a case, this minimisation
+eliminates all mismatches, leaving a shorter perfect overlap.
+Real situations may be more complex.
+
+\paragraph{Splice-signal selection.}
+If the run is recognized as RNA, or during the pilot phase
+(sections~\ref{sec:pilot}), the optimal overlap is scanned
+successively for an already annotated boundary,
+then for a splice signal:
+\begin{enumerate}
+  \item GT-AG (canonical sense) or CT-AC (canonical antisense),
+        chosen according to the strand established during the pilot
+        phase;
+  \item GC-AG (less common but well-documented);
+\end{enumerate}
+For non-stranded libraries both GT-AG and CT-AC are considered.
+In case of success, the fragments are clipped accordingly, even if this produces
+a single base mismatch, insertion or deletion, and the score of the aligment
+receives a bonus. However, no bonus is given if the read mixes
+sence (GT-AG) and antisense (CT-AC) signals, or the the signal is incompatible
+with the strand specificity of the run.
+
+The final clip point therefore simultaneously minimises alignment
+errors and maximises splice-signal evidence.
+
+
 
 \paragraph{Intron size threshold.}
 Magic2 does not call introns below 30 bases.
@@ -845,27 +919,6 @@ plus indels of up to 3 bases) summed across both fragments.
 In low-complexity regions the overlap can span 30 or more bases
 with errors on both sides, so this joint minimisation is essential
 for accurate boundary placement.
-
-\paragraph{Splice-signal selection.}
-Once the optimal clip point is identified, the genomic gap between
-the two fragments defines a candidate intron.
-If a junction seed hit is available for this locus, its annotated
-boundary is adopted directly without further search.
-Otherwise, Magic2 slides the clip point within a small window around
-the error minimum and scores the dinucleotides at the resulting
-donor and acceptor sites, applying the following preference order:
-\begin{enumerate}
-  \item GT-AG (canonical sense) or CT-AC (canonical antisense),
-        chosen according to the strand established during the pilot
-        phase (Section~\ref{sec:pilot});
-  \item GC-AG (less common but well-documented);
-  \item any other dinucleotide pair, scored by error count alone.
-\end{enumerate}
-For non-stranded libraries both GT-AG and CT-AC are considered
-equally at step~1, and the one consistent with the lower error
-count is preferred.
-The final clip point therefore simultaneously minimises alignment
-errors and maximises splice-signal evidence.
 
 \subsection{Adjust-exons: shadow realignment}
 \label{sec:adjust_exons}
