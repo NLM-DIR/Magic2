@@ -1,0 +1,109 @@
+#################################################################
+# wsa_torch/makefile.sa_torch
+#
+# Builds sortalign_torch (magic2_torch) in bin.$(ACEDB_MACHINE).
+# Copied there by wsa_torch/makefile before building.
+#
+# Requires:
+#   LIBTORCH     path to the LibTorch distribution root
+#                (set in environment or passed on make command line)
+#                e.g.  make LIBTORCH=/opt/libtorch
+#
+#   ACEDB_MACHINE already set; deffile already copied by wsa/makefile
+#   or wsa_torch/makefile.
+#
+# The sa.torch.cpp source is symlinked from ../wsa_torch/ just as
+# wsa C sources are symlinked from ../wsa/.
+# All objects and the final binary land in bin.$(ACEDB_MACHINE).
+#################################################################
+
+SHELL = /bin/sh
+.SCCS_GET:
+
+#################################################################
+# Machine-specific flags (CC, LINKER, USEROPTS, LIBS, NAME …)
+include deffile
+
+#################################################################
+# LibTorch — must be set externally
+ifndef LIBTORCH
+  $(error LIBTORCH is not set. Usage: make LIBTORCH=/path/to/libtorch ; make LIBTORCH=/home/mieg/ace/libtorch -k all; )
+endif
+
+TORCH_INC = -I$(LIBTORCH)/include \
+            -I$(LIBTORCH)/include/torch/csrc/api/include
+
+TORCH_LIB = -L$(LIBTORCH)/lib \
+            -Wl,-rpath,$(LIBTORCH)/lib \
+            -ltorch -ltorch_cpu -lc10
+
+# Add CUDA torch libs when building on a CUDA machine
+ifneq (,$(findstring GPU,${ACEDB_MACHINE}))
+  TORCH_LIB += -ltorch_cuda -lc10_cuda
+endif
+
+#################################################################
+# Compiler for C++ translation units
+# Use g++ (or clang++) regardless of what COMPILER is for C code.
+# Override with  make CXX=clang++  if needed.
+CXX      ?= g++
+CXXFLAGS = -std=c++17 -O2 -fPIC -D_FILE_OFFSET_BITS=64 -DOPTERON -DUSE_TORCH \
+           -D_GLIBCXX_USE_CXX11_ABI=0 \
+           -I. -I.. -I../wh -I../wsa -I../wsa_torch \
+           $(TORCH_INC)
+	   
+#################################################################
+# The same C objects as sortalign, compiled the same way
+IDIR = -I. -I.. -I../wh -I../wsa
+
+CC        = $(COMPILER) $(USEROPTS) $(IDIR) -DAC_TEST -D$(NAME) \
+            -D_FILE_OFFSET_BITS=64 -DUSE_TORCH -c
+
+COMPILE.c = $(CC)
+
+SRAINC  = -I../wsra
+SRALIBS = -L$(shell find ../wsra -name "ngs-sdk.*" -type d)/lib64 \
+          -lncbi-ngs-c++-static -lncbi-ngs-static \
+          -lncbi-vdb-static -lngs-c++-static
+
+LINK_ACS = libace.a libfree.a libtsfree.a
+
+SA_OBJS = sa.main.o sa.config.o sa.targetIndex.o \
+	sa.sequenceParser.o sa.parse.o \
+	sa.seeds.o sa.sort.o sa.align.o \
+	sa.introns.o sa.wiggle.o sa.gff.o \
+	sa.stats.o sa.sam.o sa.tabular.o \
+	sa.tests.o sa.hardware_info.o sa.help.o
+
+SA_SOURCES = $(SA_OBJS:.o=.c)
+
+# Symlink C sources from ../wsa/ on first reference (same as makefile.sa)
+$(SA_SOURCES):
+	test -L $@ || ln -s ../wsa/$@ .
+
+# The one C++ source, symlinked from ../wsa_torch/
+sa.torch.cpp:
+	test -L $@ || ln -s ../wsa_torch/$@ .
+
+sa.torch.o: sa.torch.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+#################################################################
+all: sortalign_torch
+
+libsraread.a:
+	$(MAKE) -C ../wsra
+	ln -s ../wsra/libsraread.a .
+
+sortalign_torch: $(SA_OBJS) sa.torch.o libsraread.a
+	$(CXX) -o $@ \
+	    $(SA_OBJS) sa.torch.o \
+	    $(LINK_ACS) \
+	    $(SRAINC) $(LIBS) \
+	    libsraread.a $(SRALIBS) \
+	    libfree.a libtsfree.a libchannels.a libwego.a \
+	    $(TORCH_LIB) \
+	    -lpthread -ldl -lz -lbz2 -llzma -lm -lgcc_s
+
+#################################################################
+# end of wsa_torch/makefile.sa_torch
