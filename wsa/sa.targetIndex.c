@@ -845,9 +845,6 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
 	  ac_free (cwsP) ;
 
 	}
-      if (bbG->gpu)
-	for (int k = 0 ; bbG->gpu && k < NN ; k++)
-	  ac_free (bbG->cwsN[k]) ;
     }
 #endif
   

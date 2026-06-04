@@ -1141,19 +1141,21 @@ static void saSortJoinSort (const PP *pp, BB *bb)
       array (sOff, 0, unsigned int) = 0 ;   /* sentinel */
       array (sLen, 0, unsigned int) = 0 ;
 
-      for (ia = 1 ; ia < iaMax ; ia++)
+      for (ia = 0 ; ia < iaMax ; ia++)
         {
           Array dna = arr (bb->dnas, ia, Array) ;
-          if (dna)
-            {
-              unsigned int ln = arrayMax (dna) ;
-              if (ln >= minLn)
-                {
-                  unsigned char *cp = arrp (dna, 0, unsigned char) ;
-                  array (sOff, ia, unsigned int) = (unsigned int)(cp - cp0) ;
-                  array (sLen, ia, unsigned int) = ln ;
-                }
+	  unsigned int ln = dna ? arrayMax (dna) : 0 ;
+	  if (ln >= minLn)
+	    {
+	      unsigned char *cp = arrp (dna, 0, unsigned char) ;
+	      array (sOff, ia, unsigned int) = (unsigned int)(cp - cp0) ;
+	      array (sLen, ia, unsigned int) = ln ;
             }
+	  else
+	    {
+	      array (sOff, ia, unsigned int) = 0 ;
+	      array (sLen, ia, unsigned int) = 0 ;
+	    }
         }
       arrayMax (sOff) = iaMax ;
       arrayMax (sLen) = iaMax ;
@@ -1161,10 +1163,11 @@ static void saSortJoinSort (const PP *pp, BB *bb)
       /* PATH B: GPU seed extraction + join + sort */
       {
         long sm_count = 0 ;
-        long total_bases = bigArrayMax (bb->globalDna) ;
-        const unsigned int *sm_out =
+        long total_bases = arrayMax (bb->saParse->dnaArray) ;
+	cp0 = arrayp (bb->saParse->dnaArray, 0, unsigned char) ;
+	const unsigned int *sm_out =
           saTorchCodeJoinSort (pp->torch,
-                               bigArrp (bb->globalDna, 0, unsigned char),
+                               cp0,
                                total_bases,
                                arrp (sOff, 0, uint32_t),
                                arrp (sLen, 0, uint32_t),

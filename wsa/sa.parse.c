@@ -380,6 +380,7 @@ static void saParseR12Buffers (const PP *pp, BB *bb)
     bb->nPairs -= 1 ;
   saParse->nRecords = arrayMax (bb->dnaRecords) ;
   saParse->idBuffer = idArray ? arrayp (idArray, 0, unsigned char) : 0 ;
+  saParse->dnaArray = dnaArray ;
   saParse->dnaBuffer = arrayp (dnaArray, 0, unsigned char) ;
   saParse->qualityBuffer = (qualityArray ? arrayp (qualityArray, 0, unsigned char) : 0) ;
 } /* saParseR12Buffers */

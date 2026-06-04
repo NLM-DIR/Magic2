@@ -484,11 +484,14 @@ static bool sTorchSeedExtract (
   torch::Tensor read_base =
     seq_off64.repeat_interleave (n_win) ;            /* [N_win] int64  */
 
-  /* ia_idx is 1-based: ia=0 is sentinel, contributes zero windows,  *
-   * and never appears in ia_exp.  This matches the C encoding:      *
-   * nam = (ia << 1) | strand_bit with ia 1-based.                  */
+  /* ia_idx runs 0-based [0, 1, ..., iaMax-1] to align with n_win and
+   * seq_len which are also indexed 0..iaMax-1.  The 1-based ia value
+   * required by the nam encoding (nam = (ia << 1) | strand_bit, ia
+   * 1-based) is applied below when assembling the CW nam column.
+   * ia=0 is the sentinel: len_ptr[0]=0 so n_win[0]=0 and it
+   * contributes zero windows and never appears in ia_exp.           */
   torch::Tensor ia_idx =
-    torch::arange (1, (int64_t)iaMax + 1,
+    torch::arange (0, (int64_t)iaMax,
                    kInt64Dev (s->dev)) ;             /* [iaMax] int64  */
 
   torch::Tensor ia_exp =
@@ -562,9 +565,9 @@ static bool sTorchSeedExtract (
   /* 9. Assemble CW columns                                          */
   torch::Tensor strand_bit = minus.to (torch::kInt32) ;
 
-  /* ia_exp already holds 1-based ia values (see step 4 comment)    */
+  /* ia_exp is 0-based; nam requires 1-based ia: nam = ((ia+1) << 1) | strand_bit */
   torch::Tensor nam =
-    torch::bitwise_left_shift (ia_exp.to (torch::kInt32), 1)
+    torch::bitwise_left_shift ((ia_exp).to (torch::kInt32), 1)
     | strand_bit ;                                   /* [N_win] int32  */
 
   torch::Tensor pos =

@@ -63,6 +63,7 @@ typedef struct dnaRecordStruct {
 } DnaRecord ;
 
 typedef struct saParseStruct {
+  Array dnaArray ;               // dnaBuffer = arrp (dnaArray, 0, unsigned char) 
   unsigned char *idBuffer ;      // all ids, packed, zero terminated, a pair shares a single id
   unsigned char *dnaBuffer ;     // all dnas, aligned, 2 to 16 terminal 0
   unsigned char *qualityBuffer ; // all quals, packed, zero terminated
