@@ -828,8 +828,7 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
 	  fNam = hprintf (h, "%s/cwsP.%d", pp->indexName, k) ;
 	  cwsP = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed offsets */
 	  
-	  fNam = hprintf (h, "%s/cwsN.%d", pp->indexName, k) ;
-	  cwsN = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed offsets */
+	  cwsN = bbG->cwsN[k] ;
 
 	  if (! cwsU || ! cwsP || ! cwsN)
 	    { bbG->gpu = FALSE ; break ; }
@@ -844,7 +843,7 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
 	  
 	  ac_free (cwsU) ;
 	  ac_free (cwsP) ;
-	  ac_free (cwsN) ;
+
 	}
       if (bbG->gpu)
 	for (int k = 0 ; bbG->gpu && k < NN ; k++)
