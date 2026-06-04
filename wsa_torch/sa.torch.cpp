@@ -159,6 +159,12 @@ static inline torch::TensorOptions kInt32CPU ()
            .dtype (torch::kInt32)
            .device (torch::kCPU) ;
 }
+static inline torch::TensorOptions kInt64CPU ()
+{
+  return torch::TensorOptions ()
+           .dtype (torch::kInt64)
+           .device (torch::kCPU) ;
+}
 static inline torch::TensorOptions kInt64Dev (const torch::Device &dev)
 {
   return torch::TensorOptions ()
@@ -239,25 +245,31 @@ static long sTorchJoinSortDo (SATorchState           *s,
                         {N, 4}, kInt32CPU ())
       .to (s->dev) ;                             /* [N, 4] int32    */
 
-    /* 2. Extract seed column (column 0)                             */
+    /* 2. Extract seed column (column 0) and promote to int64.
+     * Seeds are full 32-bit unsigned Z = min(fwd,rc) values.
+     * The & mask zero-extends the uint32 bit pattern into int64 so
+     * that bucketize and eq see the same unsigned ordering as the
+     * sorted cwsU genome key table.                                  */
     torch::Tensor r_seeds =
-      R.select (1, 0).contiguous () ;            /* [N] int32       */
+      (R.select (1, 0).contiguous ().to (torch::kInt64)
+       & (int64_t)0xFFFFFFFFL) ;              /* [N] int64, unsigned  */
 
-    /* 3. Bucketize: floor position of each read seed in genome keys */
+    /* 3. Bucketize: floor position of each read seed in genome keys.
+     * g_keys[p] is int64 (stored that way in saTorchIndexUpload).   */
     torch::Tensor buckets =
       torch::bucketize (r_seeds, s->g_keys[p],
                         /*out_int32=*/false,
-                        /*right=*/false) ;        /* [N] int64       */
+                        /*right=*/false) ;      /* [N] int64           */
 
-    /* 4. Verify exact match                                         */
+    /* 4. Verify exact match                                          */
     int64_t K_p = s->g_keys[p].size (0) ;
     torch::Tensor b_clamped = buckets.clamp (0, K_p - 1) ;
 
     torch::Tensor genome_seeds =
-      s->g_keys[p].index_select (0, b_clamped) ; /* [N] int32       */
+      s->g_keys[p].index_select (0, b_clamped) ; /* [N] int64         */
 
     torch::Tensor exact_match =
-      genome_seeds.eq (r_seeds) ;                /* [N] bool        */
+      genome_seeds.eq (r_seeds) ;               /* [N] bool           */
 
     torch::Tensor r_matched =
       exact_match.nonzero ().squeeze (1) ;        /* [n_match] int64 */
@@ -758,15 +770,23 @@ int saTorchIndexUpload (SATorchObj     *tor,
   }
 
   try {
-    /* Keys and offsets: small — copy to device, source can be freed */
+    /* Keys and offsets: small — copy to device, source can be freed.
+     * Seeds are full 32-bit unsigned values (wLen=16 uses all 32 bits).
+     * We load as int32 then promote to int64 (zero-extend) so that
+     * bucketize and eq always use unsigned-correct ordering.
+     * LibTorch 2.1 does not have kUInt32; int64 is the safe workaround.
+     * cwsU and cwsP are small (a few million entries); the size cost
+     * is negligible.  cwsN (the large table) is never compared as a
+     * seed and stays int32 throughout.                               */
     torch::Tensor cpu_keys =
       torch::from_blob (const_cast<uint32_t *>(seeds),
-                        {K}, kInt32CPU ()) ;
+                        {K}, kInt32CPU ())
+      .to (torch::kInt64) ;            /* uint32 → int64, zero-extend */
     torch::Tensor cpu_offsets =
       torch::from_blob (const_cast<uint32_t *>(offsets),
                         {K + 1}, kInt32CPU ()) ;
 
-    s->g_keys    [p] = cpu_keys   .to (s->dev).clone () ;
+    s->g_keys    [p] = cpu_keys   .to (s->dev).clone () ; /* int64 on device */
     s->g_offsets [p] = cpu_offsets.to (s->dev).clone () ;
 
     /* CW records: large — store raw pointer only, do NOT copy now   */
