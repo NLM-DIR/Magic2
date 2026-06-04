@@ -838,6 +838,110 @@ static void *saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex)
 }  /* saRadixSort3 */
 
 /**************************************************************/
+
+/* ------------------------------------------------------------------ */
+/* saRadixSort3Signed                                                   */
+/*                                                                      */
+/* Identical to saRadixSort3 but treats the key as a signed int32.     */
+/* The only difference is pass 3: negative values (MSB=1, buckets     */
+/* 512..1023) sort before non-negative values (MSB=0, buckets 0..511). */
+/* This is achieved by rotating the prefix-sum for pass 3 so that      */
+/* bucket 512 is placed first.                                          */
+/*                                                                      */
+/* Used by USE_TORCH path: seeds are stored and compared as int32 so   */
+/* that LibTorch bucketize (which has no kUInt32) sees the same order   */
+/* as the on-disk index.                                                */
+/* ------------------------------------------------------------------ */
+static void *saRadixSort3Signed (void *base, size_t N, size_t stride, int keyIndex)
+{
+  unsigned char  *src = (unsigned char *) base ;
+  unsigned char  *dst ;
+  long int        counts[3][R3_SIZE_A] ;
+  long int        offsets[R3_SIZE_A] ;
+  long int        i ;
+  unsigned int    key ;
+  const size_t    keyOff = (size_t) keyIndex * sizeof (unsigned int) ;
+
+  if (!base || N <= 1)
+    return 0 ;
+
+  dst = (unsigned char *) aligned_alloc (128, N * stride) ;
+  if (!dst)
+    messcrash ("malloc failure in saRadixSort3Signed") ;
+
+  /* Histogram: identical to unsigned version */
+  memset (counts, 0, sizeof (counts)) ;
+  for (i = 0 ; i < (long int) N ; i++)
+    {
+      memcpy (&key, src + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
+      counts[0][(key >> R3_SHIFT_A) & R3_MASK_A]++ ;
+      counts[1][(key >> R3_SHIFT_B) & R3_MASK_B]++ ;
+      counts[2][(key >> R3_SHIFT_C) & R3_MASK_C]++ ;
+    }
+
+  /* Pass 1 and Pass 2: identical to unsigned */
+  saR3Pass (src, dst, N, stride, keyOff, R3_SHIFT_A, R3_MASK_A, counts[0], offsets) ;
+  saR3Pass (dst, src, N, stride, keyOff, R3_SHIFT_B, R3_MASK_B, counts[1], offsets) ;
+
+  /* Pass 3 (bits 22..31): signed correction.
+   * Build prefix-sum starting from bucket 512 (MSB=1, negative values)
+   * then wrapping to bucket 0 (MSB=0, non-negative values).
+   * Bucket layout for R3_MASK_C = 1023 (10 bits):
+   *   buckets   0..511  : non-negative (bit 31 = 0)
+   *   buckets 512..1023 : negative     (bit 31 = 1)
+   * We want negatives first, so start prefix sum at 512.           */
+  {
+    long int pos = 0 ;
+    long int j ;
+    /* First: negatives (buckets 512..1023) */
+    for (j = R3_SIZE_C / 2 ; j < (long int) R3_SIZE_C ; j++)
+      { offsets[j] = pos ; pos += counts[2][j] ; }
+    /* Then: non-negatives (buckets 0..511) */
+    for (j = 0 ; j < (long int) R3_SIZE_C / 2 ; j++)
+      { offsets[j] = pos ; pos += counts[2][j] ; }
+
+    /* Scatter pass 3 inline (cannot reuse saR3Pass which builds its
+     * own prefix-sum internally from counts[] in unsigned order).  */
+#ifdef VECTORIZED_MEM_CPY
+    if (stride == 16)
+      {
+        for (i = 0 ; i < (long int) N ; i++)
+          {
+            unsigned char *sp     = src + (size_t) i * stride ;
+            unsigned int   bucket = (SA3_KEY_FROM_PTR (sp) >> R3_SHIFT_C) & R3_MASK_C ;
+            SA3_SCATTER_16 (dst + (size_t) offsets[bucket] * stride, sp) ;
+            offsets[bucket]++ ;
+          }
+      }
+    else if (stride == 32)
+      {
+        for (i = 0 ; i < (long int) N ; i++)
+          {
+            unsigned char *sp     = src + (size_t) i * stride ;
+            unsigned int   bucket = (SA3_KEY_FROM_PTR (sp) >> R3_SHIFT_C) & R3_MASK_C ;
+            SA3_SCATTER_32 (dst + (size_t) offsets[bucket] * stride, sp) ;
+            offsets[bucket]++ ;
+          }
+      }
+    else
+#endif /* VECTORIZED_MEM_CPY */
+      {
+        for (i = 0 ; i < (long int) N ; i++)
+          {
+            unsigned int   bucket ;
+            memcpy (&key, src + (size_t) i * stride + keyOff, sizeof (unsigned int)) ;
+            bucket = (key >> R3_SHIFT_C) & R3_MASK_C ;
+            memcpy (dst + (size_t) offsets[bucket] * stride,
+                    src + (size_t) i              * stride,
+                    stride) ;
+            offsets[bucket]++ ;
+          }
+      }
+  }
+
+  return dst ;
+}  /* saRadixSort3Signed */
+
 /**************************************************************/
 /**************************************************************/
 

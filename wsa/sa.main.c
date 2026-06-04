@@ -420,7 +420,11 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
   int maxTargetRepeats = pp->maxTargetRepeats  ;
   long int nIntronHits = 0 ;
   long int kMax = bigArrayMax (bb->sms) ;
+#ifdef USE_TORCH
+  TORCHMATCH *smp = bigArrp (bb->sms, kk0, TORCHMATCH) ;
+#else
   SEEDMATCH *smp = bigArrp (bb->sms, kk0, SEEDMATCH) ;
+#endif
   unsigned int pair = smp->read >> 2 ;
 
   hits = bb->hits =  bigArrayReCreate(bb->hits, 256, HIT);
@@ -951,6 +955,8 @@ static void export (const void *vp)
 /**************************************************************/
 /**************************************************************/
 #ifdef USE_TORCH
+pthread_mutex_t torchMutex ;   /* initialised once in saMain / saTorchInit path */
+
 /* ------------------------------------------------------------------ *
  * PATH A wrapper: CPU seeds already in bb->cwsN[p].                 *
  * Returns TRUE on success, FALSE if torch unavailable (CPU fallback).*
@@ -1160,28 +1166,37 @@ static void saSortJoinSort (const PP *pp, BB *bb)
       arrayMax (sOff) = iaMax ;
       arrayMax (sLen) = iaMax ;
 
-      /* PATH B: GPU seed extraction + join + sort */
+      /* PATH B: GPU seed extraction + join + sort -> TORCHMATCH     */
       {
-        long sm_count = 0 ;
-        long total_bases = arrayMax (bb->saParse->dnaArray) ;
-	cp0 = arrayp (bb->saParse->dnaArray, 0, unsigned char) ;
-	const unsigned int *sm_out =
+        long           tm_count    = 0 ;
+        long           total_bases = arrayMax (bb->saParse->dnaArray) ;
+        unsigned char *cp0 = arrayp (bb->saParse->dnaArray, 0, unsigned char) ;
+
+        pthread_mutex_lock (&torchMutex) ;
+
+        const uint32_t *tm_out =
           saTorchCodeJoinSort (pp->torch,
                                cp0,
                                total_bases,
-                               arrp (sOff, 0, uint32_t),
-                               arrp (sLen, 0, uint32_t),
+                               arrp  (sOff, 0, uint32_t),
+                               arrp  (sLen, 0, uint32_t),
                                iaMax,
-                               &sm_count) ;
-        if (sm_out && sm_count > 0)
+                               &tm_count) ;
+
+        if (tm_out && tm_count > 0)
           {
-            bb->sms = bigArrayHandleCreateNoInit (sm_count, SEEDMATCH, bb->h) ;
-            bigArrayMax (bb->sms) = sm_count ;
-            memcpy (bigArrp (bb->sms, 0, SEEDMATCH), sm_out,
-                    (size_t)sm_count * sizeof (SEEDMATCH)) ;
+            bb->sms = bigArrayHandleCreateNoInit (tm_count, TORCHMATCH, bb->h) ;
+            bigArrayMax (bb->sms) = tm_count ;
+            memcpy (bigArrp (bb->sms, 0, TORCHMATCH),
+                    tm_out,
+                    (size_t)tm_count * sizeof (TORCHMATCH)) ;
             smsDone = TRUE ;
           }
+
+        pthread_mutex_unlock (&torchMutex) ;
       }
+
+
     }
 #endif
   
@@ -2135,7 +2150,10 @@ int main (int argc, const char *argv[])
 #ifdef USE_TORCH
   p.torch = saTorchNew(bestGpu, p.seedLength, p.nIndex) ;
   if (p.torch)
-    p.gpu = TRUE ;
+    {
+      p.gpu = TRUE ;
+      pthread_mutex_init (&torchMutex, NULL) ;
+    }
 #endif
   /* check the existence of the input sequence files */
   inArray = saConfigGetRuns (&p, p.runStats) ;
