@@ -11,7 +11,7 @@ SHELL = /bin/sh
 
 ####  Program list 
 
-PGM = sortalign
+PGM = sortalign magic2
 
 #### EXTERNAL acedb programs linked against acelib
 

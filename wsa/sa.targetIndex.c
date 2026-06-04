@@ -232,7 +232,11 @@ static void storeTargetIndex (PP *pp, int tStep)
   /* export the code words */
   for (int k = 0 ; k < NN ; k++)
     {
+#ifdef USE_TORCH
+      fNam = hprintf (h, "%s/cwsN.%d", pp->indexName, k) ;
+#else      
       fNam = hprintf (h, "%s/cws.sortali.%d%s", pp->indexName, k, pp->noJump ? ".noJump" : "") ;
+#endif      
       bigArrayMapWrite (bbG->cwsN[k], fNam) ;
       nn += bigArrayMax (bbG->cwsN[k]) ;
 
@@ -394,12 +398,19 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
   iMax = bigArrayMax (cws) ;
   if (! iMax) iMax = 1 ; /* insure non void */
 
-  if (pp->noJump)
+  BOOL noJump = pp->noJump ;
+#ifdef USE_GPU
+  noJump = TRUE ;
+#endif
+#ifdef USE_TORCH
+  noJump = TRUE ;
+#endif
+  if (noJump)
     {
       aa = bigArrayHandleCopy (cws, h) ;
 #ifdef USE_TORCH
-      BigArray cwsU = bigArrayHandleCreate (iMax , unsigned int, h) ;
-      BigArray cwsP = bigArrayHandleCreate (iMax + 1, unsigned int, h) ;
+      BigArray cwsU = bb->cwsU[kk] = bigArrayHandleCreate (iMax , unsigned int, h) ;
+      BigArray cwsP = bb->cwsP[kk] = bigArrayHandleCreate (iMax + 1, unsigned int, h) ;
       unsigned int oldSeed = 0 ;
       unsigned int nU = 0 ;
       unsigned int nUMax = (0x1 << 31) ;
@@ -707,6 +718,10 @@ static long int saTargetIndexCreateDo (PP *pp)
 
   printf ("%s : write the index to disk\n" , timeBufShowNow (tBuf)) ;
   bbG->cwsN = halloc (NN * sizeof(BigArray), bbG->h) ;
+#ifdef USE_TORCH
+  bbG->cwsU = halloc (NN * sizeof(BigArray), bbG->h) ;
+  bbG->cwsP = halloc (NN * sizeof(BigArray), bbG->h) ;
+#endif
   for (int kk = 0 ; kk < NN ; kk++)
     {
       bbG->cwsN[kk] = GenomeAddSkips (pp, cwsN[kk], bbG, kk) ;
@@ -801,31 +816,40 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
     }
 
 #ifdef USE_TORCH
-  bbG->gpu = 1 ;
-  BigArray cwsU = 0, cwsP = 0 ;
-  
-  for (int k = 0 ; bbG->gpu && k < NN ; k++)
+  if (pp->gpu)
     {
-      NUP nup ;
-      
-      fNam = hprintf (h, "%s.%d", pp->tFileBinaryCwsUName, k) ;
-      cwsU = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed index */
+      BigArray cwsU = 0, cwsP = 0, cwsN = 0 ;
+      bbG->gpu = TRUE ;    
+      for (int k = 0 ; bbG->gpu && k < NN ; k++)
+	{
+	  fNam = hprintf (h, "%s/cwsU.%d", pp->indexName, k) ;
+	  cwsU = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed index */
+	  
+	  fNam = hprintf (h, "%s/cwsP.%d", pp->indexName, k) ;
+	  cwsP = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed offsets */
+	  
+	  fNam = hprintf (h, "%s/cwsN.%d", pp->indexName, k) ;
+	  cwsN = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed offsets */
 
-      fNam = hprintf (h, "%s.%d", pp->tFileBinaryCwsPName, k) ;
-      cwsP = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed offsets */
-
-      nup.cwsN = bbG->cwsN[k] ;
-      nup.cwsU = cwsU ;
-      nup.cwsP = cwsP ;
-      
-      if (! saTorchIndexUpload (k, NN, &nup))
-	bbG->gpu = 0 ;
-      ac_free (bbG->cwsN[k]) ;
-      ac_free (cwsU) ;
-      ac_free (cwsP) ;
+	  if (! cwsU || ! cwsP || ! cwsN)
+	    { bbG->gpu = FALSE ; break ; }
+	  long K = bigArrayMax (cwsU) ;
+	  long M = bigArrayMax (cwsN) ;
+	  unsigned int *vU = bigArrp (cwsU, 0, unsigned int) ;
+	  unsigned int *vP = bigArrp (cwsP, 0, unsigned int) ;
+          unsigned int *vN = (unsigned int *) bigArrp (cwsN, 0, CW) ;
+	  
+	  if (! saTorchIndexUpload (pp->torch, k, vU, K, vP, vN, M))
+	    bbG->gpu = FALSE ;
+	  
+	  ac_free (cwsU) ;
+	  ac_free (cwsP) ;
+	  ac_free (cwsN) ;
+	}
+      if (bbG->gpu)
+	for (int k = 0 ; bbG->gpu && k < NN ; k++)
+	  ac_free (bbG->cwsN[k]) ;
     }
-  ac_free (bbG->cwsN) ;
-
 #endif
   
 

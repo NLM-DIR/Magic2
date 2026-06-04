@@ -220,6 +220,7 @@ static void s2gSamStatsExports (const PP *pp, Array runStats)
 	   , s0->nBaseAligned1 + s0->nBaseAligned2
 	   , 100.0 * (s0->nBaseAligned1 + s0->nBaseAligned2) / (nRawBases + .000001)
 	   ) ;
+  aceOutf (ao, "%s\t%s\tWiggleCumul\t%ld\n", run, METHOD, pp->wiggleCumul) ;
   aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t", run, METHOD, s0->nErr) ;
   aceOutPercent (ao, 100.0 * s0->nMID /(.0001 + s0->nBaseAligned1 + s0->nBaseAligned2)) ;
   aceOut (ao, "%\tof_aligned_bases\n") ;
@@ -784,7 +785,7 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		   , confirmedPolyAsCountSites (pp, run)
 		   ) ;
 	  
-	  aceOutf (ao, "%s\twiggleCumul\ti\t%ld\n", runNam, up->wiggleCumul) ;
+	  aceOutf (ao, "%s\tWiggleCumul\ti\t%ld\n", runNam, up->wiggleCumul) ;
 	  aceOutf (ao, "%s\tErrors\tift\t%ld\t"
 		   , runNam
 		   , up->nErr

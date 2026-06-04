@@ -170,6 +170,7 @@ typedef struct bStruct {
   Array dnas ;           /* Array of const char Arrays */
   Array dnasR ;          /* Their reverse complement, only computed for the genome */
   Array quals ;
+  Array dnaOffsets, dnaLengths ;  /* used by torch target index */
   BigArray globalDna ;   /* concatenation of all sequence DNAs separated by blocks of nnn */
   BigArray globalDnaR ;  /* concatenation of all reverse sequences, in the same order */
   BigArray msps ;        /* BigArray of seedmatches */
@@ -338,6 +339,7 @@ typedef struct pStruct {
   int errRateMax ;       /* (--align case) max number of errors in seed extension */
   int OVLN ;
   int gpu ;
+  void *torch ;
   float maxSraGb ; /* max number of Gigabases in each SRA download, 0 : no max */
   BOOL sraOutFormatPE ; /* default: 4 lines per pair (>id1, atgc, >id2. atgc */
   BOOL deduplicate ;

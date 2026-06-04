@@ -126,9 +126,8 @@ ifneq (,$(findstring GPU,${ACEDB_MACHINE}))
     GPU_OBJS = sa.gpusort.o
 endif
 
-
 # "all" should always be the first target so that it is the default make action.
-all: sortalign
+all: sortalign magic2
 
 libsraread.a:
 	$(MAKE) -C ../wsra
@@ -136,6 +135,10 @@ libsraread.a:
 sortalign: $(SA_OBJS) libsraread.a $(GPU_OBJS)
 	$(LINKER) -o $@ -Wno-deprecated-gpu-targets $(GPU_OBJS) $(SA_OBJS) $(LINK_ACS) $(SRAINC) $(LIBS) libsraread.a $(SRALIBS)  libfree.a libtsfree.a libchannels.a libwego.a -lpthread  -ldl -lz -lbz2 -llzma
 # -lhts for bam
+magic2: sortalign
+	ln -sf sortalign magic2
+
+
 ###########################################################
 ########### end of     acedb makefile.sa  ################
 ###########################################################

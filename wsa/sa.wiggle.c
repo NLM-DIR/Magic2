@@ -42,7 +42,7 @@ static int wpOrder (const void *va, const void *vb)
 
 /*************************************************************************************/
 
-void wiggleCumulate (BigArray aaa, BigArray aa)
+static void wiggleCumulate (BigArray aaa, BigArray aa)
 {
   WP *up, *vp ;
   long int iMax = bigArrayMax (aa), iiMax = bigArrayMax (aaa) ;
@@ -54,8 +54,10 @@ void wiggleCumulate (BigArray aaa, BigArray aa)
       vp = bigArrp (aa, 0, WP) ;
       memcpy (up, vp, iMax * sizeof (WP)) ;
       vp = bigArrp (aa, iMax -1, WP) ;
-      if ((int)vp->pos < 0)
-	messcrash ("bad negative value in wiggleCumulate") ;
+      if ((int)vp->pos < 1)
+	vp->pos = 1 ;
+      if ((int)vp->pos < 1)
+	messcrash ("bad negative value in wiggleCumulate pos=%d ln=%d\n", vp->pos, vp->ln) ;
     }
   return ;
 } /* wiggleCumulate */
@@ -284,7 +286,7 @@ void saWiggleCumulate (const PP *pp, BB *bb)
 
 /**************************************************************/
 
-#define BUF_SIZE (4 * 1024 * 1024)  // 4MB - tune based on your system/disk
+#define BUF_SIZE (1 * 1024 * 1024)  // 4MB - tune based on your system/disk and << pthread_create stack default size 4M 
 
 #ifdef JUNK
 static void exportToFile (const char *fNam)
@@ -463,8 +465,9 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 		}
 	    }
 	}
-      
+#ifdef JUNK      
       if (0 && arrayMax(a))
+	
 	{
 	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
@@ -509,6 +512,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	    }
 	  fclose (fp) ;
 	}
+#endif
       
       if (arrayMax(a) && geneB)
 	{
@@ -526,7 +530,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      BOOL master = gb->flag & 0x10 ? TRUE : FALSE ;
 	      BOOL intronic = gb->flag & 0x1 ? TRUE : FALSE ;
 	      BOOL ambiguous = gb->flag & 0x8 ? TRUE : FALSE ;
-	      int friends = ambiguous ? gb->friends : 1 ;
+	      int friends = ambiguous && gb->friends > 0 ? gb->friends : 1 ;
 	      
 	      if (sameStrand)
 		{

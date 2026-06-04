@@ -649,7 +649,7 @@ static int wego_new_thread (void)
   pthread_mutex_init(&t->semaphore,NULL);
   
   pthread_mutex_lock(&thread_startup_lock);
-  if (1)
+  if (0)
     {   /*20260531  test, but no advantage is visible */
       pthread_attr_init (&attr) ;                              /* initialise it */
       pthread_attr_setstacksize (&attr, 8 * 1024 * 1024) ;

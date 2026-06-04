@@ -194,6 +194,8 @@ setenv SV     v116.81.18M.sam.may30     # new index masking in the genome the se
 setenv SVlast v116.81.18M.sam.may30    # 
 setenv SV     v117.82.18M.wig.jun1     # new index masking in the genome the seeds of mito/transposons
 setenv SVlast v117.82.18M.wig.jun1    # 
+#setenv SV     v118.81.18M.wig.jun1     # old genome not masked + wiggles
+#setenv SVlast v118.81.18M.wig.jun1    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -1347,6 +1349,22 @@ foreach tag (Non_compatible_pairs)
   echo "\nNon compatible pairs\t$SV" >> COMPARE/samStats.$SV.txt
   cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($4) >= 1 && $3 == tag) {printf("%s\t%s\ti\t%s\n", $1,$2,$4);}}' tag=$tag >> toto.tag
    cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "Non compatible pairs" >> COMPARE/samStats.$SV.txt
+  echo "\n" >> COMPARE/samStats.$SV.txt
+end
+
+
+foreach tag (WiggleCumul)
+  echo $tag
+  if (-e  toto.tag) \rm toto.tag
+  echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt
+  foreach run ($runsN)
+    foreach mm ($allMethods)
+      echo "$run\t$mm\ti\t0" >> toto.tag
+    end
+  end
+  echo "\nWiggleCumul\t$SV" >> COMPARE/samStats.$SV.txt
+  cat RESULTS/allSamStats | gawk -F '\t' '{gsub (" ", "_",$3);if (length($4) >= 1 && $3 == tag) {printf("%s\t%s\ti\t%s\n", $1,$2,$4);}}' tag=$tag >> toto.tag
+   cat toto.tag | bin/tsf --sampleSelect $tsfMethods    -I tsf -O table --title "WiggleCumul" >> COMPARE/samStats.$SV.txt
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 

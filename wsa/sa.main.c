@@ -950,6 +950,88 @@ static void export (const void *vp)
 
 /**************************************************************/
 /**************************************************************/
+#ifdef USE_TORCH
+/* ------------------------------------------------------------------ *
+ * PATH A wrapper: CPU seeds already in bb->cwsN[p].                 *
+ * Returns TRUE on success, FALSE if torch unavailable (CPU fallback).*
+ * ------------------------------------------------------------------ */
+BOOL saTorchWrapJoinSort (const PP *pp, BB *bb)
+{
+  int p, NN = pp->nIndex ;
+  const uint32_t *cws_ptr[NN] ;
+  long            cws_n  [NN] ;
+  const uint32_t  *sm_out ;
+  long            sm_count = 0 ;
+
+  if (!pp->torch) return FALSE ;
+
+  for (p = 0 ; p < NN ; p++)
+    {
+      if (bb->cwsN && bb->cwsN[p] && bigArrayMax (bb->cwsN[p]) > 0)
+        {
+          cws_ptr[p] = bigArrp (bb->cwsN[p], 0, uint32_t) ;
+          cws_n  [p] = bigArrayMax (bb->cwsN[p]) ;
+        }
+      else
+        {
+          cws_ptr[p] = NULL ;
+          cws_n  [p] = 0 ;
+        }
+    }
+
+  sm_out = saTorchJoinSort (pp->torch, NN,
+                             cws_ptr, cws_n, &sm_count) ;
+  if (!sm_out) return FALSE ;
+
+  /* loan is valid until next torch call — copy immediately          */
+  bb->sms = bigArrayHandleCreateNoInit (sm_count, SEEDMATCH, bb->h) ;
+  bigArrayMax (bb->sms) = sm_count ;
+  memcpy (bigArrp (bb->sms, 0, SEEDMATCH),
+          sm_out,
+          (size_t)sm_count * sizeof (SEEDMATCH)) ;
+
+  return TRUE ;
+}
+
+/* ------------------------------------------------------------------ *
+ * PATH B wrapper: GPU seed extraction from bb->globalDna.           *
+ * Requires bb->dnaOffsets and bb->dnaLengths pre-built by parser.   *
+ * Returns TRUE on success, FALSE → CPU fallback.                    *
+ * ------------------------------------------------------------------ */
+BOOL saTorchWrapCodeJoinSort (const PP *pp, BB *bb)
+{
+  const uint32_t *sm_out ;
+  long           sm_count = 0 ;
+
+  if (!pp->torch) return FALSE ;
+  if (!bb->globalDna || !bb->dnaOffsets || !bb->dnaLengths) return FALSE ;
+
+  long total_bases = bigArrayMax (bb->globalDna) ;
+  int  iaMax       = arrayMax (bb->dnaOffsets) ;
+
+  sm_out = saTorchCodeJoinSort (
+               pp->torch,
+               bigArrp (bb->globalDna, 0, uint8_t),
+               total_bases,
+               arrp (bb->dnaOffsets, 0, uint32_t),
+               arrp (bb->dnaLengths, 0, uint32_t),
+               iaMax,
+               &sm_count) ;
+
+  if (!sm_out) return FALSE ;
+
+  bb->sms = bigArrayHandleCreateNoInit (sm_count, SEEDMATCH, bb->h) ;
+  bigArrayMax (bb->sms) = sm_count ;
+  memcpy (bigArrp (bb->sms, 0, SEEDMATCH),
+          sm_out,
+          (size_t)sm_count * sizeof (SEEDMATCH)) ;
+
+  return TRUE ;
+}
+
+#endif /* USE_TORCH */
+/**************************************************************/
+/**************************************************************/
 
 #ifdef USE_GPU
 static pthread_mutex_t gpu_mutex = PTHREAD_MUTEX_INITIALIZER ;
@@ -1046,12 +1128,58 @@ static void saSortJoinSort (const PP *pp, BB *bb)
 #endif   
 
 #ifdef USE_TORCH
-  /* This implemetation does not require to sort the bb->cwsN[]
-   * It does not merge sorted arrays but does a bucket search
-   * which is better for a GPU
-   */
-  if (! smsDone && bb->length > (0x1 << 21))
-    smsDone = saTorchJoinSort (pp, bb) ;  /* C++:  wsa_torch/sa.torch.cpp */
+  if (! smsDone && pp->torch && bb->length > (0x1 << 21))
+    {
+      /* Prepare per-read offset and length arrays for the GPU seed extractor */
+      int ia, iaMax = arrayMax (bb->dnas) ;
+      const int minLn = pp->seedLength ;
+      unsigned char *cp0 = bb->saParse->dnaBuffer ;
+
+      Array sOff = bb->dnaOffsets = arrayHandleCreate (iaMax, unsigned int, bb->h) ;
+      Array sLen = bb->dnaLengths = arrayHandleCreate (iaMax, unsigned int, bb->h) ;
+
+      array (sOff, 0, unsigned int) = 0 ;   /* sentinel */
+      array (sLen, 0, unsigned int) = 0 ;
+
+      for (ia = 1 ; ia < iaMax ; ia++)
+        {
+          Array dna = arr (bb->dnas, ia, Array) ;
+          if (dna)
+            {
+              unsigned int ln = arrayMax (dna) ;
+              if (ln >= minLn)
+                {
+                  unsigned char *cp = arrp (dna, 0, unsigned char) ;
+                  array (sOff, ia, unsigned int) = (unsigned int)(cp - cp0) ;
+                  array (sLen, ia, unsigned int) = ln ;
+                }
+            }
+        }
+      arrayMax (sOff) = iaMax ;
+      arrayMax (sLen) = iaMax ;
+
+      /* PATH B: GPU seed extraction + join + sort */
+      {
+        long sm_count = 0 ;
+        long total_bases = bigArrayMax (bb->globalDna) ;
+        const unsigned int *sm_out =
+          saTorchCodeJoinSort (pp->torch,
+                               bigArrp (bb->globalDna, 0, unsigned char),
+                               total_bases,
+                               arrp (sOff, 0, uint32_t),
+                               arrp (sLen, 0, uint32_t),
+                               iaMax,
+                               &sm_count) ;
+        if (sm_out && sm_count > 0)
+          {
+            bb->sms = bigArrayHandleCreateNoInit (sm_count, SEEDMATCH, bb->h) ;
+            bigArrayMax (bb->sms) = sm_count ;
+            memcpy (bigArrp (bb->sms, 0, SEEDMATCH), sm_out,
+                    (size_t)sm_count * sizeof (SEEDMATCH)) ;
+            smsDone = TRUE ;
+          }
+      }
+    }
 #endif
   
   /* fall back on CPU */
@@ -1504,7 +1632,7 @@ int main (int argc, const char *argv[])
    * adding --numactl to the command line to prevent recursion.
    *
    * If a CUDA-capable GPU is detected, magic2_gpu is spawned instead of magic2,
-   * passing --gpu_device=N to select the device with the most free memory.
+   * passing --gpu_device N to select the device with the most free memory.
    * This respawn happens even on single-node machines where NUMA binding is not needed.
    *
    * This system could be useful in other C programs using multithreading and large memory.
@@ -1558,7 +1686,7 @@ int main (int argc, const char *argv[])
 
 	  /* Tell magic2  which device to use. */
 	  if (ngpu > 0 && bestGpu >= 0)
-	    vtxtPrintf (txt, " --gpu_device=%d", bestGpu) ;
+	    vtxtPrintf (txt, " --gpu_device %d", bestGpu) ;
 
 	  fprintf (stderr, "%s\n", vtxtPtr (txt)) ;
 	  return system (vtxtPtr (txt)) ;
@@ -2001,7 +2129,11 @@ int main (int argc, const char *argv[])
   /*******************  otherwise verify the existence of the indexes ********************/
   
   p.nIndex = NN = saConfigCheckTargetIndex (&p) ;
-
+#ifdef USE_TORCH
+  p.torch = saTorchNew(bestGpu, p.seedLength, p.nIndex) ;
+  if (p.torch)
+    p.gpu = TRUE ;
+#endif
   /* check the existence of the input sequence files */
   inArray = saConfigGetRuns (&p, p.runStats) ;
   n = dictMax (p.runDict) + 1 ;
@@ -2268,10 +2400,10 @@ int main (int argc, const char *argv[])
     }
 
 #ifdef USE_GPU
-  GPUIndexFree (pp->bbG.gpu_idx); /* release the genome index on the GPU */
+  GPUIndexFree (p.bbG.gpu_idx); /* release the genome index on the GPU */
 #endif
 #ifdef USE_TORCH
-  saTorchIndexFree () ; /* release the genome index on the GPU */
+  saTorchFree (p.torch) ; /* release the genome index on the GPU */
 #endif
 
   for (int k = 0 ; k < NN ; k++)
