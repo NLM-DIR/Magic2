@@ -101,7 +101,8 @@ void saConfigIsOutDirWritable (PP *pp)
 	    cmd = hprintf (h, "mkdir -p %s  %s/hits %s/wiggles", buf, buf, buf) ;
 	  else
 	    cmd = hprintf (h, "mkdir -p %s %s/hits", buf, buf) ;
-	  system (cmd) ;
+	  if (system (cmd))
+	    messcrash ("Failed to create output files in deratory %s\n", buf) ;
 	}
       pp->outFileName = hprintf (pp->h, "%s/", buf) ;
       

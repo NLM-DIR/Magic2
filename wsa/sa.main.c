@@ -1576,7 +1576,8 @@ int main (int argc, const char *argv[])
     }     
 
   p.debug  = getCmdLineBool (&argc, argv, "--debug") ;
-      
+  BOOL request_GPU = getCommandLineBool (&argc, argv, "--gpu") ;
+  
   /**************************  SRA downloader *********************************/
   
   {{  /* --sraDownload SRR1,SRR2,,...
@@ -1666,7 +1667,7 @@ int main (int argc, const char *argv[])
     {
       int node    = saGetBestNumaNode () ;   /* -1 on single-node machine */
       int bestGpu = -1 ;
-      int ngpu    = saGetGpuInfo (&bestGpu) ;
+      int ngpu    = (request_GPU ? gpusaGetGpuInfo (&bestGpu) : 0) ;
 
       if (node == -1) node = 0 ;    /* ~200 ms, always respawn for consistency */
 
@@ -2519,7 +2520,11 @@ int main (int argc, const char *argv[])
 	ac_free (p.bbG.h) ;
     }
   /* wego_log is the thread-safe way to pass messages to stderr */
-  if (p.justStats && p.outFileName)  system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)) ;
+  if (p.justStats && p.outFileName)
+    {
+      if (system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)))
+	;
+    }
   saSetGetAdaptors (-999999, 0, 0, 0, 0) ;
   oligoEntropy (0, -999999, 0) ;
 

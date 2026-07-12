@@ -126,23 +126,28 @@ National Library of Medicine, National Institutes of Health\\
 \section{Overview}
 % ===============================================================
 
-Magic2 is an accurate, sensitive RNA deep-sequencing aligner designed for
+Magic2 is an accurate, sensitive, RNA deep-sequencing analyzer designed for
 both short reads (Illumina paired-end) and long reads (PacBio, Nanopore,
 Roche).  In a single pass it produces alignment files, gene expression
-counts, intron support tables, poly-A addition sites, coverage plots, and
+counts, intron support tables, poly-A addition sites, coverage plots,
+transcript-ends candidates and
 quality-control metrics.
 
 \textbf{Key capabilities:}
 \begin{itemize}
-  \item Aligns reads against a raw genome or an annotated genome (GTF/GFF).
-  \item Reads local FASTA/FASTQ files (gzip-compressed or plain) or streams
-        data on the fly from the NCBI Short Read Archive (SRA).
-  \item Automatically recognises paired-end vs.\ single-end reads, adaptor
-        sequences, sequencing technology, and read length---no strategy
-        parameters required.
-  \item Adapts its parallelism to the available hardware; offloads work to
-        a GPU when one is present.
-  \item Exports alignments in BAM, Magic \code{.hits}, or tabular format.
+\item Aligns reads against a raw genome or an annotated genome (GTF/GFF).
+\item Reads local FASTA/FASTQ files (gzip-compressed or plain) or streams
+  data on the fly from the NCBI Short Read Archive (SRA).
+\item Automatically recognises adaptor
+  sequences, sequencing technology, and read length---no strategy
+  parameters required.
+\item Handles paired-end reads presented in separate files, or
+  preferably in a single interleaved file.
+\item Exports alignments in SAM, BAM, Magic \code{.hits}, or tabular format.
+\item Adapts its parallelism to the available hardware--- no thread count
+  parameter needed
+\item May offload on request part of the analysis to a GPU when one is present,
+  although the performace gains are so far marginal.
 \end{itemize}
 
 \begin{notebox}
@@ -527,14 +532,27 @@ If the run is already cached, it will not be downloaded again.
 
 \subsection{Processing multiple runs in parallel}
 
-On large multi-core machines the index is memory-mapped and shared between
-concurrent Magic2 processes.  To analyse three runs in parallel on a 4 core machine
-(which probably has 96 CPUs) :
+To process multiple runs in parallel
+construct a run manifest \code{-I r.iConfig} as described in  (Section~\ref{sec:rconfig}).
+Data packets from all the runs will be processed in parallel, each run exporting its own
+results in the global \code{-o outDir} directory. If all runs are streamed from SRA,
+you can just list them on the command line \code {magic2 -srr SRR1234,SRR4567,...} 
+as shown in (Section~\ref{sec:qcsurvey}).
+
+\subsection{Processing multiple sets runs in parallel on a multicore machine}
+
+On a large multi-core linux machine (such machine often have 48, or 96 or even more CPUs),
+Magic selects the least buzy core, and runs just on that one core. The purpose is to
+eliminate data traffic accross cores, which would significantly affect the performances.
+But this means that on a 4 core machine, with say 96 CPUs, 3 cores remain idle.
+As the index is memory-mapped and shared between
+concurrent Magic2 processes, you may want on a 4 core machine to run 4 sets of runs in parallel
+using the script:
 \begin{lstlisting}
 magic2 -x IDX.T2T --srr SRR1234 --full -o out_SRR1234 &
-sleep 1 ; magic2 -x IDX.T2T --srr SRR1235 --full -o out_SRR1235 &
-sleep 1 ; magic2 -x IDX.T2T --srr SRR1236 --full -o out_SRR1236 &
-sleep 1 ; magic2 -x IDX.T2T --srr SRR1237 --full -o out_SRR1237 &
+sleep 1 ; magic2 -x IDX.T2T -I r1.iConfig --full -o out_SRR1235 &
+sleep 1 ; magic2 -x IDX.T2T -I r1.iConfig --full -o out_SRR1236 &
+sleep 1 ; magic2 -x IDX.T2T -I r1.iConfig --full -o out_SRR1237 &
 \end{lstlisting}
 
 \begin{notebox}
@@ -542,7 +560,14 @@ sleep 1 ; magic2 -x IDX.T2T --srr SRR1237 --full -o out_SRR1237 &
 independent output directories.  Total RAM usage is the index size plus
 per-run working memory.
 Thanks to the 1 second launching delays, each process will
-automatically run on a different (multi-CPU) core.
+automatically select a different (multi-CPU) core.
+
+To know the number of cores and CPUs available on your machine, type the
+command:
+
+\begin{lstlisting}
+  ls -lsd  /sys/devices/system/node/node*
+\end{lstlisting}
 \end{notebox}
 
 % ===============================================================
@@ -980,6 +1005,7 @@ magic2 -x IDX -i reads.fastq.gz -o /tmp/magic2_test/
 % ===============================================================
 
 \subsection{Quality survey of SRA runs without storing data}
+\label{sec:qcsurvey}
 
 You want to assess library quality across six SRA runs before deciding
 which to analyse further, without consuming disk space.

@@ -799,7 +799,7 @@ void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
   BB b ;
   BOOL debug = FALSE ;
   int BMAX = isGenome ? 1000000 : (pp->BMAX << 20) ;
-  long int size, size2 ;
+  long int size = 0, size2 = 0 ;
   int nPuts = 0 ;
   DnaFormat format = rc->format ;
   const char *sraID = rc ? rc->fileName1 : tc->fileName ;
