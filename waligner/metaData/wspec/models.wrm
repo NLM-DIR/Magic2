@@ -428,6 +428,8 @@
                           Unaligned  UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
       Rejected_too_many_hits UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
       Alignments Perfect_reads UNIQUE Float UNIQUE Int // same number twice but in large group the Int overflow
+                 Complex_reads UNIQUE Float UNIQUE Int // same number twice but in large group the Int overflow
+                 Partial_reads UNIQUE Float UNIQUE Int // same number twice but in large group the Int overflow
                  Count_mismatch Int UNIQUE Float REPEAT
                  Per_cent_mismatch Int UNIQUE Float REPEAT
                  Per_cent_aligned Int UNIQUE Float REPEAT

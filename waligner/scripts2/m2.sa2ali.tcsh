@@ -21,7 +21,7 @@ set ff=$dd/$run.overhang.3prime.tsf
 
 set ff=$dd/runStats.tsf
 cat $ff.1 | gawk -F '\t' '/Length_distribution_1_5_50_95_99_mode_av/{printf("Length_distribution_1_5_50_95_99_mode_av %s %s %s %s %s %s %s\n", $4,$5,$6,$7,$8,$9,$10);}' >> $toto
-cat $ff.1 | gawk -F '\t'  '/Reads_aligned_in_class/{s=$10;p=$6;m=$8;cl=substr($2,24);if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
+cat $ff.1 | gawk -F '\t'  '/Reads_aligned_in_class/{s=$10;gsub(/%/,"",s);p=$6;m=$8;cl=substr($2,24);if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
 cat $ff.1 | gawk -F '\t'  '/Reads_aligned_in_class/{cl=substr($2,24);nr[cl]=$6+$8} /Bases_aligned_in_class/{cl=substr($2,24);nb[cl]=$6+$8;printf("nh_Ali %s %s seq %s tag %.3g kb %.2f bp\n",cl,nr[cl],nr[cl],nb[cl]/1000,nb[cl]/nr[cl]);}' >> $toto
 cat $ff.1 | gawk -F '\t'  '/Reads_aligned_once/{nn[1]=$4;s[1]=$5;}/Reads_multi_aligned__/{cl=substr($2,22)+0;nn[cl]=$4;s[cl]=$5;}END{printf("Unicity any ");for(cl=1;cl<=10;cl++)printf(" %.3g", nn[cl]);printf("\n");}' >> $toto
 
@@ -30,10 +30,10 @@ set gg=$dd/geneCounts.tsf
 set fw=$dd/wiggleCumuls.tsf
 if (-e $fw.gz) gunzip -f $fw.gz
 if (-e $fw) then
-  cat $fw | gawk -F '\t' '/^Any/{CDS=$5;UTR=$6;intronic=$7;intergenic=$8;if (CDS+0>0)printf("S_1_CDS %.3f Mb aligned\n", CDS/1000000);if (UTR+0>0)printf("S_1_UTR %.3f Mb aligned\n", UTR/1000000);if (intronic+0>0)printf("S_1_intronic %.3f Mb aligned\n", intronic/1000000);if (intergenic+0>0)printf("S_1_intergenic %.3f Mb aligned\n", intergenic/1000000);}' >> $toto
+  cat $fw | gawk -F '\t' '/^Any/{CDS=$5;UTR=$6;intronic=$7;intergenic=$8;if (CDS+0>0)printf("S_1_CDS %.3f Mb_aligned\n", CDS/1000000);if (UTR+0>0)printf("S_1_UTR %.3f Mb_aligned\n", UTR/1000000);if (intronic+0>0)printf("S_1_intronic %.3f Mb_aligned\n", intronic/1000000);if (intergenic+0>0)printf("S_1_intergenic %.3f Mb_aligned\n", intergenic/1000000);}' >> $toto
 endif
 
-cat $ff | gawk -F '\t' '/Unaligned_reads/{nr=$4;}/Unaligned_bases/{nb=$4;printf("Unaligned %s Seq %d Tags %.3g kb\n", nr, nr, nb/1000) ;}' >> $toto
+cat $ff | gawk -F '\t' '/Unaligned_reads/{nr=$4;}/Unaligned_bases/{nb=$4;printf("Unaligned %d Seq %d Tags %.3g kb\n", nr, nr, nb/1000) ;}' >> $toto
 
 cat $ff | gawk -F '\t' '/Perfect_reads/{nr=$4;printf("Perfect_reads %.3g %d\n", nr, nr) ;}' >> $toto
 cat $ff | gawk -F '\t' '/Complex_reads/{nr=$4;printf("Complex_reads %.3g %d\n", nr, nr) ;}' >> $toto
@@ -56,6 +56,7 @@ set ff=$dd/$run.letterProfile.tsf
 if (-e $ff) then
   echo "\nAli $run\nRun $run" >> $toto
   cat $ff | gawk -F '\t' '/^#/{next;}{fr=substr($1,length($1),1);if(fr=="r")fr="f2";else fr="f1"; if($2+0>0)printf("Letter_profile %s %d %d %d %d %d %d %d %d %d %d %d\n",fr,$2,$10,$11,$12,$13,$14,$4,$5,$6,$7,$8)}' >> $toto
+  echo "\n" >> $toto
 endif
 
 set ff=$dd/runErrors.tsf

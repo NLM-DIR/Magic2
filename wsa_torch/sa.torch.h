@@ -77,7 +77,7 @@ extern "C" {
  * ------------------------------------------------------------------ */
 
 /*
- * TORCHMATCH  — 5 fields, 20 bytes.
+ * TORCHMATCH 5 fields, 20 bytes.
  * Sorted by read (field 0) ascending before return, so pairs are
  * grouped and mate-1 precedes mate-2 (same guarantee as SEEDMATCH).
  * Under USE_TORCH, sa.align.c reads this struct directly.

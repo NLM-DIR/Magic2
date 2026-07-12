@@ -339,7 +339,16 @@ typedef struct pStruct {
   int errRateMax ;       /* (--align case) max number of errors in seed extension */
   int OVLN ;
   int gpu ;
+#ifdef USE_TORCH
+#define MAX_GPU 4
+  void           *torch ;
+  void           *torchDev[MAX_GPU] ;
+  pthread_mutex_t torchMutex[MAX_GPU] ;
+  int             nGpu ;
+  atomic_int      torchNext ;
+#else
   void *torch ;
+#endif
   float maxSraGb ; /* max number of Gigabases in each SRA download, 0 : no max */
   BOOL sraOutFormatPE ; /* default: 4 lines per pair (>id1, atgc, >id2. atgc */
   BOOL deduplicate ;
@@ -382,6 +391,19 @@ typedef struct seedMatchStruct {
   unsigned int targetFlags ; /* copied from target index */
 } __attribute__((aligned(32))) SEEDMATCH ;
 
+#endif
+/* patch2: add after the SEEDMATCH struct in sa.h */
+/* place this block just before the #endif of JUNKINCOMMON, or after */
+/* the closing brace of seedMatchStruct                              */
+
+#ifdef USE_TORCH7bold
+typedef struct torchMatchStruct {
+  unsigned int read ;        /* read CW nam  (ia<<1 | strand_bit) */
+  unsigned int x1 ;          /* read CW pos  (1-based)            */
+  unsigned int target ;      /* genome CW nam                     */
+  unsigned int a1 ;          /* genome CW pos (1-based)           */
+  unsigned int targetFlags ; /* genome CW flags                   */
+} TORCHMATCH ;           /* 20 bytes, no padding              */
 #endif
 
 typedef struct nupStruct {

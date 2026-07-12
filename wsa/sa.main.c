@@ -955,8 +955,8 @@ static void export (const void *vp)
 /**************************************************************/
 /**************************************************************/
 #ifdef USE_TORCH
-pthread_mutex_t torchMutex ;   /* initialised once in saMain / saTorchInit path */
-
+pthread_mutex_t torchMutex[16] ;   /* initialised once in saMain / saTorchInit path */
+static atomic_int      torchNext ;
 /* ------------------------------------------------------------------ *
  * PATH A wrapper: CPU seeds already in bb->cwsN[p].                 *
  * Returns TRUE on success, FALSE if torch unavailable (CPU fallback).*
@@ -1129,12 +1129,12 @@ static void saSortJoinSort (const PP *pp, BB *bb)
   /* This implemetation does not require to sort the bb->cwsN[]
    * The sorting is done on the GPU
    */
-  if (! smsDone && bb->length > (0x1 << 21))
+  if (0 && ! smsDone && bb->length > (0x1 << 21))
     smsDone = saGpuSortJoinSort (pp, bb) ;
 #endif   
 
 #ifdef USE_TORCH
-  if (! smsDone && pp->torch && bb->length > (0x1 << 21))
+  if (! smsDone && pp->torch && bb->length > (0x1 << 1))  // << 21
     {
       /* Prepare per-read offset and length arrays for the GPU seed extractor */
       int ia, iaMax = arrayMax (bb->dnas) ;
@@ -1171,18 +1171,19 @@ static void saSortJoinSort (const PP *pp, BB *bb)
         long           tm_count    = 0 ;
         long           total_bases = arrayMax (bb->saParse->dnaArray) ;
         unsigned char *cp0 = arrayp (bb->saParse->dnaArray, 0, unsigned char) ;
-
-        pthread_mutex_lock (&torchMutex) ;
-
+	
+        int g = (int)(atomic_fetch_add (&torchNext, 1) % (unsigned)pp->nGpu) ;
+        pthread_mutex_lock (&torchMutex[g]) ;
+	
         const uint32_t *tm_out =
-          saTorchCodeJoinSort (pp->torch,
+          saTorchCodeJoinSort (pp->torchDev[g],
                                cp0,
                                total_bases,
                                arrp  (sOff, 0, uint32_t),
                                arrp  (sLen, 0, uint32_t),
                                iaMax,
                                &tm_count) ;
-
+ 
         if (tm_out && tm_count > 0)
           {
             bb->sms = bigArrayHandleCreateNoInit (tm_count, TORCHMATCH, bb->h) ;
@@ -1192,10 +1193,11 @@ static void saSortJoinSort (const PP *pp, BB *bb)
                     (size_t)tm_count * sizeof (TORCHMATCH)) ;
             smsDone = TRUE ;
           }
-
-        pthread_mutex_unlock (&torchMutex) ;
+	
+        pthread_mutex_unlock (&torchMutex[g]) ;
       }
-
+ 
+      
 
     }
 #endif
@@ -2148,13 +2150,18 @@ int main (int argc, const char *argv[])
   
   p.nIndex = NN = saConfigCheckTargetIndex (&p) ;
 #ifdef USE_TORCH
+  bestGpu = 0 ;
   p.torch = saTorchNew(bestGpu, p.seedLength, p.nIndex) ;
+  p.nGpu = 1 ;
   if (p.torch)
     {
       p.gpu = TRUE ;
-      pthread_mutex_init (&torchMutex, NULL) ;
+      for (int g = 0 ; g < 16 ; g++)
+	pthread_mutex_init (&torchMutex[g], NULL) ;
     }
 #endif
+
+
   /* check the existence of the input sequence files */
   inArray = saConfigGetRuns (&p, p.runStats) ;
   n = dictMax (p.runDict) + 1 ;
@@ -2424,7 +2431,13 @@ int main (int argc, const char *argv[])
   GPUIndexFree (p.bbG.gpu_idx); /* release the genome index on the GPU */
 #endif
 #ifdef USE_TORCH
-  saTorchFree (p.torch) ; /* release the genome index on the GPU */
+  /* release the genome index on the GPU */
+  {
+    int g ;
+    for (g = 0 ; g < p.nGpu ; g++)
+      saTorchFree (p.torchDev[g]) ;
+    p.torch = NULL ;
+  }
 #endif
 
   for (int k = 0 ; k < NN ; k++)

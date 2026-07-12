@@ -816,36 +816,35 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
     }
 
 #ifdef USE_TORCH
-  if (pp->gpu)
+ if (pp->gpu)
     {
       BigArray cwsU = 0, cwsP = 0, cwsN = 0 ;
-      bbG->gpu = TRUE ;    
-      for (int k = 0 ; bbG->gpu && k < NN ; k++)
-	{
-	  fNam = hprintf (h, "%s/cwsU.%d", pp->indexName, k) ;
-	  cwsU = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed index */
-	  
-	  fNam = hprintf (h, "%s/cwsP.%d", pp->indexName, k) ;
-	  cwsP = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ; /* memory map the seed offsets */
-	  
-	  cwsN = bbG->cwsN[k] ;
-
-	  if (! cwsU || ! cwsP || ! cwsN)
-	    { bbG->gpu = FALSE ; break ; }
-	  long K = bigArrayMax (cwsU) ;
-	  long M = bigArrayMax (cwsN) ;
-	  unsigned int *vU = bigArrp (cwsU, 0, unsigned int) ;
-	  unsigned int *vP = bigArrp (cwsP, 0, unsigned int) ;
+      int allOk = TRUE ;
+      for (int k = 0 ; allOk && k < NN ; k++)
+        {
+          fNam = hprintf (h, "%s/cwsU.%d", pp->indexName, k) ;
+          cwsU = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ;
+          fNam = hprintf (h, "%s/cwsP.%d", pp->indexName, k) ;
+          cwsP = bigArrayMapRead (fNam, unsigned int, READONLY, 0) ;
+          cwsN = bbG->cwsN[k] ;
+          if (!cwsU || !cwsP || !cwsN) { allOk = FALSE ; break ; }
+          long K = bigArrayMax (cwsU) ;
+          long M = bigArrayMax (cwsN) ;
+          unsigned int *vU = bigArrp (cwsU, 0, unsigned int) ;
+          unsigned int *vP = bigArrp (cwsP, 0, unsigned int) ;
           unsigned int *vN = (unsigned int *) bigArrp (cwsN, 0, CW) ;
-	  
-	  if (! saTorchIndexUpload (pp->torch, k, vU, K, vP, vN, M))
-	    bbG->gpu = FALSE ;
-	  
-	  ac_free (cwsU) ;
-	  ac_free (cwsP) ;
 
-	}
+          /* upload to every initialised GPU */
+          for (int g = 0 ; g < pp->nGpu ; g++)
+            if (! saTorchIndexUpload (pp->torchDev[g], k, vU, K, vP, vN, M))
+              { allOk = FALSE ; break ; }
+
+          ac_free (cwsU) ;
+          ac_free (cwsP) ;
+        }
+      bbG->gpu = allOk ;
     }
+  
 #endif
   
 

@@ -4707,7 +4707,7 @@ goto phaseLoop
 
 phaseg4:
   echo "phase g4: Export gene expression tables  in RESULTS/Expression and analyse differential expression according to the Compare class"
-  scripts2/geneindex.tcsh g4
+  scripts/geneindex.tcsh g4
 
 goto phaseLoop
 
@@ -4817,7 +4817,7 @@ goto phaseLoop
 phaseg4sp:
 phaseg4spx:
   echo "phase g4: Export gene_sponge expression tables  in RESULTS/Expression and analyse differential expression according to the Compare class"
-  scripts2/geneindex.tcsh $phase
+  scripts/geneindex.tcsh $phase
 
 goto phaseLoop
 
@@ -5116,7 +5116,7 @@ gunzip -c RESULTS/Expression/unique/AGLuK/NB.AGLuK.MA.u.ace.gz |  gawk '/Run_/{g
 phaseg5:
   echo "phase g5: Parse the geneindex in GeneindexDB"
 
-  scripts2/geneindex.tcsh g5
+  scripts/geneindex.tcsh g5
 
 goto phaseLoop
 
