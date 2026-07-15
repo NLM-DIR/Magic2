@@ -917,14 +917,14 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 			 , 100.0 * up->nBasesAlignedPerTargetClass[ii]/(.000001 + up->nBasesAlignedPerTargetClass[0]) 
 			 ) ;
 	    }
-	  int f0 = up->RF[0] ;
-	  int r0 = up->RR[0] ;
-	  int t0 = f0 + r0 ;
+	  long int f0 = up->RF[0] ;
+	  long int r0 = up->RR[0] ;
+	  long int t0 = f0 + r0 ;
 	  for (int ii = 1 ; ii < 256 ; ii++)
 	    {
-	      int f = up->RF[ii] ;
-	      int r = up->RR[ii] ;
-	      int t = f + r ;
+	      long int f = up->RF[ii] ;
+	      long int r = up->RR[ii] ;
+	      long int t = f + r ;
 	      if (t)
 		{	
 		  aceOutf (ao, "%s\tReads_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand,\t%ld\tnegative_strand,\t", runNam, ii, t, f, r) ;

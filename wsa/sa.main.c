@@ -391,7 +391,7 @@ static long int  matchSeeds (const PP *pp, const BB *bbG, BB *bb)
 	      j++ ; rw++ ;
 	    }
 	}
-      bigArrayDestroy (bb->cwsN[kk]) ; /* the read seeds are no longer needed */
+      bigArrayDestroy (bb->cwsN[kk]) ; bb->cwsN[kk] = 0 ; /* the read seeds are no longer needed */
     }
 
   if (pp->debug)
@@ -1576,7 +1576,7 @@ int main (int argc, const char *argv[])
     }     
 
   p.debug  = getCmdLineBool (&argc, argv, "--debug") ;
-  BOOL request_GPU = getCommandLineBool (&argc, argv, "--gpu") ;
+  BOOL request_GPU = getCmdLineBool (&argc, argv, "--gpu") ;
   
   /**************************  SRA downloader *********************************/
   
@@ -1667,7 +1667,7 @@ int main (int argc, const char *argv[])
     {
       int node    = saGetBestNumaNode () ;   /* -1 on single-node machine */
       int bestGpu = -1 ;
-      int ngpu    = (request_GPU ? gpusaGetGpuInfo (&bestGpu) : 0) ;
+      int ngpu    = (request_GPU ? saGetGpuInfo (&bestGpu) : 0) ;
 
       if (node == -1) node = 0 ;    /* ~200 ms, always respawn for consistency */
 
@@ -2128,8 +2128,11 @@ int main (int argc, const char *argv[])
   p.targetClassDict = dictHandleCreate (16, p.h) ;
 
   dictAdd (p.targetClassDict, "rRNA", 0) ;
-  dictAdd (p.targetClassDict, "Mito", 0) ;
+  dictAdd (p.targetClassDict, "Mitochondria", 0) ;
+  dictAdd (p.targetClassDict, "Chloroplast", 0) ;
   dictAdd (p.targetClassDict, "Genome", 0) ;
+  dictAdd (p.targetClassDict, "Transcripts", 0) ;
+  dictAdd (p.targetClassDict, "ERCC", 0) ;
   dictAdd (p.targetClassDict, "Bacteria", 0) ;
   dictAdd (p.targetClassDict, "Virus", 0) ;
 
@@ -2338,7 +2341,7 @@ int main (int argc, const char *argv[])
 	  saCpuStatCumulate (cpuStats, p.bbG.cpuStats) ;
 	  for (int k = 0 ; k < NN ; k++)
 	    {
-	      if (p.bbG.cwsN) bigArrayDestroy (p.bbG.cwsN[k]) ;
+	      if (p.bbG.cwsN) { bigArrayDestroy (p.bbG.cwsN[k]) ; p.bbG.cwsN[k] = 0 ; }
 	    }
 	  ac_free (p.bbG.cwsN) ;
 	  continue ;

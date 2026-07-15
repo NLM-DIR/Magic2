@@ -13,6 +13,7 @@
  * to the creation, writing and reading of the target index
 */
 
+#define ARRAY_CHECK
 #include "sa.h"
 
 
@@ -84,8 +85,8 @@ Array saTargetParseConfig (PP *pp)
 		       , tConfigFileName
 		       ) ;
 	  if (cc == 'I') cc = 'A' ;  /* back compatibility may 2026 to be removed later */
-	  if (! strchr ("GMCRTEBVA", cc))
-	    messcrash ("\n\nThe target class must be specified as a single character [GMCREATIBV], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
+	  if (! strchr ("GMCREBVA", cc))
+	    messcrash ("\n\nThe target class must be specified as a single character [GMCREBVA], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
 		       , cc
 		       , line
 		       , tConfigFileName
@@ -137,7 +138,6 @@ Array saTargetParseConfig (PP *pp)
 	      if (cq)
 		*cq++ = 0 ;
 	      if (! strcasecmp (cp, "fasta")) tc->format = FASTA ;
-	      if (! strcasecmp (cp, "raw")) tc->format = RAW ;
 	      cp = cq ;
 	    }
 	} 
@@ -509,14 +509,14 @@ static void saParseTarget (const PP *pp, TC *tc, BB *bbG)
       while (*++cp)
 	{
 	  unsigned char cc = dnaEncodeChar[(int)(*cp)] ;
-	  if (cc)
+	  if (cc || *cp == '-')  /* we must accept - which encodes as zero since it is a spacer */
 	    array (dna, n++, unsigned char) = cc ;
 	  else
-	    messcrash ("Bad character %c line %n of target fasta file %s\n", cc, line, fileName) ;
+	    messcrash ("Bad character %c line %d of target fasta file %s\n", *cp, line, fileName) ;
 	}
     }
   if (dna) fprintf (stderr, "\t%d bases\n", arrayMax (dna)) ;
-  
+
   ac_free (h) ;
 } /* saParseTarget */
   
@@ -573,8 +573,6 @@ static long int saTargetIndexCreateDo (PP *pp)
 
       /* we need to parse the genome before the annotations */
       if (tc->targetClass == 'A')
-	continue ; 
-      if (tc->targetClass == 'S')
 	continue ; 
       ntc++ ;
 
@@ -634,8 +632,8 @@ static long int saTargetIndexCreateDo (PP *pp)
     {
       tc = arrayp (tArray, nn, TC) ;
 
-      if (tc->targetClass == 'S')
-	messcrash ("\n Unrecognized class S in traget configuration, please try sortalign --help") ;
+      if (! strchr ("GMCRTEBVA", tc->targetClass))
+	messcrash ("\n Unrecognized class %c in target configuration, please try sortalign --help", tc->targetClass) ;
     }
   
   t2 = clock () ;
@@ -725,7 +723,7 @@ static long int saTargetIndexCreateDo (PP *pp)
   for (int kk = 0 ; kk < NN ; kk++)
     {
       bbG->cwsN[kk] = GenomeAddSkips (pp, cwsN[kk], bbG, kk) ;
-      bigArrayDestroy (cwsN[kk]) ;
+      bigArrayDestroy (cwsN[kk]) ; cwsN[kk] = 0 ;
     }
 
   storeTargetIndex (pp, pp->tStep) ;
@@ -886,14 +884,16 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
       array (bbG->dnasR, ii, Array) = dnaR ;
       /* manipulate the ancilary dna arrays */
       arrayLock (dna) ; /* protect dna->base. It must not be freed */
-      messfree (dna->base) ;
+
+      free (dna->base) ;
       dna->base = bigArrp(bbG->globalDna, x1, char) ; 
       dna->max = dna->dim = x2 - x1 ;
       bbG->length += dna->max ;
       const char *cp = dictName (bbG->dict, ii) ;
       if (cp && *cp == 'G') bbG->genomeLength += dna->max ;
       arrayLock (dnaR) ; /* protect dnaR->base */
-      messfree (dnaR->base) ;
+
+      free (dnaR->base) ;
       dnaR->base = bigArrp(bbG->globalDnaR, x1, char) ; 
       dnaR->max = dnaR->dim = x2 - x1 ;
     }

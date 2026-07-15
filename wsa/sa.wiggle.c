@@ -16,6 +16,7 @@
  *   annotating transcripts starts and ends
  *
  */
+#define ARRAY_CHECK
 
 #define WIGGLETYPEMAX 2 /* strand */
 #include "sa.h"
@@ -357,8 +358,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   long int ii, iMax = 0 ;
   long int cumul = 0, cumuls[8] = {0} ;
   unsigned int pos0 ;
-  Array geneC = 0 ;
-  Array geneB = 0 ;
+  BigArray geneC = 0 ;
+  BigArray geneB = 0 ;
   const int wiggle_step = pp->wiggle_step ;
   const int demiStep = (wiggle_step - 1)/2 ;
   const char *typeNam ;
@@ -374,8 +375,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 
       if (1)
 	{
-	  geneB = pp->geneBoxes ? array (pp->geneBoxes, chrom >> 1, Array) : 0 ;
-	  geneC = pp->geneCounts ? array (pp->geneCounts, nw, Array) : 0 ;
+	  geneB = pp->geneBoxes ? array (pp->geneBoxes, chrom >> 1, BigArray) : 0 ;
+	  geneC = pp->geneCounts ? array (pp->geneCounts, nw, BigArray) : 0 ;
 	}
       
       break ;
@@ -516,15 +517,16 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
       
       if (arrayMax(a) && geneB)
 	{
-	  int ib, ibMax = arrayMax (geneB), jMax = arrayMax (a) ;
-	  GBX *gb = arrayp (geneB, 0, GBX) ;
+	  long int ib, ibMax = bigArrayMax (geneB) ;
+	  int jMax = arrayMax (a) ;
+	  GBX *gb = bigArrayp (geneB, 0, GBX) ;
       	  xp = arrayp (a, 0, unsigned int) ;
 	  
 	  /* the candidate gene segments that may cover position x are
 	   * not earlier than the first segment igOld  covering the previous position
 	   * not later than the fist gene ig1 starting after x
 	   */
-	  for (ib = 0, gb = arrp (geneB, ib, GBX) ; ib < ibMax ; ib++, gb++)
+	  for (ib = 0, gb = bigArrp (geneB, ib, GBX) ; ib < ibMax ; ib++, gb++)
 	    {
 	      BOOL sameStrand = (gb->strand == wigStrand ? TRUE : FALSE) ;
 	      BOOL master = gb->flag & 0x10 ? TRUE : FALSE ;
@@ -545,8 +547,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 			    {
 			      int gg = gb->gene ;
 			      if (! intronic)
-				array (geneC, 2*gg, int) += weight/friends ;
-			      array (geneC, 2*gg + 1, int) += weight/friends ;
+				bigArray (geneC, 2*gg, long int) += weight/friends ;
+			      bigArray (geneC, 2*gg + 1, long int) += weight/friends ;
 			    }
 			  if (master) cumuls[gb->flag & 0x7] += weight ;
 			}
@@ -595,7 +597,8 @@ void wiggleExportAgent (const void *vp)
 /**************************************************************/
 
 typedef struct gcStruct {
-  int gene, run, boxCount, exonCount ; 
+  int gene, run ;
+  long int boxCount, exonCount ; 
 } __attribute__((aligned(16))) GC ;
 
 /**************************************************************/
@@ -604,13 +607,13 @@ static int gcOrder (const void *va, const void *vb)
 {
   const GC *up = va ;
   const GC *vp = vb ;
-  int n ;
+  long int n ;
   
-  n = up->gene - vp->gene ; if (n) return n ;
-  n = up->run - vp->run ; if (n) return n ;
+  n = up->gene - vp->gene ; if (n) return n > 0 ? 1 : -1 ;
+  n = up->run - vp->run ; if (n) return n > 0 ? 1 : -1 ;
 
   return 0 ;
-} /* wiggleOrder */
+} /* gcOrder */
 
 /**************************************************************/
 
@@ -776,12 +779,13 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
   allGeneC = bigArrayHandleCreate (1000000, GC, h) ;
   for (nw = 0 ; nw < wMax ; nw++)
     {
-      Array geneC = array (pp->geneCounts, nw, Array) ;
+      BigArray geneC = array (pp->geneCounts, nw, BigArray) ;
       int run = nw / (2 * chromMax) ;
-      int gCMax = geneC ? arrayMax (geneC) : 0 ;
-      int gene, *xp ;
+      long int gCMax = geneC ? bigArrayMax (geneC) : 0 ;
+      int gene ;
+      long int *xp ;
       if (gCMax)
-	for (gene = 0, xp = arrp (geneC, 0, int) ; gene < gCMax ; gene += 2, xp+=2)
+	for (gene = 0, xp = bigArrp (geneC, 0, long int) ; gene < gCMax ; gene += 2, xp+=2)
 	  if (*xp > 0)
 	    {
 	      gc = bigArrayp (allGeneC, igcMax++, GC) ;
@@ -791,33 +795,38 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
 	      gc->boxCount += xp[1] ;
 	    }
     }
-  bigArraySort (allGeneC, gcOrder) ;
-  for (igc = jgc = 0, gc = bigArrp (allGeneC, 0, GC), gc2 = gc ; igc < igcMax ; igc++, gc++)
+  if (igcMax)
     {
-      if (gc2->gene != gc->gene || gc2->run != gc->run)
+      bigArraySort (allGeneC, gcOrder) ;
+      for (igc = jgc = 0, gc = bigArrp (allGeneC, 0, GC), gc2 = gc ; igc < igcMax ; igc++, gc++)
 	{
-	  gc2++ ; jgc++ ;
-	  if (gc2 < gc) *gc2 = *gc ;
+	  if (gc2->gene != gc->gene || gc2->run != gc->run)
+	    {
+	      gc2++ ; jgc++ ;
+	      if (gc2 < gc) *gc2 = *gc ;
+	    }
+	  else if (gc2 < gc)
+	    {
+	      gc2->exonCount += gc->exonCount ;
+	      gc2->boxCount += gc->boxCount ;
+	    }
 	}
-      else if (gc2 < gc)
-	{
-	  gc2->exonCount += gc->exonCount ;
-	  gc2->boxCount += gc->boxCount ;
-	}
+      bigArrayMax (allGeneC) = jgc ;
+
+      
+      ACEOUT ao = aceOutCreate (pp->outFileName, ".geneCounts.tsf", pp->gzo, h) ;
+      aceOutDate (ao, "##", "Gene counts") ;
+      aceOutf (ao, "#Gene\tRun\tFormat\tGene_coverage\tExons_Xocoverage\n") ;
+      for (igc = jgc = 0, gc = bigArrp (allGeneC, 0, GC), gc2 = gc ; igc < igcMax ; igc++, gc++)
+	if (gc->gene && gc->boxCount)
+	  aceOutf (ao, "%s\t%s\ttiifii\t%s\t%d\t%d\t%.2f\t%ld\t%ld\n"
+		   , dictName (pp->geneDict, gc->gene)
+		   , dictName (pp->runDict, gc->run)
+		   , "chrom", 1, 1 // should be chrom a1 a2 (gene)
+		   , geneIndex (pp, gc)
+		   , gc->boxCount/720, gc->exonCount/720
+		   ) ;
     }
-  bigArrayMax (allGeneC) = jgc ;
-  
-  ACEOUT ao = aceOutCreate (pp->outFileName, ".geneCounts.tsf", pp->gzo, h) ;
-  aceOutDate (ao, "##", "Gene counts") ;
-  aceOutf (ao, "#Gene\tRun\tFormat\tGene coverage\tExons coverage\n") ;
-  for (igc = jgc = 0, gc = bigArrp (allGeneC, 0, GC), gc2 = gc ; igc < igcMax ; igc++, gc++)
-    if (gc->gene && gc->boxCount)
-      aceOutf (ao, "%s\t%s\tfii\t%.2f\t%d\t%d\n"
-	       , dictName (pp->geneDict, gc->gene)
-	       , dictName (pp->runDict, gc->run)
-	       , geneIndex (pp, gc)
-	       , gc->boxCount/720, gc->exonCount/720
-	       ) ;
 
   fprintf (stderr, "%s: stop geneCounts export total count %ld\n", timeBufShowNow (tBuf), nnn/720) ;
   ac_free (h) ;
@@ -970,7 +979,7 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
 	{
 	  if (pp->geneCounts)
 	    {
-	      array (pp->geneCounts, nw, Array) = arrayHandleCreate (2048, int, h) ;
+	      array (pp->geneCounts, nw, BigArray) = bigArrayHandleCreate (2048, long int, h) ;
 	    }
 	  if (doChan)
 	    channelPut (pp->wwChan, &nw, int) ;

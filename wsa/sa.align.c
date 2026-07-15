@@ -272,20 +272,21 @@ static void mergeErrors (Array aa, Array bb, unsigned int flip)
 /*************************************************************************************/
 /*************************************************************************************/
 
-static BOOL chenillette (Array  dnaArray, int x, int width, int *dxLp, int *dxRp)
+static BOOL chenillette (Array  dnaArray, int x, int width, int *dxLp, int *dxRp, int xMax)
 {
   const unsigned char *ccp ;
   unsigned char chenille[width], *cp ;
   int i, jL, jR ;
   const unsigned char *dna = arrp (dnaArray, 0, unsigned char) ;
-  
+
+  if (xMax == 0) xMax = arrayMax (dnaArray) ;
   memcpy (chenille, dna + x, width) ; 
   /* move left */
   for (ccp = dna + x, i = 0, jL = -1, cp = chenille ; *cp == *ccp && i + x >= 0 ; 
        ccp--, i--, cp = chenille + ((x*width+i) % width))
     jL++ ;
   /* move right */
-  for (ccp = dna + x + width, i = jR = 0, cp = chenille ; *cp == *ccp ; 
+  for (ccp = dna + x + width, i = jR = 0, cp = chenille ; *cp == *ccp  && x + i + width < xMax; 
        ccp++, i++, cp = chenille + (i % width))
     jR++ ;
 
@@ -305,21 +306,21 @@ BOOL pushErrorsLeftRight (Array errors, Array dna, Array dnaG, BOOL left)
       for (int i = 0 ; i < nerr ; i++, up++)
 	{
 	  Array d = 0 ;
-	  int x = 0, width = 0 ;
+	  int x = 0, width = 0, xMax = 0 ;
 	  switch (up->type)
 	    {
-	    case INSERTION:        d = dna ; width = 1 ; x = up->iShort ;  break ;
-	    case INSERTION_DOUBLE: d = dna ; width = 2 ; x = up->iShort ;  break ;
-	    case INSERTION_TRIPLE: d = dna ; width = 3 ; x = up->iShort ;  break ;
-	    case TROU:             d = dnaG ; width = 1 ; x = up->iLong ;  break ;
-	    case TROU_DOUBLE:      d = dnaG ; width = 2 ; x = up->iLong ;  break ;
-	    case TROU_TRIPLE:      d = dnaG ; width = 3 ; x = up->iLong ;  break ;
+	    case INSERTION:        d = dna ; width = 1 ; x = up->iShort + 0 ;  xMax = i < nerr - 1 ? up[1].iShort : 0 ; break ;
+	    case INSERTION_DOUBLE: d = dna ; width = 2 ; x = up->iShort + 0 ;  xMax = i < nerr - 1 ? up[1].iShort : 0 ; break ;
+	    case INSERTION_TRIPLE: d = dna ; width = 3 ; x = up->iShort + 0 ;  xMax = i < nerr - 1 ? up[1].iShort : 0 ; break ;
+	    case TROU:             d = dnaG ; width = 1 ; x = up->iLong ;  xMax = i < nerr - 1 ? up[1].iLong : 0 ; break ;
+	    case TROU_DOUBLE:      d = dnaG ; width = 2 ; x = up->iLong ;  xMax = i < nerr - 1 ? up[1].iLong : 0 ; break ;
+	    case TROU_TRIPLE:      d = dnaG ; width = 3 ; x = up->iLong ;  xMax = i < nerr - 1 ? up[1].iLong : 0 ; break ;
 	    default : break ;
 	    }
 	  if (width)
 	    {
 	      int dxL = 0, dxR = 0 ;
-	      if (chenillette (d, x, width, &dxL, &dxR))
+	      if (chenillette (d, x, width, &dxL, &dxR, xMax))
 		{
 		  pushed = TRUE ;
 		  up->iShort += (left ? -dxL : dxR) ;
@@ -3282,7 +3283,10 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
 	      dnaLength = arrayMax (dnaG) ;
 	    }
-	  if (arrayExists (ap->errors))
+	  if (0 && ap->nErr) fprintf (stderr, "read=%d nErr=%d lane=%d r=%s\n", read, ap->nErr, bb->lane, dictName(bb->dict, read >> 1)) ;
+	  if (ap->nErr &&   /* we have cases where ap->errors != 0 yet ap->errors has beed arrayDestroyed , i do not know why */
+	      ap->errors && 
+	      arrayExists (ap->errors))
 	    {
 	      unsigned int flip = 0 ;
 	      
@@ -3295,7 +3299,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (arrayMax (ap->errors))
 		alignFormatErrors (pp, bb, ap, dna, dnaG, dnaGR, read) ;	  
 	      if (! pp->sam && ! pp->bam)
-		arrayDestroy (ap->errors) ;
+		{ arrayDestroy (ap->errors) ; ap->errors = 0 ; }
 	    }
 	  if (ap->chrom & 0x1)
 	    {
@@ -3469,8 +3473,8 @@ static void alignDoOneRead (const PP *pp, BB *bb
 	{
 	  chromOld = 0 ;
 	  int a0 = a1, x0 = x1 ;
-	  if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tbefore align\t%s\t%u\n"
-			      , ii, read, x1, x2, chrom, a1, a2, dictName (pp->bbG.dict, chrom >> 1), hit->a1) ;
+	  if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tbefore align\t%s\t%u lane=%d r=%s\n"
+				   , ii, read, x1, x2, chrom, a1, a2, dictName (pp->bbG.dict, chrom >> 1), hit->a1, bb->lane, dictName (bb->dict, read >> 1))  ;
 	  if (alignExtendHit (dna, dnaG1, dnaGR1, err, TRUE, chromLength, &a1, &a2, &x1, &x2, errCost, DA, errMax, 22, maxJump))
 	    {
 	      if (debug) fprintf (stderr, "Hit %ld\tr=%d\t%d\t%d\tc=%d\t%d\t%d\tAccepted\t%s, u=%u, nErr=%d, DA=%d\n"
@@ -4065,13 +4069,13 @@ void saAlignDo (const PP *pp, BB *bb)
       pass++ ;
       goto secondPass ;
     }
-  bigArrayDestroy (bb->hits) ;
+  bigArrayDestroy (bb->hits) ; bb->hits = 0 ;
 #ifdef USE_GPU9999
   saGPUFreeHostBuffer (bb->sms->base) ;
   bb->sms->base = 0 ;
 #endif
   
-  bigArrayDestroy (bb->sms) ;
+  bigArrayDestroy (bb->sms) ; bb->sms = 0 ;
   bb->hits = bb->sms = 0 ;
   
   ac_free (h) ;

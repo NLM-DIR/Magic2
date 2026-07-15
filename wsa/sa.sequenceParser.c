@@ -81,7 +81,8 @@ void globalDnaCreate (BB *bb)
 	  cp = bigArrp (bb->globalDna, ln, unsigned char) ;
 	  cq = arrp (dna, 0, unsigned char) ;
 	  memcpy (cp, cq, n) ; 
-	  messfree (dna->base) ;
+
+	  free (dna->base) ;
 	  dna->virtual = TRUE ; /* abuse, we should call virtualArrayCreate */
 	  arrayLock (dna) ;
 	  dna->base = (char *) cp ; 
@@ -529,8 +530,8 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
   AC_HANDLE h = ac_new_handle () ;
   BB b ;
   int BMAX = isGenome ? 100000 : (pp->BMAX << 20) ;
-  unsigned char *buffer = halloc (BMAX, h) ;
-  unsigned char *buffer2 = halloc (BMAX, h) ;
+  unsigned char *buffer  = halloc (BMAX+1, h) ;
+  unsigned char *buffer2 = halloc (BMAX+1, h) ;
   int pos = 0 ;
   BOOL done = FALSE ;
   long int nBytes = 0 ;
@@ -558,7 +559,7 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       unsigned char *restrict cp ;
 
       bytes += pos ;
-
+      buffer[bytes] = 0 ;
 
       if (bytes < BMAX)
 	{

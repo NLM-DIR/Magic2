@@ -315,7 +315,7 @@ void bigArrayExtend (BigArray a, long int n)
   free (a->base) ;
 
   a->base = base ;
-}
+} /* bigArrayExtend */
 
 /***************/
 

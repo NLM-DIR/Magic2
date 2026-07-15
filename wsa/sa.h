@@ -149,8 +149,8 @@ typedef struct runStatStruct {
   long int overhangR1 [OVERHANGMAX] ; /* read 1 right overhang  */
   long int overhangR2 [OVERHANGMAX] ; /* read 2 right overhang */
   
-  int RF[256], RR[256] ; /* number of reads aligned per target_class on Forward/Reverse strand */
-  int BF[256], BR[256] ; /* number of bases aligned per target_class on Forward/Reverse strand */
+  long int RF[256], RR[256] ; /* number of reads aligned per target_class on Forward/Reverse strand */
+  long int BF[256], BR[256] ; /* number of bases aligned per target_class on Forward/Reverse strand */
   Array errors ;  /* substitutions, insertions, deletions counts */
   /* coverage of long transcripts ? */
 } RunSTAT ;

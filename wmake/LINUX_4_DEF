@@ -17,12 +17,24 @@
 
 NAME = OPTERON
 
-COMPILER = gcc -g -Wall -DACEDB4  
-LINKER = g++ -g  
+COMPILER = gcc -g -Wall -DACEDB4  -fsanitize=undefined 
+LINKER = g++ -g   -fsanitize=undefined 
+COMPILER = gcc -g -Wall -DACEDB4 \
+           -Wcast-align -Wstrict-aliasing=2 \
+           -fsanitize=address,undefined 
+
+LINKER = g++ -g -fsanitize=address,undefined
 
 LIBS = -lm 
 Xt_LIBS = -L/usr/X11R6/lib -lXaw -lXt -lXmu -lXext -lX11
 
+# run gdb using
+# setenv ASAN_OPTIONS halt_on_error=1
+# gdb
+#    handle SIGABRT stop
+#    br abort
+#    run ...
+#	
 #################################################################
 ###################### Lex Libraries ############################
 #################################################################

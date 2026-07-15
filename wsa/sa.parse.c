@@ -854,6 +854,8 @@ int saParseSraDownload (PP *pp, const char *sraID)
   SRAReadBatchFree(sra);
   if (ao1)
     fprintf (stderr, " %s downloaded %d data blocks infile %s\ndone: %s\n", sraID, nn, aceOutFileName (ao1), timeBufShowNow(tBuf)) ;
+  else
+    fprintf (stderr, " %s not found, sorry\n", sraID) ;
   
   ac_free (h) ;
   return 0 ;

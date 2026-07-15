@@ -156,11 +156,12 @@ void saGffBinaryParser (PP *pp)
 	  for (ii = 0, up = bigArrp (geneBoxes, 0, GBX) ; ii < nnE ; ii++, up++)
 	    {
 	      int chrom = up->chrom ;
-	      Array chromBoxes = array (pp->geneBoxes, chrom, Array) ;
+	      BigArray chromBoxes = array (pp->geneBoxes, chrom, BigArray) ;
 	      if (! chromBoxes)
-		chromBoxes = array (pp->geneBoxes, chrom, Array) = arrayHandleCreate (10000, GBX, pp->h) ;
-	      vp = arrayp (chromBoxes, arrayMax (chromBoxes), GBX) ;
-	      *vp = *up ;	      
+		chromBoxes = array (pp->geneBoxes, chrom, BigArray) = bigArrayHandleCreate (10000, GBX, pp->h) ;
+	      vp = bigArrayp (chromBoxes, bigArrayMax (chromBoxes), GBX) ;
+	      *vp = *up ;
+	      chrom++ ;
 	    }
 	}
     }
@@ -401,7 +402,8 @@ long int saGffParser (PP *pp, TC *tc)
   Array mrnaExons = 0 ;
   KEYSET borders = 0 ;
   char strand = 0 ;
-
+  char *requested_method = 0 ;
+  
   /* debug introns creation
    *  if (! bbG->dict) bbG->dict = dictHandleCreate (256, pp->h) ; 
    * chromDict = bbG->dict ;
@@ -477,6 +479,7 @@ long int saGffParser (PP *pp, TC *tc)
 
       aceInStep (ai, '\t') ;
       cp = aceInWord (ai) ;  /* method, drop it */
+      if (requested_method && (!cp || strcasecmp (cp, requested_method))) continue ;
       
       aceInStep (ai, '\t') ;
       cp = aceInWord (ai) ;  /* type */

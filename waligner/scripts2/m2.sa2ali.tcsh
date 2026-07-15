@@ -3,7 +3,7 @@ set run=$1
 set dd=tmp/SA/$run 
 set toto=$dd/sa2ali.ace
 
-echo "Ali $run\nRun $run" > $toto
+echo "\nAli $run\nRun $run" > $toto
 echo "-D Letter_profile" >> $toto
 echo "-D stranding Introns" >> $toto
 echo "-D Candidate_introns" >> $toto
@@ -20,18 +20,17 @@ set ff=$dd/$run.overhang.3prime.tsf
 #Exit_adaptor_clipping
 
 set ff=$dd/runStats.tsf
-cat $ff.1 | gawk -F '\t' '/Length_distribution_1_5_50_95_99_mode_av/{printf("Length_distribution_1_5_50_95_99_mode_av %s %s %s %s %s %s %s\n", $4,$5,$6,$7,$8,$9,$10);}' >> $toto
-cat $ff.1 | gawk -F '\t'  '/Reads_aligned_in_class/{s=$10;gsub(/%/,"",s);p=$6;m=$8;cl=substr($2,24);if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
-cat $ff.1 | gawk -F '\t'  '/Reads_aligned_in_class/{cl=substr($2,24);nr[cl]=$6+$8} /Bases_aligned_in_class/{cl=substr($2,24);nb[cl]=$6+$8;printf("nh_Ali %s %s seq %s tag %.3g kb %.2f bp\n",cl,nr[cl],nr[cl],nb[cl]/1000,nb[cl]/nr[cl]);}' >> $toto
-cat $ff.1 | gawk -F '\t'  '/Reads_aligned_once/{nn[1]=$4;s[1]=$5;}/Reads_multi_aligned__/{cl=substr($2,22)+0;nn[cl]=$4;s[cl]=$5;}END{printf("Unicity any ");for(cl=1;cl<=10;cl++)printf(" %.3g", nn[cl]);printf("\n");}' >> $toto
+cat $ff | gawk -F '\t' '/Length_distribution_1_5_50_95_99_mode_av/{printf("Length_distribution_1_5_50_95_99_mode_av %s %s %s %s %s %s %s\n", $4,$5,$6,$7,$8,$9,$10);}' >> $toto
+cat $ff | gawk -F '\t'  '/Reads_aligned_in_class/{s=$10;gsub(/%/,"",s);p=$6;m=$8;cl=substr($2,24);if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
+cat $ff | gawk -F '\t'  '/Intron_supports/{s=$10;gsub(/%/,"",s);p=$6;m=$8;cl="I";if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
+cat $ff | gawk -F '\t'  '/Reads_aligned_in_class/{cl=substr($2,24);nr[cl]=$6+$8} /Bases_aligned_in_class/{cl=substr($2,24);nb[cl]=$6+$8;printf("nh_Ali %s %s seq %s tag %.3g kb %.2f bp\n",cl,nr[cl],nr[cl],nb[cl]/1000,nb[cl]/nr[cl]);}' >> $toto
+cat $ff | gawk -F '\t'  '/Reads_aligned_once/{nn[1]=$4;s[1]=$5;}/Reads_multi_aligned__/{cl=substr($2,22)+0;nn[cl]=$4;s[cl]=$5;}END{printf("Unicity any ");for(cl=1;cl<=10;cl++)printf(" %.3g", nn[cl]);printf("\n");}' >> $toto
+cat $ff | gawk -F '\t'  '/CDS_utr_intronic_intergenic_Bases/{s=$10/1000; printf("Intergenic %d kb\n", s);}' >> $toto
+cat $ff | gawk -F '\t'  '/Supported_introns/{n=$4;printf("Candidate_introns any %d\n", n);}' >> $toto
+cat $ff | gawk -F '\t'  '/CDS_utr_intronic_intergenic_Bases/{s=$4/1000000.0; printf("S_1_CDS %.2f \"Mb aligned\"\n",s);s=$6/1000000.0; printf("S_1_UTR %.2f \"Mb aligned\"\n",s);s=$8/1000000.0; printf("S_1_intronic %.2f \"Mb aligned\"\n",s);s=$10/1000000.0; printf("S_1_intergenic %.2f \"Mb aligned\"\n",s);}' >> $toto
+cat $ff | gawk -F '\t'  '/ATGCN/{k=1000;A=$4;T=$5;G=$6;C=$7;N=$8;Z=A+T+G+C+N;Z/=1000;printf("ATGC_kb %d %d %d %d %d %d %d %d %d %d\n", A/Z,T/Z,G/Z,C/Z,N/Z,A/k,T/k,G/k,C/k,N/k);}' >> $toto
 
 set gg=$dd/geneCounts.tsf
-
-set fw=$dd/wiggleCumuls.tsf
-if (-e $fw.gz) gunzip -f $fw.gz
-if (-e $fw) then
-  cat $fw | gawk -F '\t' '/^Any/{CDS=$5;UTR=$6;intronic=$7;intergenic=$8;if (CDS+0>0)printf("S_1_CDS %.3f Mb_aligned\n", CDS/1000000);if (UTR+0>0)printf("S_1_UTR %.3f Mb_aligned\n", UTR/1000000);if (intronic+0>0)printf("S_1_intronic %.3f Mb_aligned\n", intronic/1000000);if (intergenic+0>0)printf("S_1_intergenic %.3f Mb_aligned\n", intergenic/1000000);}' >> $toto
-endif
 
 cat $ff | gawk -F '\t' '/Unaligned_reads/{nr=$4;}/Unaligned_bases/{nb=$4;printf("Unaligned %d Seq %d Tags %.3g kb\n", nr, nr, nb/1000) ;}' >> $toto
 

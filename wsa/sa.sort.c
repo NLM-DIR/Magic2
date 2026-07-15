@@ -795,7 +795,7 @@ static void saR3CopyBack (unsigned char *dst,
 static void *saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex)
 {
   unsigned char  *src = (unsigned char *) base ;
-  unsigned char  *dst ;
+  unsigned char  *dst = NULL ;
   /* largest pass has R3_SIZE_A == 2048 buckets */
   long int        counts[3][R3_SIZE_A] ;
   long int        offsets[R3_SIZE_A] ;
@@ -807,7 +807,11 @@ static void *saRadixSort3 (void *base, size_t N, size_t stride, int keyIndex)
     return 0 ;
 
   /* scratch buffer: N records, 128-byte aligned */
-  dst = (unsigned char *) aligned_alloc (128, N * stride) ;
+  int error = posix_memalign ((void**)&dst, 128, N * stride) ;
+  if (error)
+    messcrash ("saRadixSort3 cannot allocate %ld bytes, sorry, no more RAM", N*stride) ;
+
+  /* dst = (unsigned char *) aligned_alloc (128, N * stride) ; */
   if (!dst)
     messcrash ("malloc failure in saRadixSort3") ;
 
@@ -977,3 +981,6 @@ This code module is part of the sortalign package (RNA aligner, NCBI/NLM/NIH).
 #endif
   
 /**************************************************************/
+		/*
+		  run  -x TARGET/IDX/IDX.hs -I tmp/SA/RNA_AGLR2_B_1/iConfig --species hs -o tmp/SA/RNA_AGLR2_B_1 --wiggles --gzo --numactl
+*/						    

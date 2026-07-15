@@ -1048,8 +1048,11 @@ endif
 
 if ($phase == sortali) goto phaseSortali
 if ($phase == sortali2) goto phaseSortali2
-if ($phase == sortali3) goto phaseSortaliGroupWiggle
+if ($phase == wgr) goto phaseSortaliGroupWiggle
+if ($phase == wg5) goto phasewg5
+if ($phase == wg6) goto phasewg6
 
+if ($phase == g0) goto phaseg0
 if ($phase == g4sp) goto phaseg4sp
 
 if ($phase == I1) goto phaseI1
@@ -1129,8 +1132,6 @@ if ($phase == wg4) goto phasewg4
 if ($phase == wg4b) goto phasewg4b
 if ($phase == wg4c) goto phasewg4c
 if ($phase == wg4d) goto phasewg4d
-if ($phase == wg5) goto phasewg5
-if ($phase == wg6) goto phasewg6
 if ($phase == wg7) goto phasewg7
 if ($phase == wgh) goto phasewgh
 if ($phase == cnv) goto phasecnv
@@ -1523,6 +1524,7 @@ echo "k2:    integrate kantor results in the Products"
 echo "k9:    linear launch megaRun all on a chromosome"
 
 
+echo "g0:    Create a graphic database"
 echo "g1:    Prepare the GeneIndexDB database"
 echo "g2a:   Gene index collect the unique gene expression data for each lane"
 echo "m2a:   mRNA index collect the unique mRNA expression data for each lane"
@@ -2422,12 +2424,15 @@ echo -n "phaseSortali3: construct the group wiggles : "
 date
 
 if (! -d tmp/TABIX) mkdir tmp/TABIX
+if (! -d tmp/WIGGLEGROUP) mkdir tmp/WIGGLEGROUP
 
-foreach gg (`cat MetaDB/Magic2/GroupWiggleList`)
+foreach gg (`cat MetaDB/$MAGIC/GroupWiggleList`)
   if (! -d tmp/TABIX/$gg) mkdir tmp/TABIX/$gg
-  scripts/submit TABIX/$gg/sortali3  "scripts2/m2.wg.tcsh $gg"
+  foreach chrom ($chromSetAll)
+    scripts/submit TABIX/$gg/sortali3  "scripts2/m2.wg.tcsh $gg $chrom"
+  end
 end
-
+scripts2/m2.wg.tcsh $gg $chrom
 goto phaseLoop
 
 #######################################################################################
@@ -4530,6 +4535,59 @@ goto phaseLoop
 ###################################################################################
 ###################################################################################
 ## Gene Expression index
+## g0: initialize a graphic gene annotation database
+
+phaseg0:
+
+if ($Strategy == RNA_seq && ! -e GeneDB/go.done) then
+  echo "phase g0: export the gtf file as ace files, parse these ace files"
+  if (! -d GeneDB) then
+    mkdir GeneDB
+    pushd GeneDB
+    mkdir database
+    ln -s ../../metaData/wspec.aceview_web_site wspec
+    tace . <<EOF
+y
+EOF
+    popd
+  endif
+
+  if (-e TARGET/GTF/$species.gtf.gz && ! -e GeneDB/$species.geneTitle.ace.gz)
+    pushd TARGET/GTF
+    pushd GeneDB
+      dna2dna -gtf ../TARGET/GTF/$species.gtf.gz  -gtfRemap KT_RefSeq -o $species -gzo -gtfGenome  ../TARGET/Targets/$species.genome.fasta.gz 
+    popd
+    popd
+  endif
+  
+  tace GeneDB <<EOF
+    parse TARGET/Targets/$species.genome.fasta.gz
+    find Sequence
+    edit genomic
+    parse GeneDB/$species.geneTitle.ace.gz
+    parse GeneDB/$species.transcripts.ace.gz
+    parse metaData/methods.ace
+    save
+    quit
+EOF
+  tace GeneDB <<EOF
+    query Find Sequence genomic
+    bql -o GeneDB/i2map.f.txt select c,i,d,a from c in @, m in c->subsequence, i in m->intron, c1 in i->IntMap, a1 in c1[1], a2 in c1[2] where a1 < a2, d in DNA(c,a1,a1+1), a in DNA(c,a2-1,a2)
+    query Find Sequence genomic
+    bql -o GeneDB/i2map.r.txt select c,i,d,a from c in @, m in c->subsequence, i in m->intron, c1 in i->IntMap, a1 in c1[1], a2 in c1[2] where a1 > a2, d in DNA(c,a1,a1-1), a in DNA(c,a2+1,a2)
+    save
+    quit
+EOF
+  cat GeneDB/i2map.[fr].txt  | gawk -F '\t' '{printf("Intron %s\n%s_%s\n\n", $2,$3,$4) ;}' > GeneDB/i2map.ace
+  echo "pparse  GeneDB/i2map.ace" | tace GeneDB -noprompt
+endif
+
+goto phaseLoop
+
+###################################################################################
+###################################################################################
+###################################################################################
+## Gene Expression index
 ## g1: initialize the GeneIndex database
 
 phaseg1:
@@ -4707,7 +4765,7 @@ goto phaseLoop
 
 phaseg4:
   echo "phase g4: Export gene expression tables  in RESULTS/Expression and analyse differential expression according to the Compare class"
-  scripts/geneindex.tcsh g4
+  scripts2/geneindex.tcsh g4
 
 goto phaseLoop
 
@@ -4817,7 +4875,7 @@ goto phaseLoop
 phaseg4sp:
 phaseg4spx:
   echo "phase g4: Export gene_sponge expression tables  in RESULTS/Expression and analyse differential expression according to the Compare class"
-  scripts/geneindex.tcsh $phase
+  scripts2/geneindex.tcsh $phase
 
 goto phaseLoop
 
@@ -5116,7 +5174,7 @@ gunzip -c RESULTS/Expression/unique/AGLuK/NB.AGLuK.MA.u.ace.gz |  gawk '/Run_/{g
 phaseg5:
   echo "phase g5: Parse the geneindex in GeneindexDB"
 
-  scripts/geneindex.tcsh g5
+  scripts2/geneindex.tcsh g5
 
 goto phaseLoop
 
@@ -9909,19 +9967,16 @@ endif
 if (! -d tmp/TABIX) mkdir tmp/TABIX
 
 if (-e tmp/TABIX/tabix.ace) \rm  tmp/TABIX/tabix.ace
-set chr=""
-if ($species == worm) set chr="CHROMOSOME_"
 
-foreach group (`cat MetaDB/$MAGIC/RunWiggleList  MetaDB/$MAGIC/GroupWiggleList`)
+foreach group (`cat MetaDB/$MAGIC/GroupWiggleList`)
   # we construct all run wigglesin WIGGLERUN,  but we only want to TABIX the groups and runs comtaining the Wiggle tag
   if (! -d tmp/TABIX/$group) mkdir tmp/TABIX/$group
-  foreach chrom ($chromSetAll mito chloro)
-    foreach unique (nu u pp)
- 
-        if (! -e tmp/WIGGLEGROUP/$group/$chrom/R.chrom.$unique.f.BF.gz && ! -e tmp/WIGGLERUN/$group/$chrom/R.chrom.$unique.f.BF.gz) continue
-        if (-e  tmp/TABIX/$group/$chrom.$unique.tabix.done) continue
+  foreach chrom ($chromSetAll)
+    foreach uu (nu u pp)
+        if (! -e tmp/WIGGLEGROUP/$group/$chrom/R.chrom.$uu.f.BF.gz) continue
+        if (-e  tmp/TABIX/$group/$chrom.$uu.tabix.done) continue
           # last parm could be C_$chrom
-          scripts2/submit  tmp/TABIX/$group/$chrom.$unique.tabix  "scripts2/wiggle2tabix.tcsh $group $chrom $unique $chrom"
+          scripts2/submit  tmp/TABIX/$group/$chrom.$uu.tabix  "scripts2/wiggle2tabix.tcsh $group $chrom $uu $chrom"
     end
   end
 end
@@ -9939,13 +9994,28 @@ phasewg6:
  if (! -d tmp/TABIX/$MAGIC) mkdir tmp/TABIX/$MAGIC
  foreach chrom ($chromSetAll mito)
   echo "Map $chrom" >  tmp/TABIX/$MAGIC/$chrom.tabix.ace
-  foreach group (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
+  foreach group (`cat MetaDB/$MAGIC/GroupWiggleList`)
     if (! -e tmp/TABIX/$group/R.$chrom.u.f.BF.gz && ! -e  tmp/TABIX/$group/R.$chrom.u.r.BF.gz) continue
     echo "Wiggle $group $group/$chrom" >>  tmp/TABIX//$MAGIC/$chrom.tabix.ace
   end
   echo >> tmp/TABIX/$MAGIC/$chrom.tabix.ace
 end
 
+ pushd GeneDB
+   ln -s ../tmp/TABIX
+ popd
+ cat tmp/TABIX/$MAGIC/*.tabix.ace > tmp/TABIX/$MAGIC/tabix.ace
+ tace GeneDB <<EOF
+   pparse tmp/TABIX/$MAGIC/tabix.ace
+   pparse MetaDB/$MAGIC/runs.ace
+   pparse MetaDB/$MAGIC/groups.ace
+   pparse MetaDB/$MAGIC/ali.ace
+   query find sequence genomic
+   bql -o MetaDB/seq2map.txt select s,m,a1,a2 from s in @, m in s->dna, a1=1, a2 in m[1]
+   save
+EOF
+  cat MetaDB/seq2map.txt | gawk '{printf("Sequence %s\nIntMap %s %d %d\n\n", $1,$2,$3,$4) }' > MetaDB/seq2map.ace
+  echo "pparse MetaDB/seq2map.ace " | tace GeneDB -noprompt
 goto phaseLoop
 
 ###############################################################

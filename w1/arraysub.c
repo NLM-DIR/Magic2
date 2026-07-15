@@ -57,6 +57,17 @@ static volatile mysize_t totalNumberActive = 0 ;
 static Array reportArray = 0 ;
 static void uArrayFinalise (void *cp) ;
 
+static char *arrayAlloc (long int n, int size, BOOL zeroInit)
+{
+  mysize_t nn = (mysize_t) n * size ;
+  char *cp = NULL ;
+  int error = posix_memalign ((void**)&cp, 64, nn) ;
+  if (error)
+    messcrash ("arrayAlloc cannot allocate %ld bytes, sorry, no more RAM", n) ;
+  if (zeroInit) memset (cp, 0, nn) ;
+  return cp ;
+} /* arrayAlloc */
+
 #ifndef MEM_DEBUG
   Array uArrayCreate (mysize_t n, int size, AC_HANDLE handle)
 { mysize_t id = totalNumberCreated++ ;
@@ -84,11 +95,7 @@ Array   uArrayCreate_dbg (mysize_t n, int size, AC_HANDLE handle,
     n = 1 ;
   if (reportArray != (Array)2)
     totalAllocatedMemory += n * size ;
-#ifndef MEM_DEBUG
-  neuf->base = (char *) messalloc (n*size) ;
-#else
-  neuf->base = (char *) messalloc_dbg (n*size,dbgPos(hfname, hlineno, __FILE__), __LINE__) ;
-#endif
+  neuf->base = arrayAlloc (n , size, TRUE) ;
   neuf->dim = n ;
   neuf->max = 0 ;
   neuf->size = size ;
@@ -227,11 +234,11 @@ Array uArrayReCreate (Array a, int n, int size)
     { 
       if (reportArray != (Array)2)
 	totalAllocatedMemory -= a->dim * size ;
-      messfree (a->base) ;
+      free (a->base) ;
+      a->base = arrayAlloc (n, size, TRUE) ;
       a->dim = n ;
       if (reportArray != (Array)2)
 	totalAllocatedMemory += a->dim * size ;
-      a->base = (char *) messalloc (a->dim*size) ;
     }
   memset(a->base,0,(mysize_t)(a->dim*size)) ;
 
@@ -263,11 +270,13 @@ static void uArrayFinalise (void *cp)
   
   if (! a->virtual && reportArray != (Array)2)
     totalAllocatedMemory -= a->dim * a->size ;
-  if (!a->lock && ! a->virtual &&  !finalCleanup) messfree (a->base) ;
+  if (!a->lock && ! a->virtual &&  !finalCleanup)
+    free (a->base) ;
   a->magic = 0 ; a->base = 0 ;
   totalNumberActive-- ;
   if (! a->virtual && !finalCleanup && reportArray != (Array)1 && reportArray != (Array)2) 
     arr(reportArray, a->id, Array) = 0 ;
+  memset (a, 0, sizeof(*a)) ;
 }
 
 /******************************/
@@ -324,13 +333,10 @@ void arrayUnlock (Array a)
 
   if (reportArray != (Array)2)
     totalAllocatedMemory += a->dim * a->size ;
-#ifndef MEM_DEBUG
-  neuf = (char *) messalloc (a->dim*a->size) ;
-#else
-  neuf = (char *) messalloc_dbg (a->dim*a->size,dbgPos(hfname, hlineno, __FILE__), __LINE__) ;
-#endif
+  neuf = arrayAlloc (a->dim, a->size, TRUE) ;
   memcpy (neuf,a->base,a->size*a->max) ;
-  messfree (a->base) ;
+
+  free (a->base) ;
   a->base = neuf ;
 }
 

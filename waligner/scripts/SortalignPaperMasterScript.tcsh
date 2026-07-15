@@ -196,8 +196,10 @@ setenv SV     v117.82.18M.wig.jun1     # new index masking in the genome the see
 setenv SVlast v117.82.18M.wig.jun1    # 
 #setenv SV     v118.81.18M.wig.jun1     # old genome not masked + wiggles
 #setenv SVlast v118.81.18M.wig.jun1    # 
-setenv SV     v120.82.18M.wig.jul10     # new index masking in the genome the seeds of mito/transposons
+setenv SV     v120.82.18M.wig.jul10     # same code wig
 setenv SVlast v120.82.18M.wig.jul10    # 
+setenv SV     v121.82.18M.jul10     # exact same code nowig
+setenv SVlast v121.82.18M.jul10    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -211,7 +213,7 @@ endif
 
 setenv NOINTRONSEEDS 0
 setenv EXPORTSAM 0
-setenv EXPORTWIGGLES 1
+setenv EXPORTWIGGLES 0
 setenv EXPORTWIGGLEENDS 0
 setenv seedLength 16
 setenv seedLength 18
