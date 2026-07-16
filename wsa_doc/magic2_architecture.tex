@@ -68,11 +68,12 @@ itself building on the AceView gene and transcript annotation
 system~\citep{thierrymieg2006}.
 It aligns short (Illumina) and long (Nanopore, PacBio) RNA-seq or
 DNA-seq reads against an annotated or unannotated reference genome,
-augmented with its mitochondia, examplars of its ribosomal RNA precursor
-and main repeat elemets, and optionally its most frequent contaminants.
+augmented with its mitochondria, exemplars of its ribosomal RNA
+precursor and of its main repeat elements, and optionally its most
+frequent contaminants (Section~\ref{sec:target}).
 In a single pass Magic2 produces alignments, gene-expression counts,
-intron-support tables, poly(A) addition sites, coverage tracks, and
-rich QC metrics.
+intron-support tables, poly(A) addition sites, candidate transcription
+start sites, coverage tracks, and rich QC metrics.
 
 A posteriori, the name Magic2 can be parsed as
 \emph{Memory-Aware Genomic Integrative Computation} --- an
@@ -90,7 +91,7 @@ Three principles govern all architectural decisions:
       working data inside CPU caches and saturating memory bandwidth.
 
 \item \textbf{Automatic configuration.}
-      Read length, paired-end geometry, adapter sequences, strandedness,
+      Read length, paired-end geometry, adaptor sequences, strandedness,
       and sequencing platform are inferred from the data.
       Internal parameters (seed length, maximum intron size, subsampling
       density) are derived from genome size and reported to the user for
@@ -194,9 +195,9 @@ Channels track the number of active producers.
 When all producers have finished and decremented the source count to
 zero, the channel closes automatically; consumers drain any remaining
 records and then exit cleanly.
-This guarantee --- no data loss and deadlock-free termination --- holds
-regardless of the number of agents or the order in which blocks are
-processed.
+This guarantee holds regardless of the number of agents or the order
+in which blocks are processed: no data are lost, and termination is
+deadlock-free.
 
 \subsection{Pipeline topology}
 \label{sec:topology}
@@ -252,13 +253,13 @@ parallelism.
 \subsection{The problem: alignment parameters depend on the data}
 \label{sec:pilot_problem}
 
-Several alignment decisions that strongly affect accuracy cannot be
+Several alignment decisions that strongly affect accuracy, cannot be
 made before reading the data: whether the library is RNA or DNA,
 what is the sequencing technology (Illumina, PacBio, Nanopore ...),
 are the reads long or short, 
 single ends or paired, 
 what are the absolute and relative rates or substitutions and indels,
-which is the dominant sequencing strand, and what adapter sequences
+which is the dominant sequencing strand, and what adaptor sequences
 were ligated.
 Requiring the user to supply these parameters manually is error-prone
 and unnecessary, because the data itself carries all the evidence
@@ -289,10 +290,10 @@ accumulated so far:
         and the orientation of the mitochondrial reads
         measures this directly and sets the strand bias used in all
         subsequent interpretation of the alignments.
-  \item \textbf{Adapter sequences.}
+  \item \textbf{Adaptor sequences.}
         Unaligned 3$'$ overhangs are accumulated into per-position
         base-frequency histograms (Section~\ref{sec:adapters}).
-        Once the histogram is sufficiently populated the adapter
+        Once the histogram is sufficiently populated the adaptor
         consensus is called.
 \end{itemize}
 
@@ -304,7 +305,7 @@ run --- all inferred parameters are frozen and used by all agents.
 \label{sec:pilot_reprocess}
 
 If a pilot block was aligned before a parameter was finalised (for
-example, before the adapters were known), it is silently reprocessed
+example, before the adaptors were known), it is silently reprocessed
 from scratch with the final parameters before its results are
 committed.
 All subsequent blocks, including the remaining pilot blocks still
@@ -320,7 +321,7 @@ The pilot mechanism means that a single undecorated command such as
 magic2 -i SRR122334 -x IDX -o output
 \end{lstlisting}
 produces fully optimised alignments regardless of library
-preparation, sequencing platform, or adapter chemistry.
+preparation, sequencing platform, or adaptor chemistry.
 For example, strand bias is exploited globally: a 99\,\%
 strand-specific RNA library is handled exactly as if
 the user had explicitly declared the strand on the command line.
@@ -328,6 +329,193 @@ the user had explicitly declared the strand on the command line.
 %% ===============================================================
 \section{Seed generation and genome indexing}
 \label{sec:seeds}
+
+\subsection{Completing the target}
+\label{sec:target}
+
+An aligner cannot report that a read originated from a sequence it was
+never given.
+It reports the best match among the sequences it \emph{was} given.
+A read whose true source is missing from the target does not disappear:
+it lands on whatever else in the target resembles it most.
+Missing sequence therefore does not produce missing data, it produces
+false data --- and the error is systematic rather than random, because
+the same reads land on the same wrong loci in every run.
+
+This is the reason Magic2 is given a target \emph{configuration}
+(\texttt{-T}) rather than a genome (\texttt{-t}).
+The genome is only the largest component of a target.
+The others are small, but they absorb reads that would otherwise be
+misattributed to it --- either because their source is genuinely absent
+from the genome, or, as with ribosomal RNA, because their source is
+present in the genome yet cannot be indexed.
+
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+Code & Class & Content \\
+\midrule
+\texttt{G} & Genome        & Chromosome sequence \\
+\texttt{M} & Mitochondria  & Mitochondrial genome \\
+\texttt{C} & Chloroplast   & Chloroplast genome (plants) \\
+\texttt{R} & Ribosomal     & One or a few rRNA precursor sequences \\
+\texttt{S} & Repeats       & Exemplars of the main interspersed repeat
+                             families (Alu and other SINEs, \ldots) \\
+\texttt{E} & Controls      & ERCC or other spike-ins \\
+\texttt{B} & Bacteria      & Expected bacterial contaminants \\
+\texttt{V} & Virus         & Expected viral contaminants \\
+\texttt{A} & Annotation    & GTF/GFF, or a bare intron list \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Ribosomal RNA.}
+rRNA is the extreme case, and it is extreme in a way that is easy to
+misdescribe.
+It can represent up to 80\,\% of a total-RNA library, and several
+percent survives even poly(A) selection or ribodepletion.
+But unlike the mitochondrion it is not a separate genome.
+Every rRNA molecule is transcribed from the nuclear chromosomes, from
+exactly one of the hundreds of near-identical rDNA repeats tandemly
+arrayed there.
+Class \texttt{R} therefore corresponds to no physical object.
+It is a bookkeeping construct, a stand-in for that whole collection of
+loci, adopted because the question it suppresses --- which of the
+hundreds of copies emitted this particular molecule --- is at once
+unanswerable and uninteresting.
+No experiment asks it.
+Every experiment asks how much rRNA the library contains, which is a
+property of the collection and not of any member of it.
+
+The technical difficulty is that the true sequence, though present in
+the assembly, is invisible to the index.
+Hundreds of tandem copies place the rDNA seeds far above
+\texttt{maxTargetRepeats}, so the multiplicity filter of
+Section~\ref{sec:multiplicity} discards precisely them, while the
+rRNA-derived pseudogenes and degenerate fragments dispersed across the
+genome are each rare enough to survive it.
+The filter does not fail to see the repeats: it removes them by design,
+and in doing so hands the reads to the only rRNA-like sequence left
+standing, which is the wrong one.
+The result is not missing data but misplaced data --- a haze of spurious
+expression and spurious junctions over loci that merely resemble rRNA.
+The benchmark in the main paper attributes the elevated novel-junction
+counts of competing tools on total-RNA libraries to this effect.
+
+Declaring one or a few precursor sequences as class \texttt{R} restores
+an indexable copy.
+Several non-identical precursors may be supplied, since the arrays are
+not homogeneous.
+This works only because seed multiplicity is counted \emph{per class}
+rather than across the target as a whole.
+The classes are thus not merely accounting labels.
+Were the count global, the exemplar's seeds would be masked along with
+the genomic rDNA they duplicate, and the construct would defeat itself.
+Counted within class \texttt{R} alone they occur once or twice, pass the
+filter untouched, and give the reads somewhere correct to go.
+
+\paragraph{A tested alternative: masking.}
+If the rDNA seeds in class \texttt{G} are the problem, the obvious move
+is to delete them: during target construction, mask from \texttt{G}
+every seed also present in \texttt{R}.
+This is easy to implement, and it was tried.
+It measurably reduced the number of perfect alignments, and was
+abandoned.
+The reason is that rRNA-like sequence in the genome is not all
+parasitic; some of it is genuinely transcribed or genuinely sequenced,
+and deleting its seeds removes true alignments along with false ones.
+The classes are therefore left deliberately overlapping, and the
+competition between them is settled by score rather than by exclusion.
+
+\paragraph{Interspersed repeats.}
+Class \texttt{S} is the same construct as \texttt{R}, applied to the
+main interspersed repeat families --- Alu and the other SINEs, and their
+kin.
+The situation is formally identical: Alu occurs about a million times in
+the human genome, so far above \texttt{maxTargetRepeats} that its seeds
+cannot survive in class \texttt{G}, and a read lying wholly inside an
+Alu cannot in any case be assigned to one copy rather than another.
+Declaring exemplars as class \texttt{S} lets such reads be captured and
+counted globally, as a measured property of the library, rather than
+scattered or lost.
+Reads that extend into the unique sequence flanking a repeat are
+unaffected, and continue to be placed at their true locus by class
+\texttt{G}.
+
+\paragraph{Mitochondria.}
+The mitochondrial genome is a circular molecule of 16.6\,kb, against
+3.1\,Gb of nuclear sequence, but it is present in hundreds to thousands
+of copies per cell, and its transcripts routinely account for 5--30\,\%
+of an RNA-seq library.
+It is usually already present in the genome FASTA, so declaring it
+separately is not a question of presence but of accounting and of
+competition.
+Every mammalian genome carries \emph{NUMTs}, nuclear insertions of
+mitochondrial sequence; when the true mitochondrion is not an explicit,
+exact target, mitochondrial reads settle on NUMTs and manufacture
+nuclear expression where there is none.
+
+Class \texttt{M} also earns its place functionally.
+Mitochondrial transcription is intronless, polycistronic, strand-defined
+and very highly expressed, which makes it a dense and unambiguous strand
+calibrator, independent of splice signals.
+The pilot phase uses it as such (Section~\ref{sec:pilot}): the
+orientation of mitochondrial reads settles the strandedness of a library
+even when introns are scarce or absent.
+
+\paragraph{The class bonus.}
+Residency in the index is necessary but not sufficient.
+A real rRNA read still competes against hundreds of degenerate genomic
+copies; it carries sequencing errors, and the individual's rDNA differs
+from the exemplar by polymorphism.
+The comparison is thus not between one true match and one false one, but
+between a single true template and the \emph{best of hundreds} of false
+ones --- and the maximum over many near-misses will, by chance alone,
+sometimes exceed the truth.
+This is a multiple-comparisons effect: it biases assignment away from
+the correct class systematically, and the more numerous the decoys the
+worse it gets.
+Mitochondria against NUMTs pose the identical problem.
+
+Magic2 corrects it with a fixed bonus: alignments to classes
+\texttt{M}, \texttt{C} and \texttt{R} score $2\times\texttt{errCost}$
+higher than they otherwise would, so an organellar or ribosomal
+placement prevails unless a genomic placement is better by more than two
+substitutions.
+Expressing the bonus in error units rather than absolute points keeps it
+calibrated when \texttt{errCost} switches between 4 and 8 on the pilot
+data (Section~\ref{sec:pilot}).
+Classes \texttt{E}, \texttt{B} and \texttt{V} receive no bonus and need
+none: spike-ins, bacteria and viruses are alien to the genome and have
+no imitations there to compete with.
+The bonus exists exactly where a class competes with genomic look-alikes
+of itself, and nowhere else.
+
+Three mechanisms thus act together, and each is needed.
+Per-class multiplicity counting keeps the true sequence in the index.
+The same per-class count is what decorates each seed record, so during
+clustering (Section~\ref{sec:clustering}) an \texttt{M} or \texttt{R}
+glue point keeps its full weight while its genomic imitations are
+down-weighted for high multiplicity.
+And the bonus settles the residual competition on score.
+
+\paragraph{Controls and contaminants.}
+ERCC spike-ins (class \texttt{E}) enter the library at known
+concentrations, and so calibrate sensitivity and dynamic range against
+an absolute scale.
+Expected bacterial and viral sequence (classes \texttt{B}, \texttt{V})
+follows the same logic as rRNA: declared, it is quantified; undeclared,
+it is misplaced.
+
+\paragraph{Cost.}
+The whole completion --- rRNA exemplars, mitochondrion, spike-ins,
+common contaminants --- amounts to a few hundred kilobases against a
+3.1\,Gb genome, and so is free in index size, index construction time
+and alignment time.
+It changes the disposition of a large fraction of the reads.
+Few interventions in the pipeline have so asymmetric a payoff, which is
+why the annotated, completed target is the recommended configuration and
+the bare genome (\texttt{-t}) is offered only for testing.
 
 \subsection{Seed encoding}
 \label{sec:seed_encoding}
@@ -650,8 +838,103 @@ Within each block the GPU performs the following steps in sequence:
 \end{enumerate}
 
 
-%% ===============================================================
-\section{Alignment extension}
+\subsection{LibTorch backend: an alternative GPU implementation}
+\label{sec:torch}
+
+The pipeline of Section~\ref{sec:gpu_pipeline} is also implemented a
+second time, independently, on top of LibTorch, the C++ API of PyTorch
+(\texttt{wsa/sa\_torch.cpp}, interface \texttt{wsa/sa.torch.h}).
+It is compiled under \texttt{-D USE\_TORCH} into the binary
+\texttt{magic2\_torch}, and is selected by the same respawn mechanism.
+The two backends are alternatives, not layers: each performs the
+complete pre-assignment, and either can be replaced by the CPU
+sort--merge of Section~\ref{sec:sort} at run time.
+
+The motivation is expressive rather than numerical.
+The entire join is written as a handful of whole-array operations ---
+\texttt{bucketize}, \texttt{index\_select}, \texttt{repeat\_interleave},
+\texttt{argsort} --- with no hand-written kernel, no explicit thread or
+block geometry, and no manual memory management.
+The same source runs on CUDA, on Apple MPS, and on the CPU, the device
+being selected at run time.
+Isolation follows the rule already used for the SRA reader: the file
+includes only LibTorch headers and its own public header, never
+\texttt{sa.h} or any acedb header, and all data crosses the boundary as
+flat pointers and counts behind an opaque \texttt{SATorchObj} handle.
+
+\paragraph{Index residency.}
+Each of the $\mathit{NN}=16$ partitions is held on the device as three
+tensors in compressed-sparse-row form: \texttt{g\_keys} $[K]$, the
+sorted unique seeds; \texttt{g\_offsets} $[K{+}1]$; and \texttt{g\_cw}
+$[M,3]$, the payload columns \texttt{nam}, \texttt{pos}, \texttt{flags}.
+The seed column of the \texttt{CW} record is not stored: the CSR index
+already says which rows belong to which seed, and the value itself is
+never needed after the join.
+Dropping it reduces the resident index for a human or mouse genome
+(1.43 billion records) from about 22.8 to 17.1\,GB, which leaves room
+on a 32\,GB device for the 1--2\,GB of working tensors a block requires.
+Seeds are compared as \emph{signed} \texttt{int32}, LibTorch offering no
+unsigned 32-bit \texttt{bucketize}; the on-disk index must therefore be
+built with the matching signed radix sort.
+
+\paragraph{Join and output.}
+Read seeds are located in \texttt{g\_keys} by \texttt{bucketize},
+equality is verified, and the CSR start and count of each surviving seed
+are gathered.
+\texttt{repeat\_interleave} then materialises the Cartesian product
+directly, the jump lines of Section~\ref{sec:multiplicity} being excluded
+by masking the row indices divisible by 256, so no extra field is needed.
+The genome payload is gathered, the five output columns are concatenated,
+and the table is sorted by read identifier --- which, by the paired
+encoding of Section~\ref{sec:paired_encoding}, groups mates as before.
+The record returned is a \texttt{TORCHMATCH}: five 32-bit fields,
+20\,bytes, against 64 for a \texttt{SEEDMATCH}, the two seed fields and
+the read flags having been dropped as always zero.
+The buffer is owned by the handle and loaned to the C caller.
+Two entry points are offered: \texttt{saTorchJoinSort}, which joins and
+sorts seeds already extracted by the CPU, and
+\texttt{saTorchCodeJoinSort}, which in addition extracts the seeds on the
+device from a flat IUPAC buffer, packing the forward and reverse-complement
+$k$-mers by weighted sums and keeping $Z=\min(S,C)$ exactly as in
+Section~\ref{sec:strand_agnostic}.
+Every entry point is exception-guarded and returns a null pointer on any
+failure, which the caller reads as an instruction to fall back to the CPU.
+
+\paragraph{Performance and its ceiling.}
+Both GPU backends are correct and in production, and both are only
+marginally faster than the CPU sort--merge.
+This is a property of the problem rather than a defect of either
+implementation, and it can be measured directly.
+Varying the sampling steps changes the size of the seed tables while
+leaving every other stage of the pipeline untouched, and therefore
+isolates the cost of pre-assignment.
+Across 27 benchmark datasets, tripling the number of read seeds
+(read step 3 to 1) costs only 10\,\% of wall time, and doubling the
+number of genome seeds (index step 6 to 3) costs 22\,\%.
+Back-solving each against $T = (1-f) + kf$ gives a read-seed-dependent
+fraction $f \approx 5\,\%$ and a genome-seed-dependent fraction
+$f \approx 22\,\%$.
+Seed generation, sorting and joining --- the entire work that either
+GPU backend performs --- thus accounts for roughly a quarter of the
+run.
+By Amdahl's argument, no implementation of this stage, on any device
+and however fast, can accelerate Magic2 by more than about
+$1/(1-0.27) \approx 1.4\times$.
+The observed marginal gain is exactly what that bound predicts, and it
+is the reason no further GPU implementation of the seed stage is
+planned.
+
+The remaining three quarters --- alignment extension, the exon-path
+dynamic programming, and the splice logic
+(Sections~\ref{sec:align}--\ref{sec:adjust_introns}) --- are
+branch-heavy, data-dependent and irregular, which is the least
+favourable workload a GPU can be given; they stay on the CPU by design.
+The clearer benefit of both GPU paths therefore lies elsewhere: the
+index is resident on the device, so the CPU no longer memory-maps
+$\sim$22\,GB per machine and that memory is returned to the agents.
+Given the cost of a GPU, the CPU path remains the recommended default.
+
+
 \label{sec:align}
 
 The alignment extension stage receives \texttt{SEEDMATCH} records ---
@@ -828,7 +1111,7 @@ This is expected and correct behaviour: the multi-mapping rate is
 a property of the genome annotation, not an aligner artefact.
 
 \section{Intron detection}
-\label{sec:adjust_introns_1}
+\label{sec:adjust_introns}
 
 After the dynamic-programming pass, the successive fragments have not
 yet been clipped, their read coordinates very often overlap by a few bases
@@ -841,7 +1124,7 @@ To locate the most probable correct boundaries and clip blunt-end
 the successive fragments the program works as follows.
 
 \subsection{Error minimisation}
-\label{sec:adjust_introns_1}
+\label{sec:error_minimisation}
 Because the genome contains so many repetions at all scales,
 two successive fragments often overlap over dozens of bases or more.
 The code first searches the region where a blunt end clip would
@@ -875,25 +1158,36 @@ errors and maximises splice-signal evidence.
 
 
 
-\paragraph{Intron size threshold.}
+\paragraph{Minimal intron size.}
 Magic2 does not call introns below 30 bases.
 No confirmed human intron shorter than 30 bases is known, and
 short genomic gaps in an alignment are more parsimoniously explained
 by sequencing deletions: a 6-base gap is reported as two successive
 3-base deletions and penalised accordingly in the score.
-Above 30 bases, a gap becomes an intron candidate, but confidence
-is graded rather than binary.
-Magic2 counts, for each candidate gap-length threshold $t$, the
-fraction of gaps at or above $t$ that carry a canonical GT-AG (or
-CT-AC) signal.
-As $t$ increases this fraction rises; the threshold is set at the
-point where the slope of that curve falls to~1 (i.e.\ where raising
-the threshold further gains no additional enrichment for canonical
-signals).
-This adaptive procedure is described in detail in the Magic-BLAST
+Above 30 bases, a gap becomes an intron candidate.
+
+\paragraph{Minimal intron support.}
+Confidence in a candidate intron is graded rather than binary, and it
+is set by the support $n$: the number of independent reads whose
+alignment crosses that exact donor--acceptor pair.
+The data themselves calibrate the scale.
+Introns with high support are almost always canonical GT-AG, whereas
+the proportion of GT-AG falls as the support decreases, revealing the
+level at which the collection starts to be dominated by noise.
+Magic2 exploits this by a descending procedure.
+The support threshold $t$ is walked downward from the maximum observed
+support through the low values $5, 4, 3, 2, 1$, and at each step the
+cumulative number of GT-AG introns with support $\ge t$ is plotted
+against the cumulative number of introns of any splice signal with
+support $\ge t$.
+The local slope of this curve, after regularisation, is the fraction
+of newly admitted introns that are canonical.
+The walk stops as soon as that slope drops below $1/2$, that is, as
+soon as lowering the threshold one step further admits more
+non-canonical than canonical introns; introns with support below the
+threshold reached are not reported.
+This adaptive procedure is the one introduced in the Magic-BLAST
 paper~\citep{boratyn2019}; Magic2 inherits and extends it.
-An intron is considered reliable if it either carries a GT-AG signal
-or is supported by multiple independent reads.
 
 \paragraph{Intron scoring bonus/penalty.}
 Once a gap is confirmed as an intron, its contribution to the
@@ -1060,35 +1354,37 @@ hit an unreadable stretch typically fail to align altogether rather
 than producing two flanking paths.
 
 %% ===============================================================
-\section{Adapter detection and trimming}
+\section{Adaptor detection and trimming}
 \label{sec:adapters}
 
-Adapter sequences may be supplied via \texttt{--adaptor1}/\texttt{--adaptor2}
-or the run manifest, but this is not required.
-In practice, the exact adapter sequence as it appears in sequenced reads
+Adaptor sequences may be supplied via \texttt{--adaptor1}/\texttt{--adaptor2}
+or via the optional third column of the run manifest
+(\texttt{adaptor1=atgc,adaptor2=tggt}; see the user manual),
+but this is not required.
+In practice, the exact adaptor sequence as it appears in sequenced reads
 is frequently unknown to the user, owing to the complexity of modern
 library constructions.
-Magic2 therefore infers adapter sequences directly from the data.
+Magic2 therefore infers adaptor sequences directly from the data.
 
 \subsection{Overhang accumulation}
 \label{sec:overhang}
 
 After alignment, the unaligned 3$'$ tail of a read --- the overhang ---
-is a candidate adapter fragment.
+is a candidate adaptor fragment.
 Magic2 accumulates four per-position base-frequency histograms over
 overhangs, one for each possible first overhang base (A, T, G, C).
 The split is necessary because the first overhang base has a 25\,\%
 probability of matching the genomic sequence by chance, which
-otherwise shifts the composite histogram and obscures the adapter
+otherwise shifts the composite histogram and obscures the adaptor
 signal.
 
-To reconstruct the adapter consensus, the histogram with the highest
-total count is selected (say, the A histogram, implying the adapter
+To reconstruct the adaptor consensus, the histogram with the highest
+total count is selected (say, the A histogram, implying the adaptor
 begins with A).
 The most frequent second base is then identified (say, G), and the
 G sub-histogram, shifted by one position, is added to the A histogram.
 The resulting composite histogram is extremely clean: on real datasets,
-base prevalence at each of the first $\sim$40 adapter positions
+base prevalence at each of the first $\sim$40 adaptor positions
 typically exceeds 70\,\% (Figure~\ref{fig:adaptor_histo}).
 
 \begin{figure}[h]
@@ -1096,36 +1392,36 @@ typically exceeds 70\,\% (Figure~\ref{fig:adaptor_histo}).
 \includegraphics[width=\textwidth]{adaptor_histogram}
 \caption{Per-position base-frequency of 3$'$ unaligned overhangs
 (run A\_Total\_151PE), after splitting by first overhang base and compositing.
-\textbf{(a)}~Read~1 (TruSeq adapter): the four bases alternate sharply between
+\textbf{(a)}~Read~1 (TruSeq adaptor): the four bases alternate sharply between
 positions, each dominant base reaching 88--94\,\%, unambiguously encoding the
 29-nt consensus shown above the panel.
-\textbf{(b)}~Read~2 (degenerate adapter): dominant-base fractions range from
+\textbf{(b)}~Read~2 (degenerate adaptor): dominant-base fractions range from
 50--80\,\%, consistent with a partially randomised ligation sequence;
-the adapter family is nonetheless uniquely identified.
+the adaptor family is nonetheless uniquely identified.
 Colours: A\,=\,green, T\,=\,red, G\,=\,orange, C\,=\,blue.
-The coloured sequence above each panel is the adapter inferred by Magic2.}
+The coloured sequence above each panel is the adaptor inferred by Magic2.}
 \label{fig:adaptor_histo}
 \end{figure}
 
 \subsection{Pilot blocks and reprocessing}
 \label{sec:adapter_pilot}
 
-Adapter inference is part of the broader pilot-block mechanism
+Adaptor inference is part of the broader pilot-block mechanism
 described in Section~\ref{sec:pilot}.
-Once the adapter consensus is called, any pilot block that was
+Once the adaptor consensus is called, any pilot block that was
 processed without it is reprocessed from scratch; no reads are lost.
 
 \subsection{Trimming and alignment extension}
 \label{sec:trimming}
 
-Once an adapter is known, each read's overhang is compared to it.
+Once an adaptor is known, each read's overhang is compared to it.
 If enough bases match, the alignment is clipped back to the exact
-genomic position where the adapter begins, effectively extending the
+genomic position where the adaptor begins, effectively extending the
 reported alignment.
 In the Magic2 output format the trimmed bases are exported as clipped,
 and the extension bases are reported in upper case rather than lower
 case.
-A read that aligns fully up to the recognised adapter boundary, with
+A read that aligns fully up to the recognised adaptor boundary, with
 no mismatches in the genomic portion, is counted as a
 \emph{perfect alignment}.
 
@@ -1151,7 +1447,7 @@ stereotyped sequence at their 5$'$ end by trans-splicing: the
 SL sequences are highly conserved and serve as extremely reliable
 markers of transcription start sites.
 Magic2 searches for SL sequences at the same positions used for
-adapter detection: the 5$'$ end of forward reads and the 3$'$ end
+adaptor detection: the 5$'$ end of forward reads and the 3$'$ end
 of reverse reads.
 The 12 known \textit{C.~elegans} SL sequences (SL1--SL12) are
 hard-coded in the program~\citep{blumenthal2002}.
@@ -1167,21 +1463,6 @@ The recommended mechanism is a \texttt{Species=worm} entry in the
 settings alongside the genome index rather than on the command line.
 A \texttt{--species worm} command-line override is also accepted for
 convenience.
-
-%% ===============================================================
-\section{Intron boundary optimisation and splice-signal scoring}
-\label{sec:introns}
-
-Intron detection, boundary optimisation, splice-signal scoring,
-the dynamic intron-size threshold, and the RNA/DNA scoring
-adjustment are all handled during the adjust-introns step
-described in Section~\ref{sec:adjust_introns}.
-The maximum reportable intron size is \texttt{maxIntron}=1{,}000{,}000
-bases; gaps above this limit are not called as introns regardless
-of splice-signal evidence.
-Strand inference from the GT-AG versus CT-AC intron balance is
-performed during the pilot phase (Section~\ref{sec:pilot}) and
-used throughout.
 
 %% ===============================================================
 \section{Output formats}
@@ -1261,6 +1542,110 @@ also installable via \texttt{conda install ucsc-wigtobigwig}.
 \textbf{[TODO: implement the \texttt{wigToBigWig} pipe and
 chromosome-sizes export in \texttt{wsa/sa.wiggle.c}.]}
 
+\subsection{Gene expression: projecting coverage onto the annotation}
+\label{sec:gene_expression}
+
+The annotation supplied as class \texttt{A} serves two distinct
+purposes.
+The first is the construction of junction seeds
+(Section~\ref{sec:junction_seeds}), which happens at index time.
+The second is gene expression, which happens at output time and is
+described here.
+
+\paragraph{Why projection rather than read counting.}
+Conventional pipelines obtain gene counts in a second pass: a tool such
+as \texttt{htseq-count} or \texttt{featureCounts} re-reads the BAM file,
+tests each alignment against the annotation, and assigns or discards it.
+Magic2 does not need that pass, because it has already built the object
+that the pass would reconstruct.
+A strand-specific coverage map at single-base resolution is accumulated
+during alignment, while the reads are in memory, at no additional I/O
+cost; it is required in any case for the coverage tracks
+(Section~\ref{sec:wiggle}).
+
+That map is a sufficient statistic for expression.
+Once per-base, per-strand depth is known, the expression of any feature
+is an integral of the map over the geometry of that feature.
+Counting therefore ceases to be an operation on reads and becomes an
+operation on the annotation, and costs no further traversal of the data.
+(A new annotation can in principle be re-projected onto an exported
+coverage track without realigning, but the point is academic: realigning
+is cheap enough that nobody would bother.)
+Note that the internal map is kept at single-base resolution regardless
+of \texttt{wiggle\_step}, which only governs the resolution of the
+exported track; gene counts are therefore exact even when coverage is
+exported at 10-base resolution.
+
+\paragraph{Slicing the genome by annotation status.}
+The annotation is projected onto the genome, and the genome is cut into
+maximal intervals of constant annotation status.
+Each interval is classified as intergenic, intronic, exonic sense,
+exonic antisense, or CDS, and carries the list of genes claiming it.
+This partition is a static property of the annotation: it is computed
+once, independently of any data.
+
+The reformulation is what makes overlapping genes tractable.
+The awkward question ``which gene does this read belong to'' --- which
+must be asked once per read, and has no answer for reads in shared
+regions --- is replaced by ``which genes claim this interval'', which is
+asked once per interval and always has an answer.
+
+\paragraph{Resolving ambiguity.}
+An interval claimed by a single gene contributes its coverage integral
+to that gene directly.
+The difficult case is an interval claimed by two genes, classically a
+convergent pair sharing a 3$'$ UTR.
+In a stranded library the strand resolves it.
+In an unstranded library nothing in the data can.
+
+Magic2 defers such intervals rather than deciding them.
+Once every unambiguous interval has been attributed, the deferred signal
+is divided between the claimants in proportion to the coverage each has
+already accumulated over the intervals it claims alone.
+Each gene is thus weighted by evidence untouched by the ambiguity being
+resolved.
+The division is performed once and is not iterated to convergence.
+The two obvious alternatives are both biased: discarding ambiguous
+intervals penalises precisely those genes that overlap others, while
+crediting both claimants inflates both.
+
+\paragraph{Quality control for free.}
+The same partition yields the mapping-class fractions reported in
+\texttt{runStats.tsf} (Section~\ref{sec:runstats}) at no extra cost,
+and they are diagnostic.
+A high intronic fraction indicates pre-mRNA or nuclear RNA rather than
+mature message; a high intergenic fraction indicates genomic DNA
+contamination or transcription the annotation does not know about; the
+balance between exonic sense and exonic antisense measures the
+strand-specificity of the protocol directly.
+
+\paragraph{The expression index.}
+Raw fractional counts are not comparable across libraries.
+When one gene captures 40\,\% of the reads --- haemoglobin in whole
+blood, or residual rRNA --- every other gene's share of the total is
+compressed by that factor, and a comparison between two runs with
+different high-abundance content measures their high-abundance content
+rather than their biology.
+Magic2 therefore computes a preliminary expression index in which the
+contribution of super-expressed genes, defined as those capturing more
+than 1\,\% of all counts, is removed from the normalising denominator.
+Those genes are retained in the table with their own counts intact; only
+their weight in the total is withdrawn, which is what keeps the index of
+a housekeeping gene stable across libraries of very different
+composition.
+Counts are exported in TSF (Section~\ref{sec:tsf}) and merge across runs
+by concatenation, so that a differential-expression table over an
+arbitrary number of runs requires no additional tooling.
+
+\paragraph{Chromosome naming.}
+Projection presupposes that the coordinates of the annotation and of the
+genome refer to the same objects.
+Magic2 does not attempt to reconcile naming conventions: chromosome
+identifiers are taken verbatim from the \texttt{G} FASTA and the
+\texttt{A} annotation, and a mismatch is a fatal error at index
+construction rather than a silent loss of every gene on the offending
+chromosome.
+
 \subsection{Intron support tables}
 \label{sec:intron_tables}
 
@@ -1272,7 +1657,11 @@ The tag field encodes the intron as
 \texttt{chrom\_\_donor\_acceptor}, where the double underscore
 separates the chromosome name from the two boundary coordinates
 and a single underscore separates donor from acceptor.
-Negative coordinates indicate the antisense strand.
+Both coordinates are positive; the strand is encoded by their order
+rather than by their sign.
+An ascending pair ($a_1 < a_2$) denotes an intron on the minus
+strand, a descending pair ($a_1 > a_2$) an intron on the plus
+strand.
 The format code is \texttt{iit} (two integers, one text):
 \texttt{n}~(number of supporting reads on the annotated strand),
 \texttt{nR}~(reads on the opposite strand), and
@@ -1370,7 +1759,7 @@ statistics for a run in a single TSF file (\texttt{wsa/sa.stats.c}).
 The header comment records the index used, seed length, maximum
 repeats, and error cost, providing a self-contained audit trail.
 
-Unlike the other TSF files, \texttt{runStats.tsf} uses
+\texttt{runStats.tsf} uses
 multi-value format codes (\texttt{ift}, \texttt{iftift},
 \texttt{itititft}, \ldots) that pack several related numbers and
 labels into one record.
@@ -1407,9 +1796,9 @@ intron-spanning gaps.
 The full per-type breakdown is in \texttt{errorProfile.tsf}
 (Section~\ref{sec:outputs}).
 
-\paragraph{Adapter and clipping statistics.}
+\paragraph{Adaptor and clipping statistics.}
 \texttt{Clipped\_3prime\_Adaptor\_read1} records the number of
-reads trimmed and the inferred adapter sequence.
+reads trimmed and the inferred adaptor sequence.
 \texttt{Clipped\_polyA} and \texttt{Clipped\_polyT} count reads
 trimmed at a poly(A) or poly(T) tail.
 
@@ -1431,8 +1820,10 @@ more than one alignment.
 \paragraph{Target-class breakdown.}
 Magic2 aligns against one or more named target classes defined in
 the index (Section~\ref{sec:seeds}).
-The standard classes are \texttt{G} (genomic, the primary genome),
-\texttt{M} (mitochondrial), and \texttt{R} (repeat / ribosomal RNA).
+The classes are those declared in the target configuration
+(Section~\ref{sec:target}): most commonly \texttt{G} (genomic, the
+primary genome), \texttt{M} (mitochondrial), \texttt{R} (ribosomal RNA)
+and \texttt{S} (interspersed repeats).
 For each class, \texttt{Reads\_aligned\_in\_class\_X} and
 \texttt{Bases\_aligned\_in\_class\_X} give total counts, positive-
 and negative-strand breakdowns, the positive-strand fraction, and
@@ -1451,7 +1842,7 @@ Magic2 derives all internal parameters from the hardware and data
 rather than requiring user configuration.
 Hardware auto-configuration (NUMA node selection, CPU count, agent
 and block counts) is described in Section~\ref{sec:parallel}.
-Data auto-configuration (read type, library type, strand, adapter
+Data auto-configuration (read type, library type, strand, adaptor
 sequences) is described in Section~\ref{sec:pilot}.
 The resulting defaults are listed below for reference; all can be
 overridden on the command line when needed.
@@ -1461,11 +1852,11 @@ overridden on the command line when needed.
 \toprule
 Parameter & Default \\
 \midrule
-\texttt{errCost}         & 4 \\
+\texttt{errCost}         & 4 or 8, selected dynamically from the pilot data \\
 \texttt{errRateMax}      & 12\,\% \\
 \texttt{bMax}            & 3\,Mb per block \\
 Index step               & 6 (genomes $>1$\,Mb) \\
-Alignment step (\texttt{iStep}) & \texttt{tStep}/2 \\
+Alignment step (\texttt{iStep}) & \texttt{tStep} \\
 \texttt{seedLength}      & 16 (genomes $<1$\,Gb); 18 (human/mouse) \\
 \texttt{maxTargetRepeats}& 81 (Section~\ref{sec:multiplicity}) \\
 \texttt{wiggle\_step}    & 1 (small genomes); 10 (human/mouse) \\
@@ -1500,64 +1891,6 @@ Optional GPU acceleration  & CUDA (Thrust); silent CPU fallback \\
 \bottomrule
 \end{tabular}
 \end{center}
-
-Continuous integration currently uses Travis CI (\texttt{.travis.yml}).
-Migration to GitHub Actions with matrix builds for all three target
-platforms is planned.
-
-%% ---------------------------------------------------------------
-\section{Current status and roadmap}
-\label{sec:roadmap}
-
-\subsection{Implemented and tested}
-
-The following components are fully implemented and have been
-validated on human, mouse, and \textit{C.~elegans} RNA-seq datasets:
-sort--merge alignment, radix sort, Go-style channel parallelism,
-NUMA-aware respawning, pilot-block inference, adapter detection and
-trimming, splice-boundary optimisation (adjust-introns,
-Section~\ref{sec:adjust_introns}), shadow realignment
-(adjust-exons, Section~\ref{sec:adjust_exons}), poly(A)
-detection, trans-splice leader detection, SAM output, TSF output,
-fixedStep wiggle output, intron and double-intron tables, error
-profile, and run statistics.
-Optional GPU acceleration via CUDA is implemented and tested on
-NVIDIA hardware; execution falls back silently to the CPU path on
-machines without a compatible device.
-
-\subsection{Implemented, verification pending}
-
-Two output features are coded but require testing against standard
-downstream tools before the first public release:
-\begin{itemize}
-  \item \textbf{Rafia BAM encoding.}
-        The compound \texttt{200I3000N} CIGAR strategy for long-read
-        bubbles (Section~\ref{sec:rafias}) needs to be implemented
-        and verified against samtools, IGV, and downstream tools
-        (see \texttt{wsa/sa.sam.c}).
-  \item \textbf{BigWig export.}
-        The \texttt{wigToBigWig} pipe and automatic chromosome-sizes
-        file (Section~\ref{sec:wiggle}) need to be implemented in
-        \texttt{wsa/sa.wiggle.c}.
-\end{itemize}
-
-\subsection{Planned}
-
-The following are design decisions made but not yet implemented:
-\begin{itemize}
-  \item GitHub Actions CI with matrix builds for Linux x86-64,
-        Linux ARM, and macOS, replacing the current Travis CI
-        configuration.
-  \item Automated GitHub Releases attaching pre-built binaries
-        and documentation when a version tag is pushed.
-  \item A regression test suite running a small reference dataset
-        and comparing outputs to stored expected results.
-  \item Verification that Magic2 runs correctly inside Docker
-        containers (currently untestable at NCBI for security
-        reasons).
-  \item A standalone TSF library reference
-        (\texttt{magic2\_tsf\_reference.tex}).
-\end{itemize}
 
 %% ---------------------------------------------------------------
 \bibliographystyle{naturemag}
