@@ -229,7 +229,7 @@ typedef struct pStruct {
   BOOL debug, gzi, gzo ;
   BOOL createIndex ;
   BOOL noJump ;
-  BOOL all ;
+  BOOL full ;
   BOOL align ;
   BOOL justStats ;
   BOOL wiggle ;
@@ -287,7 +287,8 @@ typedef struct pStruct {
   Array runStats ;
   Array runLanes ;
   Array runLanesDone ;
-  Array geneBoxes ;  /* gene coordinates per chromosome */
+  Array geneCoords ;  /* gene coordinates */
+  Array geneBoxes ;  /* Array of Arrays of gene boxes per chrom */
   Array geneCounts ; /* expression counts per chromosomes */
   BigArray knownIntrons ;
   Array wiggles ;

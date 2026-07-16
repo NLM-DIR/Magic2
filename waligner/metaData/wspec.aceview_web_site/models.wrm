@@ -3818,7 +3818,8 @@
                           Unaligned  UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
       Rejected_too_many_hits UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
       Alignments Perfect_reads UNIQUE Float UNIQUE Int // same number twice but in large group the Int overflow
-                 Complex_reads  UNIQUE Float
+                 Complex_reads  UNIQUE Float UNIQUE Int
+                 Partial_reads  UNIQUE Float UNIQUE Int
 		 Count_mismatch Int UNIQUE Float REPEAT
                  Per_cent_mismatch Int UNIQUE Float REPEAT
                  Per_cent_aligned Int UNIQUE Float REPEAT
@@ -3865,8 +3866,8 @@
                               Links_to_spike_in UNIQUE Float
                               Links_to_rRNA  UNIQUE Float
                               Links_to_mito  UNIQUE Float
-                              Circle_pairs     UNIQUE Float			      
-                              Complex_pairs  UNIQUE Float
+                              Circle_pairs     UNIQUE Float UNIQUE Int			      
+                              Complex_pairs  UNIQUE Float UNIQUE Int
                 Orphans Text UNIQUE Float UNIQUE Text  // type-number, count, type-title
       Errors Error_position Int UNIQUE Float UNIQUE Float UNIQUE Float UNIQUE Float
              Error_profile Text Text UNIQUE Float UNIQUE Float UNIQUE Float   // f1  a>g number Mb n/Mb             

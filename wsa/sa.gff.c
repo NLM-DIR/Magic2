@@ -150,8 +150,9 @@ void saGffBinaryParser (PP *pp)
 
       if (nnE) /* split per chromosomes */
 	{
-	  GBX *up, *vp ;
+	  GBX *up, *vp, *gCo ;
 	  long int ii ;
+	  pp->geneCoords = arrayHandleCreate (20000, GBX, pp->h) ;
 	  pp->geneBoxes = arrayHandleCreate (dictMax (pp->bbG.dict) + 1, Array, pp->h) ;
 	  for (ii = 0, up = bigArrp (geneBoxes, 0, GBX) ; ii < nnE ; ii++, up++)
 	    {
@@ -161,6 +162,10 @@ void saGffBinaryParser (PP *pp)
 		chromBoxes = array (pp->geneBoxes, chrom, BigArray) = bigArrayHandleCreate (10000, GBX, pp->h) ;
 	      vp = bigArrayp (chromBoxes, bigArrayMax (chromBoxes), GBX) ;
 	      *vp = *up ;
+	      gCo = arrayp (pp->geneCoords, up->gene, GBX) ;
+	      gCo->gene = up->gene ; gCo->chrom = up->chrom ;
+	      gCo->a1 = (! gCo->a1 || up->a1 < gCo->a1) ? up->a1 : gCo->a1 ;
+	      gCo->a2 = up->a2 > gCo->a2 ? up->a1 : gCo->a2 ;
 	      chrom++ ;
 	    }
 	}

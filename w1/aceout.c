@@ -114,6 +114,7 @@ ACEOUT aceOutCreateToFile (const char *filename, const char *spec, AC_HANDLE han
 
   if (fil)
     {
+      setvbuf (fil, NULL, _IOFBF, 256 * 1024) ;  // 256KB buffer instead of default 8KB
       fo = aceOutSetFileStack (fil, 0, handle);
       fo->filename = strnew (filename, handle);
     }
@@ -497,7 +498,6 @@ int aceOutBinary (ACEOUT fo, const void *data, long int size)
 
   return errno_result;
 } /* aceOutBinary */
-
 
 /*************************************************************/
 /* Print output at specified position in a "teletext"-like way.              */

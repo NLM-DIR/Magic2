@@ -158,24 +158,26 @@ static int wiggleCreate (const PP *pp, BB *bb)
 	    {
 	      if (wigL && wigR && w1 < w2)
 		{
-		  WP *wp = bigArrayp (isRead2 ? wigR : wigL, bigArrayMax (wigL), WP) ;
+		  BigArray wig = isRead2 ? wigR : wigL ;
+		  WP *wp = bigArrayp (wig, bigArrayMax (wig), WP) ;
 		  wp->pos = w1 ; wp->ln = endLength ; wp->weight = weight ;
 		}
 	      if (wigL && wigR && w1 > w2 && w1 >= endLength)
 		{
-		  WP *wp = bigArrayp (isRead2 ? wigR : wigL, bigArrayMax (wigR), WP) ;
+		  BigArray wig = isRead2 ? wigR : wigL ;
+		  WP *wp = bigArrayp (wig, bigArrayMax (wig), WP) ;
 		  wp->pos = w1 - endLength ; wp->ln = endLength ; wp->weight = weight ;
 		}
 	    }
 	  
-	  if (wigP && w1 > 10 && x1 > ap->leftClip + 25)
+	  if (wigP && w1 > 10 && w1 > endLength &&  x1 > ap->leftClip + 25)
 	    {
 	      WP *wp = bigArrayp (wigP, bigArrayMax (wigP), WP) ;
 	      if (w1 < w2) { wp->pos = w1 - endLength ; wp->ln = endLength ; }
 	      else { wp->pos = w1 ; wp->ln = endLength ; }
 	      wp->weight = weight ;
 	    }
-	  if (wigP && w2 > 10 && x2 < ap->rightClip - 25)
+	  if (wigP && w2 > 10 && w2 > endLength &&  x2 < ap->rightClip - 25)
 	    {
 	      WP *wp = bigArrayp (wigP, bigArrayMax (wigP), WP) ;
 	      if (w1 < w2) { wp->pos = w2 ; wp->ln = endLength ; }
@@ -351,9 +353,10 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   int run = nw / (2 * chromMax) ;
   int chrom = (nw % (2 * chromMax)) ;
-  int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
-  int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
-  char flip = (pp->antiStrand || (! pp->strand && nm > 3 && 100*nm > 80*(nm+np))) ? 0x1 : 0x0 ;  ;  
+  long int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
+  long int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
+  BOOL doFlip = (pp->antiStrand || (! pp->strand && nm > 3 && 100L * nm > 80L * (nm+np))) ;
+  char flip = doFlip ? 0x1 : 0x0 ;  ;  
   char strand = ( nw & 0x1) ^ flip ? 'r' : 'f' ;
   long int ii, iMax = 0 ;
   long int cumul = 0, cumuls[8] = {0} ;
@@ -437,84 +440,53 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 
       if (1 && arrayMax(a))
 	{
+#define BUFFER_SIZE (2 * 1024 * 1024)  // 2MB
+	  char *writeBuffer = malloc(BUFFER_SIZE) ;
+	  int bufPos = 0 ;
+	  
 	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
 	  char *fNam = hprintf (h, "/wiggles/%s.%s.%s.BF", runNam, chromNam, typeNam) ;
-	  ACEOUT ao = aceOutCreate (pp->outFileName, fNam, 0 || pp->gzo, h) ;
+	  ACEOUT ao = aceOutCreate (pp->outFileName, fNam, 0 || pp->gzo, h) ; // compressing the BF files is extremelly good 100X
 	  aceOutDate (ao, "##", "wiggle") ; 
 	  aceOutf (ao, "track type=wiggle_0\n") ;
-
+	  
 	  aceOutf (ao, "fixedStep chrom=%s start=%d step=%d\n", chromNam, pos0, wiggle_step) ;
 
       	  xp = arrayp (a, 0, unsigned int) ;
+
+
 	  for (int localCumul = 0, j = 0, jMax = arrayMax(a) ; j < jMax ; j++)
 	    {
 	      unsigned int w = xp[j] ;
 	      cumul += w ;
 	      localCumul += w ;
-	      if ((j + demiStep) % wiggle_step == 0)	      
+	      if ((j + demiStep) % wiggle_step == 0)
 		{
-		  if (0)		  aceOutf (ao, "%u\n", localCumul / 720) ;
-		  if (1)
-		    {
-		      char buf[32] ;
-		      int k = fast_itoa_nl (buf, localCumul / 720) ;
-		      if (0) aceOut (ao,buf) ;
-		      if (1) aceOutBinary (ao,buf, k) ;
-		    }
+		  char buf[32] ;
+		  int k = fast_itoa_nl(buf, localCumul / 720) ;
+		  
+		  // Flush if buffer full
+		  if (bufPos + k + 1 >= BUFFER_SIZE) {
+		    aceOutBinary(ao, writeBuffer, bufPos) ;
+		    bufPos = 0 ;
+		  }
+		  
+		  // Copy to buffer
+		  memcpy(writeBuffer + bufPos, buf, k) ;
+		  bufPos += k ;
 		  localCumul = 0 ;
 		}
 	    }
+	  
+	  
+	  // Final flush
+	  if (bufPos > 0)
+	    aceOutBinary(ao, writeBuffer, bufPos) ;
+
+	  free(writeBuffer) ;
 	}
-#ifdef JUNK      
-      if (0 && arrayMax(a))
-	
-	{
-	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
-	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
-	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.BF", pp->outFileName, runNam, chromNam, typeNam) ;
-	  vTXT txt = vtxtHandleCreate (h) ;
-	  FILE *fp = fopen(fNam, "w") ;
-	  char *cp ;
-	  int ln ;
-	  
-	  if (!fp)
-	    messcrash ("exportToFile cannot open file %s\n", fNam) ;
-	  
-	  setvbuf(fp, NULL, _IOFBF, BUF_SIZE);  /* Full buffering, large size */
-	  char buf25[25] ;
-	  char buf[BUF_SIZE] ;
-	  /* 	  size_t pos = 0 ; */
 
-	  vtxtPrintf (txt, "## wiggle %s\n", timeBufShowNow (buf25)) ;
-	  vtxtPrintf (txt, "track type=wiggle_0\n") ;
-	      
-	  vtxtPrintf (txt, "fixedStep chrom=%s start=%d step=%d\n", chromNam, pos0, wiggle_step) ;
-
-	  cp = vtxtPtr (txt) ;
-	  ln = strlen (cp) ;
-	  fwrite (cp, ln, 1, fp) ;
-	  
-      	  xp = arrayp (a, 0, unsigned int) ;
-	  for (int localCumul = 0, j = 0, jMax = arrayMax(a) ; j < jMax ; j++)
-	    {
-	      unsigned int w = xp[j] ;
-	      cumul += w ;
-	      localCumul += w ;
-	      if ((j + demiStep) % wiggle_step == 0)	      
-		{
-
-		  if (0) 	  sprintf (buf, "%d\n",  localCumul / 720) ;
-		  if (0) 	  fast_itoa_nl (buf, localCumul / 720) ;
-		  if (1) 	  fast_itoa_nl (buf, localCumul / 720) ;
-		  localCumul = 0 ;
-
-		}
-	    }
-	  fclose (fp) ;
-	}
-#endif
-      
       if (arrayMax(a) && geneB)
 	{
 	  long int ib, ibMax = bigArrayMax (geneB) ;
@@ -627,7 +599,7 @@ static float geneIndex (const PP *pp, GC *gc)
   float index = 0 ;  /* depends on total counts */
   double damper = 1000 ; /* damper in bp */
   int geneLength = 3000 ;
-  int average_read_ln = rs->p.nBase1 + rs->p.nBase2 /(1 + rs->p.nReads) ;
+  long int average_read_ln = (rs->p.nBase1 + rs->p.nBase2) /(1L + rs->p.nReads) ;
   int ln = geneLength, ln0 ;
   int accessibleLength = 5000 ;
   double z, abp, bp, genomicKb ;
@@ -773,6 +745,7 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
   GC *gc, *gc2 ; 
   char tBuf[25] ;
   GeneCounts gcs = {0} ;
+  int ngenes = 0 ;
   
   fprintf (stderr, "%s: start geneCounts export\n", timeBufShowNow (tBuf)) ;
   
@@ -817,18 +790,28 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
       ACEOUT ao = aceOutCreate (pp->outFileName, ".geneCounts.tsf", pp->gzo, h) ;
       aceOutDate (ao, "##", "Gene counts") ;
       aceOutf (ao, "#Gene\tRun\tFormat\tGene_coverage\tExons_Xocoverage\n") ;
+
+      Array geneCoords = pp->geneCoords ;
+      GBX *gCo = 0 ;
+      int gbxMax = geneCoords ? arrayMax (geneCoords) : 0 ;
+      
       for (igc = jgc = 0, gc = bigArrp (allGeneC, 0, GC), gc2 = gc ; igc < igcMax ; igc++, gc++)
 	if (gc->gene && gc->boxCount)
-	  aceOutf (ao, "%s\t%s\ttiifii\t%s\t%d\t%d\t%.2f\t%ld\t%ld\n"
-		   , dictName (pp->geneDict, gc->gene)
-		   , dictName (pp->runDict, gc->run)
-		   , "chrom", 1, 1 // should be chrom a1 a2 (gene)
-		   , geneIndex (pp, gc)
-		   , gc->boxCount/720, gc->exonCount/720
-		   ) ;
+	  {
+	    nnn+= gc->boxCount ; ngenes++ ;
+	    gCo = gc->gene < gbxMax ? arrp (geneCoords, gc->gene, GBX) : 0 ;
+	    aceOutf (ao, "%s\t%s\ttiifii\t%s\t%d\t%d\t%.2f\t%ld\t%ld\n"
+		     , dictName (pp->geneDict, gc->gene)
+		     , dictName (pp->runDict, gc->run)
+		     , gCo && gCo->chrom ? dictName (pp->bbG.dict, gCo->chrom >> 1) : "-"
+		     , gCo ? gCo->a1 : 0, gCo ? gCo->a2 : 0
+		     , geneIndex (pp, gc)
+		     , gc->boxCount/720, gc->exonCount/720
+		     ) ;
+	  }
     }
-
-  fprintf (stderr, "%s: stop geneCounts export total count %ld\n", timeBufShowNow (tBuf), nnn/720) ;
+  
+  fprintf (stderr, "%s: stop geneCounts export %d genes with total count %ld\n", timeBufShowNow (tBuf), ngenes, nnn/720) ;
   ac_free (h) ;
   return gcs ;
 } /* wiggleExportGeneCounts */
@@ -928,6 +911,8 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
   BOOL debug = FALSE ;
   char tBuf[25] ;
   GeneCounts gcs = {0} ;
+
+  nAgents = nAgents > 32 ? 32 : nAgents ;
   
   pp->wiggleCumuls = arrayHandleCreate (wMax, long int, h) ;
   pp->cdss = arrayHandleCreate (wMax, long int, h) ;

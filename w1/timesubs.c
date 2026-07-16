@@ -122,7 +122,7 @@ mytime_t aceTime(struct tm *tm,
       if (wantMonth)
 	t |= (tm->tm_mon + 1) << 22;
       
-      t |= (tm->tm_year - 90) << 26; 
+      t |= (tm->tm_year - 110) << 26; 
     }
   return t;
 }
@@ -160,7 +160,7 @@ static void timeStruct(struct tm *tm, mytime_t t,
   month = ( t >> 22) & 0xf;
   year = ( t >> 26) &0x3f;
   
-  if (year == 0) /* before 1990, use time-less format. */
+  if (year == 0) /* before 2020, use time-less format. */
     { 
       secs = mins = hours = 0;
       day = t & 0x1f;
@@ -168,7 +168,7 @@ static void timeStruct(struct tm *tm, mytime_t t,
       year = (t >> 9) & 0x7f;
     }
   else 
-    year += 90; 
+    year += 120; 
   
   tm->tm_year = year;
   

@@ -892,16 +892,20 @@ void saIntronsExport (PP *pp, Array aaa)
       AC_HANDLE h = ac_new_handle () ;
       ACEOUT ao = aceOutCreate (pp->outFileName, ".introns.tsf", 0, h) ;
       INTRON *up ;
-      long int ii ;
+      BigArray kI = pp->knownIntrons ;
+      int ii ;
+      long int ik = 0, ikMax = kI ? bigArrayMax (kI) : 0 ;
+      GBX *gp = ikMax ? bigArrp (kI, 0, GBX) : 0 ;
       
       aceOutf (ao, "### Intron support in tsf format: chrom__a1_a2,  run, iit (format for 2 integers 1 text), nb of reads supportingt the intron, number antistrand, intron feet\n") ;
       aceOutf (ao, "### Call bin/tsf -i %s -I tsf -O table -o my_table.txt to reformat this file into an excell compatible tab delimited table\n",
 	       aceOutFileName (ao)
 	       ) ;
-      aceOutf (ao, "#Intron\tRun\tformat\tn\tnR\tfeet\n") ;
+      aceOutf (ao, "#Intron\tRun\tformat\tForward_supports\tnReverse_supports\tfeet\tKnown/Novel\n") ;
       for (ii = 0, up = arrp (aaa, ii, INTRON) ; ii < iMax ; ii++, up++)
 	{
 	  int min = 3 ;
+	  BOOL isKnown = FALSE ;
 	  
 	  if (! up->feet[0])
 	    continue ;
@@ -910,12 +914,30 @@ void saIntronsExport (PP *pp, Array aaa)
 	  else if (!strcasecmp (up->feet, "gc_ag"))
 	    min = 2 ;
 
+	  if (gp)
+	    {
+	      int chrom = up->chrom, a1 = up->a1, a2 = up->a2 ;
+	      if (a1 > a2) { int a0 = a1 ; a1 = a2 ; a2 = a0 ; }      
+	      while (gp->chrom < chrom && ik < ikMax)
+		{ gp++ ; ik++ ; }
+	      while (gp->chrom == chrom && gp->a1 < a1 && ik < ikMax)
+		{ gp++ ; ik++ ; }
+	      while (gp->chrom == up->chrom && gp->a1 == a1 && gp->a2 < a2 && ik < ikMax)
+		{ gp++ ; ik++ ; }
+	      
+	      if (gp->chrom == chrom &&
+		  gp->a1 == a1 && gp->a2 == a2
+		  )
+		isKnown = TRUE ;
+	    }
+		  
 	  if (1 && up->n + up->nR >= min)
-	    aceOutf (ao, "%s__%d_%d\t%s\tiit\t%d\t%d\t%s\n"
+	    aceOutf (ao, "%s__%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
 		     , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2
 		     , dictName (pp->runDict, up->run)
 		     , up->n, up->nR
 		     , up->feet
+		     , isKnown ? "Known" : "Novel"
 		     ) ;
 	}
       

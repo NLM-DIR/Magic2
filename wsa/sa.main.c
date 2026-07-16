@@ -1908,7 +1908,7 @@ int main (int argc, const char *argv[])
 
   p.hitsFormat = TRUE ; /* default */
   p.introns = TRUE ; /* default */
-  p.all = getCmdLineBool (&argc, argv, "--all") ;
+  p.full = getCmdLineBool (&argc, argv, "--full") ;
   p.sam = getCmdLineBool (&argc, argv, "--sam") ;
   p.bam = getCmdLineBool (&argc, argv, "--bam") ;
   p.tabular = getCmdLineBool (&argc, argv, "--tabular") ;
@@ -1982,12 +1982,12 @@ int main (int argc, const char *argv[])
   getCmdLineText (h, &argc, argv, "-r", &(p.runName)) ;
   getCmdLineText (h, &argc, argv, "--run", &(p.runName)) ;
 
-  if (p.all && ! p.createIndex)
+  if (p.full && ! p.createIndex)
     {
       p.align = TRUE ;
       p.wiggle = TRUE ;  // implies geneCounts
       p.wiggleEnds = TRUE ;
-      p.bam = TRUE ;
+      // p.bam = TRUE ;
     }
   
   /***************** method name, only used in some output files, convenient when optimizing parameters */

@@ -233,7 +233,7 @@ of your hardware.
 This section shows three minimal end-to-end examples to get you started
 immediately.  Full details for each step are in the sections that follow.
 
-\subsection{Example 1: Align reads against a raw genome}
+\subsection{Example 1: Align reads against a raw genome (not recommended)}
 
 Two steps:
 
@@ -248,7 +248,7 @@ magic2 -x IDX.genome -i reads.fasta.gz -o results/
 \code{genome.fasta.gz} must contain all chromosomes in a single FASTA
 file.  Results appear in the \code{results/} directory.
 
-\subsection{Example 2: Align reads against an annotated genome}
+\subsection{Example 2: Align reads against an annotated genome (recommended)}
 
 Three steps (see the details in Section~\ref{sec:targetIndex}):
 
@@ -310,7 +310,7 @@ identifiers ending in \code{/1} and \code{/2}: four lines per pair
 in FASTA (two records of header\,+\,sequence), eight lines per pair
 in FASTQ (two records of header\,+\,sequence\,+\,\code{+}\,+\,quality).
 
-To be automatically recognized, the file should be called *.sample_12.fast[aq](.gz)
+To be automatically recognized, the file should be called *.sample\_12.fast[aq](.gz)
 If not, use --interleaved on the command line, or write interleaved in the third column
 of the read manifest
 
@@ -476,7 +476,7 @@ finishes within seconds of the completeing the download.
 
 \begin{notebox}
 \textbf{Note:} If the files already exist in the local \code{./SRA/}
-cache directory (from a previous \code{--sraDownload}), they are used
+cache directory (for example created by previous \code{--sraDownload}), they are used
 instead of re-downloading.
 \end{notebox}
 
@@ -485,6 +485,8 @@ without storing the reads or alignment files:
 \begin{lstlisting}
 magic2 -x IDX --srr SRR1,SRR2,SRR3 --no_ali --maxGB 1 -o out/
 \end{lstlisting}
+The option '\code{--maxGB 1}' restricts the analysis to the first gigabase of each run,
+this is usually sufficient to asees the QC.
 
 \subsection{Downloading SRA runs}
 
@@ -520,7 +522,7 @@ magic2 --sraDownload SRR1,SRR2,... [--fastq] [--split_pairs] [--maxGB <n>]
                         Default is FASTA. \\
 \code{--split\_pairs} & Write paired-end reads to separate \code{\_R1} and
                         \code{\_R2} files instead of interleaved (slower, not recommended) \\
-\code{--maxGB <n>}   & Stop after downloading \code{n} gigabases.
+\code{--maxGB <n>}   & Stop after downloading \code{n} gigabases. \code{n} is decimal (n=0.01 => 10Mb) 
                         By default the entire run is downloaded. \\
 \bottomrule
 \end{tabular}
@@ -742,7 +744,7 @@ magic2 -x IDX -i reads.fasta.gz -o out/ --hits --tabular --bam
 \code{--hits}    & Magic \code{.hits} format.  Describes mismatches,
                    introns, read overhangs, short indels and mismatches explicitly. Default. \\
 \code{--tabular} & Magic-BLAST tabular format.  Similar to \code{.hits}\\
-\code{--sam}     & Standard SAM format.  
+\code{--sam}     & Standard SAM format.  \\
 \code{--bam}     & Standard BAM format.  Required for tools such as
                    IGV, Samtools, and many genome browsers.\\
 \code{--no\_ali} & Suppress all alignment output.  Useful when only
@@ -930,28 +932,42 @@ Magic2 measures and reports the following metrics for each run:
 \textbf{Metric} & \textbf{Description} \\
 \midrule
 \endhead
-Total reads              & Total number of reads (or read pairs) in the input. \\
-Aligned reads (\%)       & Fraction of reads with at least one alignment. \\
-Uniquely aligned (\%)    & Fraction of reads with exactly one alignment. \\
-Multi-mapping (\%)       & Fraction of reads aligning to more than one locus. \\
-Unmapped (\%)            & Fraction of reads with no alignment. \\
-rRNA fraction (\%)       & Fraction of reads mapping to ribosomal RNA sequences.
-                           Values above 30\% may indicate inadequate rRNA depletion. \\
-Mitochondrial fraction (\%) & Fraction of reads mapping to the mitochondrial sequence. \\
-Adaptor rate (\%)        & Fraction of reads in which an adaptor sequence was
-                           detected and clipped. \\
-Library strandedness (\%)& Percentage of intron reads exhibiting GT-AG motifs
-                           (vs.\ CT-AC).  Values near 0\% or 100\% indicate a
-                           stranded library; values near 50\% indicate unstranded. \\
-Read length distribution & Histogram of aligned read lengths (especially
-                           informative for long-read data). \\
-Mismatch rate (\%)       & Per-base substitution rate in aligned reads. \\
-Insertion rate (\%)      & Per-base insertion rate in aligned reads. \\
-Deletion rate (\%)       & Per-base deletion rate in aligned reads. \\
-Soft-clip rate (\%)      & Fraction of read bases that are soft-clipped at either end. \\
-Exonic fraction (\%)     & Fraction of aligned bases falling in annotated exons. \\
-Intronic fraction (\%)   & Fraction of aligned bases falling in annotated introns. \\
-Intergenic fraction (\%) & Fraction of aligned bases in intergenic regions. \\
+Pairs  & Number of raw pairs. \\
+Aligned\_pairs & Number and fraction of aligned pairs. \\
+Compatible\_pairs & Number and fraction of compatible aligned pairs. \\
+Circle\_pairs & Number and fraction of locally diverging pairs (candidate circles). \\
+Non\_compatible\_pairs  & Number and fraction of non compatible aligned pairs. \\
+Reads & Total number of raw reads, counting 2 reads per pair if applicable. \\
+Low\_entropy\_reads & Number of rejected reads with very low sequence complexity. \\
+Low\_entropy\_bases & Number of baes in those reads. \\
+Aligned\_reads & Number of aligned reads. \\
+Unligned\_reads & Number of unaligned reads. \\
+Perfect\_reads & Number and fraction of fully and exactly aligned reads. \\
+Complex\_reads & Number and fraction of reads aligned in an unusual way. \\
+Partial\_reads & Number and fraction of partially aligned reads. \\
+Bases & Number of bases in the raw reads: total, in read 1, in read 2. \\
+Aligned\_bases   & Number and fraction of aligned bases: total, in read 1, in read 2. \\
+Unaligned\_bases  & Number of unaligned bases. \\
+Genome\_length  & Cumulated length of the calss G (genomic) targets. \\
+CDS\_utr\_intronic\_intergenic\_Bases & Number and fraction of bases mapping in the different annotated regions. \\
+ATGCN   & Number of bases A, T, G, C or other in the raw reads. \\
+Clipped\_polyA & Number of reads with at least 8 overhanging terminal A. \\
+Clipped\_polyT & Number of reads with at least 8 overhanging initial T. \\
+polyA\_sites  & Number of observed polyA addition sites. \\
+WiggleCumul  & Total number of bases represented in the coverage plots (wiggles). \\
+Errors & Number (and fraction of aligned bases) of mismatched bases. \\
+Mismatches\_and\_InDels & Number (and fraction of aligned bases) of substitutions and short indels. \\
+Strategy   & A positive number in RNA samples, negative in DNA samples. \\ 
+Intron\_supports & Number of local read supports for new and novel introns. \\
+Supported\_introns & Number of new and novel supported introns.\\
+Min\_read\_length & Minimal read length. \\
+Max\_read\_length & Maximal read length. \\
+Length\_distribution\_1\_5\_50\_95\_99\_mode\_av  & Read length distribution per quantile. \\
+Reads\_Aligned\_once & Number and Fraction of all reads uniquely mapped. \\
+Reads\_multi\_aligned\_\_n & Number and Fraction of all reads mapped 2,3,4...10 times. \\
+Reads\_aligned\_several\_times & Number and Fraction of all reads mapped several time. \\
+Reads\_aligned\_in\_class\_X & Number and Fraction of aligned reads per strand per class (rRNA, Genome...). \\
+Bases\_aligned\_in\_class\_X & Number and Fraction of aligned bases per strand per class (rRNA, Genome...). \\
 \bottomrule
 \end{longtable}
 \end{center}
@@ -961,7 +977,7 @@ in the human readable TSF-format
 allowing easy production of tables per property
 
 \begin{lstlisting}
-cat out_dir/*/runStats.tsf | grep Perfect | bin/tsf -I tsf -O table --title 'Perfect reads' > perfect_reads.table.txt
+cat out_dir/*/runStats.tsf | gawk -F '\t' '{if($2 == tag)print;}' tag=Perfect  | bin/tsf -I tsf -O table --title 'Perfect reads' > perfect_reads.table.txt
 \end{lstlisting}
 
 
@@ -1040,6 +1056,7 @@ magic2 -x IDX -i reads.fastq.gz -o /tmp/magic2_test/
 \code{-o}             & \textit{dir}  & required & Output directory.  Created if it does not exist. \\
 \code{--hits}         & ---           & on       & Export in Magic \code{.hits} format. \\
 \code{--tabular}      & ---           & off      & Export in tabular (Magic-BLAST) format. \\
+\code{--sam}          & ---           & off      & Export in SAM format. \\
 \code{--bam}          & ---           & off      & Export in BAM format. \\
 \code{--no\_ali}      & ---           & off      & Suppress alignment output (metrics and counts only). \\
 \code{--full}         & ---           & off      & Enable all outputs: genes, wiggles, wiggle ends. \\
@@ -1065,7 +1082,7 @@ which to analyse further, without consuming disk space.
 magic2 -x IDX.T2T \
        --srr SRR24511880,SRR24511881,SRR24511882,\
              SRR24511883,SRR24511884,SRR24511885 \
-       --no_ali -o qc_survey/
+       --no_ali --maxGB 2 -o qc_survey/
 \end{lstlisting}
 
 This streams each run from NCBI, produces quality-control metrics
@@ -1138,7 +1155,7 @@ Index creation fails with out-of-memory error
   & Increase available RAM, or use a larger \code{--step} value (e.g.\
     8 or 10) to reduce index size at a some cost to sensitivity. \\[4pt]
 
-Zero rRNA fraction ($>$50\%)
+Zero rRNA fraction
   & In RNA-seq experiments, this is unusual.  Ensure that an
     \code{R} line pointing to rRNA sequences was included in the
     tConfig so they are counted correctly. \\[4pt]
@@ -1159,17 +1176,18 @@ SRA download stalls or times out
 Chromosome names don't match between genome and GTF
   & This is a fatal error reported during index creation.
     Ensure that the chromosome identifiers in your FASTA \code{G} file
-    exactly match those in the \code{I} annotation file (including
+    exactly match those in the \code{A} annotation file (including
     \code{chr} prefix vs.\ no prefix). \\[4pt]
 
 BAM file not produced despite \code{--bam} flag
-  & Confirm that the output directory is writable and has sufficient
-    disk space.  BAM files for a human-scale genome typically require
-    3--10 GB per run. \\[4pt]
+& To transform a SAM output into a BAM output, Magic2 invokes 'samtools'.
+Otherwise Magic2 reverts to SAM fromat.
+Samtools is not part of the magic2 distribution. You must install it from the web
+and make it accessible. Check by typing: which samtools.\\[4pt]
 
-Missing gene count output despite \code{--full}
+Missing gene counts output despite \code{--full}
   & Confirm that the index was built with \code{-T} (tConfig including
-    an \code{I} annotation line) rather than \code{-t} (raw genome only).
+    a \code{I} annotation line) rather than \code{-t} (raw genome only).
     The actual tConfig file used during index creation is copied in the
     IDX directory. Please check that file.\\
 

@@ -2158,7 +2158,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	  for (ie2a = 0 ; ie2a < ne2a ; ie2a++)
 	    {
 	      HIT *yp = bigArrp (e2a, ie2a, HIT) ;
-	      if (yp->x1 == xp[nd].x1 && yp->a1 != ii) 
+	      if (yp->x1 == xp[nd].x1 && yp->a1 != ii && (nMate+1) * nMask < 32)
 		{ nMate++ ; mate = (mate << nMask) | (yp->a1 + 1) ; jIntron = yp->x1 ; }  /* common exon */
 	    }
 	}
@@ -2181,7 +2181,7 @@ static int findIntronMates (const PP *pp, BB *bb, Array aa, BigArray introns)
 	  for (ie2d = 0 ; ie2d < ne2d ; ie2d++)
 	    {
 	      HIT *yp = bigArrp (e2d, ie2d, HIT) ;
-	      if (yp->x1 == xp[na].x1 && yp->a1 != ii) 
+	      if (yp->x1 == xp[na].x1 && yp->a1 != ii  && (nMate+1) * nMask < 32) 
 		{ nMate++ ; mate = (mate << nMask) | (yp->a1 + 1) ; }  /* common exon */
 	    }
 	}
@@ -3383,7 +3383,7 @@ static void alignDoOneRead (const PP *pp, BB *bb
       BOOL isIntron = ((hit->x1  >> NTARGETREPEATBITS )  & 0x7) ? TRUE : FALSE ;
       if (! read || ! chrom)
 	continue ;
-      if (ii < iMax  && ! memcmp (hit, hit + 1, sizeof (HIT)))
+      if (ii < iMax -1 && ! memcmp (hit, hit + 1, sizeof (HIT)))
 	continue ;
       if (read != read1)
 	{

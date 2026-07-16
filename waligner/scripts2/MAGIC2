@@ -1048,9 +1048,12 @@ endif
 
 if ($phase == sortali) goto phaseSortali
 if ($phase == sortali2) goto phaseSortali2
+if ($phase == wg4sp) goto phasewg4sp
+
 if ($phase == wgr) goto phaseSortaliGroupWiggle
 if ($phase == wg5) goto phasewg5
 if ($phase == wg6) goto phasewg6
+
 
 if ($phase == g0) goto phaseg0
 if ($phase == g4sp) goto phaseg4sp
@@ -2387,7 +2390,7 @@ foreach run (`cat MetaDB/$MAGIC/RunList`)
     date > tmp/SA/$run/salign.out
     date > tmp/SA/$run/salign.err
     echo "$sortalign -x TARGET/IDX/IDX.$species -I tmp/SA/$run/iConfig -o tmp/SA/$run --sraCaching " >> tmp/SA/$run/salign.out
-    scripts/submit  tmp/SA/$run/salign "/usr/bin/time -f 'TIMING\tE\t%E\tU\t%U\tS\t%S\tM\t%M\tP\t%P' $sortalign -x TARGET/IDX/IDX.$species -I tmp/SA/$run/iConfig --species $species -o tmp/SA/$run --wiggles --gzo " 64G
+    scripts/submit  tmp/SA/$run/salign "/usr/bin/time -f 'TIMING\tE\t%E\tU\t%U\tS\t%S\tM\t%M\tP\t%P' $sortalign -x TARGET/IDX/IDX.$species -I tmp/SA/$run/iConfig --species $species -o tmp/SA/$run --wiggles --wiggleEnds --gzo " 64G
   endif
 end
 
