@@ -131,7 +131,8 @@ typedef struct runStatStruct {
   long int nTelloRead ;
   long int SlRead ;
   long int nClippedSls[SLMAX] ;
-  long int nSupportedIntrons ;
+  long int nrSupportedIntrons[5] ;
+  long int nrIntronSupports[4] ;
   long int gt_ag_Support ;
   long int ct_ac_Support ;
   float intronStranding ;
@@ -307,8 +308,10 @@ typedef struct pStruct {
   Array confirmedSLs ;
   Array confirmedIntrons ;
   Array doubleIntrons ;
+  long int nrIntronSupports[4] ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
   BOOL sam, bam, hitsFormat, tabular, blink ;
+  BOOL bigWig ;
   BOOL exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;
@@ -548,7 +551,9 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0) ;
 void saConfigIsIndexAccessible (PP *pp) ;
 void saConfigIsOutDirWritable (PP *pp) ;
 int saConfigCheckTargetIndex (PP *pp) ; 
-Array saConfigGetRuns (PP *pp, Array runStats) ;    
+Array saConfigGetRuns (PP *pp, Array runStats) ;
+BOOL saSanitizeRunName (const char *nam) ;
+
 /* saSetGetAdaptors:
  * set=0: get, 1: set, 2: hard set non rewritable
  * isRna: >=0: favor introns, search polyAs, export gene expression

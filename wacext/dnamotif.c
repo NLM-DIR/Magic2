@@ -2128,6 +2128,7 @@ static int dnaMotifBarCodeConstruct (LOOK *look)
   dnaMotifBarCodeConstructDoubles1 (dict6, dict12) ; 
   return 16 ;
   dnaMotifBarDistanceDistrib (look, dict12, 6) ;
+  return 16 ;
 }  /* dnaMotifBarCodeConstruct */
 
 /*************************************************************************************/

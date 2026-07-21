@@ -527,7 +527,7 @@ static void qcAli (QC *qc, RC *rc)
 
 	      aceOutf (qc->ao, "\t%.3f", z/1000000) ;
 	      aceOutf (qc->ao, "\t%.2f", zc) ;  /* average length aligned */
-	      aceOutf (qc->ao, "\t%.3f", zb/1000) ; /* Mb aligned on any target */
+	      aceOutf (qc->ao, "\t%.3f", zb/1000.0) ; /* Mb aligned on any target */
 
 	      aceOutf (qc->ao, "\t%.2f", rc->var[T_kb] ? 100 *zb / rc->var[T_kb] : 0) ; /* % Mb aligned on any target before clipping */
 	      {
@@ -555,7 +555,7 @@ static void qcAli (QC *qc, RC *rc)
 		      }
 		  }
 		aceOutf (qc->ao, "\t") ;
-		if (z > -1)
+		if (zClipped > -1)
 		  {
 		    aceOutPercent (qc->ao, 100.00 * z/zClipped) ;
 		  } 
@@ -705,7 +705,7 @@ static void qcAvLengthAli (QC *qc, RC *rc)
 		    irAny = ir ;
 		}
 
-	      avClipped = z = irAny > 0 ? ac_table_float (tt, irAny, 11, -1) : -1 ; 
+	      avClipped = z = irAny > 0 ? ac_table_float (tt, irAny, (tt->cols >=12 ? 11 : 7), -1) : -1 ; 
 	      if (z > -1)
 		{
 		  nw++ ;
@@ -974,7 +974,7 @@ static void qcMismatchTypes (QC *qc, RC *rc)
   float zDeletionA = 0, zDeletionT = 0, zDeletionG = 0, zDeletionC= 0 ; 
   float zSub[12] ;
 
-  TT *ti, tts[] = {
+  TT *ti = 0, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
     { "TITLE", "Title", 10, 0, 0} ,
  
@@ -1043,12 +1043,26 @@ static void qcMismatchTypes (QC *qc, RC *rc)
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
 
+  float zBasesAligned = 0 ;
 
   memset (zSub, 0, sizeof (zSub)) ;
   /*
 Distribution of mismatches in best unique alignments, absolute, observed, counts
 */
 
+  if (rc && ti && ti->tag && strcmp (ti->tag, "TITLE"))
+    {
+      tt = ac_tag_table (rc->ali, "nh_Ali", h) ;
+      for (ir = 0 ; tt && ir < tt->rows ; ir++)
+	{
+	  const char *ccp = ac_table_printable (tt, ir, 0, EMPTY) ;
+	  if (! strcasecmp (ccp, "any"))
+	    {
+	      zBasesAligned = ac_table_float (tt, ir, 5, 0) ;
+	    }
+	}
+    }
+  
   for (ti = tts ; ti->tag ; ti++)
     {
       char buf[256] ;
@@ -1086,6 +1100,7 @@ Distribution of mismatches in best unique alignments, absolute, observed, counts
 		      zz +=  ac_table_float (tt, ir, 3, 0) ;
 		    }
 		}
+	      if (! zz) zz = zBasesAligned/1000.0 ;
 	      aceOutf (qc->ao, "\t%.0f", zz) ;
 	      denominator = zz ;
 	      break ;
@@ -1751,7 +1766,7 @@ static void qcDoPair (QC *qc, RC *rc, BOOL doPercent)
 	  const char *ccp ;
 	  ccp = doPercent ? "%" : "Number of" ;
 	  aceOut (qc->ao, "\t") ;
-	  aceOutf (qc->ao, (char *)ti->title, ccp, ccp, ccp, ccp, ccp, ccp, ccp, ccp) ;
+	  aceOutf (qc->ao, (char *)ti->title, ccp, ccp, ccp, ccp, ccp, ccp, ccp, ccp, ccp) ;
 	}
      else if (! strcmp (ti->tag, "TITLE"))
 	{
@@ -2140,6 +2155,8 @@ static void qcProject (QC *qc, RC *rc)
 	      tt = rc->srr ? ac_tag_table (rc->srr, "Nucleic_Acid_Extraction", h) : 0 ;
 	      if (! tt)
 		 tt = rc->srr ? ac_tag_table (rc->srr, "sraNucleic_Acid_Extraction", h) : 0 ;
+	      if (! tt)
+		 tt = rc->run ? ac_tag_table (rc->run, "Machine", h) : 0 ;
 	      if (tt)
 		{
 		  DICT *dict = dictHandleCreate (128,h) ;
@@ -2452,7 +2469,9 @@ static void qcMainResults1 (QC *qc, RC *rc)
 	      break ;
 	      
 	    case 40: /* Average fragment multiplicity */
-	      if (qc->TT)
+	      if (ac_has_tag (rc->ali, "Multi_threading"))
+		aceOutf (qc->ao, "\tNA") ;  /* NA in Magic2 */
+	      else if (qc->TT)
 		{
 		  aceOutf (qc->ao, "\t%.2f", zs ? zr/zs : 0) ;
 		}
@@ -2469,7 +2488,10 @@ static void qcMainResults1 (QC *qc, RC *rc)
 		  {
 		    if (! strcasecmp (ac_table_printable (tt, ir, 0, ""), qc->TT ? "targeted_genes" : myAny))
 		      {
-			z = ac_table_float (tt, ir, 11, 0) ;
+			if (tt->cols >= 12)
+			  z = ac_table_float (tt, ir, 11, 0) ;
+			else
+			  z = ac_table_float (tt, ir, 7, 0) ;
 			aceOutf (qc->ao, "%.2f", z) ;
 		      }
 		   }
@@ -2526,7 +2548,7 @@ static void qcMainResults1 (QC *qc, RC *rc)
 		for (ir = 0 ; tt && ir < tt->rows ; ir++)
 		  {
 		    ccp = ac_table_printable (tt, ir, 0, EMPTY) ;
-		    if (! strcasecmp (ccp, "any1") || ! strcasecmp (ccp, "any2"))
+		    if (! strcasecmp (ccp, "any"))
 		      {
 			zb += ac_table_float (tt, ir, 5, 0) ;
 		      }
@@ -2615,7 +2637,7 @@ static void qcMainResults2 (QC *qc, RC *rc)
 		    if (! strcasecmp (ac_table_printable (tt, ir, 0, ""), "any"))
 		      {
 			z =  ac_table_float (tt, ir, 7, -1) ; 
-			zClipped = ac_table_float (tt, ir, 11, -1) ;
+			zClipped = ac_table_float (tt, ir, 11, z) ;
 			break ;
 		      }
 		  }
@@ -5383,11 +5405,18 @@ static void qcRunSelection (QC *qc, RC *rc)
 	  tt = ac_tag_table (rc->ali, tag, h) ;
 	  z = 0 ;
 	  if (tt)
-	    for (ir = 0 ; ir < tt->rows ; ir++)
-	      {
-		if (!ir || ! strcasecmp (ac_table_printable (tt, ir, 0, "xxx"), target))
-		  z = ac_table_int (tt, ir, ic, 0) + ac_table_float (tt, ir, ic, 0) ;
-	      }
+	    {
+	      for (int pass = 0 ; pass<2 ; pass++)
+		{
+		  const char *targetI = pass ? "any" : target ;
+		  for (ir = 0 ; ir < tt->rows ; ir++)
+		    {
+		      if (!ir || ! strcasecmp (ac_table_printable (tt, ir, 0, "xxx"), target))
+			z = ac_table_int (tt, ir, ic, 0) + ac_table_float (tt, ir, ic, 0) ;
+		    }
+		  if (z > 0) break ;
+		}
+	    }
 	  aceOutf (qc->ao, "\t%.0f", z) ;
 	}
       else if (! strcmp (ti->tag, "PlusStrand"))
@@ -5430,7 +5459,7 @@ static void qcRunSelection (QC *qc, RC *rc)
 	  for (int ir = 0 ; tt && ir < tt->rows ; ir++)
 	    {
 	      ccp = ac_table_printable (tt, ir, 0, EMPTY) ;
-	      if (! strcasecmp (ccp, "B_rrna"))
+	      if (! strcasecmp (ccp, "B_rrna") || ! strcasecmp (ccp, "R"))
 		{
 		  if (1)  z = ac_table_float (tt, ir, 3, 0) ; 
 		  if (0) zb = ac_table_float (tt, ir, 5, 0) ;
@@ -5529,7 +5558,7 @@ static void qcRunSelection (QC *qc, RC *rc)
 	    for (int ir = 0 ; tt && ir < tt->rows ; ir++)
 	      {
 		ccp = ac_table_printable (tt, ir, 0, EMPTY) ;
-		if (! strcasecmp (ccp, "any1") || ! strcasecmp (ccp, "any2"))
+		if (! strcasecmp (ccp, "any"))
 		  {
 		    zb += ac_table_float (tt, ir, 5, 0) ;
 		  }
@@ -5615,7 +5644,10 @@ static void qcRunSelection (QC *qc, RC *rc)
 		{
 		  if (! strcmp ("any", ac_table_printable (tt, ir, 0, "toto")))
 		    {
-		      z = ac_table_float (tt, ir, 11, 0) ;
+		      if (tt->cols >= 12)
+			z = ac_table_float (tt, ir, 11, 0) ;
+		      else
+			z = ac_table_float (tt, ir, 7, 0) ;
 		      if (z >= 0)
 			aceOutf (qc->ao, "%.0f", z) ;
 		      break ;
@@ -6900,6 +6932,19 @@ int main (int argc, const char **argv)
   qc.TT = getCmdLineBool (&argc, argv, "-TT") ;
   qc.gzo = getCmdLineBool (&argc, argv, "-gzo") ;
 
+  if(0)
+    {
+      int x ;
+      KEYSET ks = keySetCreate () ;
+      keySet (ks, 0) = 11 ;
+      x = 20 ; keySetInsert (ks, x) ;
+      x = 1 ; keySetInsert (ks, x) ;
+
+      for(int i = 0 ; i < 3 ; i++)
+	printf ("%d %d", i, keySet (ks,i)) ;
+      exit (0) ;
+    }
+  
   qc.export =  allMethods ;
   getCmdLineOption (&argc, argv, "-e", &qc.export) ;
   getCmdLineOption (&argc, argv, "-export", &qc.export) ;

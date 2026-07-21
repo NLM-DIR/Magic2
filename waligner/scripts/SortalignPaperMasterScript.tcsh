@@ -200,6 +200,8 @@ setenv SV     v120.82.18M.wig.jul10     # same code wig
 setenv SVlast v120.82.18M.wig.jul10    # 
 setenv SV     v121.82.18M.jul10     # exact same code nowig
 setenv SVlast v121.82.18M.jul10    # 
+setenv SV     v122.81.18M.jul19     # errcost 4, no new index masking, no wig
+setenv SVlast v122.81.18M.jul19    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -215,6 +217,7 @@ setenv NOINTRONSEEDS 0
 setenv EXPORTSAM 0
 setenv EXPORTWIGGLES 0
 setenv EXPORTWIGGLEENDS 0
+setenv SETERRCOST 4
 setenv seedLength 16
 setenv seedLength 18
 setenv maxTargetRepeats 31

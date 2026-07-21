@@ -1,0 +1,66 @@
+#!bin/tcsh -f
+if ($1 == "") then
+  echo 'qusage delay_in_minutes :: displays every dt minutes own farm usage'
+  exit 1
+endif
+set x=$1
+ 
+if (! $?farm) set farm=UGE
+if (! $?MAGIC) set MAGIC=XXX
+set MAGIC2=$MAGIC
+set MAGIC=`echo $MAGIC2 | gawk '{print substr($1,1,10);}'`
+echo $MAGIC
+
+@ y = 60 * $x
+if($x>0) sleep 10
+lao:
+  date | gawk -F '\n' '{printf("%s\t::\t",$1);}'
+
+  if ($farm == TH2) then
+    yhrequeue:
+      yhqueue --name $MAGIC > toto.$$
+      set Status=$status 
+      if ($Status != 0) then
+        sleep 5
+        goto yhrequeue
+      endif
+    set nn=`cat toto.$$  | gawk '/JOBID/{next}{if($5 == "CG")next;n++;}END{print 0+n;}' magic=$MAGIC`
+    \rm toto.$$ 
+    echo "$nn running tasks waiting"
+  else if ($farm == BIOWULF) then
+    brequeue:
+      squeue --name $MAGIC --user $USER > toto.$$
+      set Status=$status 
+      if ($Status != 0) then
+        sleep 5
+        goto bsrequeue
+      endif
+    set nn=`cat toto.$$  | gawk '/JOBID/{next}{if($5 == "PD" || $6 == "R")n++;}END{print 0+n;}' magic=$MAGIC`
+    \rm toto.$$ 
+    echo "$nn running tasks waiting"
+  else if ($farm == SLURM) then
+    srequeue:
+      squeue --name $MAGIC --user $USER > toto.$$
+      set Status=$status 
+      if ($Status != 0) then
+        sleep 5
+        goto srequeue
+      endif
+    set nn=`cat toto.$$  | gawk '/JOBID/{next}{if($5 == "CG")next;n++;}END{print 0+n;}' magic=$MAGIC`
+    \rm toto.$$ 
+    echo "$nn running tasks waiting"
+  else
+    qstat | gawk '{if($5=="dr" || $6=="dr" || substr($6,1,2)=="dr")next;}{if($5=="dt" || $6=="dt" || substr($6,1,2)=="dt")next;}{ln++;if(ln<3)next;if ($3 == magic && $4 == uu) print substr($0,i);}' uu=$USER magic=$MAGIC | gawk '{ln++;nn[$5]++;if($7 != "dr")nj++}END{printf("%d jobs",nj);for(k in nn)printf("\t%s:%d",k,nn[k]);printf("\n");}' > toto.$$
+    set nn=`gawk '{print $1;}' toto.$$`
+    \rm toto.$$ 
+    echo "$nn running tasks waiting"
+    if ($x >= 30) df .
+#    qhost
+  endif
+
+  if ($nn <= 0) exit
+
+ if($x == 0) exit 0
+ sleep $y
+ goto lao
+exit 0

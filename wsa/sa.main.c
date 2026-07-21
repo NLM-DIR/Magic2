@@ -1288,7 +1288,7 @@ static void reportRunStats (PP *pp, Array runStats)
 	  , s0->ct_ac_Support 
 	  , s0->intronStranding
 	  ) ;
-  printf ("\n#:Supported_introns\t%ld", s0->nSupportedIntrons) ;
+  printf ("\n#:Supported_introns\t%ld", s0->nrSupportedIntrons[4]) ;
 
 
   printf ("\n\n#:Bases\t%ld", s0->p.nBase1 + s0->p.nBase2) ;
@@ -1911,6 +1911,8 @@ int main (int argc, const char *argv[])
   p.full = getCmdLineBool (&argc, argv, "--full") ;
   p.sam = getCmdLineBool (&argc, argv, "--sam") ;
   p.bam = getCmdLineBool (&argc, argv, "--bam") ;
+  p.bigWig = getCmdLineBool (&argc, argv, "--bigWig") ;
+  if (getCmdLineBool (&argc, argv, "--BF")) p.bigWig = FALSE ;
   p.tabular = getCmdLineBool (&argc, argv, "--tabular") ;
   p.qualityFactors = getCmdLineBool (&argc, argv, "--quality_factors") ;
   if (p.sam || p.bam)
@@ -1980,7 +1982,14 @@ int main (int argc, const char *argv[])
    */
   p.run = 0 ;
   getCmdLineText (h, &argc, argv, "-r", &(p.runName)) ;
-  getCmdLineText (h, &argc, argv, "--run", &(p.runName)) ;
+  if (getCmdLineText (h, &argc, argv, "--run", &(p.runName)))
+    {
+      if (! saSanitizeRunName (p.runName))
+	{
+	  fprintf (stderr, "--run %s  // a run name is used as a directory name, it should not contain spaces or special characters,\n please only use characters a-z A-Z 0-9 and .-_\n", p.runName) ;
+	  exit (1) ;
+	}
+    }
 
   if (p.full && ! p.createIndex)
     {

@@ -171,6 +171,8 @@ void saHelp (void)
     "  --wiggles                Export coverage plots (UCSC wiggle / BF format)\n"
     "  --wiggle_step <INT>      Coverage plot resolution in bases [default: 10]\n"
     "  --wiggle_ends            Export transcription-start / end-site coverage tracks\n"
+    "  --bigWig                 Export all wiggles in bigWig format (default, recommended)\n"
+    "  --BF                     Export all wiggles in bigWig format (fixed interval BF format)\n"
     "  --introns                Export intron support table (TSF format) [default: on]\n"
     "  --gzi                    Gunzip the -i files even if not implied by their name\n"
     "  --gzo                    Compress more output files with gzip \n"

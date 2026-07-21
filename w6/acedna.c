@@ -510,8 +510,9 @@ JUMP jumper [] = {  /* called from abifix.c */
  {0, 1, 8, 0},    /* trou in 1 */
  {2, 0, 10, 0}, 
  {0, 2, 10, 0}, 
- {3, 0, 10, 0}, 
- {0, 3, 10, 0}, 
+ {3, 0, 13, 0}, 
+ {0, 3, 13, 0}, 
+ {2, 2, 12, 0}, /* try double mismatch */
  {1, 0, 10, 2},    /* insert in 1 */
  {0, 1, 10, 2},    /* trou in 1 */
  {2, 0, 10, 2}, 
@@ -532,6 +533,25 @@ JUMP jumper [] = {  /* called from abifix.c */
  {0, 9, 15, 3},
  {10, 0, 15, 3},
  {0, 10, 15, 3},
+ {1, 1, 0, 0}    /* default is punctual */
+} ;
+
+
+JUMP gregJumper_default [] = {
+ {1, 1, 4, 0},  /* this was added for illumina */
+ {1, 0, 10, 0},    /* insert in 1 */ 
+ {0, 1, 10, 0},    /* deletion in 1 */
+ {2, 0, 10, 0}, 
+ {0, 2, 10, 0}, 
+ {3, 0, 13, 0},
+ {0, 3, 13, 0},
+ {2, 2, 12, 0}, /* try double mismatch */
+ {1, 0, 10, 2},
+ {0, 1, 10, 2},
+ {2, 0, 10, 2}, 
+ {0, 2, 10, 2}, 
+ {3, 0, 13, 2},
+ {0, 3, 13, 2},
  {1, 1, 0, 0}    /* default is punctual */
 } ;
 

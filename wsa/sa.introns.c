@@ -930,15 +930,27 @@ void saIntronsExport (PP *pp, Array aaa)
 		  )
 		isKnown = TRUE ;
 	    }
-		  
-	  if (1 && up->n + up->nR >= min)
-	    aceOutf (ao, "%s__%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
-		     , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2
-		     , dictName (pp->runDict, up->run)
-		     , up->n, up->nR
-		     , up->feet
-		     , isKnown ? "Known" : "Novel"
-		     ) ;
+
+	  int type = (isKnown ? 0x2 : 0x0) |
+	    (!strcmp (up->feet, "gt_ag") || !strcmp (up->feet, "ct_ac") ? 0x1 : 0x0) ;
+	  if (up->n + up->nR >= min)
+	    {
+	      RunSTAT *rc = arrp (pp->runStats, up->run, RunSTAT) ;
+	      
+	      rc->nrSupportedIntrons[4]++ ;
+	      rc->nrIntronSupports[type]+= up->n + up->nR;
+	      rc = arrp (pp->runStats, 0, RunSTAT) ;
+	      rc->nrSupportedIntrons[4]++ ;
+	      rc->nrIntronSupports[type]+= up->n + up->nR;
+	      
+	      aceOutf (ao, "%s__%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
+		       , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2
+		       , dictName (pp->runDict, up->run)
+		       , up->n, up->nR
+		       , up->feet
+		       , isKnown ? "Known" : "Novel"
+		       ) ;
+	    }
 	}
       
       ac_free (h) ;
@@ -964,7 +976,7 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
       aceOutf (ao, "### Call bin/tsf -i %s -I tsf -O table -o my_table.txt to reformat this file into an excell compatible tab delimited table\n",
 	       aceOutFileName (ao)
 	       ) ;
-      aceOutf (ao, "Double_intron\tRun\tiit\tn\tnR\tfeet1\tfeet2\n") ;
+      aceOutf (ao, "# Double_intron\tRun\tiit\tn\tnR\tfeet1\tfeet2\n") ;
       for (ii = 0, up = arrp (aaa, ii, DOUBLEINTRON) ; ii < iMax ; ii++, up++)
 	{
 	  int min = 2 ;
@@ -983,8 +995,7 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 	      else if (!strcasecmp (up->feet1, "ct_ac") && !strcasecmp (up->feet2, "ct_gc"))
 		min = 1 ;
 	      if (up->n + up->nR >= min)
-		aceOutf (ao, "AA: %f  %s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
-			 , s0[up->run]
+		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->b2, up->b1, up->a2, up->a1
 			 , dictName (pp->runDict, up->run)
 			 , up->nR, up->n
@@ -1001,8 +1012,7 @@ void saDoubleIntronsExport (PP *pp, Array aaa)
 	      else if (!strcasecmp (up->feet1, "gt_ag") && !strcasecmp (up->feet2, "gc_ag"))
 		min = 1 ;
 	      if (up->n + up->nR >= min)
-		aceOutf (ao, "BB: %f %s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
-			 , s0[up->run]
+		aceOutf (ao, "%s__%d_%d___%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"
 			 , dictName (pp->bbG.dict, up->chrom >> 1) + 2, up->a1, up->a2, up->b1, up->b2
 			 , dictName (pp->runDict, up->run)
 			 , up->n, up->nR

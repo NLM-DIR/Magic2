@@ -604,12 +604,20 @@ BOOL arrayInsert(Array a, void * s, int (*order)(const void*, const void*))
 
 	/* avoid memcpy for same reasons as above */
   {
-    char* cp = uArray(a,j - 1) + a->size - 1,  *cq = cp - a->size ;
-    mysize_t k = (j - i - 1)*(a->size);
+    char *cp, *cq ;
+    mysize_t k = (j - i - 2)*(a->size);
+
+    cp = uArray(a,j - 1) ;
+    cp += a->size - 1 ;
+    cq = cp - a->size ;
+
     while(k--)
       *cp-- = *cq--;
     
-    cp = uArray(a,i+1); cq = (char *) s; k = a->size;
+    cp = uArray(a,i+1) ;
+    cq = (char *) s;
+
+    k = a->size;
     while(k--)
       *cp++ = *cq++;
   }

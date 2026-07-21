@@ -15,8 +15,8 @@ set nWait=0
 
 set farm=ZERO
 # set farm=local
-set farm=MULTICORE
-# set farm=UGE
+# set farm=MULTICORE
+set farm=UGE
 # set farm=BIOWULF
 # set farm=SGE
 # set farm=LSF

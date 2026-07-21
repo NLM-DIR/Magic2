@@ -446,8 +446,20 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	  
 	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
-	  char *fNam = hprintf (h, "/wiggles/%s.%s.%s.BF", runNam, chromNam, typeNam) ;
-	  ACEOUT ao = aceOutCreate (pp->outFileName, fNam, 0 || pp->gzo, h) ; // compressing the BF files is extremelly good 100X
+	  ACEOUT ao = 0 ;
+	  if (! ao && pp->bigWig)
+	    {
+	      /* -clip avoids a crash if we go out of chromSizes */
+	      char *chromSizeNam = hprintf (h, "%s/chromSizes.txt", pp->indexName) ;
+	      char *fNam = hprintf (h, "/wiggles/%s.%s.%s.bw", runNam, chromNam, typeNam) ;
+	      char *cmd = hprintf (h, "wigToBigWig -clip stdin %s %s", chromSizeNam, fNam) ;
+	      ao = aceOutCreateToPipe (cmd, h) ; // the bw format allows direct access
+	    }
+	  if (! ao)
+	    {
+	      char *fNam = hprintf (h, "/wiggles/%s.%s.%s.BF", runNam, chromNam, typeNam) ;
+	      ACEOUT ao = aceOutCreate (pp->outFileName, fNam, 0 || pp->gzo, h) ; // compressing the BF files is extremelly good 100X
+	    }	  
 	  aceOutDate (ao, "##", "wiggle") ; 
 	  aceOutf (ao, "track type=wiggle_0\n") ;
 	  
@@ -803,7 +815,7 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
 	    aceOutf (ao, "%s\t%s\ttiifii\t%s\t%d\t%d\t%.2f\t%ld\t%ld\n"
 		     , dictName (pp->geneDict, gc->gene)
 		     , dictName (pp->runDict, gc->run)
-		     , gCo && gCo->chrom ? dictName (pp->bbG.dict, gCo->chrom >> 1) : "-"
+		     , gCo && gCo->chrom ? dictName (pp->bbG.dict, gCo->chrom) : "-"
 		     , gCo ? gCo->a1 : 0, gCo ? gCo->a2 : 0
 		     , geneIndex (pp, gc)
 		     , gc->boxCount/720, gc->exonCount/720

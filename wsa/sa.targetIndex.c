@@ -85,7 +85,13 @@ Array saTargetParseConfig (PP *pp)
 		       , tConfigFileName
 		       ) ;
 	  if (cc == 'I') cc = 'A' ;  /* back compatibility may 2026 to be removed later */
-	  if (! strchr ("GMCREBVA", cc))
+	  if (tc->targetClass && (tc->targetClass < 'A' || tc->targetClass > 'Z'))
+	    messcrash ("\n\nThe target class must be specified as a single upper-case character [A-Z], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
+		       , cc
+		       , line
+		       , tConfigFileName
+		       ) ;
+	  if (0 && ! strchr ("GMCREBVA", cc))
 	    messcrash ("\n\nThe target class must be specified as a single character [GMCREBVA], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
 		       , cc
 		       , line
@@ -595,6 +601,19 @@ static long int saTargetIndexCreateDo (PP *pp)
 	}
     }
 
+  /* export the target lengths */
+  ACEOUT aoChromLengths = aceOutCreate (pp->indexName, "targetSizes.txt", FALSE, pp->h) ;
+  for (int ii = 1 ; ii <= dictMax (bbG->dict) ; ii++)
+    {
+      const char *nam = dictName (bbG->dict, ii) ;
+      if (!nam) continue ;
+      if (!strchr ("GMC", nam[0])) continue ;
+      Array dna = array (bbG->dnas, ii, Array) ;
+      int ln = arrayMax (dna) ;
+      aceOutf (aoChromLengths, "%s\t%d\n", nam, ln) ;
+    }
+  ac_free (aoChromLengths) ;
+
   /* create the REVERSE COMPLEMENT of the GENOME */
   int iMax = bbG->nSeqs = arrayMax (bbG->dnas) ;
   globalDnaCreate (bbG) ;
@@ -632,7 +651,9 @@ static long int saTargetIndexCreateDo (PP *pp)
     {
       tc = arrayp (tArray, nn, TC) ;
 
-      if (! strchr ("GMCRTEBVA", tc->targetClass))
+      if (tc->targetClass && (tc->targetClass < 'A' || tc->targetClass > 'Z'))
+	messcrash ("\n The target class must be specified as a single upper case character [A-Z] not %c in the target configuration file", tc->targetClass) ;
+      if (0 && ! strchr ("GMCRTEBVA", tc->targetClass))
 	messcrash ("\n Unrecognized class %c in target configuration, please try sortalign --help", tc->targetClass) ;
     }
   

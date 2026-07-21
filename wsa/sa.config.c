@@ -131,6 +131,26 @@ void saConfigIsOutDirWritable (PP *pp)
   return ;
 } /* saConfigIsOutFDirWritable */
 
+/**************************************************************/
+/**************************************************************/
+
+BOOL saSanitizeRunName (const char *nam)
+{
+  const char *cp = nam - 1 ;
+
+  while (*++cp)
+    {
+      if (*cp >= 'a' && *cp <= 'z') continue ;
+      if (*cp >= 'A' && *cp <= 'Z') continue ;
+      if (*cp >= '0' && *cp <= '9') continue ;
+      if (*cp == '.') continue ;
+      if (*cp == '-') continue ;
+      if (*cp == '_') continue ;
+      return FALSE ;
+    }
+  return TRUE ;
+} /* sanitizeRunName */
+
 /*********************************************************************/
 
 /* check the existence of the sequence files to be aligned
@@ -339,6 +359,15 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	  else
 	    dictAdd (pp->runDict, hprintf (h, "r.%d", nRuns), &run) ;
 	  rc->run = run ;
+	  if (! saSanitizeRunName (dictName (pp->runDict, run)))
+	    {
+	      fprintf (stderr, "In file -I %s line %d, the run name in column 2: %s is used as a directory name, it should not contain spaces or special characters,\n please only use characters a-z A-Z 0-9 and .-_\n"
+		       , pp->inConfigFileName
+		       , line
+		       , dictName (pp->runDict, run)
+		       ) ;
+	      exit (1) ;
+	    }
 
 	  /*
 	    memcpy (rc->adaptor1L, pp->adaptor1L , 30) ;

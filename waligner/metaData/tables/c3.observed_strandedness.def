@@ -1,5 +1,5 @@
 // Spread sheet definition for the ACeDB software 
-// Date: 2022-02-01_16:15:08
+// Date: 2026-07-17_09:22:26
 
 // %n (%%n in the graphic)  are parameter to be given on the command line in tace
 // or by default by the Parameters given in this file
@@ -17,6 +17,7 @@ Optional
 Visible
 Class
 Class Ali
+Condition IS *libs
 
 Colonne 2
 Subtitle Column #2
@@ -27,7 +28,7 @@ Class
 Class Target
 From 1
 Tag stranding
-Condition IS any.*
+Condition IS any.* || IS ?
 
 Colonne 3
 Subtitle Column #3
@@ -56,7 +57,7 @@ Class
 Class Target
 From 1
 Tag stranding
-Condition IS B_rrna* || IS ?T_* || IS 0_SpikeIn*
+Condition IS B_rrna* || IS ?T_* || IS 0_SpikeIn* || IS I || IS M || IS R
 
 Colonne 6
 Subtitle Column #6

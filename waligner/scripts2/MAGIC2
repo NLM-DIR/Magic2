@@ -56,6 +56,7 @@ endif
 
 ############################################################################################
 
+setenv ici `pwd`
 setenv MagicRootDir `pwd`
 setenv MagicRootDir `pwd`
 setenv metaData `pwd`/metaData
@@ -2633,9 +2634,12 @@ echo -n "Phase f1: Construct the doubleintrons, start:"
  date
 
 # Create a directory for each chromosome
-if (! -e TARGET/CHROMS) then
-  echo "f1: missing TARGET/CHROMS dir"
-  goto phaseLoop
+if (-d TARGET && ! -d TARGET/CHROMS) then
+  mkdir TARGET/CHROMS
+  pushd TARGET/CHROMS
+    zcat ../Targets/$species.genome.fasta.gz | gawk '/^>/{ok=1;if(index($1,"|")>0)ok=0;ch=substr($1,2);}{if(ok==1)print>s".chrom_"ch".fasta"}}' s=$species
+    gzip *.fasta
+  popd
 endif
 
 if (! -d tmp/X.$MAGIC) mkdir tmp/X.$MAGIC
@@ -2650,7 +2654,7 @@ foreach chrom ($chromSetAll)
     continue 
   endif
   echo "scripts2/submit tmp/X.$MAGIC/$chrom/m2.f1"
-  scripts2/submit "tmp/X.$MAGIC/$chrom/f1" "scripts2/m2.f1.introns.tcsh $MAGIC $chrom" 
+  scripts2/submit "tmp/X.$MAGIC/$chrom/f1" "scripts2/m2.f1.introns.tcsh $chrom" 
 end
 
 
@@ -2670,10 +2674,8 @@ if ($Strategy != RNA_seq) goto phaseLoop
 foreach chrom ($chromSetAll)
   if (! -e tmp/X.$MAGIC/$chrom/f1.done) continue
   if (-e tmp/X.$MAGIC/$chrom/f2.done) continue
-  scripts2/submit "tmp/X.$MAGIC/$chrom/f2" "scripts2/m2.f2.double_introns.tcsh $MAGIC $chrom" 
+  scripts2/submit "tmp/X.$MAGIC/$chrom/f2" "scripts2/m2.f2.double_introns.tcsh $chrom" 
 end
-
-
 
 goto phaseLoop
 
@@ -2685,10 +2687,7 @@ phasef3:
  echo -n "Parse the yellow/green pseudo est  in the XH databases"
  date
 
-if (0 && $Strategy != RNA_seq) goto phaseLoop
- 
 if (! -d tmp/TABIX) mkdir tmp/TABIX
-
 
 foreach chrom ($chromSetAll)
   if (! -e tmp/X.$MAGIC/$chrom/f1.done) continue
@@ -2702,29 +2701,10 @@ goto phaseLoop
 
 ###########################################################################
 ###########################################################################
-## phase f4: parse the data
-
-phasef4:   
-echo -n "Phase f4: parse the data : "
-date
-
-# Import the data
-foreach chrom ($chromSetAll)
-  if (! -e tmp/X.$MAGIC/$chrom/f1.done) continue
-  if (! -e tmp/X.$MAGIC/$chrom/f2.done) continue
-  if (! -e tmp/X.$MAGIC/$chrom/f3.done) continue
-  if (-e tmp/X.$MAGIC/$chrom/f4.done) continue
-  scripts2/submit "tmp/X.$MAGIC/$chrom/f4" "scripts2/m2.f4.parse.tcsh $chrom" 
-end
-
-date
-goto phaseLoop
-
-###########################################################################
 ###########################################################################
 ## phase f4: Assemble the yellow/green pseudo est in the XH databases
 
-phasef5:
+phasef4:
  echo -n "Assemble the yellow/green pseudo est in the XH databases"
  date
 
@@ -2732,9 +2712,8 @@ foreach chrom ($chromSetAll)
   if (! -e tmp/X.$MAGIC/$chrom/f1.done) continue
   if (! -e tmp/X.$MAGIC/$chrom/f2.done) continue
   if (! -e tmp/X.$MAGIC/$chrom/f3.done) continue
-  if (! -e tmp/X.$MAGIC/$chrom/f4.done) continue
-  if (-e tmp/X.$MAGIC/$chrom/f5.done) continue
-  scripts2/submit tmp/X.$MAGIC/$chrom/f5 "scripts2/m2.f5.assemble.tcsh $chrom" 
+  if (-e tmp/X.$MAGIC/$chrom/f4.done) continue
+  scripts2/submit tmp/X.$MAGIC/$chrom/f4 "scripts2/m2.f4.assemble.tcsh $chrom" 
 end
 
 date
@@ -8746,34 +8725,6 @@ echo -n "phase c7: Export a general quality control table called RESULTS/Mapping
 date 
 if (! -d RESULTS/Mapping) mkdir RESULTS/Mapping
 
-if (! -e tmp/c7.fix.done) then
-
-  bin/tacembly MetaDB << EOF
-    query find ali aligned_pairs
-    show -a -f tmp/toto.aligned_pairs.ace  aligned_pairs 
-    query find ali ali
-    show -a -f tmp/$MAGIC.tati.ace ali
-EOF
- cat  tmp/$MAGIC.tati.ace  | gawk '/h_Ali/{b=$7;t=$5;if (t==0)t=1;n=$9;n1=int(.5+1000000*b/t)/1000;$9=n1;}{print}' >  tmp/$MAGIC.tati.ace2
-
-  if (-e  tmp/toto.aligned_pairs.ace) then
-    cat  tmp/toto.aligned_pairs.ace | sed -e 's/Aligned_pairs/Aligned_fragments/' >  tmp/toto.aligned_pairs.ace2
-    bin/tacembly MetaDB << EOF
-      parse  MetaDB/$MAGIC/groups2runid.ace
-      query find ali aligned_pairs
-      edit -D  aligned_pairs
-      read-models  
-      parse  tmp/toto.aligned_pairs.ace2
-      parse  tmp/$MAGIC.tati.ace2
-      save
-      quit
-EOF 
-    \rm tmp/toto.aligned_pairs.ace tmp/toto.aligned_pairs.ace2
-  endif   
-  \rm  tmp/$MAGIC.tati.ace  tmp/$MAGIC.tati.ace2
-  touch  tmp/c7.fix.done
-endif
-
   bin/bestali -groupLetterProfile -db MetaDB -project $MAGIC
 
 #########  'import the stranding'
@@ -8785,22 +8736,14 @@ bin/tacembly MetaDB <<EOF
   table -o MetaDB/$MAGIC/stranding.txt -active -f tables/c3.observed_strandedness.def
 EOF
 touch MetaDB/$MAGIC/stranding.txt
-cat MetaDB/$MAGIC/stranding.txt |                                                                                                                                                                gawk '/^"/{r=$1;t=$5 "\t" $7 "\t" $8 "\t" $9;s=$10/1000000.0;if(best[r]<200)best[r]=1000;d=s;if(100-s<d)d=100-s;if(s>=50 && s-50<d)d=s-50;if(s<50 && 50-s<d)d=50-s;d+=300;if(d<best[r]){best[r]=d;tt[r]=t;ss[r]=s;}}END{for(r in best)printf("%s\t%s\t%f\n",r,tt[r],ss[r]);}' > MetaDB/$MAGIC/stranding.txt2
+cat MetaDB/$MAGIC/stranding.txt |  gawk '/^"/{r=$1;t=$5 "\t" $7 "\t" $8 "\t" $9;s=$10/1000000.0;if(best[r]<200)best[r]=1000;d=s;if(100-s<d)d=100-s;if(s>=50 && s-50<d)d=s-50;if(s<50 && 50-s<d)d=50-s;d+=300;if(d<best[r]){best[r]=d;tt[r]=t;ss[r]=s;}}END{for(r in best)printf("%s\t%s\t%f\n",r,tt[r],ss[r]);}' > MetaDB/$MAGIC/stranding.txt2
 cat MetaDB/$MAGIC/stranding.txt | grep -v rrna |  grep -v smallRNA | grep -v mito  | grep -v chloro  | grep -v transposon | grep -v virus | grep -v bacteria  | grep -v Spike | grep -v genome | gawk '/^"/{r=$1;t=$5 "\t" $7 "\t" $8 "\t" $9;s=$10/1000000.0;if(best[r]<200)best[r]=1000;d=s;if(100-s<d)d=100-s;if(s>=50 && s-50<d)d=s-50;if(s<50 && 50-s<d)d=50-s;d+=300;if(d<best[r]){best[r]=d;tt[r]=t;ss[r]=s;}}END{for(r in best)printf("%s\t%s\t%f\n",r,tt[r],ss[r]);}' >> MetaDB/$MAGIC/stranding.txt2
-cat MetaDB/$MAGIC/stranding.txt2 | gawk -F '\t' '{gsub(/NULL/,"0",$0);m=split($2,aa,"_");n=split(aa[2],bb,".");if(n>=1)printf ("Run %s\nObserved_strandedness_in_ns_mapping %s %f %s plus %s minus %s ambiguous\n\n", $1,bb[1],$6,$3,$4,$5);}' > MetaDB/$MAGIC/stranding.ace
+cat MetaDB/$MAGIC/stranding.txt2 | gawk -F '\t' '{gsub(/NULL/,"0",$0);cl=$2;m=split($2,aa,"_");n=1;if (m>1){n=split(aa[2],bb,".");if(n>=1)cl=bb[1];}printf ("Run %s\nObserved_strandedness_in_ns_mapping %s %f %s plus %s minus %s ambiguous\n\n", $1,cl,$6,$3,$4,$5);}' > MetaDB/$MAGIC/stranding.ace
 
 echo "pparse MetaDB/$MAGIC/stranding.ace" | bin/tacembly MetaDB -no_prompt
 
 ######## 
   echo " bin/qcsummary -db MetaDB -project $MAGIC -runType 2  -o RESULTS/Mapping/$MAGIC.runs"
-
-  set n=`cat MetaDB/$MAGIC/RunSublibrary_ofList | wc -l`
-  if ($n > 0) then
-    bin/qcsummary -db MetaDB -project $MAGIC -runType 1  -o RESULTS/Mapping/$MAGIC.sublibs
-  endif
-  if ($n > 1) then
-    bin/table_histo -i RESULTS/Mapping/$MAGIC.sublibs.QC.txt > RESULTS/Mapping/$MAGIC.sublibs.QC.histo.txt
-  endif
 
   set n=`cat MetaDB/$MAGIC/RunsList | wc -l`
   if ($n > 0) then

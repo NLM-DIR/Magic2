@@ -307,7 +307,6 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   up->tooShort += vp->tooShort ;
   up->lowEntropyBases += vp->lowEntropyBases ;
   up->tooShortBases += vp->tooShortBases ;
-  up->nSupportedIntrons += vp->nSupportedIntrons ;
   up->gt_ag_Support += vp->gt_ag_Support ;
   up->ct_ac_Support += vp->ct_ac_Support ;
   
@@ -338,7 +337,6 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   up->nPartialReads += vp->nPartialReads ;
   up->nBaseAligned1 += vp->nBaseAligned1 ;
   up->nBaseAligned2 += vp->nBaseAligned2 ;
-  up->nSupportedIntrons = saSupportedIntrons (pp, run) ;
   if (up->p.minReadLength == 0 || up->p.minReadLength > vp->p.minReadLength)
     up->p.minReadLength = vp->p.minReadLength ;
   if (up->p.maxReadLength < vp->p.maxReadLength)
@@ -808,16 +806,24 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 
 	  if (isRna > 0)
 	    {
-	      aceOutf (ao, "%s\tIntron_supports\titititft\t%ld\tany\t%ld\tgt_ag\t%ld\tct_ac\t%.3f%%\tpositive_strand_supports.\n"
+	      aceOutf (ao, "%s\tIntron_supports\titititftitititit\t%ld\tany\t%ld\tgt_ag\t%ld\tct_ac\t%.3f%%\tpositive_strand_supports\t%ld\tKnown_gt_ag\t%ld\tKnown_other\t%ld\tNovel_gt_ag\t%ld\tNovel_other.\n"
 		       , runNam
 		       , up->gt_ag_Support + up->ct_ac_Support 
 		       , up->gt_ag_Support
 		       , up->ct_ac_Support 
 		       , pp->runStranding[run]
+		       , up->nrIntronSupports[3]
+		       , up->nrIntronSupports[2]
+		       , up->nrIntronSupports[1]
+		       , up->nrIntronSupports[0]
 		       ) ;
-	      aceOutf (ao, "%s\tSupported_introns\tit\t%ld\tgt_ag seen once or other seen at least 3 times.\n"
+	      aceOutf (ao, "%s\tSupported_introns\tititititit\t%ld\tany\t%ld\tKnown_gt_ag\t%ld\tKnown_other\t%ld\tNovel_gt_ag\t%ld\tNovel_other\n"
 		       , runNam
-		       , confirmedIntronsCountSites (pp, run, up)
+		       , up->nrSupportedIntrons[4]
+		       , up->nrSupportedIntrons[3]
+		       , up->nrSupportedIntrons[2]
+		       , up->nrSupportedIntrons[1]
+		       , up->nrSupportedIntrons[0]
 		       ) ;
 	    }
 	  aceOutf (ao, "%s\tMin_read_length\ti\t%d\n", runNam, up->p.minReadLength) ;

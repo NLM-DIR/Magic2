@@ -3221,6 +3221,14 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      zzp->chromLength = zp1->chromLength ;
 	      zzp->run = bb->run ;
 
+	      if (zp1->chrom != chromA)
+		{
+		  chromA = zp1->chrom ;
+		  dnaG = arr (pp->bbG.dnas, chromA >> 1, Array) ;
+		  dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
+		  dnaLength = arrayMax (dnaG) ;
+		}
+
 	      if (zp1->chrom & 0x1)
 		{
 		  zzp->nR = 1 ;
