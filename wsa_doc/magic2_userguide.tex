@@ -145,9 +145,9 @@ quality-control metrics.
   preferably in a single interleaved file.
 \item Exports alignments in SAM, BAM, Magic \code{.hits}, or tabular format.
 \item Adapts its parallelism to the available hardware--- no thread count
-  parameter needed
+  parameter needed.
 \item May offload on request part of the analysis to a GPU when one is present,
-  although the performace gains are so far marginal.
+  although the performance gains are so far marginal.
 \end{itemize}
 
 \begin{notebox}
@@ -310,9 +310,9 @@ identifiers ending in \code{/1} and \code{/2}: four lines per pair
 in FASTA (two records of header\,+\,sequence), eight lines per pair
 in FASTQ (two records of header\,+\,sequence\,+\,\code{+}\,+\,quality).
 
-To be automatically recognized, the file should be called *.sample\_12.fast[aq](.gz)
+To be automatically recognized, the file should be called *.sample\_12.fast[aq](.gz).
 If not, use --interleaved on the command line, or write interleaved in the third column
-of the read manifest
+of the read manifest.
 
 
 \textbf{Reading from a pipe:}
@@ -323,10 +323,10 @@ zcat *.fastq.gz | magic2 -x IDX -i - --fastq --run runName -o out/
 
 \begin{notebox}
 \textbf{Note:} Run label and adaptor sequences may be supplied as command-line flags
-(\code{--adaptor1}, \code{--adaptor2}, \code{--run}.
-These user provided flags override the automatic recognition system.
+(\code{--adaptor1}, \code{--adaptor2}, \code{--run}).
+These user-provided flags override the automatic recognition system.
 When \code{-I} is used (see below), values given on the command line
-can them selves be overriden run by run using optional column 3 of the run manifest file.
+can themselves be overridden run by run using optional column 3 of the run manifest file.
 \end{notebox}
 
 
@@ -367,12 +367,12 @@ one row per input file.  Lines beginning with \code{\#} are ignored.
 
 \subsubsection{Run naming rules}
 
-The second column, the run name, allows to choose
-a meaningful sample name and to associate to one or several data files to
-the same sample. This is useful for example to group technical replicas (as opposed
-to biological replicas). The program will export a single output table
+The second column, the run name, allows one to choose
+a meaningful sample name and to associate one or several data files to
+the same sample. This is useful for example to group technical replicates (as opposed
+to biological replicates). The program will export a single output table
 (alignments, gene counts, intron counts, coverage plots...) per run.
-By default, if column 2 is empty, the SRR identifer
+By default, if column 2 is empty, the SRR identifier
 or the file name stripped of its path information and suffix will be used as a run name.
 (file=a/b/c.fasta.gz  is reduced to run=c).
 
@@ -391,10 +391,10 @@ By default, the file format is implied by the file suffix: .fasta, .fastq (or
 .fastc for backward compatibility with MagicBlast).
 The files called .sample\_12.fast[aq] are interleaved
 (consecutive records ending in \code{/1} and \code{/2}).
-The nature of the data: DNA or RNA, and the eventual adaptors are recognized automatically
+The nature of the data: DNA or RNA, and any adaptors are recognized automatically
 by the code by performing a dry run on the first 10 Megabases.
 Thus, the third column is only needed to impose a choice and override the auto-detection.
-The recogized keyword are:
+The recognized keywords are:
 
 
 \medskip
@@ -420,7 +420,7 @@ The recogized keyword are:
 
 \subsubsection{Example}
 
-Here is an exampl with 5 files and 3 run names:
+Here is an example with 5 files and 3 run names:
 
 \begin{lstlisting}
 # my_project.rConfig
@@ -472,7 +472,7 @@ magic2 -x IDX --srr SRR1,SRR2,SRR3 -o out/
 
 Streaming from SRA distinguishes single-end from paired-end automatically and begins
 aligning as soon as the first megabases arrive.  In practice, alignment
-finishes within seconds of the completeing the download.
+finishes within seconds of completing the download.
 
 \begin{notebox}
 \textbf{Note:} If the files already exist in the local \code{./SRA/}
@@ -486,7 +486,7 @@ without storing the reads or alignment files:
 magic2 -x IDX --srr SRR1,SRR2,SRR3 --no_ali --maxGB 1 -o out/
 \end{lstlisting}
 The option '\code{--maxGB 1}' restricts the analysis to the first gigabase of each run,
-this is usually sufficient to asees the QC.
+this is usually sufficient to assess the QC.
 
 \subsection{Downloading SRA runs}
 
@@ -521,7 +521,7 @@ magic2 --sraDownload SRR1,SRR2,... [--fastq] [--split_pairs] [--maxGB <n>]
 \code{--fastq}       & Download in FASTQ format (preserves quality scores).
                         Default is FASTA. \\
 \code{--split\_pairs} & Write paired-end reads to separate \code{\_R1} and
-                        \code{\_R2} files instead of interleaved (slower, not recommended) \\
+                        \code{\_R2} files instead of interleaved (slower, not recommended). \\
 \code{--maxGB <n>}   & Stop after downloading \code{n} gigabases. \code{n} is decimal (n=0.01 => 10Mb) 
                         By default the entire run is downloaded. \\
 \bottomrule
@@ -546,20 +546,20 @@ If the run is already cached, it will not be downloaded again.
 \subsection{Processing multiple runs in parallel}
 
 To process multiple runs in parallel
-construct a run manifest \code{-I r.iConfig} as described in  (Section~\ref{sec:rconfig}).
+construct a run manifest \code{-I r.iConfig} as described in (Section~\ref{sec:rconfig}).
 Data packets from all the runs will be processed in parallel, each run exporting its own
 results in the global \code{-o outDir} directory. If all runs are streamed from SRA,
-you can just list them on the command line \code {magic2 -srr SRR1234,SRR4567,...} 
+you can just list them on the command line \code {magic2 --srr SRR1234,SRR4567,...} 
 as shown in (Section~\ref{sec:qcsurvey}).
 
-\subsection{Processing multiple sets runs in parallel on a multicore machine}
+\subsection{Processing multiple sets of runs in parallel on a multicore machine}
 
-On a large multi-core linux machine (such machine often have 48, or 96 or even more CPUs),
-Magic selects the least buzy core, and runs just on that one core. The purpose is to
-eliminate data traffic accross cores, which would significantly affect the performances.
-But this means that on a 4 core machine, with say 96 CPUs, 3 cores remain idle.
+On a large multi-core Linux machine (such machines often have 48, or 96 or even more CPUs),
+Magic selects the least busy core, and runs just on that one core. The purpose is to
+eliminate data traffic across cores, which would significantly affect the performance.
+But this means that on a 4-core machine, with say 96 CPUs, 3 cores remain idle.
 As the index is memory-mapped and shared between
-concurrent Magic2 processes, you may want on a 4 core machine to run 4 sets of runs in parallel
+concurrent Magic2 processes, you may want on a 4-core machine to run 4 sets of runs in parallel
 using the script:
 \begin{lstlisting}
 magic2 -x IDX.T2T --srr SRR1234 --full -o out_SRR1234 &
@@ -572,7 +572,7 @@ sleep 1 ; magic2 -x IDX.T2T -I r1.iConfig --full -o out_SRR1237 &
 \textbf{Note:} Each parallel instance reads the shared index but uses
 independent output directories.  Total RAM usage is the index size plus
 per-run working memory.
-Thanks to the 1 second launching delays, each process will
+Thanks to the 1-second launching delays, each process will
 automatically select a different (multi-CPU) core.
 
 To know the number of cores and CPUs available on your machine, type the
@@ -660,7 +660,7 @@ chrom  method  tag  a1  a2  .  strand
 Only \code{exon} and \code{CDS} lines are used; all others are ignored.
 Coordinates are 1-based; \code{a1 < a2}; strand is \code{+} or \code{-}.
 The chromosome identifiers, column 1 of the gtf/gff files, must match the
-chromosome identifiers given the the \code{G} genome fasta files.
+chromosome identifiers given in the \code{G} genome fasta files.
 
 \textbf{.introns format:} If no GTF/GFF is available, provide a
 3-column introns file:
@@ -671,8 +671,8 @@ chrom  a1  a2
 of the GT-AG motif.  On the top strand \code{a1 < a2}; on the bottom
 strand \code{a1 > a2}. Coordinates are 1-based.
 
-In introns declared in the gtf/gff or intron file will be listed as known
-in the results files, the other as novel.
+The introns declared in the gtf/gff or intron file will be listed as known
+in the results files, the others as novel.
 
 \subsection{Creating the index}
 
@@ -710,11 +710,11 @@ magic2 --createIndex IDX.target -T target.tConfig \
                        at some cost to sensitivity. \\
                        \code{--maxtargetRepeats}  &int & 81 & Seeds repeated
                        more often in the genome are not indexed,
-                       effectivelly masking the highly repetitive regions.\\                        
+                       effectively masking the highly repetitive regions.\\                        
 \bottomrule
 \end{tabular}
 \end{center}
-Step is the maximal distance between seed, the average distance is step/2.
+Step is the maximal distance between seeds; the average distance is step/2.
 
 % ===============================================================
 \section{Running an Alignment}
@@ -742,7 +742,7 @@ magic2 -x IDX -i reads.fasta.gz -o out/ --hits --tabular --bam
 \textbf{Flag} & \textbf{Description} \\
 \midrule
 \code{--hits}    & Magic \code{.hits} format.  Describes mismatches,
-                   introns, read overhangs, short indels and mismatches explicitly. Default. \\
+                   introns, read overhangs, and short indels explicitly. Default. \\
 \code{--tabular} & Magic-BLAST tabular format.  Similar to \code{.hits}\\
 \code{--sam}     & Standard SAM format.  \\
 \code{--bam}     & Standard BAM format.  Required for tools such as
@@ -754,7 +754,7 @@ magic2 -x IDX -i reads.fasta.gz -o out/ --hits --tabular --bam
 \end{center}
 
 Multiple format flags may be combined; one output file per format is
-written to the output directory. By defalt, Magic2 exports in the
+written to the output directory. By default, Magic2 exports in the
 .hits format which is the richest.
 
 \subsection{Requesting the full output suite}
@@ -792,18 +792,18 @@ The \code{.hits} and tabular formats provide more detail than SAM/BAM,
 including explicit descriptions of mismatches, intron coordinates, and
 read overhangs.  BAM is the appropriate choice when interoperating with
 third-party tools.
-Magic2 exports nativelly in SAM format. SAM is then transformed in BAm
-by calling automatically samtools. If samtools is not available on your
+Magic2 exports natively in SAM format. SAM is then transformed into BAM
+by automatically calling samtools. If samtools is not available on your
 path, asking for \code{--bam} will revert to SAM format.
 
 \subsection{Intron support table}
 
 Magic2 reports all introns observed in the alignment, classified as
-\emph{known} (present in the \code{I} annotation used during index
+\emph{known} (present in the \code{A} annotation used during index
 construction) or \emph{novel}.
 
 Output is in the \textbf{tag-sample format (TSF)}, a compact
-tab-separated format in which each line the support of a given intron in a given run.
+tab-separated format in which each line records the support of a given intron in a given run.
 A utility command merges TSF files from multiple runs and produces a
 human-readable summary table:
 \begin{lstlisting}
@@ -918,8 +918,8 @@ start or termination site.  These tracks are useful for refining genome
 annotations, particularly to extend or correct 5$'$ and 3$'$ UTR
 boundaries.
 
-Magic2 also export a track of non-unique alignements, showing the
-expressed repetitive regions. Also a track of incomplete alignemnts, indicating
+Magic2 also exports a track of non-unique alignments, showing the
+expressed repetitive regions, and a track of incomplete alignments indicating
 the candidate break-points.
 
 \subsection{Quality-control metrics}
@@ -936,19 +936,19 @@ Pairs  & Number of raw pairs. \\
 Aligned\_pairs & Number and fraction of aligned pairs. \\
 Compatible\_pairs & Number and fraction of compatible aligned pairs. \\
 Circle\_pairs & Number and fraction of locally diverging pairs (candidate circles). \\
-Non\_compatible\_pairs  & Number and fraction of non compatible aligned pairs. \\
+Non\_compatible\_pairs  & Number and fraction of non-compatible aligned pairs. \\
 Reads & Total number of raw reads, counting 2 reads per pair if applicable. \\
 Low\_entropy\_reads & Number of rejected reads with very low sequence complexity. \\
-Low\_entropy\_bases & Number of baes in those reads. \\
+Low\_entropy\_bases & Number of bases in those reads. \\
 Aligned\_reads & Number of aligned reads. \\
-Unligned\_reads & Number of unaligned reads. \\
+Unaligned\_reads & Number of unaligned reads. \\
 Perfect\_reads & Number and fraction of fully and exactly aligned reads. \\
 Complex\_reads & Number and fraction of reads aligned in an unusual way. \\
 Partial\_reads & Number and fraction of partially aligned reads. \\
 Bases & Number of bases in the raw reads: total, in read 1, in read 2. \\
 Aligned\_bases   & Number and fraction of aligned bases: total, in read 1, in read 2. \\
 Unaligned\_bases  & Number of unaligned bases. \\
-Genome\_length  & Cumulated length of the calss G (genomic) targets. \\
+Genome\_length  & Cumulated length of the class G (genomic) targets. \\
 CDS\_utr\_intronic\_intergenic\_Bases & Number and fraction of bases mapping in the different annotated regions. \\
 ATGCN   & Number of bases A, T, G, C or other in the raw reads. \\
 Clipped\_polyA & Number of reads with at least 8 overhanging terminal A. \\
@@ -965,7 +965,7 @@ Max\_read\_length & Maximal read length. \\
 Length\_distribution\_1\_5\_50\_95\_99\_mode\_av  & Read length distribution per quantile. \\
 Reads\_Aligned\_once & Number and Fraction of all reads uniquely mapped. \\
 Reads\_multi\_aligned\_\_n & Number and Fraction of all reads mapped 2,3,4...10 times. \\
-Reads\_aligned\_several\_times & Number and Fraction of all reads mapped several time. \\
+Reads\_aligned\_several\_times & Number and Fraction of all reads mapped several times. \\
 Reads\_aligned\_in\_class\_X & Number and Fraction of aligned reads per strand per class (rRNA, Genome...). \\
 Bases\_aligned\_in\_class\_X & Number and Fraction of aligned bases per strand per class (rRNA, Genome...). \\
 \bottomrule
@@ -973,8 +973,8 @@ Bases\_aligned\_in\_class\_X & Number and Fraction of aligned bases per strand p
 \end{center}
 
 All metrics are written in the output directory
-in the human readable TSF-format
-allowing easy production of tables per property
+in the human-readable TSF-format
+allowing easy production of tables per property.
 
 \begin{lstlisting}
 cat out_dir/*/runStats.tsf | gawk -F '\t' '{if($2 == tag)print;}' tag=Perfect  | bin/tsf -I tsf -O table --title 'Perfect reads' > perfect_reads.table.txt
@@ -1153,7 +1153,7 @@ bin/tsf -i all_genes.tsf -O table --title 'Gene counts' > all_gene_counts.table.
 
 Index creation fails with out-of-memory error
   & Increase available RAM, or use a larger \code{--step} value (e.g.\
-    8 or 10) to reduce index size at a some cost to sensitivity. \\[4pt]
+    8 or 10) to reduce index size at some cost to sensitivity. \\[4pt]
 
 Zero rRNA fraction
   & In RNA-seq experiments, this is unusual.  Ensure that an
@@ -1166,7 +1166,7 @@ High rRNA fraction ($>$50\%)
 Very low alignment rate ($<$20\%)
   & Check that the correct genome was indexed.  For RNA-seq data,
     verify that the target includes the rRNA and mitochondria files.
-    Possibly consider adding a viral or bacterial contamination fasta file \\[4pt]
+    Possibly consider adding a viral or bacterial contamination fasta file. \\[4pt]
 
 SRA download stalls or times out
   & Check your network connection to NCBI.  Use \code{--maxGB} to
@@ -1181,13 +1181,13 @@ Chromosome names don't match between genome and GTF
 
 BAM file not produced despite \code{--bam} flag
 & To transform a SAM output into a BAM output, Magic2 invokes 'samtools'.
-Otherwise Magic2 reverts to SAM fromat.
-Samtools is not part of the magic2 distribution. You must install it from the web
+Otherwise Magic2 reverts to SAM format.
+Samtools is not part of the Magic2 distribution. You must install it from the web
 and make it accessible. Check by typing: which samtools.\\[4pt]
 
 Missing gene counts output despite \code{--full}
   & Confirm that the index was built with \code{-T} (tConfig including
-    a \code{I} annotation line) rather than \code{-t} (raw genome only).
+ydd    an \code{A} annotation line) rather than \code{-t} (raw genome only).
     The actual tConfig file used during index creation is copied in the
     IDX directory. Please check that file.\\
 

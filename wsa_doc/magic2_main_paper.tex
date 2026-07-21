@@ -47,10 +47,10 @@ PacBio) reads without requiring the user to specify read type, adapter
 sequences, strandedness, or the number of threads.
 In a single pass, Magic2 produces alignments, splice-junction tables,
 gene-level expression counts, strand-specific coverage tracks,
-poly(A)/poly(T) tail calls, probable transcription start and end poins,
+poly(A)/poly(T) tail calls, probable transcription start and end points,
 and a rich set of quality-control metrics
 — all directly comparable across runs and laboratories.
-Download from NCBI short read archive (SRA) is automatic.
+Download from the NCBI short read archive (SRA) is automatic.
 Benchmarks on 31 public datasets (covering human Illumina paired-end,
 Nanopore, PacBio, Roche~454, cross-species primate, \textit{C.\ elegans},
 ChIP-seq, and RefSeq mRNA controls) show that Magic2 matches
@@ -115,8 +115,8 @@ Magic2 accepts a reference genome (FASTA), plus the mitochondria
 and a master copy of the rRNA precursors,
 and an optional annotation
 (GTF/GFF) to build an on-disk seed index.
-ERCC spike-in and likely bacterial and virus contaminants fasta
-files also valuable and will be quantized separatelly.
+ERCC spike-in and likely bacterial and viral contaminant fasta
+files are also valuable and will be quantified separately.
 At run time, one or more SRA accession numbers or local FASTA/FASTQ
 files are supplied; no other configuration is required.
 Magic2 automatically downloads the data from SRA,
@@ -131,24 +131,24 @@ sequential blocks, sorted and joined by simultaneous linear
 traversal of both sorted lists.
 This design favors fast sequential cache access over
 much slower random main-memory accesses, strongly accelerating
-the calculations
+the calculations.
 
 The pipeline is structured as concurrent agents communicating through
-bounded, lock-free channels following the GO language paradigm.
+bounded, lock-free channels following the Go language paradigm.
 Agents process independent data blocks in parallel; backpressure and
 channel closure guarantee deadlock-free execution and no data loss.
 This design scales naturally with the number of available CPUs without
 user intervention and,
-if available, will automatically delagate part of the calculations to a GPU.
+if available, will automatically delegate part of the calculations to a GPU.
 
 
 \subsection*{Outputs}
 
 In a single pass Magic2 produces:
-(i) primary alignments (in BAM or the richer .hits format)
+(i) primary alignments (in BAM or the richer .hits format);
 (ii) splice-junction tables with per-junction read support;
 (iii) gene-level expression counts with bidirectional-overlap resolution;
-(iv) strand-specific wiggle coverage tracks (plus trancription start/end profiles
+(iv) strand-specific wiggle coverage tracks (plus transcription start/end profiles
      for transcript boundary detection);
 (v) poly(A)/poly(T) tail calls and trans-spliced leader identification
     (in \textit{C.\ elegans});
@@ -174,7 +174,7 @@ R9/R10 and PacBio Sequel\,II/Revio), seven cross-species primate
 datasets (chimpanzee to mouse lemur) aligned to the human T2T
 reference, single-end 35\,nt ChIP-seq and DNA paired-end controls,
 2 short RNA samples,  
-artificial controls from Baruzzo, a C.elegans sample,
+artificial controls from Baruzzo, a C. elegans sample,
 and human RefSeq mRNA sequences used as a zero-SNP perfect-alignment
 benchmark (Table~\ref{tab:datasets}).
 All tools were run with their default parameters; Magic2 required no
@@ -189,7 +189,7 @@ ensure hot cache; all other datasets were run once.
 \medskip\noindent\textbf{Timing and resource usage.}\quad
 Table~\ref{tab:timing} summarises wall-clock time, CPU time, and peak
 RAM across all 31 datasets for the five principal configurations.
-All calculations were performed on the large NCBI linux compute farm, where
+All calculations were performed on the large NCBI Linux compute farm, where
 most machines have 24 CPUs and 64 Gb of RAM or more.
 Magic2 completed alignment in a median wall time of \textbf{4.3\,min}
 (mean 4.1\,min), compared to 3.1\,min for HISAT2 (8 threads), 8.3\,min
@@ -205,8 +205,8 @@ lower sensitivity. Magic2 auto-selected a median of
 11 threads (range 4--18) without user intervention.
 
 CPU consumption for Magic2 averaged 47.6\,min (median), compared
-to 68.7\,min for STAR, 62 mun for minimap2 and 228\,min for Magic-BLAST, representing
-approximately $2\times$ $2\times$ and $7\times$ lower CPU use respectively.
+to 68.7\,min for STAR, 62 min for Minimap2 and 228\,min for Magic-BLAST, representing
+approximately $2\times$, $2\times$, and $7\times$ lower CPU use respectively.
 HISAT2 consumed less CPU (22.9\,min median) but is much less sensitive.
 
 Peak RAM for Magic2 averaged 23.8\,GB (max 30\,GB), below STAR
@@ -282,16 +282,16 @@ Magic2), suggesting a regression in the 2024 release that is under
 investigation by the same group.
 
 \medskip\noindent\textbf{Coverage plots and gene expression counts.}\quad
-Optionally, Magic2 exports, for each run, 4 types of strand specific coverage plots in BF format, compatible
-with th UCSC browser: the plain coverage, the partial reads (pointing to
-genomic rearrangments or deletions), the multiply-aligned locations, and the
-fragment ends strand differential contrast which gives a novel and
+Optionally, Magic2 exports, for each run, 4 types of strand-specific coverage plots in BF format, compatible
+with the UCSC browser: the plain coverage, the partial reads (pointing to
+genomic rearrangements or deletions), the multiply-aligned locations, and the
+fragment ends strand differential contrast which gives novel and
 precious information on mRNA transcription starts and ends.
 The gene expression counts are then derived from the coverage plot
-attributing bases included in several different genes (for examples opposite strand
-long 3' UTRs) in proportion of the unambiguous coverage.
+attributing bases included in several different genes (for example opposite-strand
+long 3' UTRs) in proportion to the unambiguous coverage.
 This is more or less similar to the method of Langsmead.
-If the analysis shows that the reads are stranded (or anti stranded),
+If the analysis shows that the reads are stranded (or anti-stranded),
 the mapping is automatically attributed to the correct strand.
 
 
@@ -305,10 +305,10 @@ which takes around X minutes per sample.
 
 \medskip\noindent\textbf{SRA quality control.}\quad
 Magic2 can automatically analyze a sample (say the first Giga bases)
-of a large nuber of SRA runs  and produce uniform QC metrics without
+of a large number of SRA runs  and produce uniform QC metrics without
 ever storing the fastq files or the bam files on the local machine
-in a couple of minutes per sample. This method was tested on a 10 years old home
-linux computer with 4 CPUs, 32Gb of RAM and limited disks and a throughput
+in a couple of minutes per sample. This method was tested on a 10-year-old home
+Linux computer with 4 CPUs, 32Gb of RAM and limited disks and a throughput
 of a hundred runs per day.
 
 \edcomment{INSERT Figure 1: heatmap of per-tool, per-metric scores across
@@ -365,17 +365,17 @@ with a guaranteed maximum gap of $p$.
 Seeds with genomic multiplicity $>Q$ (default 81) are discarded to
 limit hits from repetitive elements.
 When annotation is provided, junction-spanning seeds from all annotated
-exon--exon junctions are added to the index to mapping
+exon--exon junctions are added to the index to map
 reads crossing exon-exon junctions.
 Full details are given in Supplementary Section~2.
 
 \subsection*{Alignment}
 
-Read seeds are generated using by default half the genome stepping,
+Read seeds are generated using, by default, half the genome stepping,
 sorted, and joined by simultaneous
 linear traversal (possibly on the GPU).
 Seed matches are extended to full alignments using the same jump-alignment
-as in Magic-BLAST, intron boundaries are refined by splice-signal
+as in Magic-BLAST; intron boundaries are refined by splice-signal
 scoring (GT-AG, AT-AC, and non-canonical).
 Poly(A)/poly(T) tails and trans-spliced leader sequences are detected
 and clipped after alignment during the same pass.
@@ -390,8 +390,8 @@ automatically in containers and on single-node machines.
 Users do not set a thread count; Magic2 manages concurrency
 automatically, achieving a median effective parallelism of 11 threads
 (range 4--18) across the benchmark panel as measured by
-\texttt{/usr/bin/time \%P}. On machines with a GPU. it respawn itself
-in GPU enabled mode and sub-contracts the sort-merge algorithm to the GPU.
+\texttt{/usr/bin/time \%P}. On machines with a GPU, it respawns itself
+in GPU-enabled mode and sub-contracts the sort-merge algorithm to the GPU.
 
 \subsection*{Benchmark datasets and evaluation}
 

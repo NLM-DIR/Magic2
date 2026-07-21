@@ -85,7 +85,7 @@ Three principles govern all architectural decisions:
 \begin{enumerate}
 \item \textbf{Cache efficiency.}
       The dominant cost in large-scale genomic computations is data
-      movements, not arithmetics.
+      movements, not arithmetic.
       All core algorithms are designed to generate long sequential
       memory-access patterns rather than random accesses, keeping
       working data inside CPU caches and saturating memory bandwidth.
@@ -149,7 +149,7 @@ Magic2 adopts a \emph{sort--merge} paradigm:
 \item Sort both lists by seed value using a hard-coded cache-efficient radix sort
       (Section~\ref{sec:sort}).
 \item Join the two sorted lists by simultaneous linear traversal: both
-  pointers advance monotonically, so the entire join operates strongly favors
+  pointers advance monotonically, so the entire join operation strongly favors
   CPU cache and pre-fetching.
 \end{enumerate}
 
@@ -161,13 +161,13 @@ Its roots lie in classical external sorting and merge-join algorithms
 algorithms~\citep{frigo1999}.
 
 
-The key trade-off is replacing $O(n)$ cache hostile random hash look ups
-by  two cache friendly operations: $O(n \log n)$
+The key trade-off is replacing $O(n)$ cache-hostile random hash lookups
+by  two cache-friendly operations: $O(n \log n)$
 sorting followed by $O(n)$ sequential merging.
 The merge step is so cache-friendly that it runs at near-memory-bandwidth
 speed, far outpacing hash-table approaches on large genomes.
 
-If avalailable, the whole preassignment is automatically offloaded
+If available, the whole preassignment is automatically offloaded
 to a GPU
 (Section~\ref{sec:gpu}).
 
@@ -226,19 +226,19 @@ Agents never wait on one another; all synchronisation emerges from
 channel blocking and closure.
 The main program defines the pipeline topology by creating channels,
 setting source counts, launching agents, and seeding the input channel
-but neither the main program nor the agents contain any explict calls to the low level
-unix semaphores and other synchronization tools.
+but neither the main program nor the agents contain any explicit calls to the low-level
+Unix semaphores and other synchronization tools.
 
 \subsection{NUMA-aware execution}
 \label{sec:numa}
 
-During its initialisation, Magic2 analyses the harware
-and counts the number of CPUs, nodes and eventual GPU.
+During its initialisation, Magic2 analyses the hardware
+and counts the number of CPUs, nodes and any GPU.
 Then Magic2 re-spawns itself and
-binds to the least-loaded node, and eventually the least buzy GPU,
+binds to the least-loaded node, and, if present, the least busy GPU,
 minimising cross-node memory traffic.
-Users do not need set a thread count; Magic2 manages all concurrency
-automatically and continuosuly monitors its usage of memory
+Users do not need to set a thread count; Magic2 manages all concurrency
+automatically and continuously monitors its usage of memory
 by varying the number of datablocks processed in parallel.
 
 For debugging, \texttt{--debug} forces fully serial execution
@@ -253,12 +253,12 @@ parallelism.
 \subsection{The problem: alignment parameters depend on the data}
 \label{sec:pilot_problem}
 
-Several alignment decisions that strongly affect accuracy, cannot be
+Several alignment decisions that strongly affect accuracy cannot be
 made before reading the data: whether the library is RNA or DNA,
 what is the sequencing technology (Illumina, PacBio, Nanopore ...),
 are the reads long or short, 
-single ends or paired, 
-what are the absolute and relative rates or substitutions and indels,
+single-end or paired-end, 
+what are the absolute and relative rates of substitutions and indels,
 which is the dominant sequencing strand, and what adaptor sequences
 were ligated.
 Requiring the user to supply these parameters manually is error-prone
@@ -278,7 +278,7 @@ global parameters are frozen.
 On completion of each pilot block, Magic2 tallies the evidence
 accumulated so far:
 \begin{itemize}
-  \item \textbf{Read type.} Long reads with relativelly frequent indels indicate
+  \item \textbf{Read type.} Long reads with relatively frequent indels indicate
         Nanopore or PacBio; short, low-indel reads indicate Illumina.
   \item \textbf{Library type.} A significant fraction of reads
         spanning GT-AG or CT-AC boundaries identifies the library as
@@ -298,7 +298,7 @@ accumulated so far:
 \end{itemize}
 
 Once enough pilot blocks have provided good evidence --- in
-practice one block of 3\,Mb is usually sufficient for a high quality
+practice one block of 3\,Mb is usually sufficient for a high-quality
 run --- all inferred parameters are frozen and used by all agents.
 
 \subsection{Reprocessing and zero read loss}
@@ -525,7 +525,7 @@ Magic2 uses exact $k$-mer seeds of length $k \le 19$, encoded as
 32\,bits).
 The default $k$ is chosen automatically from genome size:
 \begin{itemize}
-  \item $k = 16$ for small genomes below 1 gigabases, e.g. \textit{C.~elegans},
+  \item $k = 16$ for small genomes below 1 gigabase (e.g.\ \textit{C.~elegans},
         \textit{D.~melanogaster});
   \item $k = 18$ for large genomes (human, mouse).
 \end{itemize}
@@ -591,18 +591,20 @@ This guarantees:
 \label{sec:multiplicity}
 
 After collection, target seeds are sorted (Section~\ref{sec:sort}) and their
-multiplicity (number of occurrences in per target) is counted.
+multiplicity (number of occurrences per target) is counted.
 Seeds with multiplicity $> Q$ (default 81) are discarded to limit
 spurious hits from repetitive elements; empirical tests showed $Q = 31$
 gives slightly higher specificity while $Q = 81$ slightly reduces false negatives
 at acceptable cost in index size and runtime.
 
-Jump information is then embedded directly in the seed records: every
-256th seed stores pointers to future seeds at distances
-$n_1 \times 256$, $n_2 \times 256$, $n_3 \times 256$, $n_4 \times 256$, enabling
-fast skip-ahead during the merge step.
+Jump information is then embedded directly in the seed records table: every
+256th line in the table stores pointers to future seeds at distances
+$n_1 \times 256$, $n_2 \times 256$, $n_3 \times 256$, $n_4 \times 256$,
+rather than the standard seed-target information, enabling
+fast skip-ahead during the merge step. Interspacing the jump information
+inside the actual seed table strongly favors sequential cache access and prefetching.
 
-The filtered, jump-augmented taget table is computed only once
+The filtered, jump-augmented target table is computed only once
 during index preparation and written to disk in compact binary
 format. It is later memory-mapped in shared read-only mode
 when aligning sequence data.
@@ -637,12 +639,6 @@ half a billion genomic seeds.
 Junction seeds are merged with the genomic table, sorted, and stored
 together in the same binary files.
 
-%% ===============================================================
-
-%% ===============================================================
-\section{Sorting, joining and optional GPU acceleration}
-\label{sec:gpu}
-
 \subsection{Data structures}
 \label{sec:gpu_structs}
 
@@ -667,7 +663,7 @@ The 16-byte size is deliberate: four \texttt{CW} records fill one
 64-byte cache line exactly, which is optimal for both the CPU
 vectorized instructions and for GPU coalesced memory access.
 
-\section{Radix sort}
+\subsection{Radix sort}
 \label{sec:sort}
 
 Radix sort runs in $O(n)$ time and generates purely sequential memory
@@ -687,13 +683,13 @@ On SSE2-capable processors each 16-byte record is moved by a single
 \texttt{\_mm\_load/store\_si128} instruction, with a portable
 \texttt{memcpy} fallback elsewhere.
 
-\subsection {Data loading and joining to the read-seeds with the target-seeds}
+\subsection {Data loading and joining the read-seeds with the target-seeds}
 \label{sec:index_load}
 
 The filtered multi-target index (Section~\ref{sec:seed_encoding}) is partitioned
 into $N$ sub-tables (16 or 32, indexed by the least-significant
 base pair(s) of the seed value) and
-all partitions are memory mapped. at the start of the program.
+all partitions are memory-mapped at the start of the program.
 
 The DNA or RNA sequences to be analyzed are
 read sequentially, or automatically streamed from the NCBI/SRA archives,
@@ -701,9 +697,9 @@ and partitioned in blocks of
 approximately $bMax$ megabases (default 3Mb).
 As soon as a block is complete, its processing starts,
 and the block is discarded once it has been fully exploited.
-And since the number of active block is controlled
-by channelling back-pressure (Section-\ref{sec:channels}),
-an arbitrarilly long input file (say 1 Tb)
+And since the number of active blocks is controlled
+by channelling back-pressure (Section~\ref{sec:channels}),
+an arbitrarily long input file (say 1 Tb)
 can be analyzed on a 32 Gb machine.
 This also means that the latency when acquiring the fasta/fastq files
 is hidden behind the
@@ -711,19 +707,25 @@ parallel processing of the already available data.
 
 For each block, the read seeds are constructed exactly as the target seeds
 (Section~\ref{sec:seed_encoding}), with the same pseudo-periodicity $p$
-or a divisor of $p$ (section \ref{sec:subsampling}), then sorted
+or a divisor of $p$ (Section~\ref{sec:subsampling}), then sorted
 (Section~\ref{sec:sort}).
 Both tables are scanned in parallel, advancing the pointer
-on the side of the lower seed. When there is a coincindence,
+on the side of the lower seed. When there is a coincidence,
 the local Cartesian product of all entries with the matching seed
-is emitted as 64 bytes SEEDMATCH structs, by simply joining
+is emitted as 64-bytes SEEDMATCH structs, by simply joining
 the 2 matching records. This table is then sorted by read (hence
-automaticaly by pairs, section-\ref{sec:paired_encoding}).
+automatically by pairs, Section~\ref{sec:paired_encoding}).
 
-\subsection{Optional GPU acceleration}
+%% ===============================================================
+
+%% ===============================================================
+\section{Optional GPU acceleration}
+\label{sec:gpu}
+
+\subsection{Dynamic invocation of the GPU}
 \label{sec:gpu_accel}
 
-When an NVIDIA GPU is available, Magic2 offloads three steps of the
+When an NVIDIA GPU is available, Magic2 can offload three steps of the
 seed-matching pipeline to the device via CUDA Thrust
 (\texttt{wsa/sa.gpusort.cu}): sorting the read-seed table,
 and joining it against the pre-loaded genome index,
@@ -732,11 +734,11 @@ then sorting the table of SEEDMATCH.
 GPU use is activated at compile time (\texttt{-DUSEGPU}) and detected
 at run time; execution falls back silently to the CPU radix sort
 (Section~\ref{sec:sort}) when no compatible device is present.
-If a GPU is present, the genome seed-index is transfered to the GPU
+If a GPU is present, the genome seed-index is transferred to the GPU
 prior to the calculation of the first data block and discarded from
 the CPU side.
 All structure declarations are shared and since both the CPU
-and the GPU use 64-bytes aligned buffers,
+and the GPU use 64-byte aligned buffers,
 no data conversion is required at the C/C++ CPU/GPU boundary.
 
 \subsection{Latency hiding through channel-based concurrency}
@@ -776,7 +778,7 @@ given Magic2's block-size and agent-count defaults --- GPU latency
 is fully overlapped with productive CPU work on other
 blocks, with no GPU-specific orchestration code in the pipeline at all.
 After a while, the different agents spontaneously anti-synchronize and
-relativelly rarely require the GPU at the same time.
+relatively rarely require the GPU at the same time.
 
 The channel library (\texttt{wchannels/channel.c}) is a direct C
 implementation of Go's channel semantics~\citep{donovan2015go},
@@ -802,40 +804,15 @@ processed; the CPU no longer needs to memory-map the target index,
 about 22\,GB for the human genome, and can discard it.
 
 Within each block the GPU performs the following steps in sequence:
+Read-seed sort, Common-seed identification, Match-record emission,
+and Sort by read pair.
 
-\begin{enumerate}
-\item \textbf{Read-seed sort.}
-      The read seeds extracted from the current block are sorted on
-      the device by seed value, producing the same ordered table that
-      the CPU radix sort would deliver
-      (Section~\ref{sec:sort}).
 
-\item \textbf{Common-seed identification.}
-      The sorted read-seed table is intersected with the resident
-      genome index to find all seed values present in both.
-      For each common value the set of matching genome positions and
-      the set of matching read positions are identified.
+Finally, the sorted match table is copied back to host memory,
+and all subsequent processing --- alignment extension, splicing,
+scoring --- proceeds on the CPU without any further access to
+the genome index.
 
-\item \textbf{Match-record emission.}
-      For each common seed with $m$ genomic occurrences and $n$ read
-      occurrences, all $m \times n$ candidate hit pairs are written to
-      a match table in parallel, using a prefix-scan to assign output
-      positions without atomic operations.
-
-\item \textbf{Sort by read pair.}
-      The match table is sorted by read identifier.
-      Because of the paired-end encoding
-      (Section~\ref{sec:paired_encoding}), this simultaneously groups
-      hits by read pair and places mate~1 immediately before mate~2,
-      delivering a table directly consumable by the CPU alignment
-      stage with no further reordering.
-
-\item \textbf{Return to CPU.}
-      The sorted match table is copied back to host memory.
-      All subsequent processing --- alignment extension, splicing,
-      scoring --- proceeds on the CPU without any further access to
-      the genome index.
-\end{enumerate}
 
 
 \subsection{LibTorch backend: an alternative GPU implementation}
@@ -855,86 +832,41 @@ The entire join is written as a handful of whole-array operations ---
 \texttt{bucketize}, \texttt{index\_select}, \texttt{repeat\_interleave},
 \texttt{argsort} --- with no hand-written kernel, no explicit thread or
 block geometry, and no manual memory management.
-The same source runs on CUDA, on Apple MPS, and on the CPU, the device
-being selected at run time.
-Isolation follows the rule already used for the SRA reader: the file
-includes only LibTorch headers and its own public header, never
-\texttt{sa.h} or any acedb header, and all data crosses the boundary as
-flat pointers and counts behind an opaque \texttt{SATorchObj} handle.
 
-\paragraph{Index residency.}
-Each of the $\mathit{NN}=16$ partitions is held on the device as three
-tensors in compressed-sparse-row form: \texttt{g\_keys} $[K]$, the
-sorted unique seeds; \texttt{g\_offsets} $[K{+}1]$; and \texttt{g\_cw}
-$[M,3]$, the payload columns \texttt{nam}, \texttt{pos}, \texttt{flags}.
-The seed column of the \texttt{CW} record is not stored: the CSR index
-already says which rows belong to which seed, and the value itself is
-never needed after the join.
-Dropping it reduces the resident index for a human or mouse genome
-(1.43 billion records) from about 22.8 to 17.1\,GB, which leaves room
-on a 32\,GB device for the 1--2\,GB of working tensors a block requires.
-Seeds are compared as \emph{signed} \texttt{int32}, LibTorch offering no
-unsigned 32-bit \texttt{bucketize}; the on-disk index must therefore be
-built with the matching signed radix sort.
-
-\paragraph{Join and output.}
-Read seeds are located in \texttt{g\_keys} by \texttt{bucketize},
-equality is verified, and the CSR start and count of each surviving seed
-are gathered.
-\texttt{repeat\_interleave} then materialises the Cartesian product
-directly, the jump lines of Section~\ref{sec:multiplicity} being excluded
-by masking the row indices divisible by 256, so no extra field is needed.
-The genome payload is gathered, the five output columns are concatenated,
-and the table is sorted by read identifier --- which, by the paired
-encoding of Section~\ref{sec:paired_encoding}, groups mates as before.
-The record returned is a \texttt{TORCHMATCH}: five 32-bit fields,
-20\,bytes, against 64 for a \texttt{SEEDMATCH}, the two seed fields and
-the read flags having been dropped as always zero.
-The buffer is owned by the handle and loaned to the C caller.
-Two entry points are offered: \texttt{saTorchJoinSort}, which joins and
-sorts seeds already extracted by the CPU, and
-\texttt{saTorchCodeJoinSort}, which in addition extracts the seeds on the
-device from a flat IUPAC buffer, packing the forward and reverse-complement
-$k$-mers by weighted sums and keeping $Z=\min(S,C)$ exactly as in
-Section~\ref{sec:strand_agnostic}.
-Every entry point is exception-guarded and returns a null pointer on any
-failure, which the caller reads as an instruction to fall back to the CPU.
-
-\paragraph{Performance and its ceiling.}
+\subsection{GPU performance is marginal}
 Both GPU backends are correct and in production, and both are only
 marginally faster than the CPU sort--merge.
 This is a property of the problem rather than a defect of either
 implementation, and it can be measured directly.
-Varying the sampling steps changes the size of the seed tables while
-leaving every other stage of the pipeline untouched, and therefore
-isolates the cost of pre-assignment.
-Across 27 benchmark datasets, tripling the number of read seeds
-(read step 3 to 1) costs only 10\,\% of wall time, and doubling the
-number of genome seeds (index step 6 to 3) costs 22\,\%.
-Back-solving each against $T = (1-f) + kf$ gives a read-seed-dependent
-fraction $f \approx 5\,\%$ and a genome-seed-dependent fraction
-$f \approx 22\,\%$.
-Seed generation, sorting and joining --- the entire work that either
-GPU backend performs --- thus accounts for roughly a quarter of the
-run.
-By Amdahl's argument, no implementation of this stage, on any device
-and however fast, can accelerate Magic2 by more than about
-$1/(1-0.27) \approx 1.4\times$.
-The observed marginal gain is exactly what that bound predicts, and it
-is the reason no further GPU implementation of the seed stage is
-planned.
+
+The prealignment, deferred to the GPU, represents at most 30 or 40\%
+of the total processing time. So even if the GPU ran in time zero, the whole code would accelerate by less than a factor 2.
+On the other hand, a GPU machine is very expensive and must be
+contrasted with a high end multicore machine with 24 or more CPUs,
+where $n$ agents run the prealignment in parallel,
+diminishing by this factor the relative gain of the fast GPU processing
+time. Finally, the index is very large (above 22 Gb for the human genome)
+saturating a large part of the GPU memory and forcing sequential
+processing on the probably unique available GPU.
 
 The remaining three quarters --- alignment extension, the exon-path
 dynamic programming, and the splice logic
 (Sections~\ref{sec:align}--\ref{sec:adjust_introns}) --- are
 branch-heavy, data-dependent and irregular, which is the least
 favourable workload a GPU can be given; they stay on the CPU by design.
-The clearer benefit of both GPU paths therefore lies elsewhere: the
-index is resident on the device, so the CPU no longer memory-maps
-$\sim$22\,GB per machine and that memory is returned to the agents.
-Given the cost of a GPU, the CPU path remains the recommended default.
 
+In conclusion, the acceleration offered (and tested) is marginal,
+and the only real benefit of using the GPU is to offload the
+index to the GPU memory, clearing 22Gb of the CPU RAM.
+It is much cheaper to install an extra 32Gb of RAM on a CPU machine
+than to add a GPU.
 
+Given the costs, the GPU path may be interesting to developers, but
+is not recommended to users and the GPU is only invoked if the
+optional parameter \texttt{--gpu}
+is given on the command line.
+
+\section {Alignment extension}
 \label{sec:align}
 
 The alignment extension stage receives \texttt{SEEDMATCH} records ---
@@ -944,19 +876,19 @@ Two flavours exist: standard genomic seeds
 (Section~\ref{sec:seed_encoding}),
 and junction seeds which
 each produce two glue points (a donor and an acceptor on either side
-of an annotated intron boundary, section~\ref{sec:junction_seeds}).
+of an annotated intron boundary, Section~\ref{sec:junction_seeds}).
 
 \subsection{Strand resolution}
 \label{sec:strand_resolution}
 
 Seeds are strand-agnostic: chromosome and read identifiers encode
-strand implicitly --- even identifiers $2n$) indicate the plus strand
-and odd identifiers $(2n+1)$ indicate the minus strand (section~\ref{sec:strand_agnostic}).
+strand implicitly --- even identifiers $2n$ indicate the plus strand
+and odd identifiers $(2n+1)$ indicate the minus strand (Section~\ref{sec:strand_agnostic}).
 The exclusive-or bitwise operation \texttt{(chrom \textasciicircum\ read) \& 1} therefore
 determines whether the read and the chromosome at the position
 indicated by their common seed are locally parallel or anti-parallel.
 This flag is extracted and dropped; from this point all processing
-works only on parallel alingments by compairing the positive-strand of the read (\texttt{dnaR}) to either
+works only on parallel alignments by comparing the positive-strand of the read (\texttt{dnaR}) to either
 the original target sequence
 (\texttt{dnaG}) or to the target reverse-complemented sequence  (\texttt{dnaG\_RC}), both memory-mapped at initialisation.
 
@@ -966,7 +898,7 @@ the original target sequence
 For each read, glue points may scatter across many chromosomes but
 cluster into one or a few genuine loci.
 Loci are scored by glue-point counts, with seeds of high genomic
-multiplicity (recorded in the \texttt{SEEDMATCH} record, section~\ref{sec:multiplicity}).) down-weighted.
+multiplicity (recorded in the \texttt{SEEDMATCH} record, Section~\ref{sec:multiplicity}) down-weighted.
 Junction seeds are tallied separately and contribute additional
 evidence for a specific splice structure.
 Within each candidate locus, glue points are sorted by chromosome,
@@ -984,7 +916,7 @@ Magic-BLAST~\citep{magicblast}, to which we refer for a full
 description.
 
 Extension proceeds base by base: if \texttt{*cp \& *cq != 0} (a
-bitwise test that handles IUPAC ambiguity codes: $R$ matches $A$ or $C$, and $N$ matches any letter),
+bitwise test that handles IUPAC ambiguity codes: $R$ matches $A$ or $G$, and $N$ matches any letter),
 both the read pointer \texttt{cp} and the genome pointer \texttt{cq} advance by 1 base.
 On a mismatch, a \emph{jumper table} is consulted.
 Each row encodes one error hypothesis as a triple
@@ -993,7 +925,7 @@ genome pointer by \texttt{da}, if the following $n$ letters check as exact match
 otherwise try the next hypothesis.
 The table covers substitutions, insertions, and deletions of up to
 10 bases (Table~\ref{tab:jumper});
-rows with $dx+da >k$ can be ignores, in many places Magic2 uses the limit $k=3$;
+rows with $dx+da >k$ can be ignored, in many places Magic2 uses the limit $k=3$;
 a sentinel entry
 \texttt{\{1,\,1,\,0\}} with $n=0$ is always accepted and terminates
 the search without a special exit condition.
@@ -1061,7 +993,7 @@ The input to the DP is a list of candidate exon fragments for a
 single read, each carrying: read and chromosome identifiers,
 genomic and read-space coordinates, and the error table produced
 by the jumper algorithm (Section~\ref{sec:jumper}).
-A fragment may consist of several exon if a junction
+A fragment may consist of several exons if a junction
 seed has been unambiguously recognized.
 Fragments are sorted by their 5$'$ genomic coordinate before the
 DP begins.
@@ -1128,7 +1060,7 @@ the successive fragments the program works as follows.
 Because the genome contains so many repetions at all scales,
 two successive fragments often overlap over dozens of bases or more.
 The code first searches the region where a blunt end clip would
-minimize the total number of remaing errors. In an ideal situation
+minimize the total number of remaining errors. In an ideal situation
 where the sequencing is perfectly accurate, there would be no mismatch
 in the exonic regions but possibly several where the fragments
 leak into the intronic region. In such a case, this minimisation
@@ -1137,7 +1069,7 @@ Real situations may be more complex.
 
 \paragraph{Splice-signal selection.}
 If the run is recognized as RNA, or during the pilot phase
-(sections~\ref{sec:pilot}), the optimal overlap is scanned
+(Section~\ref{sec:pilot}), the optimal overlap is scanned
 successively for an already annotated boundary,
 then for a splice signal:
 \begin{enumerate}
@@ -1148,9 +1080,9 @@ then for a splice signal:
 \end{enumerate}
 For non-stranded libraries both GT-AG and CT-AC are considered.
 In case of success, the fragments are clipped accordingly, even if this produces
-a single base mismatch, insertion or deletion, and the score of the aligment
+a single base mismatch, insertion or deletion, and the score of the alignment
 receives a bonus. However, no bonus is given if the read mixes
-sence (GT-AG) and antisense (CT-AC) signals, or the the signal is incompatible
+sense (GT-AG) and antisense (CT-AC) signals, or the signal is incompatible
 with the strand specificity of the run.
 
 The final clip point therefore simultaneously minimises alignment
@@ -1239,8 +1171,10 @@ into exonic read coordinates, and the final alignment score is
 computed (Section~\ref{sec:scoring}).
 This is the score used for all downstream comparisons.
 
-\subsection{Alignment scoring}
+\section {Final scoring}
 \label{sec:scoring}
+
+\subsection{Alignment scoring}
 
 The score of a single-read alignment path is:
 \[
@@ -1354,7 +1288,7 @@ hit an unreadable stretch typically fail to align altogether rather
 than producing two flanking paths.
 
 %% ===============================================================
-\section{Adaptor detection and trimming}
+\section{Adaptor detection and poly-A trimming}
 \label{sec:adapters}
 
 Adaptor sequences may be supplied via \texttt{--adaptor1}/\texttt{--adaptor2}
@@ -1437,6 +1371,9 @@ symmetry.
 Tails carrying at least eight consecutive A (or T) residues are
 recorded, accumulated across reads, and reported as candidate poly(A)
 addition sites.
+Reads aligning exactly and without error up to their trimmed
+adaptors or poly-A
+are counted as perfectly aligned.
 
 \subsection{Trans-splice leader detection (\textit{C.~elegans})}
 \label{sec:tsl}
@@ -1483,14 +1420,16 @@ uncompressed SAM and reports the fallback to the user.
 This keeps the binary free of any link-time dependency on
 \texttt{htslib} or \texttt{samtools}.
 
-\subsection{Compact hits format}
+\subsection{Default hits format}
 \label{sec:hits}
 
 The \texttt{.hits} format (\texttt{wsa/sa.tabular.c}), selected via
-\texttt{--hits}, is a compact tab-separated alignment format designed
+\texttt{--hits}, is a tab-separated alignment format designed
 for internal Magic2 pipelines where BAM compatibility is not required.
-It is faster to write and parse than SAM and represents multi-exon
-alignments more compactly.
+It is richer than the SAM/BAM format because it describes more precisely
+the substitutions and indels, both in read coordinates and target
+coordinates, facilitating the SNP analysis, and reports trimming,
+multimapping and paired-end alignments in a simpler way.
 
 \subsection{TSF: Tag--Sample Format}
 \label{sec:tsf}
@@ -1498,8 +1437,9 @@ alignments more compactly.
 All scalar outputs --- expression counts, intron support tables,
 poly(A) sites, QC metrics, adaptor profiles --- are exported in
 TSF (Tag--Sample Format): a plain tab-separated file with columns
-\texttt{run\,/\,tag\,/\,format-code\,/\,value}, where format codes
-are \texttt{i}~(integer), \texttt{f}~(float), and \texttt{t}~(text).
+\texttt{run\,/\,tag\,/\,format\,/\,value}, where the format is
+\texttt{i}~(integer), \texttt{f}~(float), and \texttt{t}~(text),
+for example \texttt{tiif}.
 TSF files need not be sorted; multiple TSF files can be concatenated
 directly to merge runs; and the \texttt{tsf.c} library can pivot any
 TSF file into a two-dimensional table compatible with Excel.
@@ -1714,8 +1654,8 @@ G.chr1__1304288   A_Total_151PE   ti   +   5
 \end{lstlisting}
 Sites supported by only one read are retained in the file but
 should be treated with caution; reliable poly(A) sites typically
-accumulate tens to hundreds of reads at a single nucleotide
-position, reflecting the precision of cleavage-and-polyadenylation.
+accumulate tens to hundreds of reads over a few
+positions, reflecting the slight imprecision of cleavage-and-polyadenylation.
 
 \subsection{Error profile}
 \label{sec:error_profile}
@@ -1749,7 +1689,7 @@ mismatch table reflects the error chemistry of the sequencer, not
 the underlying SNP or mutation spectrum.
 The profile is useful for comparing sequencing quality across runs,
 for detecting systematic chemistry artefacts, and for tuning the
-\texttt{errCost} parameter for non-Illumina technologies.
+\texttt{errCost} parameter and jump-table for non-Illumina technologies.
 
 \subsection{Run statistics}
 \label{sec:runstats}
@@ -1772,7 +1712,7 @@ The main categories are as follows.
 \paragraph{Pair and read counts.}
 \texttt{Pairs}, \texttt{Aligned\_pairs}, \texttt{Compatible\_pairs}
 (correct orientation and insert size), \texttt{Circle\_pairs}
-(both mates on the same strand --- a library artefact),
+(both mates close but divergent, indicating a possible circular RNA),
 and \texttt{Non\_compatible\_pairs}.
 At read level: \texttt{Aligned\_reads}, \texttt{Unaligned\_reads},
 \texttt{Perfect\_reads} (zero mismatches, zero indels),
@@ -1804,11 +1744,10 @@ trimmed at a poly(A) or poly(T) tail.
 
 \paragraph{Intron statistics.}
 \texttt{Intron\_supports} gives the total number of intron-spanning
-reads, broken down by splice signal (GT-AG, CT-AC, other) and the
-fraction on the positive strand.
-\texttt{Supported\_introns} gives the number of distinct intron
-loci passing the reliability threshold (GT-AG seen once, or any
-signal seen at least three times).
+reads, broken down by splice signal (GT-AG, other) and
+by the relative orientation of the read and the intron, and by known or novel
+relative to any annotation provided during index construction.
+The threshold is 1 support for GT-AG introns, 3 otherwise.
 
 \paragraph{Multi-mapping distribution.}
 \texttt{Reads\_Aligned\_once} through
@@ -1856,7 +1795,7 @@ Parameter & Default \\
 \texttt{errRateMax}      & 12\,\% \\
 \texttt{bMax}            & 3\,Mb per block \\
 Index step               & 6 (genomes $>1$\,Mb) \\
-Alignment step (\texttt{iStep}) & \texttt{tStep} \\
+Alignment step (\texttt{iStep}) & \texttt{same} \\
 \texttt{seedLength}      & 16 (genomes $<1$\,Gb); 18 (human/mouse) \\
 \texttt{maxTargetRepeats}& 81 (Section~\ref{sec:multiplicity}) \\
 \texttt{wiggle\_step}    & 1 (small genomes); 10 (human/mouse) \\
