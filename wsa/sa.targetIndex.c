@@ -85,7 +85,7 @@ Array saTargetParseConfig (PP *pp)
 		       , tConfigFileName
 		       ) ;
 	  if (cc == 'I') cc = 'A' ;  /* back compatibility may 2026 to be removed later */
-	  if (tc->targetClass && (tc->targetClass < 'A' || tc->targetClass > 'Z'))
+	  if (tc && tc->targetClass && (tc->targetClass < 'A' || tc->targetClass > 'Z'))
 	    messcrash ("\n\nThe target class must be specified as a single upper-case character [A-Z], not %c,  at line %d of -T target config file %s\n Please try sortalign --help\n"
 		       , cc
 		       , line
@@ -291,7 +291,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
   long int i, jj ;
   AC_HANDLE h = bb->h ;
   int maxRepeats = pp->maxTargetRepeats ;
-  unsigned int intronMask = (0x1 << 31) ;    
+  unsigned int intronMask = (0x1U << 31) ;    
   BigArray aa ;
   CW *up, *vp, *wp, *upMax ;
   unsigned int wordMax = 0xffffffff ;
@@ -602,7 +602,7 @@ static long int saTargetIndexCreateDo (PP *pp)
     }
 
   /* export the target lengths */
-  ACEOUT aoChromLengths = aceOutCreate (pp->indexName, "targetSizes.txt", FALSE, pp->h) ;
+  ACEOUT aoChromLengths = aceOutCreate (pp->indexName, "/targetSizes.txt", FALSE, pp->h) ;
   for (int ii = 1 ; ii <= dictMax (bbG->dict) ; ii++)
     {
       const char *nam = dictName (bbG->dict, ii) ;
@@ -610,7 +610,7 @@ static long int saTargetIndexCreateDo (PP *pp)
       if (!strchr ("GMC", nam[0])) continue ;
       Array dna = array (bbG->dnas, ii, Array) ;
       int ln = arrayMax (dna) ;
-      aceOutf (aoChromLengths, "%s\t%d\n", nam, ln) ;
+      aceOutf (aoChromLengths, "%s\t%d\n", nam+2, ln) ;
     }
   ac_free (aoChromLengths) ;
 
@@ -626,7 +626,7 @@ static long int saTargetIndexCreateDo (PP *pp)
       Array dnaR = arrayHandleCreate (8, unsigned char, bbG->h) ;
       unsigned int x1 = bigArr (bbG->dnaCoords, 2*ii, unsigned int) ;      /* offset of this DNA */
       unsigned int x2 = bigArr (bbG->dnaCoords, 2*ii + 1, unsigned int) ;
-      messfree (dnaR->base) ;
+      free (dnaR->base) ;
       arrayLock (dnaR) ;
       dnaR->base = (char *) cp0 + x1 ;
       dnaR->max = dnaR->dim = x2 - x1 ;

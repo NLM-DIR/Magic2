@@ -221,8 +221,7 @@ setenv SETERRCOST 4
 setenv seedLength 16
 setenv seedLength 18
 setenv maxTargetRepeats 31
-setenv maxTargetRepeats 82
-
+setenv maxTargetRepeats 81
 
 
 ##       SortalignPaperMasterScript.tcsh

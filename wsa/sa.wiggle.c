@@ -450,15 +450,15 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	  if (! ao && pp->bigWig)
 	    {
 	      /* -clip avoids a crash if we go out of chromSizes */
-	      char *chromSizeNam = hprintf (h, "%s/chromSizes.txt", pp->indexName) ;
-	      char *fNam = hprintf (h, "/wiggles/%s.%s.%s.bw", runNam, chromNam, typeNam) ;
+	      char *chromSizeNam = hprintf (h, "%s/targetSizes.txt", pp->indexName) ;
+	      char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.bw", pp->outFileName, runNam, chromNam, typeNam) ;
 	      char *cmd = hprintf (h, "wigToBigWig -clip stdin %s %s", chromSizeNam, fNam) ;
 	      ao = aceOutCreateToPipe (cmd, h) ; // the bw format allows direct access
 	    }
 	  if (! ao)
 	    {
 	      char *fNam = hprintf (h, "/wiggles/%s.%s.%s.BF", runNam, chromNam, typeNam) ;
-	      ACEOUT ao = aceOutCreate (pp->outFileName, fNam, 0 || pp->gzo, h) ; // compressing the BF files is extremelly good 100X
+	      ao = aceOutCreate (pp->outFileName, fNam, 0 || pp->gzo, h) ; // compressing the BF files is extremelly good 100X
 	    }	  
 	  aceOutDate (ao, "##", "wiggle") ; 
 	  aceOutf (ao, "track type=wiggle_0\n") ;
