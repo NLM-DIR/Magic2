@@ -66,7 +66,7 @@ static int saScanDnaEncode (BB *bb)
  * to allow transparent usage of the standard acedb dna array libraries
  */
 
-static Array saScanVirtualDnasArrayCreate (BB *bb)
+static Array saScanVirtualDnasArrayCreate (const PP *pp, BB *bb)
 {
   SAPARSE *saParse = bb->saParse ;
   Array dnas ;
@@ -79,6 +79,20 @@ static Array saScanVirtualDnasArrayCreate (BB *bb)
       DnaRecord *r = arrp (bb->dnaRecords, ii, DnaRecord) ;
       unsigned char *cp = saParse->dnaBuffer + r->xDna ;
       int ln = r->dnaLn ;
+      if (! ln) continue ;
+      int jump5 = (ii & 0x1 ? pp->jump5read2 : pp->jump5read1) ;
+      if (jump5)
+	{
+	  if (ln > jump5)
+	    {
+	      ln -= jump5 ;
+	      for (int i = 0, j = jump5 ; i < ln ; i++, j++)
+		cp[i] = cp [j] ;
+	      cp[ln] = 0 ;
+	    }
+	  else
+	    ln = 0 ;
+	}
       if (ln)
 	{
 	  if ((uintptr_t)cp & 0xf)
@@ -413,7 +427,7 @@ void saScan (const PP *pp, BB *bb)
     saParseR12Buffers (pp, bb) ;
 
   /* create dna virtual arrays to benefit from the acedb dna array library without calling malloc a zillion times */
-  bb->dnas = saScanVirtualDnasArrayCreate (bb) ;
+  bb->dnas = saScanVirtualDnasArrayCreate (pp, bb) ;
   saScanDnaEncode (bb) ;
   return ;
 } /* saScan */

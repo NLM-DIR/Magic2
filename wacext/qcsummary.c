@@ -3769,7 +3769,9 @@ static void qcReadFate1 (QC *qc, RC *rc)
 			{
 			  z = ac_table_float (tt, ir, 3, 0) ;  /* tag number */
 			}
-		      else if (! strcasecmp (ccp, "b_bacteria") || ! strcasecmp (ccp, "v_virus"))
+		      else if (! strcasecmp (ccp, "b_bacteria") || ! strcasecmp (ccp, "v_virus") ||
+			       ! strcasecmp (ccp, "B") || ! strcasecmp (ccp, "V")
+			       )
 			{
 			  zm += ac_table_float (tt, ir, 3, 0) ;
  			}
@@ -3961,7 +3963,9 @@ static void qcReadFate2 (QC *qc, RC *rc)
 			{
 			  z = ac_table_float (tt, ir, 3, 0) ;  /* tag number */
 			}
-		      else if (! strcasecmp (ccp, "b_bacteria") || ! strcasecmp (ccp, "v_virus"))
+		      else if (! strcasecmp (ccp, "b_bacteria") || ! strcasecmp (ccp, "v_virus") ||
+			       ! strcasecmp (ccp, "B") || ! strcasecmp (ccp, "V")
+			       )
 			{
 			  zm += ac_table_float (tt, ir, 3, 0) ;
  			}
@@ -4661,7 +4665,7 @@ static void qcCPU (QC *qc, RC *rc)
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
     { "TITLE", "Title", 10, 0, 0} ,
-    { "Compute", "Million reads aligned on all targets per CPU hour", 1, 0, 0 } ,
+    { "Compute", "Million reads aligned on all targets per elapsed hour", 1, 0, 0 } ,
     { "Compute", "Maximum RAM used (GB)",2, 0, 0} ,
     { "Number_of_lanes", "Number of blocks", 0, 0, 0} ,
     {  0, 0, 0, 0, 0}
@@ -4709,6 +4713,8 @@ static void qcCPU (QC *qc, RC *rc)
  	      for (ir = 0 ; tt && ir < tt->rows ; ir++)	
 		{
 		  j = ac_table_int (tt, ir, 1, 0) ;
+		  const char *kmg = ac_table_printable (tt, ir, 2, 0) ;
+		  if (kmg && *kmg == 'G') j *= 1014 ;
 		  if (k < j) k = j ;
 		}
 	      aceOutf (qc->ao, "\t%.1f", k/1024.0) ;
@@ -5411,7 +5417,7 @@ static void qcRunSelection (QC *qc, RC *rc)
 		  const char *targetI = pass ? "any" : target ;
 		  for (ir = 0 ; ir < tt->rows ; ir++)
 		    {
-		      if (!ir || ! strcasecmp (ac_table_printable (tt, ir, 0, "xxx"), target))
+		      if (!ir || ! strcasecmp (ac_table_printable (tt, ir, 0, "xxx"), targetI))
 			z = ac_table_int (tt, ir, ic, 0) + ac_table_float (tt, ir, ic, 0) ;
 		    }
 		  if (z > 0) break ;
@@ -5693,7 +5699,7 @@ static void qcCandidateIntrons (QC *qc, RC *rc)
     {	
       int ii ;
       char *cp ;
-      const char *target ;
+      const char *target = 0 ;
       
       if (rc == 0)
 	{
@@ -5998,19 +6004,19 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  if (! strcmp ( ac_table_printable (ttk, ir, 0, "x"), qc->Etargets[0]))
 		    zSpliced = ttk ? ac_table_float (ttk, ir, 3, 0) : 0 ;
 		}
-	      tt = ac_tag_table (rc->ali, "h_Ali", h) ;
+	      tt = ac_tag_table (rc->ali, "nh_Ali", h) ;
 	      for (ir = 0 ; tt && ir < tt->rows ; ir++)
 		{
 		  ccp = ac_table_printable (tt, ir, 0, EMPTY) ;
-		  if (! strcasecmp (ccp, "1_DNASpikeIn"))
+		  if (! strcasecmp (ccp, "1_DNASpikeIn") || ! strcasecmp (ccp, "D"))
 		    zhPhiX = ac_table_float (tt, ir, col, 0) ;
-		  if (! strcasecmp (ccp, "0_SpikeIn"))
+		  if (! strcasecmp (ccp, "0_SpikeIn") || ! strcasecmp (ccp, "E"))
 		    zhe = ac_table_float (tt, ir, col, 0) ;
-		  if (! strcasecmp (ccp, "B_rRNA"))
+		  if (! strcasecmp (ccp, "B_rRNA") || ! strcasecmp (ccp, "R"))
 		    zhr = ac_table_float (tt, ir, col, 0) ;
-		  if (! strcasecmp (ccp, "A_mito"))
+		  if (! strcasecmp (ccp, "A_mito") || ! strcasecmp (ccp, "M"))
 		    zhm = ac_table_float (tt, ir, col, 0) ;
-		  if (! strcasecmp (ccp, "D_transposon"))
+		  if (! strcasecmp (ccp, "D_transposon") || ! strcasecmp (ccp, "S"))
 		    zhT = ac_table_float (tt, ir, col, 0) ;
 
 		  if (! strcasecmp (ccp, "QT_smallRNA"))
@@ -6024,9 +6030,9 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  if (ccp[1] == 'T' && ccp[2] == '_')   /* any xT_ is an annotated transcript */
 		    zhPrevious += ac_table_float (tt, ir, col, 0) ;
 
-		  if (! strcasecmp (ccp, "v_virus"))
+		  if (! strcasecmp (ccp, "v_virus")  || ! strcasecmp (ccp, "V"))
 		    zhVirus = ac_table_float (tt, ir, col, 0) ;
-		  if (! strcasecmp (ccp, "b_bacteria"))
+		  if (! strcasecmp (ccp, "b_bacteria") || ! strcasecmp (ccp, "B"))
 		    zhBacteria = ac_table_float (tt, ir, col, 0) ;
 
 		  if (! strcasecmp (ccp, "Z_genome"))

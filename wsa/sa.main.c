@@ -2090,8 +2090,10 @@ int main (int argc, const char *argv[])
   getCmdLineInt (&argc, argv, "--minScore", &(p.minScore)) ;
   getCmdLineInt (&argc, argv, "--minAli", &(p.minAli)) ;
   getCmdLineInt (&argc, argv, "--minAliPerCent", &(p.minAliPerCent)) ;
-  getCmdLineInt (&argc, argv, "--errRatMax", &(p.errRateMax)) ;
+  getCmdLineInt (&argc, argv, "--errRateMax", &(p.errRateMax)) ;
   getCmdLineInt (&argc, argv, "--maxTargetRepeats", &p.maxTargetRepeats) ;
+  getCmdLineInt (&argc, argv, "--jump5read1", &(p.jump5read1)) ;
+  getCmdLineInt (&argc, argv, "--jump5read2", &(p.jump5read2)) ;
   p.maxIntron = 1000000 ;
   getCmdLineInt (&argc, argv, "--maxIntron", &(p.maxIntron)) ;
 
@@ -2186,11 +2188,12 @@ int main (int argc, const char *argv[])
   /* Set bonus for over represented sequences
    * For all classes with positive bonus
    *   Their seeds are scanned with step 1
-   *   Their are masked out of the other target classes
+   *   Bad idea abandonned: Their are masked out of the other target classes
    */
   p.bonus['M'] = 1 ; /* mitochondria */
   p.bonus['C'] = 1 ; /* chloroplast */
   p.bonus['R'] = 2 ; /* rRNA */
+  p.bonus['D'] = 2 ; /* DNA spikeIns */
   p.bonus['E'] = 2 ; /* ERCC spikeIns */
   p.bonus['T'] = 2 ; /* Transposons */
   p.bonus['B'] = -3 ; /* Bacteria */

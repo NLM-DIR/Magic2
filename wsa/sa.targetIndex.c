@@ -354,7 +354,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 	      switch ((int)bonus[(int)tc])
 		{
 		case 0: // Genome
-		  if (nR || nG > maxRepeats) ok = FALSE ;
+		  if (nG > maxRepeats) ok = FALSE ; // to maks mito/ribo in genome : use if (nR || nG > maxRepeats) ok = FALSE ;
 		  if (ok && !(wp->intron & intronMask))
 		    wp->intron = nR + nG ;
 		  break ;

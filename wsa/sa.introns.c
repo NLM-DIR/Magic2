@@ -937,10 +937,12 @@ void saIntronsExport (PP *pp, Array aaa)
 	    {
 	      RunSTAT *rc = arrp (pp->runStats, up->run, RunSTAT) ;
 	      
-	      rc->nrSupportedIntrons[4]++ ;
+	      rc->nrSupportedIntrons[4] = ikMax ;
+	      rc->nrSupportedIntrons[type]++ ;
 	      rc->nrIntronSupports[type]+= up->n + up->nR;
 	      rc = arrp (pp->runStats, 0, RunSTAT) ;
-	      rc->nrSupportedIntrons[4]++ ;
+	      rc->nrSupportedIntrons[4] = ikMax ;
+	      rc->nrSupportedIntrons[type]++ ;
 	      rc->nrIntronSupports[type]+= up->n + up->nR;
 	      
 	      aceOutf (ao, "%s__%d_%d\t%s\tiitt\t%d\t%d\t%s\t%s\n"

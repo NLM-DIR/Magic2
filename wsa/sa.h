@@ -342,6 +342,7 @@ typedef struct pStruct {
   int minLength, minEntropy ;
   int errRateMax ;       /* (--align case) max number of errors in seed extension */
   int OVLN ;
+  int jump5read1, jump5read2 ;
   int gpu ;
 #ifdef USE_TORCH
 #define MAX_GPU 4

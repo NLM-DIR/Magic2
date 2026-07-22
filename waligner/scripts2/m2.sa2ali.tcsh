@@ -25,10 +25,11 @@ cat $ff | gawk -F '\t'  '/Reads_aligned_in_class/{s=$10;gsub(/%/,"",s);p=$6;m=$8
 cat $ff | gawk -F '\t'  '/Intron_supports/{s=$10;gsub(/%/,"",s);p=$6;m=$8;cl="I";if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
 cat $ff | gawk -F '\t'  '/Reads_aligned_in_class/{cl=substr($2,24);nr[cl]=$6+$8} /Bases_aligned_in_class/{cl=substr($2,24);nb[cl]=$6+$8;printf("nh_Ali %s %s seq %s tag %.3g kb %.2f bp\n",cl,nr[cl],nr[cl],nb[cl]/1000,nb[cl]/nr[cl]);}' >> $toto
 cat $ff | gawk -F '\t'  '/Aligned_reads/{nr[cl]=$4;}/Aligned_bases/{nb[cl]=$4;printf("nh_Ali %s %s seq %s tag %d kb %.2f bp\n", "any", nr[cl],nr[cl],nb[cl]/1000,nb[cl]/nr[cl]);}' >> $toto
-cat $ff | gawk -F '\t'  '/Reads_aligned_once/{nn[1]=$4;s[1]=$5;}/Reads_multi_aligned__/{cl=substr($2,22)+0;nn[cl]=$4;s[cl]=$5;}END{printf("Unicity any ");for(cl=1;cl<=10;cl++)printf(" %.3g", nn[cl]);printf("\n");}' >> $toto
+cat $ff | gawk -F '\t'  '/Reads_Aligned_once/{nn[1]=$4;s[1]=$5;}/Reads_multi_aligned__/{cl=substr($2,22)+0;nn[cl]=$4;s[cl]=$5;}END{printf("Unicity any ");for(cl=1;cl<=10;cl++)printf(" %.3g", nn[cl]);printf("\n");}' >> $toto
 cat $ff | gawk -F '\t'  '/CDS_utr_intronic_intergenic_Bases/{s=$10/1000; printf("Intergenic %d kb\n", s);}' >> $toto
 
-cat $ff | gawk -F '\t'  '/Intron_supports/{nS=$4;}/Supported_introns/{n=$4;printf("Candidate_introns any %d In_Any %d Not_in_Any  %d new_gt_ag %d Specificity %.2f Sensitivity %.2f Known_support %d New_support %d New_minS %d\n", n,0,0,0,0,0,0,nS,0,1);}' >> $toto
+cat $ff | gawk -F '\t'  '/Intron_supports/{iTP=$12+$14;iFP=$16+$18;}/Supported_introns/{N=$4;TP=$6+$8;FP=$10+$12;printf("Candidate_introns Annotated %d Known %d Novel  %d new_gt_ag %d Specificity %.2f Sensitivity %.2f Known_support %d New_support %d New_minS %d\n",N,TP,FP,$10,100.0*TP/(TP+FP+.00001),100.0*TP/(N+.00001),iTP,iFP,3);}' >> $toto
+
 
 cat $ff | gawk -F '\t'  '/CDS_utr_intronic_intergenic_Bases/{s=$4/1000000.0; printf("S_1_CDS %.2f \"Mb aligned\"\n",s);s=$6/1000000.0; printf("S_1_UTR %.2f \"Mb aligned\"\n",s);s=$8/1000000.0; printf("S_1_intronic %.2f \"Mb aligned\"\n",s);s=$10/1000000.0; printf("S_1_intergenic %.2f \"Mb aligned\"\n",s);}' >> $toto
 cat $ff | gawk -F '\t'  '/ATGCN/{k=1000;A=$4;T=$5;G=$6;C=$7;N=$8;Z=A+T+G+C+N;Z/=1000;printf("ATGC_kb %d %d %d %d %d %d %d %d %d %d\n", A/Z,T/Z,G/Z,C/Z,N/Z,A/k,T/k,G/k,C/k,N/k);}' >> $toto
@@ -37,6 +38,7 @@ set gg=$dd/geneCounts.tsf
 
 cat $ff | gawk -F '\t' '/Unaligned_reads/{nr=$4;}/Unaligned_bases/{nb=$4;printf("Unaligned %d Seq %d Tags %.3g kb\n", nr, nr, nb/1000) ;}' >> $toto
 
+cat $ff | gawk -F '\t' '/Low_entropy_reads/{nr=$4;}/Low_entropy_bases/{nb=$4/1024;printf("Rejected 0 NA %g Tags %.3f \"kb rejected low entropy\"\n", nr, nb) ;}' >> $toto
 cat $ff | gawk -F '\t' '/Perfect_reads/{nr=$4;printf("Perfect_reads %.3g %d\n", nr, nr) ;}' >> $toto
 cat $ff | gawk -F '\t' '/Complex_reads/{nr=$4;printf("Complex_reads %.3g %d\n", nr, nr) ;}' >> $toto
 cat $ff | gawk -F '\t' '/Partial_reads/{nr=$4;printf("Partial_reads %.3g %d\n", nr, nr) ;}' >> $toto

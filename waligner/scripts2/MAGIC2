@@ -514,41 +514,7 @@ cat <<EOF > _x.awk
 
   verbose = index(z, "Verbose") ;
   ph = " " ;
-  if (a0 > 0) ph = ph " a0 " ;
-  if (a0 > 0 && a > 0)  ph = ph " wait " ;
-  if (a2 > 0 && a > 0)  ph = ph " wait sortali " ;
-  if (small + a > 0) ph = ph " a0C wait a0D wait "
-  if (small > 0) ph = ph " mi1 mi2 mi3 mi4 mi5 mi6 "
-  if (a > 0) ph = ph " a0W wait a1W wait a123 a0P a0Ba mi3 wait a0Br a0Bua c1 c2 wsig1 vir1 mi4 wait c3 c4 c5 wsig2 vir2 wait a0Bur c6 wsig3  " ;
-  if (a > 0) ph = ph " c7 wait "
-  if (ix > 0) ph = ph " ii2a wait ii2b wait ii2c wait ii2d wait ii3a wait ii3b "
-# d3 is obsolete
-# d4 must run after ii2d twice, once per run in parallel, once to cumulate the results
-  if (ixuuu > 0) ph = ph " wait d4 wait d4 " ;
-  if (gx + mx > 0) ph = ph " g1 "
-  if (gx + mx > 0) ph = ph " g2a m2aH vir1 wait g2b m2bH wait g3a m3aH vir2 wait g3b m3bH wait 8kb_histo wait " ;
-
-  if (tsnp > 0) ph = ph "tsnp0 tsnp1a " ;
-  if (ix > 0) ph = ph " t1 tgf1  SLpA1 wait t2 tgf2 SLpA2" ;
-  if (ix > 0) ph = ph " wait tgf3  SLpA3 " ;
-  if (w > 0) ph = ph " wg1 wait wg2a wait wg2as wait wg2ba wait wg2bb wait wg3a wait wg3b  wait wg4 wg4b wait  wg4c wg5 wait wg6 wg4d sponge1 wait sponge2 wait sponge3 wait " ;
-# s2c (extend, must come after s3a (detect) and would influence the BRS, so we would do s1 s2a s2b s3a,  extend which would create a modified BRS file, then s3b:count
-  if (ix > 0) ph = ph " I1 wait I2 wait I3 wait I4 wait I5 wait I6"
-  if (cnv > 0)  ph = ph " cnv wait cnv "
-  if (snp > 0) ph = ph " snp0 wait s1 wait s1A2G wait s2a wait s2b wait s2A2G wait s3a wait s3b wait snp2a "
-  if (ix > 0) ph = ph " wait   "
-  if (tsnp > 0) ph = ph "wait tsnp1b wait tsnp2a " ;
-  if (tsnpZZ > 0) ph = ph "wait tsnp2b wait tsnp2c " ;  ## make words, count words , collate word counts
-  if (snp + tsnp > 0) ph = ph "wait tsnp3 " ;  ## report snp_profile in ali
-  if (snp + tsnp > 0) ph = ph "wait tsnp10 " ;  ## report qcsummary in RESULTS/SNV
-  if (snpZZ > 0) ph = ph " wait s10 wait s12 wait s20 wait s21 wait gsnp4 wait s13  "   
-  if (snp > 0) ph = ph "wait snp4 " ;
-  if (iv > 0) ph = ph " wait d6 wait d7 wait d8 " ;
-  if (gx > 0)       ph = ph "  g4 " ;
-  if (gx + mx > 1000) ph = ph "  wait  c7 g4sp " ;
-  if (mx > 1000)       ph = ph "  wait  c7 m4H " ;
-  if (gx + mx > 1  )  ph = ph " g10 g11 g12a wait g12b FDR1 wait FDR2 " ;
-  if (a + small + qc +gx + mx + ix + snp + w > 0) ph = ph " wait c7 "
+  if (a2 > 0)  ph = ph " wait sortali wait sortali2 wait wgr wait wg5 wait wg6 wait g4sp wait c7" ;
 
   printf ("#!bin/tcsh -f\n") ;
   printf ("# command line was %s\n", z) ;
@@ -2362,7 +2328,7 @@ if (! -d TARGET/IDX/IDX.$species) then
   if (-e TARGET/Targets/$species.rrna.fasta.gz) echo "R\tTARGET/Targets/$species.rrna.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.transposons.fasta.gz) echo "T\tTARGET/Targets/$species.transposons.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.SpikeIn.fasta.gz) echo "E\tTARGET/Targets/$species.SpikeIn.fasta.gz" >> TARGET/IDX/tConfig
-  if (-e TARGET/Targets/$species.DNASpikeIn.fasta.gz) echo "E\tTARGET/Targets/$species.DNASpikeIn.fasta.gz" >> TARGET/IDX/tConfig
+  if (-e TARGET/Targets/$species.DNASpikeIn.fasta.gz) echo "D\tTARGET/Targets/$species.DNASpikeIn.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.bacteria.fasta.gz) echo "B\tTARGET/Targets/$species.bacteria.fasta.gz" >> TARGET/IDX/tConfig  
   if (-e TARGET/Targets/$species.virus.fasta.gz) echo "V\tTARGET/Targets/$species.virus.fasta.gz" >> TARGET/IDX/tConfig  
   
