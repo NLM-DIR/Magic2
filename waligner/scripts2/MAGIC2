@@ -514,7 +514,7 @@ cat <<EOF > _x.awk
 
   verbose = index(z, "Verbose") ;
   ph = " " ;
-  if (a2 > 0)  ph = ph " wait sortali wait sortali2 wait wgr wait wg5 wait wg6 wait g4sp wait c7" ;
+  if (a2 > 0)  ph = ph " wait sortali wait sortali2 wait g4sp wait c7 wait wgr wait wg5 wait wg6 wait c7" ;
 
   printf ("#!bin/tcsh -f\n") ;
   printf ("# command line was %s\n", z) ;

@@ -1463,7 +1463,7 @@ static void gxCounts (GX *gx)
 
   if (1)
     {
-      const char *qqRuns =  hprintf (h, "select r from p in ?project where p == \"%s\", r in p->run where r#is_Run && ! r#sublibrary_of " , gx->project) ;
+      const char *qqRuns =  hprintf (h, "select r from p in ?project where p == \"%s\", r in p->run where (r#is_run || r#sublibraries) && ! r#sublibrary_of " , gx->project) ;
       AC_TABLE tblRuns = ac_bql_table (gx->db, qqRuns, 0, 0, &errors, h) ;
       for (int ir = 0 ; tblRuns && ir < tblRuns->rows ; ir++)
 	{
@@ -1477,7 +1477,7 @@ static void gxCounts (GX *gx)
     }
   if (1)
     {
-      const char *qqRuns =  hprintf (h, "select r, g from p in ?project where p == \"%s\", r in p->run where r#is_Run && ! r#sublibrary_of , g in r>>group where g->project == \"%s\"", gx->project, gx->project) ;
+      const char *qqRuns =  hprintf (h, "select r, g from p in ?project where p == \"%s\", r in p->run where (r#is_run || r#sublibraries) && ! r#sublibrary_of , g in r>>group where g->project == \"%s\"", gx->project, gx->project) ;
       AC_TABLE tblRuns = ac_bql_table (gx->db, qqRuns, 0, 0, &errors, h) ;
 
       for (int ir = 0 ; tblRuns && ir < tblRuns->rows ; ir++)

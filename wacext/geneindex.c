@@ -8507,7 +8507,7 @@ static void gxBigGenesDo (ACEOUT ao, GX *gx, RC *rc, const char *target, BOOL is
   
       arraySort (bigG, bigGeneOrder) ;
       arrayCompress (bigG) ;
-      for (i = 0, bg = arrp (bigG, i, BG) ; i < arrayMax (bigG) ; bg++, i++)
+      for (i = 0, bg = arrp (bigG, i, BG) ; i < arrayMax (bigG) && i < 10 ; bg++, i++)
 	{
 	  if (! bg->gene) continue ;
 	  if (isAce)

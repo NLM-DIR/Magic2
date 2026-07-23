@@ -3260,6 +3260,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	    {
 	      int chromLength = zp->chromLength ;
 	      int a1 = zp->a1 ;
+	      zp->chrom ^= 0x1 ;
 	      zp->a1 = chromLength - zp->a2 + 1 ;
 	      zp->a2 = chromLength - a1 + 1 ;
 	      flipFeet (zp->feet) ;	  

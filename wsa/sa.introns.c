@@ -834,7 +834,7 @@ void saIntronStranding (PP *pp, Array aa)
     {
       int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
       int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
-      s0[run] = 100.0 * (np + 0.01) / (np + nm + 0.0000001) ;
+      s0[run] = 100.0 * (np) / (np + nm + 0.0000001) ;
       np0 += np ; nm0 += nm ;
       if (pp->strand)
 	s0[run] = 100 ;
