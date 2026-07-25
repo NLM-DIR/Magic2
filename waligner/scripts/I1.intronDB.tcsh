@@ -83,15 +83,15 @@ echo -n "I1 phase $phase start :"
 date
 
 # parse in INTRON_DB/$chrom the introns/genes/mRNA/chromosomes
-
+set target=`echo $Etargets | gawk '{print $1;}'`
 if (! -e tmp/INTRON_DB/$chrom/I1.parse_genes.done) then  
   zcat tmp/METADATA/gtf.*.introns.gz | gawk -F '\t' '{type=substr($1,4);c=$6;split (c,cc,"|") ;c=cc[1];if(c != chrom)next;i1=$7+0;i2=$8+0;ln=i2-i1;;if(ln<0)ln=-ln; ln=ln+1;printf("Intron %s__%d_%d\nIntMap %s %d %d\nLength %d\n%s\nGene \"%s\"\nIn_mRNA \"%s\" %d %d\n\n",c,i1,i2,c,i1,i2,ln,type,$2,$3,$4,$5);}' chrom=$chrom | gzip >  tmp/INTRON_DB/$chrom/I1.TargetIntrons.ace.gz
   pushd tmp/INTRON_DB/$chrom
     ../../../bin/tace . <<EOF
       read-models
       parse I1.TargetIntrons.ace.gz
-      query find intron av
-      edit AceView
+      query find intron $target
+      edit $target
       save
       quit
 EOF
@@ -298,8 +298,6 @@ goto phaseLoop
 intronCounts:
 echo -n "I6 phase $phase start :"
 date
-
-if (-d tmp/INTRON_DB/$chrom/database &&  -e tmp/INTRON_DB/$chrom/$MAGIC.I5.setGroups.done) then
    echo "bin/altintrons -db tmp/INTRON_DB/$chrom --counts -p $MAGIC -o tmp/INTRON_DB/$chrom/$MAGIC.I6"
          bin/altintrons -db tmp/INTRON_DB/$chrom --counts -p $MAGIC -o tmp/INTRON_DB/$chrom/$MAGIC.I6
   touch tmp/INTRON_DB/$chrom/$MAGIC.I6.counts.done

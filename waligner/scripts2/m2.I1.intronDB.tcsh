@@ -83,6 +83,7 @@ date
 
 # parse in INTRON_DB/$chrom the introns/genes/mRNA/chromosomes
 
+set target=`echo $Etargets | gawk '{print $1;}'`
 if (! -e tmp/INTRON_DB/$chrom/I1.parse_introns.done) then
   tace GeneDB <<EOF
     query find intron IntMap == $chrom
@@ -94,8 +95,8 @@ EOF
     ../../../bin/tace . <<EOF
       read-models
       parse I1.TargetIntrons.ace.gz
-      query find intron av
-      edit AceView
+      query find intron gene
+      edit $target
       save
       quit
 EOF
@@ -261,6 +262,15 @@ echo -n "I6 phase $phase start :"
 date
 
 if (-d tmp/INTRON_DB/$chrom/database &&  -e tmp/INTRON_DB/$chrom/$MAGIC.I5.setGroups.done) then
+set target=`echo $Etargets | gawk '{print $1;}'`
+
+if (-d tmp/INTRON_DB/$chrom/database &&  -e tmp/INTRON_DB/$chrom/$MAGIC.I5.setGroups.done) then
+   bin/tacembly tmp/INTRON_DB/$chrom  <<EOF
+     query find intron gene
+     edit $target
+     save
+     quit
+EOF
    echo "bin/altintrons -db tmp/INTRON_DB/$chrom --counts -p $MAGIC -o tmp/INTRON_DB/$chrom/$MAGIC.I6"
          bin/altintrons -db tmp/INTRON_DB/$chrom --counts -p $MAGIC -o tmp/INTRON_DB/$chrom/$MAGIC.I6
   touch tmp/INTRON_DB/$chrom/$MAGIC.I6.counts.done

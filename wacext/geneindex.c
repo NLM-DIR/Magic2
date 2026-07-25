@@ -1076,6 +1076,7 @@ static int gxAceParse (GX *gx, const char* fileName,BOOL metaData)
 	  if (!strcasecmp (ccp, "Gene")) 
 	    {
 	      char *cp = aceInWord (ai) ;
+	      if (!strncmp (cp, "X__", 3)) cp += 3 ;
 	      ccp = gxSplitMrnaAlias (gx, cp) ;
 	    }
 	  else
@@ -1659,7 +1660,7 @@ static int gxAceParse (GX *gx, const char* fileName,BOOL metaData)
 	      ) 
 	    {
 	      RC *rc = arrayp (gx->runs, run, RC) ;
-	      rc->tags = known + new ;
+	      if (gx->isINTRON)  rc->tags = known + new ; // this kills rc->tags after we parsed the tsf file
 	      rc->minIntronSupport = minS ;
 	    }
 	  continue ;
@@ -1731,7 +1732,7 @@ static int gxAceParse (GX *gx, const char* fileName,BOOL metaData)
 	  ccp = aceInWord (ai) ;
 	  if (! ccp) continue ;
 
-	  if (gx->target_class && !strcmp (ccp, gx->target_class))
+	  if (!gx->deepTsf && gx->target_class && !strcmp (ccp, gx->target_class))
 	    {	  
 	      for (i = j = 0 ; i < 2 ; i++)
 		if ((ccp = aceInWord (ai))) j++ ;
@@ -2557,16 +2558,21 @@ static int gxDeepTsfParse (GX *gx, const char* fileName,BOOL metaData)
       dc->tags += tags ;
       dc->kb += kb ;
 
-      rc->geneTags += tags ;
-      rc->nReads += tags ;
-      rc->nReadsOk += tags ;
-      rc->kb += kb ;
-
-      gc->tags += tags ;
-      if (gc->capturedIntronGene)
-	rc->captured_tags += tags ;
-      gc->isGood = TRUE ;
-      if (tags) rc->hasData = TRUE ;
+      if (! gc->geneGroup)
+	{
+	  rc->tags += tags ;
+	  rc->targetKb += kb ;
+	  rc->geneTags += tags ;
+	  rc->nReads += tags ;
+	  rc->nReadsOk += tags ;
+	  rc->kb += kb ;
+	  
+	  gc->tags += tags ;
+	  if (gc->capturedIntronGene)
+	    rc->captured_tags += tags ;
+	  gc->isGood = TRUE ;
+	  if (tags) rc->hasData = TRUE ;
+	}
 
     }
   {
@@ -9723,21 +9729,25 @@ static int gxExportGeneAceFileSummary (GX *gx, int type)
 	      aceOutf (ao, "Reads_in_genes Captured_%s %.0f\n"
 		       , target2, rc->CnReads
 		       ) ;
-	      aceOutf (ao, "Reads_in_pairs_in_genes Captured_%s %.0f\n"
-		       , target2, rc->CnReadsOk
-		       ) ;
-	      aceOutf (ao, "Orphan_reads_in_genes Captured_%s %d\n"
-		       , target2, rc->Corphan 
-		       ) ;
-	      aceOutf (ao, "Multi_aligned_reads_in_genes Captured_%s %d\n"
-		       , target2, rc->Cmulti
-		       ) ;
-	      aceOutf (ao, "Mismatches_in_genes Captured_%s %ld\n"
-		       , target2, rc->Cnerr
-		       ) ;
-	      aceOutf (ao, "A2G_in_genes Captured_%s %d\n"
-		       , target2, rc->Ca2g
-		       ) ;
+	      if (! gx->deepTsf)
+		{
+		  aceOutf (ao, "Reads_in_pairs_in_genes Captured_%s %.0f\n"
+			   , target2, rc->CnReadsOk
+			   ) ;
+		  aceOutf (ao, "Orphan_reads_in_genes Captured_%s %d\n"
+			   , target2, rc->Corphan 
+			   ) ;
+		  aceOutf (ao, "Multi_aligned_reads_in_genes Captured_%s %d\n"
+			   , target2, rc->Cmulti
+			   ) ;
+
+		  aceOutf (ao, "Mismatches_in_genes Captured_%s %ld\n"
+			   , target2, rc->Cnerr
+			   ) ;
+		  aceOutf (ao, "A2G_in_genes Captured_%s %d\n"
+			   , target2, rc->Ca2g
+			   ) ;
+		}
 
 	      aceOutf (ao, "nh_Ali Captured_%s %.0f seqs %.0f tags %.0f kb_aligned %.2f bp\n"
 		       , target2
