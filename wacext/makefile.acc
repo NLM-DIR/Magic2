@@ -98,7 +98,7 @@ COMPILE.c = $(COMPILER) $(USEROPTS) $(IDIR) -DAC_TEST -D$(NAME) -D_FILE_OFFSET_B
 
 ALL_ACC_OBJS = go2gene.o bly2hosac.o kscount.o akg.o gene_nm_remap.o \
 	biblio_as_dna.o resizegenebox.o abstractchi2.o fichemain.o fichepickmatch.o \
-	genecardexport.o gintegra.o alibaba.o  blystats.o e8.o su21.o irrep.o geturl.o \
+	genecardexport.o gintegra.o alibaba.o  blystats.o e8.o su21.o bimSU21.o irrep.o geturl.o \
 	gene2gene.o gene2chrom2.o gene2chrom3.o \
 	laure.o timehisto.o dnachip.o buildstats.o ts.o worf.o resequence.o  \
 	omim2ace.o maqc.o bestali.o clipalign.o paraclipalign.o estscan.o  \
@@ -132,7 +132,7 @@ ASN_DUMP_SOURCES =  $(ASN_DUMP_OBJS:.o=.c)
 all: go2gene bly2hosac kscount akg sakg gene_nm_remap sgene_nm_remap gene2gene gene2chrom2 \
 	biblio_as_dna sbiblio_as_dna resizegenebox sresizegenebox \
 	abstractchi2 sabstractchi2 genecardexport sgenecardexport gintegra \
-	alibaba alibabaclient blystats e8 su21 irrep laure geturl \
+	alibaba alibabaclient blystats e8 su21 bimSU21 irrep laure geturl \
 	dnachip buildstats sbuildstats  \
 	omim2ace maqc maqccl UCSCtrackCompare  bestali clipalign \
 	estscan genetiling geneelements magicx UMI variant_caller  \
@@ -154,6 +154,9 @@ demazure: demazure.o  $(LINK_ACS) $(LIBS)
 	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)  libchannels.a  libwego.a -lpthread 
 
 su21: su21.o $(LINK_ACC)
+	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS)
+
+bimSU21: bimSU21.o $(LINK_ACC)
 	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS)
 
 su31: su31.o $(LINK_ACC)

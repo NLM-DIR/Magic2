@@ -2472,10 +2472,9 @@ int main (int argc, const char *argv[])
       memset (p.runStranding, 0, n) ;
     }}
 
-  saIntronStranding (&p, p.confirmedIntrons) ;
   if (p.introns)
     {
-      saIntronsExport (&p, p.confirmedIntrons) ; /* before wiggleExport to restrand the gene expression */ 
+      saIntronsExport (&p) ; /* before wiggleExport to restrand the gene expression */ 
       saDoubleIntronsExport (&p, p.doubleIntrons) ;
     }
 

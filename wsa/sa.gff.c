@@ -408,6 +408,7 @@ long int saGffParser (PP *pp, TC *tc)
   KEYSET borders = 0 ;
   char strand = 0 ;
   char *requested_method = 0 ;
+  // int chromA = 0, chromLength = 0 ;
   
   /* debug introns creation
    *  if (! bbG->dict) bbG->dict = dictHandleCreate (256, pp->h) ; 
@@ -627,13 +628,32 @@ long int saGffParser (PP *pp, TC *tc)
 		if (da >= twoMb) /* our intron_seed format only allows 21 bits for the intron length */ 
 		  continue ;
 
+		// if ((chrom >> 1) != chromA)
+		//{
+		    // chromA = (chrom >> 1) ;
+		    // Array dnaG = arr(pp->bbG.dnas, chromA, Array) ;
+		    // chromLength = arrayMax (dnaG) ;
+		//}
+		
 		wp = bigArrayp (pp->knownIntrons, nnI++, GBX) ;
-		wp->chrom = chrom ;
+		if (chrom & 0x1)
+		  {
+		    wp->chrom = chrom ^ 0x1 ;
+		    wp->strand = 1 ;
+		    // wp->a1 = chromLength - a2 + 1 ;
+		    // wp->a2 = chromLength - a1 + 1 ;
+		  }
+		else
+		  {
+		    wp->chrom = chrom  ;
+		    wp->strand = 0 ;
+		    // wp->a1 = a1 ;
+		    // wp->a2 = a2 ;
+		  }
+		wp->a1 = a1 ; wp->a2 = a2 ;
 		wp->mrna = 0 ;
 		wp->flag = 1 ;
 		wp->gene = up->gene ;
-		wp->a1 = a1 ;
-		wp->a2 = a2 ;
 		
 		vp->mrna = 0 ; /* avoid looping */
 	      }
@@ -759,19 +779,19 @@ long int saIntronParser (PP *pp, TC *tc)
       if (da >= twoMb) /* our format only allows 21 bits for the intron length */ 
 	continue ;
       up = bigArrayp (pp->knownIntrons, nn++, GBX) ;
+      up->chrom = chrom << 1 ;
       if (a1 < a2)
 	{
-	  up->chrom = chrom << 1 ; 
 	  up->a1 = a1 ;
 	  up->a2 = a2 ;
+	  up->strand = 0 ;
 	}
       else
 	{
-	  up->chrom = (chrom << 1) | 0x1 ;
 	  up->a1 = a2 ;
 	  up->a2 = a1 ;
+	  up->strand = 0x1 ;
 	}
-	
     }
 
   bigArraySort (pp->knownIntrons, exonA1Order) ;

@@ -187,8 +187,8 @@ static int confirmedIntronsCompress (Array aaa)
 	if (vp < up) *vp = *up ;
 	vp++ ; jj++ ;
       }
-  arrayMax (aaa) = jj ;
-  return jj ;
+  arrayMax (aaa) = iMax = jj ;
+  return iMax ;
 } /* confirmedIntronsCompress */
 
 /**************************************************************/
@@ -819,7 +819,7 @@ static char *flipFeet (char *feet)
   
 /**************************************************************/
 
-void saIntronStranding (PP *pp, Array aa)
+static void saIntronStranding (PP *pp, Array aa)
 {
   INTRON *zp ;
   int runMax = dictMax (pp->runDict) + 1 ;
@@ -849,31 +849,11 @@ void saIntronStranding (PP *pp, Array aa)
   else if (pp->antiStrand)
     s0[0] = 0 ;
   
-  if (1)
+  for (ii = 0, zp = arrp (aa, ii, INTRON) ; ii < iMax ; ii++, zp++)
     {
-      for (ii = 0, zp = arrp (aa, ii, INTRON) ; ii < iMax ; ii++, zp++)
-	{
-	  if (s0[zp->run] > 60 && zp->nR > zp->n)
-	    {  /* flip the whole run */
-	      int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
-	      flipFeet (zp->feet) ;
-	      int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
-	    }
-	  else if (s0[zp->run] < 40 && zp->nR < zp->n)
-	    {  /* flip the whole run */
-	      int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
-	      flipFeet (zp->feet) ;
-	      int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
-	    }
-	  else if (s0[zp->run] <= 60 &&  s0[zp->run] >=40)
-	    {  /* non stranded case, choose for every intron */
-	      if (! strcmp (zp->feet, "ct_ac") || ! strcmp (zp->feet, "ct_gc"))
-		{
-		  int a0 = zp->a1 ; zp->a1 = zp->a2 ; zp->a2 = a0 ;
-		  flipFeet (zp->feet) ;
-		  int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
-		}
-	    }
+      if (s0[zp->run] < 40)
+	{  /* flip the whole run */
+	  int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
 	}
     }
   
@@ -882,10 +862,19 @@ void saIntronStranding (PP *pp, Array aa)
 
 /**************************************************************/
 
-void saIntronsExport (PP *pp, Array aaa)
+void saIntronsExport (PP *pp)
 {
-  int iMax = aaa ? confirmedIntronsCompress (aaa) : 0 ;
+  float *s0 = pp->runStranding ;
+  Array aaa = pp->confirmedIntrons ;
+  int iMax ;
   showIntrons (0) ; /* for compiler happiness */
+
+  if (! aaa) return ;
+
+  /* flip n/nR is antistrand on a per run basis */
+  saIntronStranding (pp, pp->confirmedIntrons) ;
+  /* cumulate all runs */
+  iMax = confirmedIntronsCompress (aaa) ;
   
   if (iMax)
     {
@@ -909,27 +898,43 @@ void saIntronsExport (PP *pp, Array aaa)
 	  
 	  if (! up->feet[0])
 	    continue ;
-	  if (!strcasecmp (up->feet, "gt_ag"))
-	   min = 1 ;
-	  else if (!strcasecmp (up->feet, "gc_ag"))
-	    min = 2 ;
 
 	  if (gp)
 	    {
 	      int chrom = up->chrom, a1 = up->a1, a2 = up->a2 ;
-	      if (a1 > a2) { int a0 = a1 ; a1 = a2 ; a2 = a0 ; }      
+	      if (chrom & 0x1) messcrash ("all introns should be reported on the plus strand") ;
 	      while (gp->chrom < chrom && ik < ikMax)
 		{ gp++ ; ik++ ; }
 	      while (gp->chrom == chrom && gp->a1 < a1 && ik < ikMax)
 		{ gp++ ; ik++ ; }
-	      while (gp->chrom == up->chrom && gp->a1 == a1 && gp->a2 < a2 && ik < ikMax)
+	      while (gp->chrom == chrom && gp->a1 == a1 && gp->a2 < a2 && ik < ikMax)
 		{ gp++ ; ik++ ; }
-	      
 	      if (gp->chrom == chrom &&
 		  gp->a1 == a1 && gp->a2 == a2
 		  )
 		isKnown = TRUE ;
 	    }
+	  BOOL isStranded = (s0[up->run] > 60 || s0[up->run] < 40) ;
+	  if (
+	      (isKnown && gp->strand) ||
+	      (isStranded && up->nR > up->n) ||
+	      (! isStranded && *(up->feet) < 'g')
+	      )
+	    {
+	      int a1 = up->a1, n = up->n ;
+	      // Keep the top strand coordinates, just flip them, this is what we want to export
+	      // up->chrom ^= 0x1 ;
+	      up->a1 = up->a2 ;
+	      up->a2 = a1 ;
+	      up->n = up->nR ;
+	      up->nR = n ;
+	      flipFeet (up->feet) ;
+	    }
+	  
+	  if (!strcasecmp (up->feet, "gt_ag"))
+	   min = 1 ;
+	  else if (!strcasecmp (up->feet, "gc_ag"))
+	    min = 2 ;
 
 	  int type = (isKnown ? 0x2 : 0x0) |
 	    (!strcmp (up->feet, "gt_ag") || !strcmp (up->feet, "ct_ac") ? 0x1 : 0x0) ;

@@ -3052,11 +3052,18 @@ static void qcMainResults5 (QC *qc, RC *rc)
 	  tt = ac_tag_table (rc->ali, tag, h) ;
 	  z = 0 ;
 	  if (tt)
-	    for (ir = 0 ; ir < tt->rows ; ir++)
-	      {
-		if (!ir || ! strcasecmp (ac_table_printable (tt, ir, 0, "xxx"), target2))
-		  z = ac_table_int (tt, ir, ic, 0) + ac_table_float (tt, ir, ic, 0) ;
-	      }
+	    {
+	      for (ir = 0 ; z == 0 && ir < tt->rows ; ir++)
+		{
+		  if (!ir || ! strcasecmp (ac_table_printable (tt, ir, 0, "xxx"), target2))
+		    z = ac_table_int (tt, ir, ic, 0) + ac_table_float (tt, ir, ic, 0) ;
+		}
+	      for (ir = 0 ; z == 0 && ir < tt->rows ; ir++)
+		{
+		  if (!ir || ! strcasecmp (ac_table_printable (tt, ir, 0, "xxx"), target))
+		    z = ac_table_int (tt, ir, ic, 0) + ac_table_float (tt, ir, ic, 0) ;
+		}
+	    }
 	  aceOutf (qc->ao, "\t%.0f", z) ;
 	  if (ti->col == 10)
 	    z10 = z ;
@@ -6035,7 +6042,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  if (! strcasecmp (ccp, "b_bacteria") || ! strcasecmp (ccp, "B"))
 		    zhBacteria = ac_table_float (tt, ir, col, 0) ;
 
-		  if (! strcasecmp (ccp, "Z_genome"))
+		  if (! strcasecmp (ccp, "Z_genome") || ! strcasecmp (ccp, "G"))
 		    zhG = ac_table_float (tt, ir, col, 0) ;
 		  if (! strcasecmp (ccp, "z_gdecoy"))
 		    zhg = ac_table_float (tt, ir, col, 0) ;
@@ -6056,7 +6063,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		    znhR = ac_table_float (tt, ir, col, 0) ;
 		  if (! strcasecmp (ccp + 3, qc->Etargets[2]))
 		    znhE = ac_table_float (tt, ir, col, 0) ;
-		  if (! strcasecmp (ccp, "Z_genome"))
+		  if (! strcasecmp (ccp, "Z_genome") || ! strcasecmp (ccp, "G"))
 		    znhG = ac_table_float (tt, ir, col, 0) ;
 		  if (! strcasecmp (ccp, "z_gdecoy"))
 		    znhg = ac_table_float (tt, ir, col, 0) ;
@@ -6128,7 +6135,11 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  z = znhG ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
 
 		  z = zhPrevious ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
-		  z = zhTotal - zhPrevious - zhPhiX - zhBacteria -zhVirus - zhg  ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ; /* intronic, new exon and intergenic */
+		  z = zhTotal - zhPrevious - zhPhiX - zhBacteria -zhVirus - zhg  ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ;
+		  if (ac_has_tag (rc->ali, "Multi_threading"))
+		    aceOutf (qc->ao, "NA") ;  /* NA in Magic2 */
+		  else
+		    aceOutPercent (qc->ao, z) ; /* intronic, new exon and intergenic */
 	
 		  z = znhg ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ; /* decoy */
 

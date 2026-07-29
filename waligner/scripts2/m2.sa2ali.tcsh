@@ -3,7 +3,7 @@ set run=$1
 set dd=tmp/SA/$run 
 set toto=$dd/sa2ali.ace
 
-echo "\nAli $run\nRun $run" > $toto
+echo "\n-D Ali $run\n\nAli $run\nRun $run" > $toto
 echo "-D Letter_profile" >> $toto
 echo "-D stranding Introns" >> $toto
 echo "-D Candidate_introns" >> $toto

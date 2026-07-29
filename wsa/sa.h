@@ -582,12 +582,12 @@ void saPolyAsExport (PP *pp, Array aaa) ;
 void saPolyAsCumulate (PP *pp, BB *bb) ;
 void saSLsExport (PP *pp, Array aaa) ;
 void saSLsCumulate (PP *pp, BB *bb) ;
-void saIntronsExport (PP *pp, Array aaa) ;
+void saIntronsExport (PP *pp) ;
 void saDoubleIntronsExport (PP *pp, Array aaa) ;
 void saIntronsCumulate (PP *pp, BB *bb) ;
 void saDoubleIntronsCumulate (PP *pp, BB *bb) ;
 int saSupportedIntrons (const PP *pp, int run) ;
-void saIntronStranding (PP *pp, Array aa) ;
+
 
 /* sa.targetIndex.c */
 Array saTargetParseConfig (PP *pp) ;

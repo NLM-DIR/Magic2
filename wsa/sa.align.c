@@ -3140,6 +3140,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		myDnaG = chrom & 0x1 ? dnaGR : dnaG ;
 		zp->a1 = a2 + 1 ;
 		zp->a2 = b1 - 1 ;
+		zp->n += (read & 0x1 ? 0 : 1 ) ;
+		zp->nR += (read & 0x1 ? 1 : 0 ) ;
 		const char *cp = arrp (myDnaG, zp->a1 - 1, char) ;
 		zp->feet[0] = dnaDecodeChar[(int)cp[0]] ;
 		zp->feet[1] = dnaDecodeChar[(int)cp[1]] ;
@@ -3256,21 +3258,21 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	{
 	  /* flip and reset the count which was overloaded with chain */
 	  INTRON *zp = arrayp (bb->confirmedIntrons, ii, INTRON) ;
+	  
+	  if (read & 0x1)   { zp->n = 0 ; zp->nR = 1 ; }
+	  else { zp->n = 1 ; zp->nR = 0 ; } 
+
 	  if (zp->chrom & 0x1)
 	    {
 	      int chromLength = zp->chromLength ;
 	      int a1 = zp->a1 ;
+
 	      zp->chrom ^= 0x1 ;
 	      zp->a1 = chromLength - zp->a2 + 1 ;
 	      zp->a2 = chromLength - a1 + 1 ;
-	      flipFeet (zp->feet) ;	  
-	      if (read & 0x1)   { zp->n = 1 ; zp->nR = 0 ; }
-	      else { zp->n = 0 ; zp->nR = 1 ; } 
-	    }
-	  else
-	    {
-	      if (read & 0x1)   { zp->n = 0 ; zp->nR = 1 ; }
-	      else { zp->n = 1 ; zp->nR = 0 ; } 
+	      flipFeet (zp->feet) ;
+
+	      int n = zp->n ; zp->n = zp->nR ; zp->nR = n ;
 	    }
 	}
     }

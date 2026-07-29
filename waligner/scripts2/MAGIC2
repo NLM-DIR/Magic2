@@ -8735,7 +8735,7 @@ echo "pparse MetaDB/$MAGIC/stranding.ace" | bin/tacembly MetaDB -no_prompt
 
 
 if (! -d RESULTS/SNV) mkdir RESULTS/SNV
-set toto=tmp/COUNT/$MAGIC.mismatch_type_in_best_ali.txt
+set toto=RESULTS/SNV/$MAGIC.mismatch_type_in_best_ali.txt
 
 if (1 || ! -e $toto) then
   date > $toto
@@ -8745,8 +8745,8 @@ if (1 || ! -e $toto) then
   # ennnd
   cat MetaDB/$MAGIC/RunListSorted  MetaDB/$MAGIC/GroupAdditiveList ZZZZZ  MetaDB/$MAGIC/gtitle.txt ZZZZZ  MetaDB/$MAGIC/Error_type.txt  | gawk -F '\t' -f scripts2/snpSupportStat.awk  format=Error_type minMut=1 minCover=1 minF=0 >> $toto
 
-  # \rm $toto.tmp
-  \cp  $toto RESULTS/SNV
+  \rm $toto.tmp
+
 endif
 
 
