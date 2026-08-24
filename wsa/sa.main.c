@@ -817,7 +817,7 @@ static void sortAlignTableCaption (const PP *pp, ACEOUT ao)
 
 /**************************************************************/
 
-static void exportDo (const PP *pp, BB *bb)
+static void exportDoNoGz (const PP *pp, BB *bb)
 {
   ALIGN *ap = bigArrp (bb->aligns, 0, ALIGN) ;
   long int ii, aMax = bigArrayMax (bb->aligns) ;
@@ -870,8 +870,103 @@ static void exportDo (const PP *pp, BB *bb)
 
   ac_free (h) ;
   return ;
-} /* exportDo */
+} /* exportDoNoGz */
 
+/**************************************************************/
+
+static void exportDoGz (const PP *pp, BB *bb)
+{
+  ALIGN *ap = bigArrp (bb->aligns, 0, ALIGN) ;
+  long int ii, aMax = bigArrayMax (bb->aligns) ;
+  DICT *dict = bb->dict ;
+  DICT *errDict = bb->errDict ;
+  DICT *dictG = pp->bbG.dict ;
+  BOOL pairedEnd = bb->runStat.p.nPairs > 0 ;
+  const char *run = dictName (pp->runDict, bb->run) ;
+  AC_HANDLE h = ac_new_handle () ;
+  char *runNam = hprintf (h, "hits/%s.%d.hits", run, bb->lane) ;
+  int size = 1 << 23 ; /* 8 mega */
+  Stack s = stackHandleCreate (1 << 23, h) ;
+  char *fNam = hprintf (h, "%s/%s.gz", pp->outFileName, runNam) ;
+  gzFile gzf = gzf = gzopen (fNam, "wb") ;
+  ACEOUT ao = aceOutCreateToStack (s,h) ; 
+
+  aceOutDate (ao, "###", "sortaling hits") ;
+  sortAlignTableCaption (pp, ao) ;
+  char *cp = stackText (s, 0) ;
+  int k = strlen (cp) ;
+  gzwrite (gzf, cp, k) ;
+  stackClear (s) ;
+
+  int guard = size - (0x1 << 18) ; // 100k 
+  for (ii = 0 ; ii < aMax ; ii++, ap++)
+    {
+      int read = ap->read ;
+      int chrom = ap->chrom ;
+      int x1 = ap->x1 ;
+      int x2 = ap->x2 ;
+      int a1 = ap->a1 ;
+      int a2 = ap->a2 ;
+      int nerr = ap->nErr ;
+      int nN = ap->nN ;
+
+      if (read)
+	{
+	  aceOutf (ao, "%s/%s%s", run, dictName (dict, read >> 1), (pairedEnd ? ((read & 0x1 )? "<" : ">") : "")) ; 
+	  aceOutf (ao, "\t%d", ap->chainScore) ;
+	  aceOutf (ao, "\t%d", 1) ; /* ap->multiplicity */
+	  aceOutf (ao, "\t%d", ap->rightClip - ap->leftClip) ;
+	  aceOutf (ao, "\t%d\t%d\t%d", ap->chainAli, x1, x2) ;
+	  
+	  aceOutf (ao, "\t%c\t-", ap->targetClass) ;
+	  aceOutf (ao, "\t%d", ap->nChains) ; /* ap->targetMultiplicity */
+	  aceOutf (ao, "\t%s", dictName (dictG, chrom >> 1)) ; 
+	  aceOutf (ao, "\t%d\t%d", a1, a2) ;
+	  aceOutf (ao, "\t%d\t%d", nN, nerr) ;
+	  aceOutf (ao, "\t%s", ap->errShort ? dictName (errDict, ap->errShort) : "-") ;
+	  aceOutf (ao, "\t%s", ap->errLong ? dictName (errDict, ap->errLong) : "-") ;
+	  aceOut (ao, "\t-\t-") ;  /* prefix suffix in genome */
+	  aceOutf (ao, "\t%s", ap->leftOverhang ? dictName (dict, ap->leftOverhang) : "-") ;
+	  aceOutf (ao, "\t%s", ap->rightOverhang ? dictName (dict, ap->rightOverhang) : "-") ;
+	  aceOutf (ao, "\tchain %d 1", ap->chain) ;
+	  aceOutf (ao, "\t%d", ap->chainScore) ;
+	  aceOut (ao, "\n") ;
+	}
+      if (stackPos (s) > guard)
+	{
+	  cp = stackText (s, 0) ;
+	  k = stackPos (s) ;
+	  gzwrite (gzf, cp, k) ;
+	  stackClear (s) ;
+	}
+    }
+
+  if (stackPos (s))
+    {
+      cp = stackText (s, 0) ;
+      k = stackPos (s) ;
+      gzwrite (gzf, cp, k) ;
+      stackClear (s) ;
+    }
+
+  if (gzclose(gzf) != Z_OK)
+    messcrash("gzclose failed");   /* important: the trailer/flush happens here */
+
+  ac_free (h) ;
+  return ;
+} /* exportDoGz */
+
+/**************************************************************/
+
+static void exportDo (const PP *pp, BB *bb)
+{
+  if (0 && pp->gzo)  // not faster and more risky
+    exportDoGz (pp, bb) ;
+  else
+    exportDoNoGz (pp, bb) ;
+  return ;
+} /* exportDo */
+  
 /**************************************************************/
 /**************************************************************/
 
@@ -1912,7 +2007,8 @@ int main (int argc, const char *argv[])
   p.sam = getCmdLineBool (&argc, argv, "--sam") ;
   p.bam = getCmdLineBool (&argc, argv, "--bam") ;
   p.bigWig = getCmdLineBool (&argc, argv, "--bigWig") ;
-  if (getCmdLineBool (&argc, argv, "--BF")) p.bigWig = FALSE ;
+  if (getCmdLineBool (&argc, argv, "--BF")) { p.bigWig = FALSE ; p.wigBF = TRUE ; }
+  if (getCmdLineBool (&argc, argv, "--AZ")) { p.bigWig = FALSE ; p.wigAZ = TRUE ; }
   p.tabular = getCmdLineBool (&argc, argv, "--tabular") ;
   p.qualityFactors = getCmdLineBool (&argc, argv, "--quality_factors") ;
   if (p.sam || p.bam)
@@ -1946,7 +2042,8 @@ int main (int argc, const char *argv[])
   p.wiggleEnds = getCmdLineBool (&argc, argv, "--wiggleEnds") ;
   p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
   getCmdLineInt (&argc, argv, "--wiggleStep", &(p.wiggle_step)) ;
-
+  if (p.wiggle && ! p.bigWig && ! p.wigAZ) p.wigBF = TRUE ;
+  
   p.snps = getCmdLineBool (&argc, argv, "--snp") ;
   p.blink = getCmdLineBool (&argc, argv, "--blink") ;
   p.blinkLn = 8 ;

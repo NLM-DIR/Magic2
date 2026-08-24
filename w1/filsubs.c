@@ -1010,6 +1010,7 @@ BOOL filCreateDir (const char *dirName)
       return FALSE ;
     }
 
+  
   // Find last slash
   const char *cp = strrchr(dirName, '/');
   if (cp && cp > dirName)

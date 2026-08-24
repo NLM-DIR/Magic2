@@ -32,11 +32,11 @@
 # LINK_ACC is the set of object files needed if you use
 # the client version of the new Ace C library
 LINK_ACC=libacedna.a libaccl.a  libfree.a  libtsfree.a libtcpfn.a $(LINK_ACC_RPC)
-LINK_LIGHT=libacedna.a libfree.a  libtsfree.a 
+LINK_LIGHT=libacedna.a libfree.a  libtsfree.a -lz 
 
 # LINK_ACS is the set of object files needed if you use
 # the standalone acinside version of the new Ace C library
-LINK_ACS=libace.a libfree.a libtsfree.a
+LINK_ACS=libace.a libfree.a libtsfree.a -lz
 
 # LINK_DRMAA is the Sun Grid Engine API libraru
 LINK_DRMAA= -L$(SGE_ROOT)/lib/lx24-amd64 -Wl,-rpath,$(SGE_ROOT)/lib/lx24-amd64  -ldrmaa 
@@ -132,7 +132,7 @@ ASN_DUMP_SOURCES =  $(ASN_DUMP_OBJS:.o=.c)
 all: go2gene bly2hosac kscount akg sakg gene_nm_remap sgene_nm_remap gene2gene gene2chrom2 \
 	biblio_as_dna sbiblio_as_dna resizegenebox sresizegenebox \
 	abstractchi2 sabstractchi2 genecardexport sgenecardexport gintegra \
-	alibaba alibabaclient blystats e8 su21 bimSU21 irrep laure geturl \
+	alibaba alibabaclient blystats e8 su21 irrep laure geturl \
 	dnachip buildstats sbuildstats  \
 	omim2ace maqc maqccl UCSCtrackCompare  bestali clipalign \
 	estscan genetiling geneelements magicx UMI variant_caller  \
@@ -232,13 +232,13 @@ tsnp: tsnp.o $(LINK_ACS)
 	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
 
 sv: sv.o $(LINK_ACS)  libchannels.a
-	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a libchannels.a  libwego.a listen_socket.o libfree.a libtsfree.a  -lpthread 
+	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a libchannels.a  libwego.a listen_socket.o libfree.a libtsfree.a  -lpthread -lz
 
 wiggle_smoother: wiggle_smoother.o
-	$(LINKER) -o $@  $@.o  
+	$(LINKER) -o $@  $@.o 
 
 wiggle: wiggle.o $(LINK_ACS)
-	$(LINKER) -o $@  $@.o  $(LINK_ACS) $(LIBS) 
+	$(LINKER) -o $@  $@.o  $(LINK_ACS) $(LIBS) -lz 
 
 
 nico_worf: nico_worf.o $(LINK_ACS)
@@ -299,7 +299,7 @@ clipalign: clipalign.o
 	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS) 
 
 clipalign_chan: clipalign_chan.o  
-	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a libchannels.a   libwego.a listen_socket.o libfree.a libtsfree.a -lpthread 
+	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a libchannels.a   libwego.a listen_socket.o libfree.a libtsfree.a -lpthread -lz
 
 
 
@@ -331,13 +331,13 @@ chantest: chantest.o
 	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
 
 chanclient: chanclient.o libtcpfn.a libchannels.a
-	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o  libfree.a libtsfree.a  libwego.a -lpthread 
+	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o  libfree.a libtsfree.a  libwego.a -lpthread -lz
 
 chanserver: chanserver.o libtcpfn.a libchannels.a
-	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o libfree.a libtsfree.a  libwego.a -lpthread 
+	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o libfree.a libtsfree.a  libwego.a -lpthread -lz
 
 chanscript: chanscript.o libtcpfn.a libchannels.a
-	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o libfree.a libtsfree.a  libwego.a -lpthread   $(LINK_ACC)
+	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o libfree.a libtsfree.a  libwego.a -lpthread   $(LINK_ACC) -lz
 
 googletable: googletable.o
 	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS) 

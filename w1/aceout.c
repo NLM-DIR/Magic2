@@ -166,7 +166,7 @@ ACEOUT aceOutCreateToPipe (const char *command, AC_HANDLE handle)
 
 ACEOUT aceOutCreateToGzippedFile (const char *filename, AC_HANDLE handle)
 {
-   return aceOutCreateToPipe (hprintf (handle, "gzip -1 -f > %s", filename), handle) ;
+   return aceOutCreateToPipe (hprintf (handle, "gzip  -f > %s", filename), handle) ;
 }
 
 ACEOUT aceOutCreateToURL (const char *url, const char *spec, AC_HANDLE handle)

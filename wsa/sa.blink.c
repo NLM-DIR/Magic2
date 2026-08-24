@@ -4,7 +4,7 @@
  * This module is part of the magic2 package
  * Created May 22, 2026
 
- * Authors: Danielle Thierry-Mieg, Gean Thierry-Mieg, Greg Boratyn, NCBI/NLM/NIH
+ * Authors: Danielle Thierry-Mieg, Jean Thierry-Mieg, Greg Boratyn, NCBI/NLM/NIH
 
  * This code is public.
  * 

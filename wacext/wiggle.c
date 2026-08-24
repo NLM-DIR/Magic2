@@ -2,7 +2,7 @@
  * Create and combine wiggles, i.e. tag density profiles
  * Several formats are recognized as input or output
  *   probealignbest hit plain and binary output
- *   three formats from UCSC
+ *   three formats from UCSC: BF, BV, BG
  *   the AW binary format genberated by the present program
  * Create letter profiles from a fasta or fastc file
  */
@@ -1135,7 +1135,7 @@ int main (int argc, const char **argv)
     usage ("missing output format option -O") ;
 
 
-  /* specific input options relative to 'wy' imput format */
+  /* specific input options relative to 'wy' input format */
   getCmdLineInt(&argc, argv, "-in_step", &(sx.in_step));
   getCmdLineInt(&argc, argv, "-in_span", &(sx.in_span));
   getCmdLineInt(&argc, argv, "-in_x1", &(sx.in_step));
@@ -1151,7 +1151,7 @@ int main (int argc, const char **argv)
     case COUNT:
       sx.out_step = 10 ;
       break ;
-    default: /* BF, BV, AM, AG, AW  */
+    default: /* BF, BV, AM, AG, AW, AZ  */
       sx.out_step = 10 ;
       break ;
     }

@@ -2,7 +2,7 @@
 #include <complex.h>
 #include "matrix.h"
 #include "polynome.h"
-
+#ifdef JUNK8
 /* Create july 2026
  *
  * Calculations supporting the BIM SU(2/1) coset space paper
@@ -6971,15 +6971,18 @@ static void usage (char *message)
 
 /*************************************************************************************/
 /*************************************************************************************/
-
+#endif // JUNK8
 int main (int argc, const char **argv)
 {
   AC_HANDLE h = ac_new_handle () ;
+
+#ifdef JUNK88
   BIM bim ;
 
   bim.h = h ;
   freeinit () ;
 
+  
   if (argc == 1 ||
       getCmdLineOption (&argc, argv, "-h", 0) ||
       getCmdLineOption (&argc, argv, "-help", 0) ||
@@ -7103,8 +7106,9 @@ int main (int argc, const char **argv)
       if (1) mu4p ("#########  K-ijkl Symmetrize in {ij} and {kl}, use Likjl + Liljk", 4) ;
       */
     }
-
+#endif
     return 0 ;
 }
 
   
+

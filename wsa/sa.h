@@ -311,7 +311,7 @@ typedef struct pStruct {
   long int nrIntronSupports[4] ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
   BOOL sam, bam, hitsFormat, tabular, blink ;
-  BOOL bigWig ;
+  BOOL bigWig, wigBF, wigAZ ;
   BOOL exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;

@@ -1,0 +1,3 @@
+[submodule "wAW/third_party/c-blosc2"]
+	path = wAW/third_party/c-blosc2
+	url = https://github.com/Blosc/c-blosc2

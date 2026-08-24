@@ -20,6 +20,7 @@
 
 #define WIGGLETYPEMAX 2 /* strand */
 #include "sa.h"
+#include "wiggle.h"
 #include "fastItoA.h"
 #include <fcntl.h>  // for O_WRONLY if using write()
 #include <unistd.h> // for write()
@@ -421,7 +422,11 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
       unsigned int posMax = wp->pos ;
       Array a = arrayHandleCreate (posMax + 1000, int, h) ;
       unsigned int *xp = arrayp (a, posMax, unsigned int) ;
+      Array aAZ= 0 ;
 
+      if (!pp->bigWig && pp->wigAZ && arrayMax(a))
+	aAZ = arrayHandleCreate (arrayMax (a)/wiggle_step + 1, unsigned int, h) ;
+      
       wp = bigArrp (wig, 0, WP) ;
       wp0 = bigArrp (wig, 0, WP) ;
       pos0 = wp0->pos ; pos0 -= pos0 % wiggle_step ;
@@ -429,24 +434,25 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	{
 	  if (wp->weight)
 	    {
-	      pos0 = pos0 ? pos0 : wp->pos ;
-	      posMax = wp->pos ;
 	      xp = arrayp (a, wp->pos + wp->ln - pos0, unsigned int) ;
 	      xp -= wp->ln ;
+	      posMax = wp->pos + wp->ln - 1 ;
 	      for (int i = 0 ; i < wp->ln ; i++)
 		xp[i] += wp->weight ;
 	    }
 	}
 
-      if (1 && arrayMax(a))
+      if (arrayMax(a))
 	{
 #define BUFFER_SIZE (2 * 1024 * 1024)  // 2MB
 	  char *writeBuffer = malloc(BUFFER_SIZE) ;
 	  int bufPos = 0 ;
-	  
+	  int iAAZ = 0 ;
 	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
 	  ACEOUT ao = 0 ;
+	  Stack s = stackHandleCreate (1024, h) ;
+	  gzFile gzf = 0 ;
 	  if (! ao && pp->bigWig)
 	    {
 	      /* -clip avoids a crash if we go out of chromSizes */
@@ -455,19 +461,33 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      char *cmd = hprintf (h, "wigToBigWig -clip stdin %s %s", chromSizeNam, fNam) ;
 	      ao = aceOutCreateToPipe (cmd, h) ; // the bw format allows direct access
 	    }
-	  if (! ao)
+	  if (! ao && pp->wigBF)
 	    {
-	      char *fNam = hprintf (h, "/wiggles/%s.%s.%s.BF", runNam, chromNam, typeNam) ;
-	      ao = aceOutCreate (pp->outFileName, fNam, 0 || pp->gzo, h) ; // compressing the BF files is extremelly good 100X
-	    }	  
-	  aceOutDate (ao, "##", "wiggle") ; 
-	  aceOutf (ao, "track type=wiggle_0\n") ;
-	  
-	  aceOutf (ao, "fixedStep chrom=%s start=%d step=%d\n", chromNam, pos0, wiggle_step) ;
+	      const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
+	      const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
+	      char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.BF%s", pp->outFileName, runNam, chromNam, typeNam, pp->gzo ? ".gz" : "") ;
+	      if (! pp->gzo)
+		ao = aceOutCreate (fNam, 0, 0, h) ;
+	      else  // compressing the BF files is extremelly good 100X
+		{
+		  ao = aceOutCreateToStack (s,h) ; 
+		  gzf = gzopen (fNam, "wb") ;
+		}
+	    }
+	  if (ao)
+	    {
+	      aceOutDate (ao, "##", "wiggle") ; 
+	      aceOutf (ao, "track type=wiggle_0\n") ;
+	      aceOutf (ao, "fixedStep chrom=%s start=%d step=%d\n", chromNam, pos0, wiggle_step) ;
+	      if (gzf)
+		{
+		  char *cp = stackText (s, 0) ;
+		  int k = strlen (cp) ;
+		  gzwrite (gzf, cp, k) ;
+		}
+	    }
 
       	  xp = arrayp (a, 0, unsigned int) ;
-
-
 	  for (int localCumul = 0, j = 0, jMax = arrayMax(a) ; j < jMax ; j++)
 	    {
 	      unsigned int w = xp[j] ;
@@ -475,18 +495,29 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      localCumul += w ;
 	      if ((j + demiStep) % wiggle_step == 0)
 		{
-		  char buf[32] ;
-		  int k = fast_itoa_nl(buf, localCumul / 720) ;
+		  if (ao)
+		    {
+		      char buf[32] ;
+		      int k = fast_itoa_nl(buf, localCumul / 720) ;
+		      
+		      // Flush if buffer full
+		      if (bufPos + k + 1 >= BUFFER_SIZE)
+			{
+			  {
+			    if (gzf)
+			      gzwrite (gzf, writeBuffer, bufPos) ;
+			    else if (ao)
+			      aceOutBinary(ao, writeBuffer, bufPos) ;
+			  }
+			  bufPos = 0 ;
+			}
+		      // Copy to buffer
+		      memcpy(writeBuffer + bufPos, buf, k) ;
+		      bufPos += k ;
+		    }
+		  else if (aAZ)
+		    array (aAZ, iAAZ++, unsigned int) = localCumul / 720 ;
 		  
-		  // Flush if buffer full
-		  if (bufPos + k + 1 >= BUFFER_SIZE) {
-		    aceOutBinary(ao, writeBuffer, bufPos) ;
-		    bufPos = 0 ;
-		  }
-		  
-		  // Copy to buffer
-		  memcpy(writeBuffer + bufPos, buf, k) ;
-		  bufPos += k ;
 		  localCumul = 0 ;
 		}
 	    }
@@ -494,11 +525,30 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	  
 	  // Final flush
 	  if (bufPos > 0)
-	    aceOutBinary(ao, writeBuffer, bufPos) ;
-
+	    {
+	      if (gzf)
+		gzwrite (gzf, writeBuffer, bufPos) ;
+	      else if (ao)
+		aceOutBinary(ao, writeBuffer, bufPos) ;
+	    }
+	  if (gzf)
+	    {
+	      if (gzclose(gzf) != Z_OK)
+		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
+	    }
+	  if (aAZ)
+	    {
+	      const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) ;
+	      const char *runNam = dictName (pp->runDict, run) ;
+	      
+	      AC_HANDLE h1 = ac_new_handle () ;
+	      char *fNam = hprintf (h1, "%s/wiggles/%s.%s.%s.AZ", pp->outFileName, runNam, chromNam + 2, typeNam) ;
+	      wigAzWrite (fNam, chromNam + 2, aAZ, 0, wiggle_step, pos0, posMax, h1) ;
+	      ac_free (h1) ;
+	    }
 	  free(writeBuffer) ;
 	}
-
+      if (!pp->bigWig && pp->wigAZ && arrayMax(a))
       if (arrayMax(a) && geneB)
 	{
 	  long int ib, ibMax = bigArrayMax (geneB) ;
@@ -957,7 +1007,7 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
   channelDebug (pp->wwDoneChan, debug, "wwChan") ;
 
   BOOL doChan = TRUE ;
-  nAgents = 1 ;
+
   channelSources (pp->wwDoneChan, nAgents) ;
   if (doChan)
     for (int ii = 0 ; ii < nAgents ; ii++)

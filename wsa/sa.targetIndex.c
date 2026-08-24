@@ -300,7 +300,7 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
     maxRepeats = (0x1 << 20) ; // 1 mega 
 
   /* remove highly repeated words and register number of repeats */
-  if (1)
+  if (bigArrayMax (cws))
     {
       char bonus[256] ;
       long int ks[21], cumul = 0 ;
@@ -402,8 +402,13 @@ static BigArray GenomeAddSkips (const PP *pp, BigArray cws, BB *bb, int kk)
 	}
     }
   iMax = bigArrayMax (cws) ;
-  if (! iMax) iMax = 1 ; /* insure non void */
-
+  if (! iMax)
+    {
+      bigArray (cws, 0, CW).seed = 0 ; /* insure non void */
+      aa = bigArrayHandleCopy (cws, h) ;
+      return aa ;
+    }
+  
   BOOL noJump = pp->noJump ;
 #ifdef USE_GPU
   noJump = TRUE ;
@@ -611,6 +616,7 @@ static long int saTargetIndexCreateDo (PP *pp)
       Array dna = array (bbG->dnas, ii, Array) ;
       int ln = arrayMax (dna) ;
       aceOutf (aoChromLengths, "%s\t%d\n", nam+2, ln) ;
+      bbG->length += ln ;
     }
   ac_free (aoChromLengths) ;
 
@@ -779,12 +785,13 @@ void saTargetIndexCreate (PP *pp)
       
   /* create short utility files in the IDX index directory */
   ACEOUT ao = aceOutCreate (filName (pp->indexName, "/seedLength", "w") , 0, 0, h) ;
-  aceOutf (ao, "%s\t%d\t%d\t%d\t%d\n# SeedLength\ttStep\tmaxTargetRepeats\twiggle_step\n"
+  aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%ld\n# SeedLength\ttStep\tmaxTargetRepeats\twiggle_step\tGenome_length\n"
 	   , INDEXVERSION
 	   , pp->seedLength
 	   , pp->tStep
 	   , pp->maxTargetRepeats
 	   , pp->wiggle_step
+	   , pp->bbG.length
 	   ) ;
 
   /* copy the actual config file used to create the index */
