@@ -881,12 +881,22 @@ all the counts necessary to study differential expression.
 
 Activated by \code{--wiggles} or \code{--full}.
 
-Coverage plots are exported in the \textbf{BF format} (a UCSC Genome
-Browser compatible wiggle format) at 10-base resolution by default.
+Coverage plots are exported by default with one value every 10 bases.
+A different resolution can be chosen using --wiggle_step.
+Notice that the same total numbe rof bases is reported in both cases,
+say $(1,2,2,2,4,3,3,0,0,0)$ at resolution 1 would give $(17)$ at resolution 10.
+By default, magic2 export using the UCSC broweser compatible BF format
+(one value per line). One can alternatively request the binary AZ format
+where data are split with one binary file every 2 Megabases. This format
+strongly accelerates the acedb graphic browser but is otherwise not
+interoperable. One can also request the UCSC bigwig format. The bw exportation
+is slower (tens of minutes rather than 10s of seconds) and will only work
+if the UCSC executable code wigToBigWig is available on
+your machine (on your PATH), otherwise magic2 falls back onto BF.gz
 
 \begin{lstlisting}
 magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles
-magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles --wiggle_step 1
+magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles --wiggle_step 20 --bigWig
 \end{lstlisting}
 
 \begin{center}
@@ -896,7 +906,10 @@ magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles --wiggle_step 1
 \midrule
 \code{--wiggles}      & ---  & off & Enable coverage plot output. \\
 \code{--wiggle\_step} & int  & 10  & Resolution in bases.  Use 1 for
-                                     single-base resolution. \\
+single-base resolution. \\
+\code{--BF} &[Default] UCSC BF.gz format\\
+\code{--AZ} &Internal binary format\\
+\code{--bigWig} &UCSC bigWig format\\
 \bottomrule
 \end{tabular}
 \end{center}

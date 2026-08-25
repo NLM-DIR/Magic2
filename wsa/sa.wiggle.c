@@ -488,7 +488,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	    }
 
       	  xp = arrayp (a, 0, unsigned int) ;
-	  for (int localCumul = 0, j = 0, jMax = arrayMax(a) ; j < jMax ; j++)
+	  for (int localCumul = 0, j = 0, jMax = arrayMax(a) ; j < jMax && pos0 + j < posMax + wiggle_step  ; j++)
 	    {
 	      unsigned int w = xp[j] ;
 	      cumul += w ;
@@ -543,6 +543,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      
 	      AC_HANDLE h1 = ac_new_handle () ;
 	      char *fNam = hprintf (h1, "%s/wiggles/%s.%s.%s.AZ", pp->outFileName, runNam, chromNam + 2, typeNam) ;
+	      int k = posMax % wiggle_step ; if (k) posMax += wiggle_step - k ;
 	      wigAzWrite (fNam, chromNam + 2, aAZ, 0, wiggle_step, pos0, posMax, pp->wigBMAX, h1) ;
 	      ac_free (h1) ;
 	    }
@@ -857,20 +858,21 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
       GBX *gCo = 0 ;
       int gbxMax = geneCoords ? arrayMax (geneCoords) : 0 ;
       
-      for (igc = jgc = 0, gc = bigArrp (allGeneC, 0, GC), gc2 = gc ; igc < igcMax ; igc++, gc++)
-	if (gc->gene && gc->boxCount)
-	  {
-	    nnn+= gc->boxCount ; ngenes++ ;
-	    gCo = gc->gene < gbxMax ? arrp (geneCoords, gc->gene, GBX) : 0 ;
-	    aceOutf (ao, "%s\t%s\ttiifii\t%s\t%d\t%d\t%.2f\t%ld\t%ld\n"
-		     , dictName (pp->geneDict, gc->gene)
-		     , dictName (pp->runDict, gc->run)
-		     , gCo && gCo->chrom ? dictName (pp->bbG.dict, gCo->chrom) : "-"
-		     , gCo ? gCo->a1 : 0, gCo ? gCo->a2 : 0
-		     , geneIndex (pp, gc)
-		     , gc->boxCount/720, gc->exonCount/720
-		     ) ;
-	  }
+      if (bigArrayMax(allGeneC))
+	for (igc = jgc = 0, gc = bigArrp (allGeneC, 0, GC), gc2 = gc ; igc < igcMax ; igc++, gc++)
+	  if (gc->gene && gc->boxCount)
+	    {
+	      nnn+= gc->boxCount ; ngenes++ ;
+	      gCo = gc->gene < gbxMax ? arrp (geneCoords, gc->gene, GBX) : 0 ;
+	      aceOutf (ao, "%s\t%s\ttiifii\t%s\t%d\t%d\t%.2f\t%ld\t%ld\n"
+		       , dictName (pp->geneDict, gc->gene)
+		       , dictName (pp->runDict, gc->run)
+		       , gCo && gCo->chrom ? dictName (pp->bbG.dict, gCo->chrom) : "-"
+		       , gCo ? gCo->a1 : 0, gCo ? gCo->a2 : 0
+		       , geneIndex (pp, gc)
+		       , gc->boxCount/720, gc->exonCount/720
+		       ) ;
+	    }
     }
   
   fprintf (stderr, "%s: stop geneCounts export %d genes with total count %ld\n", timeBufShowNow (tBuf), ngenes, nnn/720) ;
