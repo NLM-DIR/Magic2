@@ -119,7 +119,7 @@ typedef struct azStruct {
   Array cache ;   /* values in current cache */
 } AZZ ;
 
-AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, AC_HANDLE h0) ; /* Write the data */
+AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, int bMax, AC_HANDLE h0) ; /* Write the data */
 AZZ *wigAzOpen (const char *fName, AC_HANDLE h) ;    /* Open an AZZ file, return NULL on error. */
 BOOL wigAzAt (AZZ *az, int x, unsigned int *value) ; /* Value at position x, FALSE if out of range */
 BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPos, long int *nBpp) ; /* Out of range values are just set to zero */

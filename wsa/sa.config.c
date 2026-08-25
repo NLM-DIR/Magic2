@@ -663,6 +663,8 @@ int saConfigCheckTargetIndex (PP *pp)
 	  if (maxTargetRepeats > 0  && pp->maxTargetRepeats > maxTargetRepeats)
 	    pp->maxTargetRepeats = maxTargetRepeats ;
 	  if (! pp->wiggle_step)
+	    pp->wiggle_step = 10 ;
+	  if (! pp->wiggle_step)
 	    {
 	      aceInStep (ai, '\t') ;
 	      aceInInt (ai, &(pp->wiggle_step)) ;

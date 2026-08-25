@@ -780,8 +780,9 @@ void saTargetIndexCreate (PP *pp)
   saTargetIndexCreateDo (pp) ;
 
   pp->wiggle_step = 1 ;
-  if (pp->bbG.length > 30000000) pp->wiggle_step = 5 ;
-  if (pp->bbG.length > 300000000) pp->wiggle_step = 10 ;
+  if (pp->bbG.length >
+      10000000) pp->wiggle_step = 5 ;
+  if (pp->bbG.length > 100000000) pp->wiggle_step = 10 ;
       
   /* create short utility files in the IDX index directory */
   ACEOUT ao = aceOutCreate (filName (pp->indexName, "/seedLength", "w") , 0, 0, h) ;

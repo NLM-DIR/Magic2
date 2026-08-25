@@ -1408,7 +1408,7 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
     {
       AC_HANDLE h = ac_new_handle () ;
       const char *target = remap ? dictName (sx->remapDict, remap) : 0 ;
-      wigAzWrite (aceOutFileName (sx->ao), target, 0, aa, stepOut, 0, 0, h) ;
+      wigAzWrite (aceOutFileName (sx->ao), target, 0, aa, stepOut, 0, 0, 0, h) ;
       ac_free (h) ;
       return ;
     }
@@ -1981,7 +1981,6 @@ Array sxGetWiggleZone (Array aa, const char *fNam, char *type, int *stepp, const
 /*************************************************************************************/
 #define AZMAGIC 55182836
 /* 256k positions == 2560 kb is step = 10 */
-#define BMAX 21 
 
 /**************************************************************/
 
@@ -2011,9 +2010,10 @@ static Array wigAzRegularTiling (AZZ *az, Array wPoints, AC_HANDLE h)
 
 /**************************************************************/
 
-AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, AC_HANDLE h0)
+AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, int bMax, AC_HANDLE h0)
 {
   AC_HANDLE h = ac_new_handle () ;
+  int BMAX = bMax ? bMax : 18 ;
   int jMax = 0x1 << BMAX ;
   Array byte0 = arrayHandleCreate (jMax, unsigned char, h) ;
   Array byte1 = arrayHandleCreate (jMax, unsigned char, h) ;

@@ -2042,6 +2042,8 @@ int main (int argc, const char *argv[])
   p.wiggleEnds = getCmdLineBool (&argc, argv, "--wiggleEnds") ;
   p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
   getCmdLineInt (&argc, argv, "--wiggleStep", &(p.wiggle_step)) ;
+  p.wigBMAX = 18 ;
+  getCmdLineInt (&argc, argv, "--wigBMAX", &(p.wigBMAX)) ;  /* technical tuning affects the speed of the graphic interface */
   if (p.wiggle && ! p.bigWig && ! p.wigAZ) p.wigBF = TRUE ;
   
   p.snps = getCmdLineBool (&argc, argv, "--snp") ;
@@ -2600,8 +2602,8 @@ int main (int argc, const char *argv[])
   printf ("\tTarget %d sequences %ld bases\n", p.bbG.dnas ? arrayMax (p.bbG.dnas) - 1 : 0, p.bbG.length) ;
   if (1 || p.debug) printf ("Skips: 0=%ld, %d=%ld, %d=%ld, %d=%ld, %d=%ld, found=%ld, notFound=%ld\n",
 			    skips0, step1, skips1, step2, skips2, step3, skips3, step4, skips4, skipsFound, skipsNotFound);
-  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, maxTargetRepeats read/target=%d/%d, nCPU=%d nAgents=%d nBlocks=%d NN=%d BMAX=%d\n"
-			    , p.seedLength, p.tStep, p.iStep
+  if (1 || p.debug) printf ("SeedLength %d, tStep=%d, iStep=%d, wigStep=%d, maxTargetRepeats read/target=%d/%d, nCPU=%d nAgents=%d nBlocks=%d NN=%d BMAX=%d\n"
+			    , p.seedLength, p.tStep, p.iStep, p.wiggle_step
 			    , p.maxTargetRepeats, p.tMaxTargetRepeats
 			    , nCPU
 			    , nAgents, p.nBlocks, NN, p.BMAX

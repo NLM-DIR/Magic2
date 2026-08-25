@@ -362,6 +362,7 @@ typedef struct pStruct {
   BOOL splice ;
   long int nRawReads, nRawBases, genomeLength ;
   int wiggle_step ;
+  int wigBMAX ; /* technical tuning, do not modify */
   float *runStranding ;
 } PP ;
 

@@ -543,7 +543,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      
 	      AC_HANDLE h1 = ac_new_handle () ;
 	      char *fNam = hprintf (h1, "%s/wiggles/%s.%s.%s.AZ", pp->outFileName, runNam, chromNam + 2, typeNam) ;
-	      wigAzWrite (fNam, chromNam + 2, aAZ, 0, wiggle_step, pos0, posMax, h1) ;
+	      wigAzWrite (fNam, chromNam + 2, aAZ, 0, wiggle_step, pos0, posMax, pp->wigBMAX, h1) ;
 	      ac_free (h1) ;
 	    }
 	  free(writeBuffer) ;
