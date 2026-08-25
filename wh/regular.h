@@ -206,7 +206,7 @@ BOOL getCmdLineFloat (int *argcp, const char **argv, const char *arg_name, float
 
 /* 'Internal' functions, do not call directly.                               */
 void uMessSetErrorOrigin(const char *filename, int line_num) ;
-void uMessCrash(char *format, ...) ;
+void uMessCrash(char *format, ...)  __attribute__((noreturn))  ;
 
 /* External Interface.                                                       */
 /* Note that messcrash is a macro and that it makes use of the ',' operator  */
@@ -234,7 +234,7 @@ void messbeep (void) ; /* make a beep */
 void messout (char *format, ...) ;  /* simple message */
 void messdump (char *format, ...) ; /* write to log file */
 void messerror (const char *format, ...) ; /* error message and write to log file */
-void messExit(char *format, ...) ;  /* error message, write to log file & exit */
+void messExit(char *format, ...)  __attribute__((noreturn)) ;  /* error message, write to log file & exit */
 #define messcrash   uMessSetErrorOrigin(__FILE__, __LINE__), uMessCrash
 						  /* abort - but see below */
 BOOL messQuery (char *text,...) ;	  /* ask yes/no question */

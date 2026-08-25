@@ -359,7 +359,7 @@ void messerror (const char *format, ...)
 /* any chance to interrupt it (e.g. the crash routine in uMessCrash), this   */
 /* could be changed to allow the application to register an exit handler.    */
 /*                                                                           */
-void messExit(char *format, ...)
+  __attribute__((noreturn)) void messExit(char *format, ...)
 {
   ACFORMAT (EXIT_PREFIX) ;
 
@@ -371,8 +371,6 @@ void messExit(char *format, ...)
   messdump ("%s", message) ;
   
   exit(EXIT_FAILURE) ;
-  
-  return ;					  /* Should never get here. */
 }
 
 
@@ -384,7 +382,7 @@ void messExit(char *format, ...)
 /* to call itself to report the error. To avoid infinite recursion we limit  */
 /* this to just one reporting of an internal error and then we abort.        */
 /*                                                                           */
-void uMessCrash (char *format, ...)
+ __attribute__((noreturn)) void uMessCrash (char *format, ...)
 {
   enum {MAXERRORS = 1} ;
   static int internalErrors = 0 ;
@@ -434,8 +432,6 @@ void uMessCrash (char *format, ...)
     
     exit(EXIT_FAILURE) ;
   }
-  
-  return ;					  /* Should never get here. */
 } /* uMessCrash */
 
 

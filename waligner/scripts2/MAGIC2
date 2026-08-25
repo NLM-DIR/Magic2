@@ -1017,7 +1017,7 @@ if ($phase == sortali) goto phaseSortali
 if ($phase == sortali2) goto phaseSortali2
 if ($phase == wg4sp) goto phasewg4sp
 
-if ($phase == wgr) goto phaseSortaliGroupWiggle
+if ($phase == wgr) goto phasewgr 
 if ($phase == wg5) goto phasewg5
 if ($phase == wg6) goto phasewg6
 
@@ -2389,7 +2389,7 @@ goto phaseLoop
 ###################################################################################
 ## phase sa2ali3
 
-phaseSortaliGroupWiggle:
+phasewgr:
 echo -n "phaseSortali3: construct the group wiggles : "
 date
 
@@ -4536,6 +4536,40 @@ EOF
   cat tmp/GeneDB/i2map.[fr].txt  | gawk -F '\t' '{printf("Intron %s\n%s_%s\n\n", $2,$3,$4) ;}' > tmp/GeneDB/i2map.ace
   echo "pparse  tmp/GeneDB/i2map.ace" | tace tmp/GeneDB -noprompt
 endif
+
+  tace tmp/GeneDB <<EOF
+    query Find Sequence genomic
+    bql -o tmp/GeneDB/chrom_ln.txt select s,ln from s in @, d in s->dna, ln in d[1]
+EOF
+cat tmp/GeneDB/chrom_ln.txt | gawk '{printf("Sequence c_%s\nIntMap %s 1 %d\n\n", $1, $1, $2);}' > tmp/GeneDB/chrom2intmap.ace
+echo "pparse tmp/GeneDB/chrom2intmap.ace" | tace tmp/GeneDB -no_prompt
+
+ 
+foreach chrom (`cat tmp/GeneDB/chrom_ln.txt | cut -f 1`)
+  tacembly tmp/GeneDB <<EOF
+    query find sequence $chrom
+      kstore ss
+      acem
+        make_subseq -dna c t 1000000 10000 // this breaks my 6 contigs into tiles
+        quit                    // oct 15 2001, i changed from 400 kb to 600 kb
+      kget ss
+      Follow DNA
+      kill 
+      undo
+      edit -D DNA
+      edit YBR_Contig
+    save
+    quit
+EOF
+end
+
+cat tmp/GeneDB/chrom_ln.txt | gawk '{printf("-R Sequence %s c_%s\n\n", $1, $1);}' > tmp/GeneDB/chrom2chrom.ace
+echo "pparse tmp/GeneDB/chrom2chrom.ace" | tace tmp/GeneDB -no_prompt
+bin/gene2chrom2 -any -gs -i tmp/GeneDB  >! tmp/GeneDB/g2c.gsi.ace
+echo "pparse tmp/GeneDB/g2c.gsi.ace" | tace tmp/GeneDB -no_prompt
+cat tmp/GeneDB/chrom_ln.txt | gawk '{printf("-R Map c_%s %s\n\n", $1, $1);}' > tmp/GeneDB/map2map.ace
+echo "pparse tmp/GeneDB/map2map.ace" | tace tmp/GeneDB -no_prompt
+pushd tmp/GeneDB ;\rm TABIX ; ln -s ../TABIX
 
 goto phaseLoop
 
@@ -9161,91 +9195,6 @@ cat  DEG2compound ZZZZZ  Affy2compoundGene ZZZZZ RESULTS/MOA_genes.RNA_Affy.Shif
 ###############################################################
 ## phase wg: Export a genomic wiggle per lane
 
-foreach chrom ($chromSetAll)
-  foreach group (R454 HEL LIF_S LIF_R ILM_S ILM_R)
-    ls -ls $group*/*/$chrom/*.bv.gz | gawk '{if($6==20)printf("\\rm %s\n",$10);}' > _k ; wc _k ; source _k
-  end
-end
-
-phasewg1:
- echo -n "Phase wg1 Export a genomic wiggle per manip/tissue/lane "
- date
-
-if (! -d tmp/WIGGLELANE) mkdir tmp/WIGGLELANE
-
-if ($Strategy == RNA_seq && ! -e tmp/METADATA/mrnaRemap.gz) then
-  echo "missing file tmp/METADATA/mrnaRemap.gz"
-  goto phaseLoop
-endif
-
-# mito RefSeq $chromSetAll
-# 
-if (0) then
-  # clean up missed subli wiggles
-  \rm totokill
-  foreach run (`cat MetaDB/$MAGIC/r2sublib | cut -f 2 | sort -u `)
-    set run2=`cat MetaDB/$MAGIC/r2sublib | gawk -F '\t' 'BEGIN {rr="toto";}{if($2==run)rr=$1;}END{print rr}' run=$run`
-    echo $run $run2
-    if ($run2 != toto && ! -e  tmp/WIGGLEGROUP/$run2/NC_005111.4/R.chrom.u.f.BF.gz) then
-      echo "\\rm -rf tmp/WIGGLE*/$run tmp/WIGGLE*/$run2 tmp/SPONGE/$run tmp/SPONGE/$run2 tmp/TABIX/$run2" >> totokill
-    endif
-  end
-  foreach run (`cat MetaDB/$MAGIC/RunsList`)
-    if (! -e  tmp/WIGGLERUN/$run/NC_005111.4/R.chrom.u.f.BF.gz && ! -e  tmp/WIGGLEGROUP/$run/NC_005111.4/R.chrom.u.f.BF.gz) then
-      echo "\\rm -rf tmp/WIGGLE*/$run tmp/SPONGE/$run tmp/TABIX/$run" >> totokill
-    endif
-  end
-  source totokill
-endif
-
-foreach run (`cat MetaDB/$MAGIC/RunList`)
-  # retrocompatibility 2015_08_31
-  if (-e tmp/WIGGLERUN/$run/wg2a.done && ! -e tmp/WIGGLERUN/$run/wg2a.u.done ) then
-    mv tmp/WIGGLERUN/$run/wg2a.done tmp/WIGGLERUN/$run/wg2a.u.done
-  endif
-  if (-e tmp/WIGGLERUN/$run/wg2a.u.done && -e tmp/WIGGLERUN/$run/wg2a.nu.done) continue
-
-  if (! -d  tmp/$MAGIC_COUNT_DIR/$run) continue
-  if (! -d tmp/WIGGLELANE/$run) $mkDir WIGGLELANE $run
-
-  set stranded="non_stranded"
-  foreach run2 (`cat MetaDB/$MAGIC/RunForwardList`)
-    if ($run == $run2) set stranded="strand"
-  end
-  foreach run2 (`cat MetaDB/$MAGIC/RunReverseList`)
-    if ($run == $run2) set stranded="antistrand"
-  end 
-  # the experimental value takes precedence */
-  set s=`cat MetaDB/$MAGIC/runs.ace | gawk 'BEGIN{x=-1;}/^Run[ \t]/{gsub(/\"/,"",$2);ok=0;if($2==run)ok=1;next;}/^Observed_strandedness_in_ns_mapping/{if(ok==1)x=$3;next;}END{print int(100*x)}' run=$run`
-# 2019_12_16, in SILVER a few of the reads are standed (contaminant Oligo) but the experiment is non stranded
-# by swithcing at 60% we maintain the strand of the contaminants
-  if ($s >= 0 && $s < 4000) then
-    set stranded="antistrand"
-    touch tmp/WIGGLELANE/$run/wg1.antistranded
-  endif
-  if ($s >= 6000 && $s <= 10000) then
-    set stranded="strand"
-    touch tmp/WIGGLELANE/$run/wg1.stranded
-  endif
-  echo "wgi.wigglelane $run $stranded"
-  set paired="singlets"
-  foreach run2 (`cat MetaDB/$MAGIC/RunPairedList`)
-    if ($run == $run2) then
-      set paired="pairs"
-    endif
-  end
-
-  foreach lane (`cat Fastc/$run/LaneList`)
-    if (! -d tmp/WIGGLELANE/$lane) mkdir tmp/WIGGLELANE/$lane 
-    if (-e tmp/WIGGLERUN/$run/wg2a.u.done && -e tmp/WIGGLERUN/$run/wg2a.nu.done) continue
-    if (! -e tmp/WIGGLELANE/$lane/wg1.done) then
-      echo "scripts2/wigglerun.tcsh $run $lane $stranded"
-      scripts2/submit tmp/WIGGLELANE/$lane.wg1  "scripts2/wg1.wigglelane.tcsh $run $lane $stranded $paired"
-    endif
-  end
-end
-
-date
 
 goto phaseLoop
 
@@ -9253,29 +9202,6 @@ goto phaseLoop
 ## phase wg2a: combine the manip/tissue wiggle per group
 
 phasewg2a:
- echo -n "Phase wg2a combine the lane wiggles per run "
- date
-
-
-if ($Strategy == Exome) then
-  bin/tacembly MetaDB <<EOF 
-    query find runs project == $MAGIC
-    edit Wiggle  // in Exome case we need the coveron for each run
-    save
-    quit
-EOF
-endif
-
-foreach run (`cat MetaDB/$MAGIC/RunList`)
-  if (! -d  tmp/WIGGLELANE/$run) continue
-  if (! -d  tmp/WIGGLERUN) mkdir tmp/WIGGLERUN
-  if (! -d  tmp/WIGGLERUN/$run)$mkDir WIGGLERUN $run
-  foreach uu (u nu pp)
-    if (-e tmp/WIGGLERUN/$run/wg2a.$uu.done) continue
-    if (-d tmp/SPONGE/$run) \rm -rf tmp/SPONGE/$run
-    scripts2/submit "tmp/WIGGLERUN/$run/wg2a" "scripts2/wg2a.wiggleLane2Run.tcsh $run $uu lane2run"
-  end
-end
 
 goto phaseLoop
 
@@ -9874,52 +9800,6 @@ phasewg5:
  echo -n "Phase wg5 TABIX the group wiggles "
  date
 
-set tabix=`which tabix | gawk '/Command/{print "uudummy";next;}{print $1}'`
-if (! -x $tabix) then
-  echo "Sorry tabix is not avalaible"
-  echo "May be you should add it to the path, or install it from Source forge"
-  echo "But this is completelly optional, it is only used by the graphic gene display"
-  echo "but not by any of the algorithms used to reconstruct the genes"
-  goto phaseLoop
-endif
-
-if (! -d tmp/TABIX) mkdir tmp/TABIX
-
-if (-e tmp/TABIX/tabix.ace) \rm  tmp/TABIX/tabix.ace
-
-foreach group (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
-  # we construct all run wigglesin WIGGLERUN,  but we only want to TABIX the groups and runs comtaining the Wiggle tag
-  if (! -d tmp/TABIX/$group) mkdir tmp/TABIX/$group
-  foreach chrom ($chromSetAll)
-    foreach uu (nu u pp)
-        if (! -e tmp/WIGGLERUN/$group/$chrom/R.chrom.$uu.f.BF.gz && ! -e tmp/WIGGLEGROUP/$group/$chrom/R.chrom.$uu.f.BF.gz) continue
-        if (-e  tmp/TABIX/$group/$chrom.$uu.tabix.done) continue
-          # last parm could be C_$chrom
-          scripts2/submit  tmp/TABIX/$group/$chrom.$uu.tabix  "scripts2/wiggle2tabix.tcsh $group $chrom $uu $chrom"
-    end
-  end
-end
-
-goto phaseLoop
-
-###############################################################
-## phase wg6: TABIX the groups
-
-phasewg6:
-
- echo -n "Phase wg6 create the tabix.ace files "
- date 
- if (! -d tmp/TABIX) goto phaseLoop
- if (! -d tmp/TABIX/$MAGIC) mkdir tmp/TABIX/$MAGIC
- foreach chrom ($chromSetAll mito)
-  echo "Map $chrom" >  tmp/TABIX/$MAGIC/$chrom.tabix.ace
-  foreach group (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
-    if (! -e tmp/TABIX/$group/R.$chrom.u.f.BF.gz && ! -e  tmp/TABIX/$group/R.$chrom.u.r.BF.gz) continue
-    echo "Wiggle $group $group/$chrom" >>  tmp/TABIX//$MAGIC/$chrom.tabix.ace
-  end
-  echo >> tmp/TABIX/$MAGIC/$chrom.tabix.ace
-end
-
   if (! -d tmp/GeneDB) then
     mkdir tmp/GeneDB
     pushd tmp/GeneDB
@@ -9931,21 +9811,37 @@ EOF
     popd
   endif
 
- pushd tmp/GeneDB
-   ln -s ../tmp/TABIX
- popd
- cat tmp/TABIX/$MAGIC/*.tabix.ace > tmp/TABIX/$MAGIC/tabix.ace
+
+if (! -d tmp/TABIX) mkdir tmp/TABIX
+set toto=tmp/TABIX/$MAGIC.tabix.ace
+echo '#' > $toto 
+
+foreach chrom ($chromSetAll)
+  echo "Map $chrom" >> $toto
+  echo "edit -D Wiggle" >> $toto
+  foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
+    echo "Wiggle $run tmp/SA/$run/wiggles/$run.$chrom" >>  $toto
+  end
+  foreach group (`cat MetaDB/$MAGIC/GroupWiggleList`)
+    echo "Wiggle $run tmp/WIGGLEGROUPS/$group.$chrom" >>  $toto
+  end
+  echo  >> $toto
+end
+
  tace tmp/GeneDB <<EOF
-   pparse tmp/TABIX/$MAGIC/tabix.ace
    pparse MetaDB/$MAGIC/runs.ace
    pparse MetaDB/$MAGIC/groups.ace
    pparse MetaDB/$MAGIC/ali.ace
-   query find sequence genomic
-   bql -o MetaDB/seq2map.txt select s,m,a1,a2 from s in @, m in s->dna, a1=1, a2 in m[1]
+   pparse $toto
    save
+   quit
 EOF
-  cat MetaDB/seq2map.txt | gawk '{printf("Sequence %s\nIntMap %s %d %d\n\n", $1,$2,$3,$4) }' > MetaDB/seq2map.ace
-  echo "pparse MetaDB/seq2map.ace " | tace tmp/GeneDB -noprompt
+
+goto phaseLoop
+
+###############################################################
+
+phasewg6:
 goto phaseLoop
 
 ###############################################################

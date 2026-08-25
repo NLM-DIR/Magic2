@@ -372,8 +372,8 @@ typedef struct StackStruct      /* assumes objects <= 16 bytes long */
 		       This (1) save space (esp on ALPHA) and
 		       (2) provides stacks which can be stored and got
 		       safely between architectures. Once you've set this,
-		       using stackTextOnly() only pushText, popText, etc, 
-		       no other types. */   
+		       only pushText, popText, etc, 
+		       no other types. */
   } *Stack ;
  
         /* as with ArrayStruct, the user should NEVER access StackStruct
@@ -416,6 +416,7 @@ void    stackClear (Stack s) ;
  * it makes no difference since messcrash stops the program before dereferencing 1
  */
 
+#ifdef OLDJUNK
 #if (STACK_ALIGNMENT<=2)
 #define push(stk,x,type) ((stk)->ptr < (stk)->safe ? \
                            ( *(type *)((stk)->ptr) = (x) , (stk)->ptr += sizeof(type)) : \
@@ -439,6 +440,40 @@ void    stackClear (Stack s) ;
 #define stackNext(stk,type) (*((type*)(  ((stk)->pos += STACK_ALIGNMENT ) - \
                                              STACK_ALIGNMENT ))  )
 #define stackSkip(stk) ((stk)->pos += STACK_ALIGNMENT )
+#endif
+#endif
+
+/* mieg 2104_01_13, in the pop messcrash i change  *((type*)0 to  *((type*)1 to remove compiler warnings
+ * it makes no difference since messcrash stops the program before dereferencing 1
+ */
+
+#if (STACK_ALIGNMENT<=2)
+#define push(stk,x,type) ((stk)->ptr < (stk)->safe ? \
+                           ( *(type *)((stk)->ptr) = (x) , (stk)->ptr += sizeof(type)) : \
+			    (stackExtend (stk,16), \
+			     *(type *)((stk)->ptr) = (x) , (stk)->ptr += sizeof(type)) )
+#define pop(stk,type)    (  ((stk)->ptr -= sizeof(type)) >= (stk)->a->base ? \
+			    *((type*)((stk)->ptr)) : \
+                          (messcrash ("User stack underflow"), *((type*)0)) )
+#define stackNext(stk,type) (*((type*)(  (stk)->pos += sizeof(type) )  - 1 )  )
+#define stackSkip(stk) ((stk)->pos += sizeof(int) )
+
+#else
+
+
+#define STK_PUT(p,x,type)  ({ type _v = (x); memcpy ((p), &_v, sizeof(type)); })
+#define STK_GET(p,type)    (__extension__ ({ type _v; memcpy (&_v, (p), sizeof(type)); _v; }))
+#define STK_REF(p,type)    (*(type *)(void *)(p))
+#define push(stk,x,type) ((stk)->ptr < (stk)->safe ? \
+       ( STK_PUT((stk)->ptr,(x),type) , (stk)->ptr += STACK_ALIGNMENT) : \
+                            (stackExtend (stk,16), \
+                             STK_PUT((stk)->ptr,(x),type) , (stk)->ptr += STACK_ALIGNMENT) )
+#define pop(stk,type)    (  ((stk)->ptr -= STACK_ALIGNMENT) >= (stk)->a->base ? \
+                            STK_GET((stk)->ptr,type) : \
+                          (messcrash ("User stack underflow"), (type)0) )
+#define stackNext(stk,type) STK_REF(((stk)->pos += STACK_ALIGNMENT) - STACK_ALIGNMENT, type)
+#define stackSkip(stk) ((stk)->pos += sizeof(int) )
+
 #endif
 
 #if STACK_DOUBLE_ALIGNMENT > STACK_ALIGNMENT

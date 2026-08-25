@@ -795,7 +795,7 @@ int pushText (Stack s, const char* text)
     stackExtend (s,strlen(text)+1) ;
   while ((*(s->ptr)++ = *text++)) ;
 #ifdef MEM_DEBUG
-  if (!s->textOnly)
+  if (!s->textOnly && !s->aligned)
     messcrash("pushText on non-text stack\n");
 #else
   /* old code preserved in case something depends on it */

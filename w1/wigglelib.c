@@ -299,10 +299,10 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 	stepOut = sx->out_step =  sx->out_step ? sx->out_step : az->step ;
 	if (az->target)
 	  dictAdd (sx->remapDict, az->target, &remap) ;
-	Array aa = array (sx->aaa, remap, Array) ;
+	Array aa = array (sx->aaa, 0, Array) ;
 	if (! aa)
-	  aa = array (sx->aaa, remap, Array) = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
-	wigAzZone (az, 0, az->posMax, aa, &nn, &nBp) ;
+	  aa = array (sx->aaa, 0, Array) = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
+	wigAzZone (az, z1, z2 ? z2 : az->posMax, aa, &nn, &nBp) ;
 	ac_free (h) ;
       }
       break ;
@@ -2289,6 +2289,7 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
     messcrash ("wigAzZone called x1 < 0: x1 = %d, xMin = %d", x1) ;
   int step = az->step ;
   x1 = x1 + step - 1 - az->posMin ; x1 /= step ; // transform true position in array offsets
+  x2 = x2 + step - 1 - az->posMin ; x2 /= step ; x2++ ; // transform true position in array offsets
   if (x2 > x1)
     {
       array (wPoints, x2 - x1 -1, WIGGLEPOINT).x = 0 ;

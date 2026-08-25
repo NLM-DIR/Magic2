@@ -2703,7 +2703,7 @@ static int htileWiggleConvert (Htile look, PNX *pnx, int ns, Array wpArray)
   int solexaStep = look->solexaStep  ; 
   int step = solexaStep ; /* resolution of this experiment */
 
-  /* in old method we parse at actual positions, so the tads have random positions
+  /* in old method we parse at actual positions, so the tags have random positions
    * in new method we systematically create a tag every solexastep
    */
   if (!look->map->solexa)
@@ -2876,16 +2876,14 @@ static void htileSolexaConvert (Htile look, BOOL force, ACEOUT ao)
 	for (pnx = arrp (look->solexaAll, 0, PNX), ns = 0 ; pnx->p ; pnx++, ns++)
 	  {
 	    char *fNam ;
-
-	    int dn = 0 ;
-
 	    for (j = 0 ; j < NF ; j++)
 	      if ((pnx->flag & PGG_endRatios) == 0 && (pnx->flag & flag[j])  ==  flag[j])
 		{
 		  BOOL ok = FALSE ;
 		  if (! ok)
 		    {
-		      fNam = hprintf (h, "TABIX/%s/R.%s.%s.BF.gz"
+		      fNam = hprintf (h, "../SA/%s/wiggles/%s.%s.%s.az"
+				      , pnx->p
 				      , pnx->p
 				      , name(look->intMap)
 				      , suffix[j]
@@ -2893,32 +2891,9 @@ static void htileSolexaConvert (Htile look, BOOL force, ACEOUT ao)
 		      if (filCheckName(fNam, 0, "r"))
 			ok = TRUE ;
 		    }
-		  if (! ok)
-		    {
-		      dn = 2 ;
-		      fNam = hprintf (h, "TABIX/%s/R.%s.%s.BF.gz"
-				      , pnx->p
-				      , name(look->intMap) + dn
-				      , suffix[j]
-				      ) ;
-		      if (filCheckName(fNam, 0, "r"))
-			ok = TRUE ;
-		    }
-		  if (! ok)
-		    {
-		      fNam = hprintf (h, "TABIX/%s/%s/R.chrom.%s.BF.gz"
-				      , pnx->p
-				      , name(look->intMap)
-				      , suffix[j]
-				      ) ;
-		      if (filCheckName(fNam, 0, "r"))
-			ok = TRUE ;
-		    }
-		      
-
 		  if (ok)
 		    {
-		      Array aa = sxGetWiggleZone (0, fNam, "BF", &(look->solexaStep), name(look->intMap), look->a1, look->a2, h) ;
+		      Array aa = sxGetWiggleZone (0, fNam, "az" , &(look->solexaStep), name(look->intMap), look->a1, look->a2, h) ;
 		      if (aa && arrayMax (aa))
 			htileWiggleConvert (look, pnx, ns, aa) ;
 		    }
