@@ -8,7 +8,35 @@
  */
 
 #include "wiggle.h"
+#include "fastItoA.h"
 #include <zlib.h>
+
+/*************************************************************************************/
+
+static inline int fast_itoa_nl(char *buf, int val)
+{
+    char *p = buf;
+
+    if (val < 0) {
+        *p++ = '-';
+        val = -val;
+    }
+
+    if (val == 0) {
+        *p++ = '0';
+    } else {
+        char tmp[10];
+        int i = 0;
+        while (val > 0) {
+            tmp[i++] = '0' + val % 10;
+            val /= 10;
+        }
+        while (i--) *p++ = tmp[i];
+    }
+
+    *p++ = '\n';
+    return p - buf;           // bytes written
+}
 
 /*************************************************************************************/
 /************************** Wiggles **************************************************/
@@ -299,9 +327,9 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 	stepOut = sx->out_step =  sx->out_step ? sx->out_step : az->step ;
 	if (az->target)
 	  dictAdd (sx->remapDict, az->target, &remap) ;
-	Array aa = array (sx->aaa, 0, Array) ;
+	Array aa = array (sx->aaa, remap, Array) ;
 	if (! aa)
-	  aa = array (sx->aaa, 0, Array) = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
+	  aa = array (sx->aaa, remap, Array) = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
 	wigAzZone (az, z1, z2 ? z2 : az->posMax, aa, &nn, &nBp) ;
 	ac_free (h) ;
       }
@@ -769,7 +797,7 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
     }
   fprintf (stderr, "// Parsed %d positions, %ld bases, rejected %d positions, in file %s\n", nn, nBp, nRejected, sx->inFileName) ;      
 
-  if (sx->aaa)
+  if (sx->aaa && sx->in != AZ) /* in AZ case aa is already sorted */
     for (nn = 0 ; nn < arrayMax (sx->aaa) ; nn++)
       {
 	aap = arrayp (sx->aaa, nn, Array) ;
@@ -1000,7 +1028,7 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
 	  
 	  if (! mp->ln) continue ;
 	  av = mp->cover * 1.0/(mp->ln) ;
-	  if (mp->cover < 1 || mp->x1 > mp[-1].x2 + 10)
+	  if (mp->cover < 1 || (ii && mp->x1 > mp[-1].x2 + 10))
 	    {
 	      lastMin = lastMax = goodMin = goodMax = 0 ;
 	      mpMin = 0 ;
@@ -2067,58 +2095,125 @@ AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints,
 	  
   aceOutDestroy (ao) ;
 
-  int xx = 0 ;
-  for (int ii = 0 ; ii < az->NB ; ii++)
+  BOOL preferAZ = TRUE ;
+  if (preferAZ)
     {
-      unsigned int zMin = 0, zMax = 0 ;
-      int nBytes = 0, dummy = 0 ;
-      unsigned int dz ;
-
-      zMin = zMax = xx < az->xMax ? array (aa, xx, unsigned int) : 0 ;
-      
-      for (int jj = 1 ; jj < jMax && xx + jj < xMax ; jj++)
+      int xx = 0 ;
+      for (int ii = 0 ; ii < az->NB ; ii++)
 	{
-	  unsigned int z = array (aa, xx + jj, unsigned int) ;
-	  if (z < zMin) zMin = z ;
-	  if (z > zMax) zMax = z ;
+	  unsigned int zMin = 0, zMax = 0 ;
+	  int nBytes = 0, dummy = 0 ;
+	  unsigned int dz ;
+	  
+	  zMin = zMax = xx < az->xMax ? array (aa, xx, unsigned int) : 0 ;
+	  
+	  for (int jj = 1 ; jj < jMax && xx + jj < xMax ; jj++)
+	    {
+	      unsigned int z = array (aa, xx + jj, unsigned int) ;
+	      if (z < zMin) zMin = z ;
+	      if (z > zMax) zMax = z ;
+	    }
+	  dz = zMax - zMin ;
+	  
+	  nBytes = 0 ;
+	  if (dz) { nBytes++ ; dz >>= 8 ; }
+	  if (dz) { nBytes++ ; dz >>= 8 ; }
+	  if (dz) { nBytes++ ; dz >>= 8 ; }
+	  if (dz) { nBytes++ ; dz >>= 8 ; }
+	  
+	  char *azFileName = hprintf (h, "%s/wig.%d.az.gz",  az->fName, ii) ;
+	  gzFile gzf = gzopen (azFileName, "wb"); 
+	  if (! gzf)
+	    messcrash("wigAzWrite cannot open file %s",  azFileName) ;
+	  gzprintf (gzf, "%u\t%u\t%d\t%d\n", zMin, zMax, nBytes, dummy) ;
+	  
+	  
+	  for (int jj = 0 ; jj < jMax ; jj++)
+	    {
+	      unsigned int z = xx < az->xMax ? array (aa, xx++, unsigned int) : 0 ;
+	      dz = z - zMin;
+	      
+	      if (nBytes >= 1) { array (byte0, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
+	      if (nBytes >= 2) { array (byte1, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
+	      if (nBytes >= 3) { array (byte2, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
+	      if (nBytes >= 4) { array (byte3, jj, unsigned char) = dz & 0xff ; }
+	    }
+	  
+	  unsigned int k = 0 ;
+	  if (nBytes >= 1)  k += gzwrite(gzf, arrp (byte0, 0, unsigned char), jMax) ;
+	  if (nBytes >= 2)  k += gzwrite(gzf, arrp (byte1, 0, unsigned char), jMax) ;
+	  if (nBytes >= 3)  k += gzwrite(gzf, arrp (byte2, 0, unsigned char), jMax) ;
+	  if (nBytes >= 4)  k += gzwrite(gzf, arrp (byte3, 0, unsigned char), jMax) ;
+	  
+	  if (k != (unsigned)(nBytes * jMax))
+	    messcrash("gzwrite k=%u != nBytes*jMax=%u", k, (unsigned) (nBytes  * jMax)) ;  
+	  if (gzclose(gzf) != Z_OK)
+	    messcrash("gzclose failed");   /* important: the trailer/flush happens here */
 	}
-      dz = zMax - zMin ;
- 
-      nBytes = 0 ;
-      if (dz) { nBytes++ ; dz >>= 8 ; }
-      if (dz) { nBytes++ ; dz >>= 8 ; }
-      if (dz) { nBytes++ ; dz >>= 8 ; }
-      if (dz) { nBytes++ ; dz >>= 8 ; }
-
-      char *azFileName = hprintf (h, "%s/wig.%d.az.gz",  az->fName, ii) ;
-      gzFile gzf = gzopen (azFileName, "wb"); 
-      if (! gzf)
-	messcrash("wigAzWrite cannot open file %s",  azFileName) ;
-      gzprintf (gzf, "%u\t%u\t%d\t%d\n", zMin, zMax, nBytes, dummy) ;
-    
-
-      for (int jj = 0 ; jj < jMax ; jj++)
-	{
-	  unsigned int z = xx < az->xMax ? array (aa, xx++, unsigned int) : 0 ;
-	  dz = z - zMin;
-
-	  if (nBytes >= 1) { array (byte0, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
-	  if (nBytes >= 2) { array (byte1, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
-	  if (nBytes >= 3) { array (byte2, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
-	  if (nBytes >= 4) { array (byte3, jj, unsigned char) = dz & 0xff ; }
-	}
-
-      unsigned int k = 0 ;
-      if (nBytes >= 1)  k += gzwrite(gzf, arrp (byte0, 0, unsigned char), jMax) ;
-      if (nBytes >= 2)  k += gzwrite(gzf, arrp (byte1, 0, unsigned char), jMax) ;
-      if (nBytes >= 3)  k += gzwrite(gzf, arrp (byte2, 0, unsigned char), jMax) ;
-      if (nBytes >= 4)  k += gzwrite(gzf, arrp (byte3, 0, unsigned char), jMax) ;
-      
-      if (k != (unsigned)(nBytes * jMax))
-	messcrash("gzwrite k=%u != nBytes*jMax=%u", k, (unsigned) (nBytes  * jMax)) ;  
-      if (gzclose(gzf) != Z_OK)
-	messcrash("gzclose failed");   /* important: the trailer/flush happens here */
     }
+  else
+    {
+      #define BUFFER_SIZE (2 * 1024 * 1024)  // 2MB
+      char *writeBuffer = malloc(BUFFER_SIZE) ;
+      unsigned int bufPos = 0 ;
+      
+      int xx = 0 ;
+      for (int ii = 0 ; ii < az->NB ; ii++)
+	{
+	  unsigned int zMin = 0, zMax = 0 ;
+	  int nBytes = 0, dummy = 0 ;
+	  
+	  if (0)
+	    {
+	      zMin = zMax = xx < az->xMax ? array (aa, xx, unsigned int) : 0 ;
+	      for (int jj = 1 ; jj < jMax && xx + jj < xMax ; jj++)
+		{
+		  unsigned int z = array (aa, xx + jj, unsigned int) ;
+		  if (z < zMin) zMin = z ;
+		  if (z > zMax) zMax = z ;
+		}
+	    }
+	  
+	  
+	  char *azFileName = hprintf (h, "%s/wig.%d.BF.gz",  az->fName, ii) ;
+	  gzFile gzf = gzopen (azFileName, "wb"); 
+	  if (! gzf)
+	    messcrash("wigAzWrite cannot open file %s",  azFileName) ;
+	  gzprintf (gzf, "%u\t%u\t%d\t%d\n", zMin, zMax, nBytes, dummy) ;
+	  
+	  
+	  for (int jj = 0 ; jj < jMax ; jj++)
+	    {
+	      unsigned int z = xx < az->xMax ? array (aa, xx++, unsigned int) : 0 ;
+	      char buf[32] ;
+	      int k = fast_itoa_nl(buf, z) ;
+	      
+	      // Flush if buffer full
+	      if (bufPos + k + 1 >= BUFFER_SIZE)
+		{
+		  unsigned int kk = gzwrite (gzf, writeBuffer, bufPos) ;
+		  if (kk != bufPos)
+		    messcrash("gzwrite kk=%u != bufPos=%u", kk, bufPos) ;
+		  bufPos = 0 ;
+		}
+	      // Copy to buffer
+	      memcpy(writeBuffer + bufPos, buf, k) ;
+	      bufPos += k ;
+	    }
+	  // Final flush
+	  if (bufPos > 0)
+	    {
+	      unsigned int kk = gzwrite (gzf, writeBuffer, bufPos) ;
+	      if (kk != bufPos)
+		messcrash("gzwrite kk=%u != bufPos=%u", kk, bufPos) ;
+	    }
+	  
+	  free(writeBuffer) ;
+	  if (gzclose(gzf) != Z_OK)
+	    messcrash("gzclose failed");   /* important: the trailer/flush happens here */
+	}
+    }
+      
 
   ac_free (h) ;
   return az ;

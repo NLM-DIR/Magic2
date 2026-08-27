@@ -2,7 +2,7 @@
 #include <complex.h>
 #include "matrix.h"
 #include "polynome.h"
-#ifdef JUNK8
+
 /* Create july 2026
  *
  * Calculations supporting the BIM SU(2/1) coset space paper

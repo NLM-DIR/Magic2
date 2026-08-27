@@ -263,6 +263,7 @@ static void qcShowTag (QC *qc, RC *rc, TT *ti)
     case F_Hide:
       break ;
     }
+  ac_free (h) ;
 } /* qcShowTag */
 
 /*************************************************************************************/
@@ -592,7 +593,7 @@ static void qcAli (QC *qc, RC *rc)
 
 static void qcAvLengthAli (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
   AC_TABLE  tt ;
   int ir, irAny = -1 ;
   float z, avClipped = 1 ;
@@ -664,10 +665,10 @@ static void qcAvLengthAli (QC *qc, RC *rc)
     {
       h = ac_new_handle () ;
       qcChapterCaption (qc, tts, caption) ;
-      ac_free (h) ;
       return ;
     }
   
+  h =ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {
       int nw = 0 ;
@@ -3501,7 +3502,7 @@ static void qcTitles (QC *qc, RC *rc)
 
 static void qcProtocol (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ; 
   AC_TABLE  tt ;
   AC_KEYSET aks ;
   const char *ccp ;
@@ -3530,6 +3531,7 @@ static void qcProtocol (QC *qc, RC *rc)
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
 
+  h = ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {
       int nw = 0 ;
@@ -3584,7 +3586,7 @@ static void qcProtocol (QC *qc, RC *rc)
 	      break ;
 	    case 12:  /* Machine */
 	      aks = ac_objquery_keyset (rc->run, "{Machine} SETOR {>sublibraries; Machine}", h) ;
-	      tt = aks ? ac_bql_table (qc->db, "select m1,m2 from r in @, m1 in r->machine, m2 in m1[1]", aks, 0, 0, h) : 0 ;
+ 	      tt = aks ? ac_bql_table (qc->db, "select m1,m2 from r in @, m1 in r->machine, m2 in m1[1]", aks, 0, 0, h) : 0 ;
 	      if (tt && tt->rows > 1)
 		tt = aks ? ac_bql_table (qc->db, "select m1 from r in @, m1 in r->machine", aks, 0, 0, h) : 0 ;
 	      if (tt && tt->rows > 1)
@@ -4199,7 +4201,7 @@ static void qcBloom (QC *qc, RC *rc)
 /* Transpliced leader SL1 SL12 */
 static void qcSLsDo (QC *qc, RC *rc, BOOL isSL)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
   TT *ti, *tti ;
   TT ttA[] = {
     { "Spacer", "", 0, 0, 0} ,
@@ -4251,7 +4253,7 @@ static void qcSLsDo (QC *qc, RC *rc, BOOL isSL)
   
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tti, caption) ;
-  
+  h = ac_new_handle () ;
   AC_TABLE tbl = 0 ;
   for (ti = tti ; ti->tag ; ti++)
     {
@@ -4684,6 +4686,7 @@ static void qcCPU (QC *qc, RC *rc)
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
 
+  h = ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {	
       if (rc == 0)
@@ -4763,6 +4766,7 @@ static void qcMicroRNA (QC *qc, RC *rc)
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
 
+  h = ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {	
       if (rc == 0)
@@ -4890,7 +4894,7 @@ static void qcMicroRNA (QC *qc, RC *rc)
 
 static void qcHighVirusBacteria (QC *qc, RC *rc)
 {
- AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
  DICT *myDict = 0 ;
 
   TT *ti, tts[] = {
@@ -4908,7 +4912,8 @@ static void qcHighVirusBacteria (QC *qc, RC *rc)
   const char *targets[3] = {"transposon", "microbe" , "virus"} ;
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
-
+  h = ac_new_handle () ;
+ 
   for (ti = tts ; ti->tag ; ti++)
     {	
       AC_TABLE tt = 0 ;
@@ -4969,7 +4974,7 @@ static void qcHighVirusBacteria (QC *qc, RC *rc)
 
 static void qcGeneExpression1 (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
 
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
@@ -4987,6 +4992,7 @@ static void qcGeneExpression1 (QC *qc, RC *rc)
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
 
+  h = ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {	
       int ii ;
@@ -5081,7 +5087,7 @@ static void qcGeneExpression1 (QC *qc, RC *rc)
 
 static void qcGeneExpression2 (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
 
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
@@ -5101,6 +5107,8 @@ static void qcGeneExpression2 (QC *qc, RC *rc)
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
 
+  h = ac_new_handle () ;
+ 
   for (ti = tts ; ti->tag ; ti++)
     {	
       int ii ;
@@ -5202,7 +5210,7 @@ static void qcGeneExpression2 (QC *qc, RC *rc)
 
 static void qcHighGenes (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
 
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
@@ -5220,7 +5228,7 @@ static void qcHighGenes (QC *qc, RC *rc)
   
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
-  
+  h = ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {	
       const char *target, *tag ;
@@ -5328,7 +5336,7 @@ static void qcHighGenes (QC *qc, RC *rc)
 
 static void qcRunSelection (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h  = 0 ;
 
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
@@ -5364,7 +5372,7 @@ static void qcRunSelection (QC *qc, RC *rc)
   
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
-  
+  h = ac_new_handle () ;
   const char *target = qc->Etargets[0] ? qc->Etargets[0] : "xx" ;
   for (ti = tts ; ti->tag ; ti++)
     {	
@@ -5680,7 +5688,7 @@ static void qcRunSelection (QC *qc, RC *rc)
 
 static void qcCandidateIntrons (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
 
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
@@ -5701,7 +5709,7 @@ static void qcCandidateIntrons (QC *qc, RC *rc)
 
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
-  
+  h = ac_new_handle () ;  
   for (ti = tts ; ti->tag ; ti++)
     {	
       int ii ;
@@ -5791,8 +5799,7 @@ static void qcCandidateIntrons (QC *qc, RC *rc)
 
 static void qcSexTissueSignatures (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
-
+  AC_HANDLE h = 0 ;
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} ,
     { "TITLE", "Title", 10, 0, 0} ,
@@ -5808,6 +5815,7 @@ static void qcSexTissueSignatures (QC *qc, RC *rc)
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
 
+  h = ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {	
       const char *target, *tag ;
@@ -5858,7 +5866,7 @@ static void qcSexTissueSignatures (QC *qc, RC *rc)
 
 static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
   AC_TABLE  tt, ttk ;  
   const char *ccp ;
   float z ;
@@ -5920,7 +5928,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
     }   
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
-
+  h = ac_new_handle () ;
   for (ti = tts ; ti->tag ; ti++)
     {
       if (rc == 0)
@@ -6349,7 +6357,7 @@ static void qcIntergenic2 (QC *qc, RC *rc)
 
 static void qcDrosoZhenXia (QC *qc, RC *rc)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = 0 ;
   AC_TABLE  tt, tta, ttb ;
   float zRaw = 0 ;
 
@@ -6392,7 +6400,7 @@ static void qcDrosoZhenXia (QC *qc, RC *rc)
     ;
   if (rc == (void *) 1)
     return  qcChapterCaption (qc, tts, caption) ;
-
+  h = ac_new_handle () ;
   tta = rc ? ac_tag_table (rc->ali, "nh_Ali", h) : 0 ;
   ttb = rc ? ac_tag_table (rc->ali, "h_Ali", h) : 0 ;
   if (rc)
@@ -6648,7 +6656,8 @@ static BOOL qcExportRun (QC *qc, int irc, int type)
   MM *mm ;
   RC *rc = 0 ;
   char *cp ;
-  KEY srp1, srp2 ;
+  KEY srp1 ;
+  static KEY oldsrp = 0 ;
   
   switch (type)
     {
@@ -6666,10 +6675,10 @@ static BOOL qcExportRun (QC *qc, int irc, int type)
       rc = arrp (qc->runs, irc, RC) ;
       if (irc && rc->run && rc[-1].run &&
 	  (srp1 = ac_tag_key (rc->run, "SRP", 0)) &&
-	  (srp2 = ac_tag_key (rc[-1].run, "SRP", 0)) &&
-	  srp1 != srp2
+	  srp1 != oldsrp
 	  )
 	aceOut (qc->ao, "\n") ;
+      oldsrp = srp1 ;
       lineName = ac_name (rc->run) ;
       qcSetAli (qc, rc) ;
 

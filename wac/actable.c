@@ -1291,7 +1291,7 @@ AC_TABLE ac_table_paragraph (AC_TABLE table, int *rowp, AC_HANDLE h)
  */
 BOOL ac_table_sort_compress (AC_TABLE table, const char *spec, vTXT errTxt)
 {
-  AC_HANDLE h ;
+  AC_HANDLE h = 0 ;
   int i, i1, j, k, n, cols, rows, specLen, sortCol ; 
   const char *ccp ;
   BOOL isPlus = TRUE ;
@@ -1381,7 +1381,7 @@ BOOL ac_table_sort_compress (AC_TABLE table, const char *spec, vTXT errTxt)
 	}
     }
   t->rows = j + 1 ;
-
+  ac_free (h) ;
   return TRUE ;
 } /* ac_table_sort_compress */
 

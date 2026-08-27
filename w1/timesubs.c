@@ -122,7 +122,7 @@ mytime_t aceTime(struct tm *tm,
       if (wantMonth)
 	t |= (tm->tm_mon + 1) << 22;
       
-      t |= (tm->tm_year - 110) << 26; 
+      t |= (tm->tm_year - 120) << 26;  // was 110 (bug) until 2026-08-25, and since ??
     }
   return t;
 }
@@ -315,7 +315,7 @@ mytime_t timeParse (char *ace_time)
 
  done:
   
-  if (ts.tm_year > 2053)
+  if (ts.tm_year > 2083)
 	return 0;
  
   if (*cp) return 0;	/* incomplete */

@@ -446,7 +446,8 @@ void    stackClear (Stack s) ;
 /* mieg 2104_01_13, in the pop messcrash i change  *((type*)0 to  *((type*)1 to remove compiler warnings
  * it makes no difference since messcrash stops the program before dereferencing 1
  */
-
+#define CLAUDEJUNK 1
+#ifdef CLAUDEJUNK
 #if (STACK_ALIGNMENT<=2)
 #define push(stk,x,type) ((stk)->ptr < (stk)->safe ? \
                            ( *(type *)((stk)->ptr) = (x) , (stk)->ptr += sizeof(type)) : \
@@ -474,6 +475,7 @@ void    stackClear (Stack s) ;
 #define stackNext(stk,type) STK_REF(((stk)->pos += STACK_ALIGNMENT) - STACK_ALIGNMENT, type)
 #define stackSkip(stk) ((stk)->pos += sizeof(int) )
 
+#endif
 #endif
 
 #if STACK_DOUBLE_ALIGNMENT > STACK_ALIGNMENT

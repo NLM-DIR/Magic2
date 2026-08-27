@@ -1491,7 +1491,7 @@ AC_TABLE ac_bql_table (AC_DB db, const char *query, AC_KEYSET initial_keyset, co
     messcrash ("ac_bql_table received an empty query") ;
    
   bql = bqlDbCreate (db, FALSE, handle) ; /* (BOOL debug, AC_HANDLE h) */
-  command = halloc (strlen (query) + 100 + (orderBy ? strlen(orderBy) + 12 : 0), 0) ;
+  command = halloc (strlen (query) + 100 + (orderBy ? strlen(orderBy) + 12 : 0), handle) ;
   sprintf (command, "%s %s %s", query, orderBy ? "order_by" : "", orderBy ? orderBy : "") ;
   if (bqlParse (bql, command, FALSE) &&
       bqlRun (bql,  initial_keyset ? initial_keyset->ks : 0, resultKs)

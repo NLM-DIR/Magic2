@@ -202,6 +202,8 @@ setenv SV     v121.82.18M.jul10     # exact same code nowig
 setenv SVlast v121.82.18M.jul10    # 
 setenv SV     v122.81.18M.jul19     # errcost 4, no new index masking, no wig
 setenv SVlast v122.81.18M.jul19    # 
+setenv SV     v123.81.18M.aug25     # errcost 4, no new index masking, no wig
+setenv SVlast v123.81.18M.aug25    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV

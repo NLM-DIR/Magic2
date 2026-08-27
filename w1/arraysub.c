@@ -815,7 +815,8 @@ char* popText (Stack s)
     messcrash("popText called on pushPop stack\n");
 
   while (s->ptr > base && !*--(s->ptr)) ;
-  while (s->ptr >= base && *--(s->ptr)) ;
+  while (s->ptr > base && *--(s->ptr)) ;
+  while (s->ptr == base && --(s->ptr)) ;
   return ++(s->ptr) ;
 }
 
