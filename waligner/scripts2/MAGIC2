@@ -9826,7 +9826,7 @@ echo '#' > $toto
 
 foreach chrom ($chromSetAll)
   echo "Map $chrom" >> $toto
-  echo "edit -D Wiggle" >> $toto
+  echo "-D Wiggle" >> $toto
   foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
     echo "Wiggle $run tmp/SA/$run/wiggles/$run.$chrom" >>  $toto
   end
@@ -9866,7 +9866,7 @@ end
 
 foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
   foreach chrom ($chromSetAllZZZ)
-    if (! -e tmp/Peaks/$run.$chrom.multiPeaks2 && -e tmp/SA/$run/wiggles/$run.$chrom.u.f.az) then
+    if (0 && ! -E tmp/Peaks/$run.$chrom.multiPeaks2 && -e tmp/SA/$run/wiggles/$run.$chrom.u.f.az) then
       echo -n "$run $chrom : "
       date
       echo "bin/wiggle -wiggle1 tmp/SA/$run/wiggles/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 10 -O COUNT -o titi88/$run.$chrom"
