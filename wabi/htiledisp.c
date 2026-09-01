@@ -2463,7 +2463,7 @@ static void htileDrawMusicalScale (Htile look, float offset)
   if (y > 0) 
     {
       int box = graphBoxStart () ;
-      graphText (messprintf (" %g ", s), 1, y) ;
+      graphText (messprintf (" %g ", s/look->solexaStep), 1, y) ;
       graphBoxEnd () ;
       graphBoxDraw (box, BLACK, WHITE) ;
     }
@@ -2475,7 +2475,7 @@ static void htileDrawMusicalScale (Htile look, float offset)
       if (! look->hideMusic && y < look->map->graphHeight)
 	{
 	  graphLine (3, y, look->map->graphWidth -1, y) ;
-	  graphText (messprintf ("%g", - s), 1, y) ;
+	  graphText (messprintf (" %g", - s/look->solexaStep), 1, y) ;
 	}
     }
   oldw = graphLinewidth (.3) ;

@@ -892,6 +892,9 @@ static void usage (const char *error)
 	   "//   -i input_file : [default: stdin] data file to analyze\n"
 	   "//   -I input_format : [default: BV = tab-delimited hits] format of the input file, defined below\n"
 	   "// Output\n"
+	   "//   -f <file_name> : file of file names\n"
+	   "//      File contains a list of files, comma or space or tab or line separated\n"
+	   "//      ATTENTION all file names must be local or fully qualified starting at /\n"
 	   "//   -o output_file_prefix : [default: stdout] prefix for the name of the processed sequence\n"
 	   "//   -O output_format : [mandatory] format of the output file, defined below\n"
 	   "// \n"
@@ -970,7 +973,7 @@ static void usage (const char *error)
 	   "//   BG : UCSC tab delimited bedGraph format : target x1 x2 value \n"
 	   "//     In BG format, x1 is zero-based but x2 is 1 based, so the orientation is always known\n"
 	   "//   AM : "
-	   "//     the wiggle is exported in .ace format as class:mRNA\\nWiggle 'name' coord number-of-tags\n"
+ 	   "//     the wiggle is exported in .ace format as class:mRNA\\nWiggle 'name' coord number-of-tags\n"
 	   "//   AG : -feature name\n"
 	   "//     the wiggle is exported in .ace format as Sequence target\\nFeature 'name' coord coord number-of-tags 'trackName'\n"
 	   "//   Count : \n"
@@ -978,7 +981,7 @@ static void usage (const char *error)
 	   "//   -cumul : \n"
 	   "//     coverage statistics are exported on  <-out>.cumul\n"
            "//   -peaks : export the peaks above mincover with area above 1.5 * minCover * width\n"
-	   "//     peaks are exported on <-out>.peaks as a 4 columns table\n"
+	   "//     peaks are exported on <-out>.peaks as a 4 columns table\n"  
 	   "//     target(e.g. the target of the wiggle) x1 x2 max area\n"
 	   "//   -multiPeaks <int n> -wiggle1 <file1> -wiggle2 <file2> -swiggle1 <sfile1> -swiggle2 <sfile2> -stranding <float s> -minCover <int c>\n"
 	   "//     file 1/2 are wiggle files (of type -I, optionally .gzipped) representing sense and antisense alignments\n"
@@ -1111,6 +1114,7 @@ int main (int argc, const char **argv)
 
   getCmdLineOption (&argc, argv, "-i", &(sx.inFileName)) ;
   getCmdLineOption (&argc, argv, "-o", &(sx.outFileName)) ;
+  getCmdLineOption (&argc, argv, "-f", &(sx.inFileOfFileList)) ;
 
   if (getCmdLineOption (&argc, argv, "-I", &ccp))
     {

@@ -478,7 +478,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	    {
 	      aceOutDate (ao, "##", "wiggle") ; 
 	      aceOutf (ao, "track type=wiggle_0\n") ;
-	      aceOutf (ao, "fixedStep chrom=%s start=%d step=%d\n", chromNam, pos0, wiggle_step) ;
+	      aceOutf (ao, "fixedStep chrom=%s start=%d step=%d span=%d\n", chromNam, pos0, wiggle_step, wiggle_step) ;
 	      if (gzf)
 		{
 		  char *cp = stackText (s, 0) ;
@@ -498,7 +498,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 		  if (ao)
 		    {
 		      char buf[32] ;
-		      int k = fast_itoa_nl(buf, localCumul / 720) ;
+		      int k = fast_itoa_nl(buf, (int)(0.49999 + localCumul / (720.0 * wiggle_step))) ;
 		      
 		      // Flush if buffer full
 		      if (bufPos + k + 1 >= BUFFER_SIZE)

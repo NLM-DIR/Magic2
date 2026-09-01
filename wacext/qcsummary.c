@@ -699,7 +699,7 @@ static void qcAvLengthAli (QC *qc, RC *rc)
 	  switch (ti->col)
 	    {
 	    case 1:   /*  Average clipped length */
-	      irAny = ir ;
+	      irAny = 0 ;
 	      for (ir = 0 ; tt &&  ir < tt->rows; ir++)
 		{
 		  if (! strcasecmp (ac_table_printable (tt, ir, 0, ""), "any"))
@@ -5872,7 +5872,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
   float z ;
   long int zhPrevious ;
   long int znhA, znhR, znhE, znhG, znhg, zhBacteria, zhVirus, zSpliced ;
-  long int zhe, zhPhiX, zhr, zhm, zhS, zhT, zhA, zhR, zhE, zhG, zhg, zhAny, zhTotal ;
+  long int zhe, zhPhiX, zhr, zhm, zhc, zhS, zhT, zhA, zhR, zhE, zhG, zhg, zhAny, zhTotal ;
   int ir ;
   TT *ti, tts[] = {
     { "Spacer", "", 0, 0, 0} , 
@@ -5885,6 +5885,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
       "\t%s aligned in RNA spike-in (ERCC, Sequin, or yeast enolase)"
       "\t%s aligned in ribosomal RNA"
       "\t%s aligned in mitochondria"
+      "\t%s aligned in chloroplast"
       "\t%s aligned in other small genes"
       "\t%s aligned in transposons"
 
@@ -5946,6 +5947,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		       , "Reads"
 		       , "Reads"
 		       , "Reads"
+		       , "Reads"
 		       , "Reads", qc->EtargetsBeau[0]
 		       , "Reads", qc->EtargetsBeau[1]
 		       , "Reads", qc->EtargetsBeau[2]
@@ -5966,6 +5968,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		       , "% Reads"
 		       , "% Reads"
 		       , "% Reads"
+		       , "% Reads"
 		       , "% Reads", qc->EtargetsBeau[0]
 		       , "% Reads", qc->EtargetsBeau[1]
 		       , "% Reads", qc->EtargetsBeau[2]
@@ -5978,6 +5981,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 	      break ;
 	    case 3: 
 	      aceOutf (qc->ao, tit
+		       , "Mb"
 		       , "Mb"
 		       , "Mb"
 		       , "Mb"
@@ -6012,7 +6016,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 	    {
 	    case 1:
 	      ccp = EMPTY ;
-	      zhe = zhr = zhm = zhA = zhR = zhE = zhG = zhg = zhAny = zhS = zhT = zhPhiX = zSpliced = zhBacteria = zhVirus = zhPrevious = zhTotal = 0 ;
+	      zhe = zhr = zhm = zhc = zhA = zhR = zhE = zhG = zhg = zhAny = zhS = zhT = zhPhiX = zSpliced = zhBacteria = zhVirus = zhPrevious = zhTotal = 0 ;
 	      ttk = ac_tag_table (rc->ali, "Known_introns", h) ;
 	      for (ir = 0 ; ttk && ir < ttk->rows ; ir++)
 		{
@@ -6031,6 +6035,8 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		    zhr = ac_table_float (tt, ir, col, 0) ;
 		  if (! strcasecmp (ccp, "A_mito") || ! strcasecmp (ccp, "M"))
 		    zhm = ac_table_float (tt, ir, col, 0) ;
+		  if (! strcasecmp (ccp, "C_chloro") || ! strcasecmp (ccp, "C"))
+		    zhc = ac_table_float (tt, ir, col, 0) ;
 		  if (! strcasecmp (ccp, "D_transposon") || ! strcasecmp (ccp, "S"))
 		    zhT = ac_table_float (tt, ir, col, 0) ;
 
@@ -6057,8 +6063,8 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  if (! strcasecmp (ccp, "Any"))
 		    zhAny = ac_table_float (tt, ir, col, 0) ;
 		}
-	      zhTotal = zhPhiX + zhe + zhr + zhm + zhT + zhPrevious + zhVirus + zhBacteria + zhG + zhg ;
-	      zhPrevious += zhe + zhr + zhm + zhT  ; /* previously annotated transcripts */ 
+	      zhTotal = zhPhiX + zhe + zhr + zhm + zhc + zhT + zhPrevious + zhVirus + zhBacteria + zhG + zhg ;
+	      zhPrevious += zhe + zhr + zhm + zhc + zhT  ; /* previously annotated transcripts */ 
 
 	      ccp = EMPTY ; tt = ac_tag_table (rc->ali, "nh_Ali", h) ;
 	      znhA = znhR = znhE = znhG = znhg = 0 ;
@@ -6086,6 +6092,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  aceOutf (qc->ao, "\t%ld", zhe) ;
 		  aceOutf (qc->ao, "\t%ld", zhr) ;
 		  aceOutf (qc->ao, "\t%ld", zhm) ;
+		  aceOutf (qc->ao, "\t%ld", zhc) ;
 		  aceOutf (qc->ao, "\t%ld", zhS) ;
 		  aceOutf (qc->ao, "\t%ld", zhT) ;
 		  
@@ -6110,6 +6117,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  aceOutf (qc->ao, "\t%.2f", zhe/1000.0) ;
 		  aceOutf (qc->ao, "\t%.2f", zhr/1000.0) ;
 		  aceOutf (qc->ao, "\t%.2f", zhm/1000.0) ;
+		  aceOutf (qc->ao, "\t%.2f", zhc/1000.0) ;
 		  aceOutf (qc->ao, "\t%.2f", zhS/1000.0) ;
 		  aceOutf (qc->ao, "\t%.2f", zhT/1000.0) ;
 		  
@@ -6134,6 +6142,7 @@ static void qcMappingPerTargetType (QC *qc, RC *rc, int type)
 		  z = zhe ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
 		  z = zhr ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
 		  z = zhm ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
+		  z = zhc ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
 		  z = zhS ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
 		  z = zhT ; aceOutf (qc->ao, "\t") ; z = 100 * z/zhTotal ; aceOutPercent (qc->ao, z) ;
 

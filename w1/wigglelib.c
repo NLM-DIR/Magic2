@@ -327,9 +327,11 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 	stepOut = sx->out_step =  sx->out_step ? sx->out_step : az->step ;
 	if (az->target)
 	  dictAdd (sx->remapDict, az->target, &remap) ;
-	Array aa = array (sx->aaa, remap, Array) ;
+	Array aa = array (sx->aaa, 0, Array) ;
 	if (! aa)
-	  aa = array (sx->aaa, remap, Array) = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
+	  aa = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
+	array (sx->aaa, 0, Array) = aa ;
+	array (sx->aaa, remap, Array) = aa ;
 	wigAzZone (az, z1, z2 ? z2 : az->posMax, aa, &nn, &nBp) ;
 	ac_free (h) ;
       }
@@ -430,6 +432,7 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 	      dx = stepOut/2 > 1 ? stepOut/2 - 1 : 0 ;
 	      x1 = (x1 - z1 + dx)/stepOut ; 
 	      x2 = (x2 - z1 + (dx > stepIn ? dx - stepIn : 0))/stepOut ;
+	      y *= span ;  /* we need to conserve the mass, internally we use span=1 */
 	      { int ny = x2 > x1 ? x2 - x1 : x1 - x2 ; y /= (1+ny) ; } /* since we are spreading the point */
 
 	      break ;
@@ -821,10 +824,10 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
   int ii, jj, nn ;
   Array aa = bb ? bb : aa0 ;
   int iiMax = aa ? arrayMax (aa) : 0 ;
-  int x, y ;
+  int x, y, yMax ;
   int ratio = sx->multiPeaks ;
-  int minCover = sx->minCover ;
   int step = (sx->out_step  ? sx->out_step : 1) ;
+  int minCover = sx->minCover * step ;
   int level, imm = 0 ;
   double aliBp = 0, area = 0 ;
   ACEOUT ao = sx->aoPeaks ;
@@ -840,11 +843,12 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
   if (! ao)
     return ;
   fprintf (stderr, "// multiPeaks are exported in file %s.multiPeaks\n", sx->outFileName) ;   
-  
+
   for (aliBp = 0, nn = 0, area = 0, ii = 0, wp = arrp (aa, ii, WIGGLEPOINT) ; ii < iiMax ; ii++, wp++) 
     { 
       x = wp->x ;
       y = wp->y ; if (y < 0) y = 0 ;
+      if (y > yMax) yMax = y ;
       aliBp += y ;
       if (y >= minCover) { nn += step ; area += y * step ; }
     }
@@ -855,70 +859,38 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
 	  ) ;
 
   aceOut (ao, "#Target\ta1\ta2\tlength bp\tmax cover\taverage cover\taligned bp\tlevel1\tlevel2\n") ;
-  for (ii = jj = 0,  level = minCover ; ii < iiMax ; ii++) 
-    {
-      wp = arrp (aa, ii, WIGGLEPOINT) ;
-      x = wp->x ;
-      y = wp->y ; if (y < 0) y = 0 ;
-      if (y < minCover)
-	continue ;
-      if (y >= level)  /* we just reached this level, span that terrace and export it */
-	{
-	  int level2 = level * ratio ;
-	  
-	  while (level > 0)
-	    {
-	      int ln = 0, yMax = wp->y, yMin = wp->y ;
-	      long int cover = 0 ;
 
-	      for (wq = wp, jj = ii ;  jj < iiMax ; jj++, wq++)
-		{
-		  y = wq->y ; if (y < 0) y = 0 ;
-		  if (wq->x > x + step)
-		    y = 0 ;
-		  x = wq->x ;
-		  if (y >= level && (level2 < 0 ||  y < level2)) 
-		    {
-		      ln++ ;
-		      cover += y ;
-		      if (y > yMax) yMax = y ;
-		      if (y < yMin) yMin = y ;
-		    }
-		  else
-		    break ;
-		}
-	      if (ln > 0)
-		{
-		  if (level == 1 || cover > 1.5 * minCover) /* avoid fluctuations just around minCover */
-		    {
-		      mp = arrayp (mmm, imm++, MPK) ;
-		      mp->x1 = wp->x - step/2 ; 
-		      mp->x2 = x - step/2 ; if (jj == iiMax)  mp->x2 += step ;
-		      mp->ln = ln ;
-		      mp->yMin = yMin ;
-		      mp->yMax = yMax ;
-		      mp->cover = cover ;
-		      mp->level = level ;
-		    }
-		  break ;
-		}
-	      else
-		{
-		  level = level2 ; level2 = level * ratio ;
-		}
-	    }
-	  /* This system allows multi valued XH exon support */
-	  if (y >= level2)
-	    { 
-	      while (level2 > 0 && y >= level2)
-		{ level = level2 ; level2 *= ratio ; }
-	    }
-	  else if (y < level && level > minCover)
+  for (level = minCover ; level < yMax  ; level *= ratio)
+    {
+      for (ii = jj = 0 ; ii < iiMax ; ii++) 
+	{
+	  wp = arrp (aa, ii, WIGGLEPOINT) ;
+	  x = wp->x ;
+	  y = wp->y ; if (y < 0) y = 0 ;
+	  if (y < level)
+	    continue ;
+	  int aMin = wp->y, aMax = wp->y ;
+	  /* we just reached this level, span that terrace and check area > 1.5 level */
+	  for (area = 0, wq = wp, jj = ii ;  jj < iiMax && wq->y >= level ; jj++, wq++)
 	    {
-	      while  (y < level && level > minCover)
-		{ level2 = level ; level /= ratio ; }
+	      area += wq->y ;
+	      if (aMin > wq->y) aMin = wq->y ;
+	      if (aMax < wq->y) aMax = wq->y ;
 	    }
-	  wp = wq - 1 ; ii = jj - 1 ;
+	  /* register this peak */
+	  if (jj < iiMax)
+	    {
+	      mp = arrayp (mmm, imm++, MPK) ;
+	      mp->x1 = wp->x - step/2 ; 
+	      mp->x2 = wq->x - step/2 ;
+	      mp->ln = wq->x - wp->x + step ;
+	      mp->yMin = aMin ;
+	      mp->yMax = aMax ;
+	      mp->cover = area ;
+	      mp->level = level ;
+	    }
+	  /* proceed */
+	  ii = jj ; wp = wq ;
 	}
     }
 
@@ -928,9 +900,9 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
       for (ii = 0, mp = arrp (mmm, ii, MPK) ; ii < imm ; mp++, ii++)
 	aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%.1f\t%d\t%d\t%d\n"
 		 , dictName (sx->remapDict, remap)
-		 , mp->x1, mp->x2, mp->ln * step
-		 , mp->yMax, mp->cover * 1.0/(mp->ln), mp->cover * step
-		 , mp->level, mp->level * ratio
+		 , mp->x1, mp->x2, mp->ln
+		 , mp->yMax/step, 1.0*mp->cover/mp->ln,  mp->cover
+		 , mp->level/step,( mp->level * ratio)/step
 		 ) ;
     }
 
@@ -973,11 +945,11 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
     {
       aceOutf (ao, "\nBefore dips\n") ;
       for (ii = 0, mp = arrp (mmm, ii, MPK) ; ii < imm ; mp++, ii++)
-	aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%ld\t%ld\t%d\t%d\n"
+	aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%.1f\t%d\t%d\t%d\n"
 		 , dictName (sx->remapDict, remap)
-		 , mp->x1, mp->x2, mp->ln * step
-		 , mp->yMax, mp->cover * 1.0/(mp->ln), mp->cover * step
-		 , mp->level, mp->level * ratio
+		 , mp->x1, mp->x2, mp->ln
+		 , mp->yMax/step, 1.0*mp->cover/mp->ln,  mp->cover
+		 , mp->level/step,( mp->level * ratio)/step
 		 ) ;
     }
 
@@ -1069,15 +1041,15 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
 
   for (ii = 0, mp = arrp (mmm, ii, MPK) ; ii < imm ; mp++, ii++)
     if (mp->cover)
-      aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%.0f\t%ld\t%d\t%d\n"
-	       , dictName (sx->remapDict, remap)
-	       , mp->x1, mp->x2, mp->ln * step
-	       , mp->yMax, mp->cover * 1.0/(mp->ln), mp->cover * step
-	       , mp->level, mp->level * ratio
-	       ) ;
+	aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%.1f\t%d\t%d\t%d\n"
+		 , dictName (sx->remapDict, remap)
+		 , mp->x1, mp->x2, mp->ln
+		 , mp->yMax/step, 1.0*mp->cover/mp->ln,  mp->cover
+		 , mp->level/step,( mp->level * ratio)/step
+		 ) ;
 
   /* zero terminate */
-      aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n"
+  aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n"
 	   , dictName (sx->remapDict, remap)
 	   , (mp -1)->x2 + 3*step/2, (mp-1)->x2 + 5*step/2, step
 	   , 0, 0, 0
@@ -1496,8 +1468,8 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
       if (remap) aceOutf (ao, " chrom=%s", dictName (sx->remapDict, remap)) ;
       aceOutf (ao, " start=%d", x1) ;
       aceOutf (ao, " step=%d", stepOut) ;
-      if (spanOut > 1) aceOutf (ao, " span=%d", spanOut) ;
-      if (0) aceOutf (ao, " span=%d", stepOut) ;
+      if (0 && spanOut > 1) aceOutf (ao, " span=%d", spanOut) ;
+      if (1) aceOutf (ao, " span=%d", stepOut) ; /* BF is supposed to export a coverage, so mass = value * (span==step) */
       aceOutf (ao, "\n") ;
       
       break ;
@@ -1645,7 +1617,7 @@ void sxWiggleExport (WIGGLE *sx)
   memset (cumul, 0, sizeof(cumul)) ;
   memset (pos_covered, 0, sizeof(pos_covered)) ;
 
-  for (remap = 0 ; remap < arrayMax (sx->aaa) ; remap++)
+  for (remap = 1 ; remap < arrayMax (sx->aaa) ; remap++)
     {
       aa =  arr (sx->aaa, remap, Array) ;
       if (arrayExists (aa) && arrayMax (aa))
@@ -1998,7 +1970,7 @@ Array sxGetWiggleZone (Array aa, const char *fNam, char *type, int *stepp, const
   sx->aaa = arrayHandleCreate (12, Array, h) ;	
   if (! aa)
     aa = arrayHandleCreate (100000, WIGGLEPOINT, h0) ;
-  array (sx->aaa, 0, Array) = aa ; 
+  array (sx->aaa, 0, Array) = aa ;
   sxWiggleParse (sx, z1, z2) ;
   *stepp = sx->out_step ;
   ac_free (h) ;

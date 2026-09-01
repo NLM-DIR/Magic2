@@ -51,6 +51,7 @@ typedef struct wiggleStruct {
     , *wiggleFileName1, *wiggleFileName2
     , *swiggleFileName1, *swiggleFileName2   /* controlling stranded wiggles */
     , *selectFileName, *rejectFileName
+    , *inFileOfFileList
     , *inFileName, *outFileName, *target_class, *min_target_class, *sxxChromosome
     , *transcriptsEndsFileName ;
   BOOL unique ; /* BHIT format: only consider unique hits */

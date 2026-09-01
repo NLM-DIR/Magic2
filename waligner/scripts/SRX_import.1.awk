@@ -1,13 +1,13 @@
 function parseDate(d) {
     n = split(d, aa, "/") ;
     if (n == 3)
-    {
-	m= aa[1] + 0 ; d = aa[2] + 0 ; y = aa[3] + 0 ;
+    {   split (aa[3],bb," "); 
+	m= aa[1] + 0 ; d = aa[2] + 0 ; y = bb[1] + 0 ;
 	if (y > 1000 && m < 13 && d < 32)
 	    return  y "-" m "-" d ;
     }
     else
-    {
+    { 
 	split (d, aa, "-") ; an=aa[3]+0;if(an <50)an += 2000 ; else an += 1900 ;
 	m = index("xxJanFebMarAprMayJunJulAugSepOctNovDec",aa[2])/3;if (m<10) m = "0" m ;
 	j=aa[1];;if (j+0<10)j="0" j ;
@@ -76,14 +76,14 @@ function parseDate(d) {
 	if (1) # $15 == "GENOMIC" || $15 == "METAGENOMIC" || $15 == " TRANSCRIPTOMIC" || $15 == "METATRANSCRIPTOMIC" || $15 == "VIRAL"
 	{
 	    if ($14 == "Hybrid Selection" )
-		printf ("sraExome") ;
+		printf ("sraExome\n") ;
 	    else
 	    {
 		z = $14 ;
 		if (z == "other" || z == "unspecified") $14 = "" ;
 		if (z == "MDA") $14 = "MDA often for single cell sequencing" ;
 		
-		printf ("sraWhole_genome") ;
+		printf ("sraWhole_genome\n") ;
 	    }
 
 	    if ($15 == "METAGENOMIC") 
