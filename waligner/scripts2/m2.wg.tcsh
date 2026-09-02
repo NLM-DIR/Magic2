@@ -46,7 +46,7 @@ endif
       echo "ok=$ok uu=$uu $fr"
       if ($ok == 1) then
           # contruct the combined wiggles
-        set out2=$out/$run.$chrom.$uu.$fr.az
+        set out2=tmp/$WRG/$group/$group.$chrom.$uu.$fr
 	bin/wiggle -f $out/$fr.$uu.chrom.list -I AZ -O AZ $out_step  -o $out2 -cumul >&   $out/R.genes.$uu.$fr.cumul
       endif
     end

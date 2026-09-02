@@ -184,7 +184,7 @@ if ($phase == sraDownloadTest) goto phase_sraDownload
 
 usage:
 echo "usage: SRX_import.tcsh SRR PRJ SRP GEO Sample SRX Files Papers  Sublibs Titles  srr2srx srr2run |  sraDownload sraDownloadTest"
-goto phaseLoop
+exit 0
 
 ############
 phaseSRR:
@@ -658,6 +658,7 @@ echo ZZZZZ > ZZZZZ
 cat $dd/srr.dump.ace > $dd/srr2run.preace
 
 cat <<EOF > $dd/srr2run.awk
+/date\s+1900/{next;}
 /^Adult/{print;next;}
 /^Age/{print;next;}
 /^Annotation_problem/{print;next;}
@@ -780,7 +781,6 @@ cat <<EOF > $dd/srr2run.awk
 /^sraRIP_CLIP/{next;}
 /^sraSmall_RNA/{next;}
 /^sraUnspecified_RNA/{next;}
-
 END {printf("\n");}
 EOF
 
@@ -807,6 +807,7 @@ cat <<EOF > $dd/srp2run.awk
 /^SRR/{print;printf ("Run %s\n",\$2);next;}
 /^Species/{print;next;}
 /^Title/{print;next;}
+/date\s+1900/{next;}
 END {printf("\n");}
 EOF
 
@@ -935,7 +936,7 @@ tbly SRX_DB <<EOF
 EOF
 
 echo ZZZZZ > ZZZZZ
-cat  srr2srx.txt  ZZZZZ  $MAGIC.srr.ace | gawk '/^ZZZZZ/{zz++;next;}{if(zz<1){r2x[$1]=$2;next;}}/^File/{next;}/^SRR /{printf("SRR %s\n",r2x[$2]);next;}/^Sublib/{next;}/^Spots/{next;}{print}' >  $MAGIC.srr2srx.ace
+cat  srr2srx.txt  ZZZZZ  $MAGIC.srr.ace | gawk '/^ZZZZZ/{zz++;next;}{if(zz<1){r2x[$1]=$2;next;}}/^File/{next;}/^SRR /{printf("SRR %s\n",r2x[$2]);next;}/^Sublib/{next;}/^Spots/{next;}{print}' | grep -vE "date\s+1900" | grep -v 'Release_date\t1900' >  $MAGIC.srr2srx.ace
 
 tbly SRX_DB <<EOF
   pparse $MAGIC.srr2srx.ace

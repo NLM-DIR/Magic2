@@ -308,6 +308,21 @@ def Rchi(a, N=1):
 ChiCheck = namedtuple("ChiCheck", "label ok residual")
 
 
+def verify_metric_inverse(g_lower, g_upper):
+    """Verify that g_upper is the left inverse of g_lower: g^ij g_jk = delta^i_k.
+    
+    Returns a list of (i, k) pairs where the inverse property fails."""
+    n = 8
+    failures = []
+    for i in range(n):
+        for k in range(n):
+            delta = 1 if i == k else 0
+            entry = simplify(sum(g_upper[i, j] * g_lower[j, k] for j in range(n)))
+            if entry != delta:
+                failures.append((i, k, entry, delta))
+    return failures
+
+
 def chi_relations(rep, chi):
     """The chi relations as plain data (never printed).
 
@@ -368,6 +383,195 @@ def killing_metric(rep, chi, N):
         return simplify(supertrace(chi, P) / two_N)
 
     return Matrix(len(nums), len(nums), entry)
+
+
+def casimir_quadratic(rep, g_upper):
+    """Compute the quadratic Casimir operator C_2 = (1/2) g^{AB} M_A M_B.
+    
+    Returns a dict with:
+        'even_sector': contribution from even generators only
+        'odd_sector':  contribution from odd generators only
+        'total':       even + odd
+        'is_scalar_multiple': True if result ≈ λ * Identity
+    """
+    nums = rep.numbers()
+    d = rep.dim
+    
+    # Start with zero matrix
+    C2_even = Matrix.zero(d, d)
+    C2_odd = Matrix.zero(d, d)
+    
+    # Contributions from even-even pairs (canonical numbers 0, 1, 2, 3)
+    even_indices = [0, 1, 2, 3]
+    for a in even_indices:
+        for b in even_indices:
+            c_ab = g_upper[a, b]  # g^{ab} from the 8x8 metric matrix
+            if c_ab != 0:
+                term = (c_ab / 2) * (rep[a] @ rep[b])
+                C2_even = C2_even + term
+    
+    # Contributions from odd-odd pairs (canonical numbers 4, 5, 6, 7)
+    odd_indices = [4, 5, 6, 7]
+    for a in odd_indices:
+        for b in odd_indices:
+            # Access the metric at the correct position for odd generators
+            c_ab = g_upper[a, b]
+            if c_ab != 0:
+                term = (c_ab / 2) * (rep[a] @ rep[b])
+                C2_odd = C2_odd + term
+    
+    # Note: cross terms (even-odd) should be zero due to metric structure
+    
+    C2_total = C2_even + C2_odd
+    
+    # Check if C2_total is a scalar multiple of identity
+    # Extract diagonal elements and check if all are equal
+    diag = [C2_total[i, i] for i in range(d)]
+    diag_simplified = [simplify(x) for x in diag]
+    
+    # Check if off-diagonals are zero
+    off_diag_nonzero = False
+    for i in range(d):
+        for j in range(d):
+            if i != j:
+                off_d = simplify(C2_total[i, j])
+                if off_d != 0:
+                    off_diag_nonzero = True
+                    break
+    
+    # Check if diagonal elements are all equal
+    diag_constant = len(set(str(x) for x in diag_simplified)) == 1 if diag_simplified else True
+    
+    is_scalar_multiple = (not off_diag_nonzero) and diag_constant
+    
+    eigenvalue = None
+    if is_scalar_multiple and d > 0:
+        eigenvalue = simplify(diag_simplified[0])
+    
+    return {
+        'even_sector': C2_even,
+        'odd_sector': C2_odd,
+        'total': C2_total,
+        'is_scalar_multiple': is_scalar_multiple,
+        'eigenvalue': eigenvalue
+    }
+
+
+def export_metrics(rep, chi, N, g_lower=None, g_upper=None):
+    """Export the Killing metrics (lower and upper index) as a structured dict.
+    
+    If g_lower/g_upper not provided, they are computed. Returns a dict with
+    the sector structure for easy access:
+    {
+        'lower': g_lower_matrix,
+        'upper': g_upper_matrix,
+        'sectors': {
+            'Y-Y': (g_lower[0,0], g_upper[0,0]),
+            'E-F': (2x2 blocks for lower and upper),
+            'H-H': (g_lower[3,3], g_upper[3,3]),
+            'U-V': (2x2 blocks for lower and upper),
+            'W-X': (2x2 blocks for lower and upper),
+        }
+    }
+    """
+    if g_lower is None:
+        g_lower = killing_metric(rep, chi, N)
+    if g_upper is None:
+        g_upper = upper_killing_metric(g_lower, rep)
+    
+    sectors = {
+        'Y-Y': (g_lower[0,0], g_upper[0,0]),
+        'E-F': {
+            'lower': [[g_lower[1,1], g_lower[1,2]], [g_lower[2,1], g_lower[2,2]]],
+            'upper': [[g_upper[1,1], g_upper[1,2]], [g_upper[2,1], g_upper[2,2]]]
+        },
+        'H-H': (g_lower[3,3], g_upper[3,3]),
+        'U-V': {
+            'lower': [[g_lower[4,4], g_lower[4,5]], [g_lower[5,4], g_lower[5,5]]],
+            'upper': [[g_upper[4,4], g_upper[4,5]], [g_upper[5,4], g_upper[5,5]]]
+        },
+        'W-X': {
+            'lower': [[g_lower[6,6], g_lower[6,7]], [g_lower[7,6], g_lower[7,7]]],
+            'upper': [[g_upper[6,6], g_upper[6,7]], [g_upper[7,6], g_upper[7,7]]]
+        }
+    }
+    
+    return {
+        'lower': g_lower,
+        'upper': g_upper,
+        'sectors': sectors
+    }
+
+
+def upper_killing_metric(g_lower, rep):
+    """Upper-index Killing metric g^ij (inverse of g_ij), computed sector-by-sector.
+
+    The canonical numbers are Y(0), E(1), F(2), H(3), U(4), V(5), W(6), X(7).
+    The structure is:
+        - Y-Y block:   1x1 diagonal  (even)
+        - E-F block:   2x2 symmetric (even)
+        - H-H block:   1x1 diagonal  (even)
+        - U-V block:   2x2 antisymmetric (odd)
+        - W-X block:   2x2 antisymmetric (odd)
+
+    For antisymmetric 2x2 blocks (u,v) with g_uv = -g_vu:
+        g^uv = -1/g_uv,   g^vu = 1/g_uv
+    satisfies g^ui * g_iv = delta^u_i."""
+    n = 8  # exactly 8 generators in sl(2|1)
+
+    # Initialize the upper-index metric
+    def g_upper_entry(p, q):
+        if p == 0 and q == 0:  # Y-Y (1D diagonal)
+            g_yy = g_lower[0, 0]
+            return 1 / g_yy if g_yy != 0 else 0
+
+        elif (p, q) in [(1, 1), (1, 2), (2, 1), (2, 2)]:  # E-F block (2x2 symmetric)
+            g_ee = g_lower[1, 1]
+            g_ef = g_lower[1, 2]
+            g_ff = g_lower[2, 2]
+            det = simplify(g_ee * g_ff - g_ef * g_ef)
+            if det == 0:
+                return 0
+            inv_det = 1 / det
+            if p == 1 and q == 1:
+                return simplify(inv_det * g_ff)
+            elif (p, q) in [(1, 2), (2, 1)]:
+                return simplify(-inv_det * g_ef)
+            else:  # (2, 2)
+                return simplify(inv_det * g_ee)
+
+        elif p == 3 and q == 3:  # H-H (1D diagonal)
+            g_hh = g_lower[3, 3]
+            return 1 / g_hh if g_hh != 0 else 0
+
+        elif (p, q) in [(4, 4), (4, 5), (5, 4), (5, 5)]:  # U-V block (2x2 antisymmetric)
+            g_uv = g_lower[4, 5]  # the only nonzero off-diagonal
+            if g_uv == 0:
+                return 0
+            inv = 1 / g_uv
+            if p == 4 and q == 5:
+                return simplify(-inv)  # g^uv = -1/g_uv
+            elif p == 5 and q == 4:
+                return simplify(inv)   # g^vu = 1/g_uv
+            else:
+                return 0  # diagonals are zero
+
+        elif (p, q) in [(6, 6), (6, 7), (7, 6), (7, 7)]:  # W-X block (2x2 antisymmetric)
+            g_wx = g_lower[6, 7]  # the only nonzero off-diagonal
+            if g_wx == 0:
+                return 0
+            inv = 1 / g_wx
+            if p == 6 and q == 7:
+                return simplify(-inv)  # g^wx = -1/g_wx
+            elif p == 7 and q == 6:
+                return simplify(inv)   # g^xw = 1/g_wx
+            else:
+                return 0  # diagonals are zero
+
+        else:  # off-diagonal cross-sector blocks are zero
+            return 0
+
+    return Matrix(n, n, g_upper_entry)
 
 
 # -- 3. verification ---------------------------------------------------------
@@ -514,6 +718,69 @@ def main(a, b, N=1):
           + "  ".join(_row(r, even_c) for r in range(4)))
     print(f"  odd  [{' '.join(titles[4:])}]:  "
           + "  ".join(_row(r, odd_c) for r in range(4, 8)))
+
+    # -- the upper-index Killing metric (inverse) ----------------------------
+    print()
+    g_up = upper_killing_metric(g, rep)
+    print(f"Upper-index Killing metric (inverse)   g^ij = (g_lower)^-1_ij")
+    
+    def _row_up(r, cols):
+        return "(" + " ".join(f"{g_up[r, c]!s:>4}" for c in cols) + ")"
+    
+    print(f"  even [{' '.join(titles[:4])}]:  "
+          + "  ".join(_row_up(r, even_c) for r in range(4)))
+    print(f"  odd  [{' '.join(titles[4:])}]:  "
+          + "  ".join(_row_up(r, odd_c) for r in range(4, 8)))
+
+    # Test inverse property: g^ij g_jk = delta^i_k
+    print()
+    print("Testing metric inverse property: g^ij g_jk = delta^i_k")
+    failures = verify_metric_inverse(g, g_up)
+    if not failures:
+        print("  All components verified. \u2713")
+    else:
+        print(f"  {len(failures)} component(s) failed:")
+        for i, k, got, expected in failures:
+            print(f"    g^{titles[i]}{titles[k]} * g_{k}? should be "
+                  f"{expected}, got {got}")
+
+    # -- the quadratic Casimir operator C_2 --------------------------------
+    print()
+    print("Quadratic Casimir operator: C_2 = (1/2) g^{AB} M_A M_B")
+    c2_result = casimir_quadratic(rep, g_up)
+    
+    print()
+    print("C_2 even sector (generators Y, e, f, h only):")
+    print(c2_result['even_sector'])
+    
+    print()
+    print("C_2 odd sector (generators u, v, w, x only):")
+    print(c2_result['odd_sector'])
+    
+    print()
+    print("C_2 total = even + odd:")
+    print(c2_result['total'])
+    
+    print()
+    if c2_result['is_scalar_multiple']:
+        print(f"✓ C_2 is a scalar multiple of identity with eigenvalue: "
+              f"{c2_result['eigenvalue']}")
+    else:
+        print("✗ C_2 is NOT a scalar multiple of identity")
+        # Show some off-diagonal elements
+        C2 = c2_result['total']
+        print("  Some off-diagonal elements:")
+        count = 0
+        for i in range(min(4, C2.rows)):
+            for j in range(i+1, min(4, C2.cols)):
+                val = simplify(C2[i, j])
+                if val != 0:
+                    print(f"    C_2[{i},{j}] = {val}")
+                    count += 1
+                    if count >= 3:
+                        break
+            if count >= 3:
+                break
 
 
 def _build_parser():

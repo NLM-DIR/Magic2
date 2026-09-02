@@ -9794,7 +9794,7 @@ date
 
 if (! -d tmp/TABIX) mkdir tmp/TABIX
 
-foreach run (`cat MetaDB/$MAGIC/r2sublib`)
+foreach run (`cat MetaDB/$MAGIC/r2sublib | cut -f 1 | sort -u`)
   if (! -d tmp/WIGGLERUN) mkdir tmp/WIGGLERUN
   if (! -d tmp/WIGGLERUN/$run) mkdir tmp/WIGGLERUN/$run
   foreach chrom ($chromSetAll)

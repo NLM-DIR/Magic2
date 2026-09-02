@@ -165,8 +165,8 @@
                                           Gene_selection  UNIQUE ?Text
                               Genome  Whole_genome    UNIQUE  ?Text  
                                       Enhancer_STARR   UNIQUE ?Text
-                                      Exome   UNIQUE ?Text
-                                      ChIP    UNIQUE ?Text
+                                      Exome   UNIQUE ?Text 
+                                      ChIP    UNIQUE ?Text UNIQUE ?Text
                               Microbiome
                               RNA_extraction RIN UNIQUE Float UNIQUE Float // range in case of a group
                                              Ligation

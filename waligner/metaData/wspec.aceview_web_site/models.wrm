@@ -3650,7 +3650,7 @@
                                           Capture  UNIQUE ?Capture
                               Genome  Whole_genome   UNIQUE   Text  
                                       Exome   UNIQUE ?Text
-                                      ChIP    UNIQUE ?Text
+                                      ChIP    UNIQUE ?Text UNIQUE ?Text
                               Microbiome
                               RNA_extraction RIN UNIQUE Float UNIQUE Float // range in case of a group
                                              Ligation
