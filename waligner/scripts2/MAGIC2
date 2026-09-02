@@ -692,6 +692,8 @@ bin/tacembly MetaDB << EOF > MetaDB/makelists.log
   list -a -f MetaDB/$MAGIC/RunWithKnownAdaptors.list
   query find project IS $MAGIC ; > Run  ; Sublibraries
   list -a -f MetaDB/$MAGIC/RunHasSubLib.list
+  query find project IS $MAGIC ; > Run ; > Sublibraries
+  edit project $MAGIC
   query find project IS $MAGIC ; > Run  ; ! Sublibraries && ! union_of && Is_Run
   list -a -f MetaDB/$MAGIC/RunToAlign.list
   query find project IS $MAGIC ; > Run  ; Is_run && Sublibrary_of
@@ -869,6 +871,7 @@ if (-e  MetaDB/$MAGIC/run2file_name.txt) then
   cat  MetaDB/$MAGIC/run2file_name.txt >> $toto
 endif
 
+if (0) then
   foreach run (`cat MetaDB/$MAGIC/RunList`)
     if (! -d Fastc/$run) then
       set n=`ls -d Fastc.*/$run | gawk '{n++}END{print n}'`
@@ -878,7 +881,7 @@ endif
       endif
     endif
   end
-
+endif
 echo -n "\n-- Construct the lists of Runs and Groups "
 
 # create the group runid correspondance
@@ -992,7 +995,9 @@ if (! -e AliArchived) then
 
   echo -n "" > MetaDB/$MAGIC/LaneList
   foreach run (`cat MetaDB/$MAGIC/RunList`)
-    cat Fastc/$run/LaneList >> MetaDB/$MAGIC/LaneList
+    if (-e Fastc/$run/LaneList) then
+      cat Fastc/$run/LaneList >> MetaDB/$MAGIC/LaneList
+    endif
   end
   set nRun=`cat MetaDB/$MAGIC/RunList | wc | gawk '{print $1}'`
   cat MetaDB/$MAGIC/LaneList | gawk '{n++}END{printf("--- the %d runs or sublibraries are split in %d blobs of at most %d Mb or %dM reads\n", nRun, n, splitMb, splitMs/1000000) ; }' nRun=$nRun splitMb=$splitMb  splitMs=$splitMs
@@ -2394,34 +2399,6 @@ echo "pparse  tmp/SA/$MAGIC.ali2.ace" | bin/tacembly MetaDB --no_prompt
 goto phaseLoop
 
 ###################################################################################
-###################################################################################
-## phase sa2ali3
-
-phasewgr:
-echo -n "phaseSortali3: construct the group wiggles : "
-date
-
-if (! -d tmp/TABIX) mkdir tmp/TABIX
-
-foreach gg (`cat MetaDB/$MAGIC/RunWiggleList`)
-  if (! -d tmp/WIGGLERUN) mkdir tmp/WIGGLERUN
-  if (! -d tmp/TABIX/$gg) mkdir tmp/TABIX/$gg
-  foreach chrom ($chromSetAll)
-    scripts/submit tmp/WIGGLERUN/$gg/$chrom   "scripts2/m2.wg.tcsh WIGGLERUN $gg $chrom"
-  end
-end
-
-foreach gg (`cat MetaDB/$MAGIC/GroupWiggleList`)
-  if (! -d tmp/WIGGLEGROUP) mkdir tmp/WIGGLEGROUP
-  if (! -d tmp/TABIX/$gg) mkdir tmp/TABIX/$gg
-  foreach chrom ($chromSetAll)
-    scripts/submit tmp/WIGGLEGROUP/$gg/$chrom  "scripts2/m2.wg.tcsh WIGGLEGROUP $gg $chrom"
-  end
-end
-
-
-goto phaseLoop
-
 #######################################################################################
 #######################################################################################
 #######################################################################################
@@ -8760,6 +8737,14 @@ echo "pparse MetaDB/$MAGIC/stranding.ace" | bin/tacembly MetaDB -no_prompt
 ######## 
   echo " bin/qcsummary -db MetaDB -project $MAGIC -runType 2  -o RESULTS/Mapping/$MAGIC.runs"
 
+    set n=`cat MetaDB/$MAGIC/RunSublibrary_ofList | wc -l`
+  if ($n > 0) then
+    bin/qcsummary -db MetaDB -project $MAGIC -runType 1  -o RESULTS/Mapping/$MAGIC.sublibs
+  endif
+  if ($n > 1) then
+    bin/table_histo -i RESULTS/Mapping/$MAGIC.sublibs.QC.txt > RESULTS/Mapping/$MAGIC.sublibs.QC.histo.txt
+  endif
+
   set n=`cat MetaDB/$MAGIC/RunsList | wc -l`
   if ($n > 0) then
     bin/qcsummary -db MetaDB -project $MAGIC -runType 2 -o  RESULTS/Mapping/$MAGIC.runs
@@ -9798,6 +9783,34 @@ phasewg4d:
  date
 goto phaseLoop
 scripts2/wg4b.gene_sponge.tcsh Parse
+goto phaseLoop
+
+###################################################################################
+## wgr : construct the group wiggles
+
+phasewgr:
+echo -n "phaseSortali3: construct the group wiggles : "
+date
+
+if (! -d tmp/TABIX) mkdir tmp/TABIX
+
+foreach run (`cat MetaDB/$MAGIC/r2sublib`)
+  if (! -d tmp/WIGGLERUN) mkdir tmp/WIGGLERUN
+  if (! -d tmp/WIGGLERUN/$run) mkdir tmp/WIGGLERUN/$run
+  foreach chrom ($chromSetAll)
+    scripts/submit tmp/WIGGLERUN/$run/$chrom   "scripts2/m2.wg.tcsh WIGGLERUN $run $chrom"
+  end
+end
+qusage 1
+foreach gg (`cat MetaDB/$MAGIC/GroupWiggleList`)
+  if (! -d tmp/WIGGLEGROUP) mkdir tmp/WIGGLEGROUP
+  if (! -d  tmp/WIGGLEGROUP/$group) mkdir tmp/WIGGLEGROUP/$group
+  foreach chrom ($chromSetAll)
+    scripts/submit tmp/WIGGLEGROUP/$gg/$chrom  "scripts2/m2.wg.tcsh WIGGLEGROUP $gg $chrom"
+  end
+end
+
+
 goto phaseLoop
 
 ###############################################################

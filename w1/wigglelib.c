@@ -332,7 +332,7 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 	  aa = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
 	array (sx->aaa, 0, Array) = aa ;
 	array (sx->aaa, remap, Array) = aa ;
-	wigAzZone (az, z1, z2 ? z2 : az->posMax, aa, &nn, &nBp) ;
+	wigAzZone (az, z1, z2 ? z2 : az->posMax, aa, &nn, &nBp, sx->inFileOfFileList ? TRUE : FALSE) ;
 	ac_free (h) ;
       }
       break ;
@@ -2340,7 +2340,7 @@ BOOL wigAzAt (AZZ *az, int x, unsigned int *value)
      
 /**************************************************************/
 /* x1, x2 are given as entries in the table (not multiplied by step) */
-BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nBpp)
+BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nBpp, BOOL cumul)
 {
   WIGGLEPOINT *wp ;
   
@@ -2357,13 +2357,18 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
   int step = az->step ;
   x1 = x1 + step - 1 - az->posMin ; x1 /= step ; // transform true position in array offsets
   x2 = x2 + step - 1 - az->posMin ; x2 /= step ; x2++ ; // transform true position in array offsets
-  if (x2 > x1)
+  if (! cumul)
     {
-      array (wPoints, x2 - x1 -1, WIGGLEPOINT).x = 0 ;
-      memset (arrp (wPoints, 0, int), 0, (x2 - x1) * sizeof(WIGGLEPOINT)) ;
+      if (x2 > x1)
+	{
+	  array (wPoints, x2 - x1 -1, WIGGLEPOINT).x = 0 ;
+	  memset (arrp (wPoints, 0, int), 0, (x2 - x1) * sizeof(WIGGLEPOINT)) ;
+	}
+      arrayMax (wPoints ) = x2 - x1 ;
     }
-  arrayMax (wPoints ) = x2 - x1 ;
-
+  else
+    array (wPoints, x2 - x1 -1, WIGGLEPOINT).x += 0 ;
+  
   if (x1 < 0)
     x1 = 0 ;  
   if (x2 > az->xMax)
@@ -2378,7 +2383,10 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
 	    {
 	      wp = arrp (wPoints, jj, WIGGLEPOINT) ;
 	      wp->x = x * step + az->posMin ;
-	      wp->y = array (az->cache, x - az->c1, unsigned int) ;
+	      if (cumul)
+		wp->y += array (az->cache, x - az->c1, unsigned int) ;
+	      else
+		wp->y = array (az->cache, x - az->c1, unsigned int) ;
 	      *nBpp += wp->y * step ;
 	      jj++ ; x++ ; (*nPosp)++ ;
 	    }

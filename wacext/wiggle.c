@@ -1233,8 +1233,11 @@ int main (int argc, const char **argv)
 
   fprintf (stderr, "// start: %s\n", timeShowNow()) ;
 
-  sx.ai = aceInCreate (sx.inFileName, sx.gzi, h) ;
-  aceInSpecial (sx.ai,"\t\n") ;
+  if (0)
+    {
+      sx.ai = aceInCreate (sx.inFileName, sx.gzi, h) ;
+      aceInSpecial (sx.ai,"\t\n") ;
+    }
   sx.ao = aceOutCreate (sx.outFileName, messprintf(".%s", sx.fileType), sx.gzo, h) ;
  
   if (0) aceOutf (sx.ao, "// %s\n", timeShowNow()) ;
@@ -1463,7 +1466,30 @@ int main (int argc, const char **argv)
 		}
 	      ac_free (sx.ai) ;
 	    }
-	  else  /* single wiggle */
+	  else if (sx.inFileOfFileList)  /* list of wiggle files */
+	    {
+	      ACEIN ai = aceInCreate (sx.inFileOfFileList, 0, h) ;
+	      if (ai)
+		{
+		  char *fNam = 0 ;
+		  while (aceInCard(ai))
+		    {
+		      while ((fNam = aceInWord (ai)))
+			{
+			  if (*fNam == '#') continue ;
+			  sx.ai = aceInCreate (fNam, sx.gzi, h) ;
+			  if (sx.ai)
+			    {
+			      aceInSpecial (sx.ai,"\t\n") ;
+			      sxWiggleParse (&sx, 0, 0) ;
+			      ac_free (sx.ai) ;
+			    }
+			}
+		    }
+		  ac_free (ai) ;
+		}
+	    }
+	  else  /* single wiggle or pipe from stdin */
 	    { 
 	      sx.ai = aceInCreate (sx.inFileName, sx.gzi, h) ;
 	      aceInSpecial (sx.ai,"\t\n") ;

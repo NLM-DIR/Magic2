@@ -123,7 +123,7 @@ typedef struct azStruct {
 AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, int bMax, AC_HANDLE h0) ; /* Write the data */
 AZZ *wigAzOpen (const char *fName, AC_HANDLE h) ;    /* Open an AZZ file, return NULL on error. */
 BOOL wigAzAt (AZZ *az, int x, unsigned int *value) ; /* Value at position x, FALSE if out of range */
-BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPos, long int *nBpp) ; /* Out of range values are just set to zero */
+BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPos, long int *nBpp, BOOL cumul) ; /* Out of range values are just set to zero */
 void azDoClose (AZZ *az) ;     /* free az */
 #define azClose(_az) {azDoClose(_az);_az=0}
 #endif
