@@ -386,7 +386,7 @@ def killing_metric(rep, chi, N):
     return Matrix(len(nums), len(nums), entry)
 
 
-def cubic_d(rep, chi):
+def cubic_d(rep, chi, N):
     """The 512 constants d_ABC = (1/6) STr(A [[B,C]]), keyed (A,B,C) over the
     canonical numbers, with [[B,C]] = B C - C B when B,C both odd else B C + C B."""    
     nums = rep.numbers()
@@ -403,7 +403,7 @@ def cubic_d(rep, chi):
                     bc = MB @ MC + MC @ MB
                 value = simplify(supertrace(chi, MA @ bc) / 2)
                 
-                d[(A, B, C)] = value
+                d[(A, B, C)] = value / N
     return d
 
 
@@ -973,7 +973,7 @@ def _casimir_report(rep, chi, N):
     print("=" * 80)
     print()
     
-    d_lower = cubic_d(rep, chi)
+    d_lower = cubic_d(rep, chi, N)
     d_upper = cubic_d_upper(d_lower, g_up)
     C3 = casimir_cubic(rep, d_upper, debug=False)
     
@@ -1130,7 +1130,7 @@ def main(a, b, N=1, casimirs=False):
         chi = Rchi(a, N)
         g_lower = killing_metric(rep, chi, N)
         g_upper = upper_killing_metric(g_lower, rep)
-        d_lower = cubic_d(rep, chi)
+        d_lower = cubic_d(rep, chi, N)
         d_upper = cubic_d_upper(d_lower, g_upper)
 
         # Non-zero metric values
@@ -1172,7 +1172,10 @@ def main(a, b, N=1, casimirs=False):
         # d_YYY = -6(a+1)(y-1)
         d_yyy_actual = simplify(d_lower[(0, 0, 0)])
         d_yyy_formula = -6 * (a + 1) * (y_val - 1)
-        d_yyy_ratio = simplify(d_yyy_actual / d_yyy_formula) if d_yyy_formula != 0 else "undef"
+        if d_yyy_formula == 0:
+            d_yyy_ratio = 1 if d_yyy_actual == 0 else "undef"
+        else:
+            d_yyy_ratio = simplify(d_yyy_actual / d_yyy_formula)
         mark_d = "✓" if d_yyy_ratio == 1 else "✗"
         print(f"d_YYY = {d_yyy_actual}")
         print(f"  Formula:  -6(a+1)(y-1) = {d_yyy_formula}")
@@ -1181,9 +1184,17 @@ def main(a, b, N=1, casimirs=False):
         
         # C_2 = -1/(4(a+1)) * (y+a)(y-a-2)
         c2_result = casimir_quadratic(rep, g_upper)
-        c2_actual = c2_result['eigenvalue']
+        C2_matrix = c2_result['total']
+        # For scalar case (N=1): extract eigenvalue; for Matryoshka (N>1): use diagonal element
+        if c2_result['is_scalar_multiple']:
+            c2_actual = c2_result['eigenvalue']
+        else:
+            c2_actual = simplify(C2_matrix[0, 0])  # Take first diagonal for non-scalar
         c2_formula = -Rational(1, 4*(a+1)) * (y_val + a) * (y_val - a - 2)
-        c2_ratio = simplify(c2_actual / c2_formula) if c2_formula != 0 else "undef"
+        if c2_formula == 0:
+            c2_ratio = 1 if c2_actual == 0 else "undef"
+        else:
+            c2_ratio = simplify(c2_actual / c2_formula)
         mark_c2 = "✓" if c2_ratio == 1 else "✗"
         print(f"C_2 = {c2_actual}")
         print(f"  Formula:  -1/(4(a+1))·(y+a)(y-a-2) = {c2_formula}")
@@ -1194,7 +1205,10 @@ def main(a, b, N=1, casimirs=False):
         C3 = casimir_cubic(rep, d_upper, debug=False)
         c3_actual = simplify(C3[0, 0])
         c3_formula = -Rational(1, 2*(a+1)) * c2_formula * (y_val - 1)**2
-        c3_ratio = simplify(c3_actual / c3_formula) if c3_formula != 0 else "undef"
+        if c3_formula == 0:
+            c3_ratio = 1 if c3_actual == 0 else "undef"
+        else:
+            c3_ratio = simplify(c3_actual / c3_formula)
         mark_c3 = "✓" if c3_ratio == 1 else "✗"
         print(f"C_3 = {c3_actual}")
         print(f"  Formula:  -1/(2(a+1))·C_2·(y-1)² = {c3_formula}")
