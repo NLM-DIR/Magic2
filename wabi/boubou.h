@@ -26,6 +26,8 @@ typedef struct pairGeneGroupStruct { char *nam ; unsigned int flag ;} PGG ;
 #define PGG_nu    0x20000
 #define PGG_pp    0x40000
 #define PGG_ends  0x80000
+#define PGG_runs  0x100
+#define PGG_groups  0x200
 
 
 #define PGG_uf    0x11000
@@ -154,6 +156,8 @@ static PGG pggGroups[] =
     { "Partial", PGG_pp},
     { "Cover", PGG_cover},
     { "End-ratio", PGG_endRatios},
+    { "Runs", PGG_runs},
+    { "Groups", PGG_groups},
  
     {0, 0}
   } ;

@@ -2891,6 +2891,28 @@ static void htileSolexaConvert (Htile look, BOOL force, ACEOUT ao)
 		      if (filCheckName(fNam, 0, "r"))
 			ok = TRUE ;
 		    }
+		  if (! ok)
+		    {
+		      fNam = hprintf (h, "../WIGGLERUN/%s/%s.%s.%s.az"
+				      , pnx->p
+				      , pnx->p
+				      , name(look->intMap)
+				      , suffix[j]
+				      ) ;
+		      if (filCheckName(fNam, 0, "r"))
+			ok = TRUE ;
+		    }
+		  if (! ok)
+		    {
+		      fNam = hprintf (h, "../WIGGLEGROUP/%s/%s.%s.%s.az"
+				      , pnx->p
+				      , pnx->p
+				      , name(look->intMap)
+				      , suffix[j]
+				      ) ;
+		      if (filCheckName(fNam, 0, "r"))
+			ok = TRUE ;
+		    }
 		  if (ok)
 		    {
 		      Array aa = sxGetWiggleZone (0, fNam, "az" , &(look->solexaStep), name(look->intMap), look->a1, look->a2, h) ;

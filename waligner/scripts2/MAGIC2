@@ -9841,10 +9841,17 @@ foreach chrom ($chromSetAll)
   echo "Map $chrom" >> $toto
   echo "-D Wiggle" >> $toto
   foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
-    echo "Wiggle $run tmp/SA/$run/wiggles/$run.$chrom" >>  $toto
+    if (-e tmp/SA/$run/wiggles/$run.$chrom.u.f.az) then
+      echo "Wiggle $run tmp/SA/$run/wiggles/$run.$chrom" >>  $toto
+    endif
   end
   foreach group (`cat MetaDB/$MAGIC/GroupWiggleList`)
-    echo "Wiggle $run tmp/WIGGLEGROUPS/$group.$chrom" >>  $toto
+    if (-e tmp/WIGGLERUN/$group/$group.$chrom.u.f.az) then
+      echo "Wiggle $group tmp/WIGGLERUN/$group/$group.$chrom" >>  $toto
+    endif
+    if (-e tmp/WIGGLEGROUP/$group/$group.$chrom.u.f.az) then
+      echo "Wiggle $group tmp/WIGGLEGROUP/$group/$group.$chrom" >>  $toto
+    endif
   end
   echo  >> $toto
 end
