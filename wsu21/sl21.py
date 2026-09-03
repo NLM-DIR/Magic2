@@ -37,6 +37,7 @@ Structure constants:
 
 import sys
 import argparse
+from itertools import permutations
 from collections import namedtuple
 
 from sympy import Rational, sympify, simplify
@@ -387,10 +388,7 @@ def killing_metric(rep, chi, N):
 
 def cubic_d(rep, chi):
     """The 512 constants d_ABC = (1/6) STr(A [[B,C]]), keyed (A,B,C) over the
-    canonical numbers, with [[B,C]] = B C - C B when B,C both odd else B C + C B.
-    
-    SIGN CORRECTION: flip the sign when exactly 2 of the three indices are ODD.
-    This is a necessary correction to the structure constants for superalgebra."""
+    canonical numbers, with [[B,C]] = B C - C B when B,C both odd else B C + C B."""    
     nums = rep.numbers()
     d = {}
     for A in nums:
@@ -403,12 +401,7 @@ def cubic_d(rep, chi):
                     bc = MB @ MC - MC @ MB
                 else:
                     bc = MB @ MC + MC @ MB
-                value = simplify(supertrace(chi, MA @ bc) / 6)
-                
-                # Sign correction: count ODD indices
-                num_odd = (rep.parity(A) == ODD) + (rep.parity(B) == ODD) + (rep.parity(C) == ODD)
-                if num_odd == 2:
-                    value = -value
+                value = simplify(supertrace(chi, MA @ bc) / 2)
                 
                 d[(A, B, C)] = value
     return d
@@ -520,12 +513,6 @@ CasimirCheck = namedtuple("CasimirCheck", "label ok residual")
 def casimir_cubic(rep, d_upper, debug=False):
     """Compute the cubic Casimir operator C_3 = Σ d^ABC M_A M_B M_C.
     
-    The structure constants d_ABC have been corrected (sign-flipped for 2-odd triples)
-    in cubic_d(), so here we simply compute the standard cubic form.
-    
-    WARNING: d_upper already includes the normalization factor (1/6),
-    so we do NOT apply another /6 here.
-    
     If debug=True, prints each term's contribution to C_3[0,0] and C_3[3,3].
     """
     nums = rep.numbers()
@@ -546,7 +533,7 @@ def casimir_cubic(rep, d_upper, debug=False):
     for A in nums:
         for B in nums:
             for C in nums:
-                coeff = d_upper.get((A, B, C), 0)
+                coeff = d_upper.get((A, B, C), 0)/6
                 
                 # Skip zero terms
                 if coeff == 0:
@@ -556,10 +543,10 @@ def casimir_cubic(rep, d_upper, debug=False):
                 M_A = rep[A]
                 M_B = rep[B]
                 M_C = rep[C]
-                product = M_A @ M_B @ M_C
+                product = M_C @ M_B @ M_A
                 
                 # Add this term to C_3
-                term = coeff * product
+                term = coeff * product 
                 C3 = C3 + term
                 
                 if debug:
@@ -578,7 +565,7 @@ def casimir_cubic(rep, d_upper, debug=False):
     return C3
 
 
-def casimir_commutes(rep, C2):
+def casimir_commutes(rep, C2, nam):
     """Check that the quadratic Casimir C2 commutes with every generator.
 
     Being a Casimir means exactly this: [C2, M_k] = 0 for all k. C2 is even,
@@ -604,7 +591,7 @@ def casimir_commutes(rep, C2):
     for k in rep.numbers():
         M = rep[k]
         br = C2 @ M - M @ C2                    # [C2, M_k]  (C2 even -> commutator)
-        out.append(CasimirCheck(f"[C2, {rep.title(k)}] = 0",
+        out.append(CasimirCheck(f"[{nam}, {rep.title(k)}] = 0",
                                 is_zero_matrix(br), br))
     return out
 
@@ -726,6 +713,91 @@ def upper_killing_metric(g_lower, rep):
     return Matrix(n, n, g_upper_entry)
 
 
+# -- the Gorelik anticenter element T_4 (built from N_2 and N_4) -------------
+
+# the four odd generators, in canonical order
+ODD_GENS = [U, V, W, X]
+
+
+def _perm_sign(perm):
+    """Sign (+1/-1) of a permutation given as a sequence, by inversion count
+    against ascending order (so (U,V,W,X) itself is +1)."""
+    perm = list(perm)
+    n = len(perm)
+    s = 1
+    for i in range(n):
+        for j in range(i + 1, n):
+            if perm[i] > perm[j]:
+                s = -s
+    return s
+
+
+def anticenter_N2(rep):
+    """N_2 = UV - VU + WX - XW  (ordinary matrix products of the odd gens).
+
+    U,V,W,X are u,v,w,x (canonical 4,5,6,7). Returns a Matrix (simplified)."""
+    u, v, w, x = rep[U], rep[V], rep[W], rep[X]
+    N2 = u @ v - v @ u + w @ x - x @ w
+    return N2.applyfunc(simplify)
+
+
+def anticenter_N4(rep):
+    """N_4 = fully antisymmetric sum over the four odd generators:
+
+        N_4 = Σ_{σ ∈ S_4} sign(σ) · M_{σ(1)} M_{σ(2)} M_{σ(3)} M_{σ(4)}
+
+    where σ permutes (u, v, w, x): 24 signed quartic matrix products. Returns a
+    Matrix (simplified)."""
+    d = rep.dim
+    N4 = Matrix.zero(d, d)
+    for perm in permutations(ODD_GENS):
+        s = _perm_sign(perm)
+        prod = rep[perm[0]] @ rep[perm[1]] @ rep[perm[2]] @ rep[perm[3]]
+        N4 = N4 + s * prod
+    return N4.applyfunc(simplify)
+
+
+def anticenter_T(rep):
+    """T = N_4 - N_2."""
+    N2 = anticenter_N2(rep)
+    N4 = anticenter_N4(rep)
+    return (N4 - N2).applyfunc(simplify)
+
+
+# One reported T relation: its label, whether it holds, and the leftover.
+TCheck = namedtuple("TCheck", "label ok residual")
+
+
+def anticenter_relations(rep, T):
+    """T must commute with every even generator and anticommute with every odd
+    one -- checked NUMERICALLY on the full matrices, never theorized.
+
+    For each generator g:
+        even g:  [T, g] = T g - g T   must be the zero matrix
+        odd  g:  {T, g} = T g + g T   must be the zero matrix
+
+    This is the odd-element behaviour (same shape as the chi relations): T's
+    super-bracket with g is a commutator when g is even and an anticommutator
+    when g is odd. Zero-testing goes through is_zero_scalar (invariant 4).
+    Returns a list of TCheck records -- data only, never printed."""
+    def is_zero_matrix(M):
+        return all(is_zero_scalar(M[i, j])
+                   for i in range(M.rows) for j in range(M.cols))
+
+    out = []
+    for k in rep.numbers():
+        M = rep[k]
+        if rep.parity(k) == ODD:
+            br = T @ M + M @ T                      # {T, odd}
+            op, cl = "{", "}"
+        else:
+            br = T @ M - M @ T                      # [T, even]
+            op, cl = "[", "]"
+        out.append(TCheck(f"{op}T, {rep.title(k)}{cl} = 0",
+                          is_zero_matrix(br), br))
+    return out
+
+
 # -- 3. verification ---------------------------------------------------------
 
 def verify(rep, f=f):
@@ -788,73 +860,9 @@ def _null_label(rep, i, j):
     return f"{lhs} = 0"
 
 
-def main(a, b, N=1):
-    rep = Rmatryoshka(a, b, N)
-
-    y = Rational(a + b, 2)
-    if N == 1:
-        print(f"sl(2|1) Kac module R(a={a}, b={b})  [y={y}]   "
-              f"(dimension {rep.dim} = 4(a+1))")
-    else:
-        print(f"sl(2|1) Matryoshka indecomposable rep MR(a={a}, b={b}, N={N})  "
-              f"[y={y}]   (dimension {rep.dim} = {N}*4(a+1))")
-    print("=" * 46, "\n")
-
-    for num in rep.numbers():
-        _show_matrix(f"{rep.title(num)}  (#{num})", rep[num])
-
-    print("Nonzero (super-)brackets to verify:")
-    for (i, j), terms in INDEPENDENT.items():
-        print("    " + _bracket(rep, i, j, terms))
-    print()
-
-    nulls = _null_pairs(rep)
-    print("Null (super-)brackets to verify (must vanish):")
-    for (i, j) in nulls:
-        print("    " + _null_label(rep, i, j))
-    print()
-
-    n_pairs = len(INDEPENDENT) + len(nulls)
-    print(f"Coverage: all {n_pairs} canonical pairs i<=j checked "
-          f"({len(INDEPENDENT)} nonzero + {len(nulls)} null); "
-          f"reversed pairs follow by graded antisymmetry.")
-    print()
-
-    residuals = verify(rep)
-    if not residuals:
-        print("All sl(2|1) relations verified (nonzero and null). \u2713")
-    else:
-        print(f"{len(residuals)} relation(s) FAILED:\n")
-        for r in residuals:
-            op, cl = ("{", "}") if (PARITY[r.i] == ODD and PARITY[r.j] == ODD) \
-                else ("[", "]")
-            print(f"    {op}{r.title_i}, {r.title_j}{cl} residual =")
-            print(r.matrix)
-            print()
-
-    # -- the grading operator chi --------------------------------------------
-    print()
-    chi = Rchi(a, N)
-    _show_matrix("chi  (grading operator: -1,+1,+1,-1 per layer)", chi)
-
-    print("Grading-operator relations to verify "
-          "([chi,even]=0, {chi,odd}=0, chi^2=1):")
-    chi_checks = chi_relations(rep, chi)
-    for c in chi_checks:
-        mark = "\u2713" if c.ok else "FAILED"
-        print(f"    {c.label:<16} {mark}")
-    print()
-
-    if all(c.ok for c in chi_checks):
-        print("chi commutes with the even generators and anticommutes with the "
-              "odd ones, and chi^2 = 1. \u2713")
-    else:
-        for c in chi_checks:
-            if not c.ok:
-                print(f"    {c.label} residual =")
-                print(c.residual)
-                print()
-
+def _casimir_report(rep, chi, N):
+    """Killing metric + quadratic/cubic Casimir constructors and their
+    commutation checks. Only run when --casimirs is given."""
     # -- the lower-index Killing metric --------------------------------------
     print()
     g = killing_metric(rep, chi, N)
@@ -943,7 +951,7 @@ def main(a, b, N=1):
     # test in that regime.
     print()
     print("Testing that C_2 commutes with every generator: [C_2, M_k] = 0")
-    casimir_checks = casimir_commutes(rep, c2_result['total'])
+    casimir_checks = casimir_commutes(rep, c2_result['total'],"C2")
     for c in casimir_checks:
         mark = "\u2713" if c.ok else "FAILED"
         print(f"    {c.label:<16} {mark}")
@@ -974,18 +982,19 @@ def main(a, b, N=1):
     print()
     
     # Check if C_3 is diagonal
-    C3_diag_00 = simplify(C3[0, 0])
-    C3_diag_33 = simplify(C3[3, 3]) if C3.rows > 3 else 0
-    diff = simplify(C3_diag_00 - C3_diag_33)
-    
-    print(f"C_3[0,0] = {C3_diag_00}")
-    print(f"C_3[3,3] = {C3_diag_33}")
-    print(f"Difference = {diff}")
-    print()
+    if (0):
+        C3_diag_00 = simplify(C3[0, 0])
+        C3_diag_33 = simplify(C3[3, 3]) if C3.rows > 3 else 0
+        diff = simplify(C3_diag_00 - C3_diag_33)
+        
+        print(f"C_3[0,0] = {C3_diag_00}")
+        print(f"C_3[3,3] = {C3_diag_33}")
+        print(f"Difference = {diff}")
+        print()
     
     # Test that C_3 commutes with all generators
     print("Testing that C_3 commutes with every generator: [C_3, M_k] = 0")
-    c3_checks = casimir_commutes(rep, C3)
+    c3_checks = casimir_commutes(rep, C3,"C3")
     for c in c3_checks:
         mark = "\u2713" if c.ok else "FAILED"
         print(f"    {c.label:<16} {mark}")
@@ -998,6 +1007,167 @@ def main(a, b, N=1):
                 print(f"    {c.label} residual =")
                 print(c.residual)
                 print()
+
+
+
+def main(a, b, N=1, casimirs=False):
+    rep = Rmatryoshka(a, b, N)
+
+    y = Rational(a + b, 2)
+    if N == 1:
+        print(f"sl(2|1) Kac module R(a={a}, b={b})  [y={y}]   "
+              f"(dimension {rep.dim} = 4(a+1))")
+    else:
+        print(f"sl(2|1) Matryoshka indecomposable rep MR(a={a}, b={b}, N={N})  "
+              f"[y={y}]   (dimension {rep.dim} = {N}*4(a+1))")
+    print("=" * 46, "\n")
+
+    for num in rep.numbers():
+        _show_matrix(f"{rep.title(num)}  (#{num})", rep[num])
+
+    print("Nonzero (super-)brackets to verify:")
+    for (i, j), terms in INDEPENDENT.items():
+        print("    " + _bracket(rep, i, j, terms))
+    print()
+
+    nulls = _null_pairs(rep)
+    print("Null (super-)brackets to verify (must vanish):")
+    for (i, j) in nulls:
+        print("    " + _null_label(rep, i, j))
+    print()
+
+    n_pairs = len(INDEPENDENT) + len(nulls)
+    print(f"Coverage: all {n_pairs} canonical pairs i<=j checked "
+          f"({len(INDEPENDENT)} nonzero + {len(nulls)} null); "
+          f"reversed pairs follow by graded antisymmetry.")
+    print()
+
+    residuals = verify(rep)
+    if not residuals:
+        print("All sl(2|1) relations verified (nonzero and null). \u2713")
+    else:
+        print(f"{len(residuals)} relation(s) FAILED:\n")
+        for r in residuals:
+            op, cl = ("{", "}") if (PARITY[r.i] == ODD and PARITY[r.j] == ODD) \
+                else ("[", "]")
+            print(f"    {op}{r.title_i}, {r.title_j}{cl} residual =")
+            print(r.matrix)
+            print()
+
+    # -- the grading operator chi --------------------------------------------
+    print()
+    chi = Rchi(a, N)
+    _show_matrix("chi  (grading operator: -1,+1,+1,-1 per layer)", chi)
+
+    print("Grading-operator relations to verify "
+          "([chi,even]=0, {chi,odd}=0, chi^2=1):")
+    chi_checks = chi_relations(rep, chi)
+    for c in chi_checks:
+        mark = "\u2713" if c.ok else "FAILED"
+        print(f"    {c.label:<16} {mark}")
+    print()
+
+    if all(c.ok for c in chi_checks):
+        print("chi commutes with the even generators and anticommutes with the "
+              "odd ones, and chi^2 = 1. \u2713")
+    else:
+        for c in chi_checks:
+            if not c.ok:
+                print(f"    {c.label} residual =")
+                print(c.residual)
+                print()
+
+    if casimirs:
+        _casimir_report(rep, chi, N)
+
+    if casimirs:
+        # -- the Gorelik anticenter element T_4: N_2 and N_4 ---------------------
+        print()
+        print("=" * 80)
+        print("Gorelik anticenter T_4:  N_2 then N_4  (compare by eye)")
+        print("=" * 80)
+        print()
+
+        N2 = anticenter_N2(rep)
+        print("N_2 = UV - VU + WX - XW =")
+        print(N2)
+        print()
+
+        N4 = anticenter_N4(rep)
+        print("N_4 = Σ_σ sign(σ) (u v w x permuted), fully antisymmetric =")
+        print(N4)
+        print()
+
+        T = (N4 - N2).applyfunc(simplify)
+        print("T = N_4 - N_2 =")
+        print(T)
+        print()
+
+        print("Anticenter relations to verify numerically "
+              "([T,even]=0, {T,odd}=0):")
+        t_checks = anticenter_relations(rep, T)
+        for c in t_checks:
+            mark = "\u2713" if c.ok else "FAILED"
+            print(f"    {c.label:<16} {mark}")
+        print()
+        if all(c.ok for c in t_checks):
+            print("T commutes with all even generators and anticommutes with all "
+                  "odd ones. \u2713")
+        else:
+            for c in t_checks:
+                if not c.ok:
+                    print(f"    {c.label} residual =")
+                    print(c.residual)
+                    print()
+
+        # -- Export data for analytic formula discovery -----
+        print()
+        print("=" * 80)
+        print("EXPORT: Non-zero metric elements, d_YYY, STr(N_4)")
+        print("=" * 80)
+        print()
+
+        chi = Rchi(a, N)
+        g_lower = killing_metric(rep, chi, N)
+        g_upper = upper_killing_metric(g_lower, rep)
+        d_lower = cubic_d(rep, chi)
+
+        # Non-zero metric values
+        print(f"Non-zero metric values (lower index):")
+        metric_entries = []
+        for i in range(8):
+            for j in range(i, 8):
+                val = g_lower[i, j]
+                if val != 0:
+                    metric_entries.append((i, j, val))
+                    titles = ['Y', 'e', 'f', 'h', 'u', 'v', 'w', 'x']
+                    print(f"  g_{{{titles[i]}{titles[j]}}} = {val}")
+        if not metric_entries:
+            print("  (all zero)")
+        print()
+
+        print(f"Non-zero metric values (upper index):")
+        metric_entries_up = []
+        for i in range(8):
+            for j in range(i, 8):
+                val = g_upper[i, j]
+                if val != 0:
+                    metric_entries_up.append((i, j, val))
+                    titles = ['Y', 'e', 'f', 'h', 'u', 'v', 'w', 'x']
+                    print(f"  g^{{{titles[i]}{titles[j]}}} = {val}")
+        if not metric_entries_up:
+            print("  (all zero)")
+        print()
+
+        # d_YYY (cubic d constant for (Y, Y, Y))
+        d_yyy = simplify(d_lower[(0, 0, 0)])
+        print(f"Cubic d constant d_YYY = d_{{Y,Y,Y}} = {d_yyy}")
+        print()
+
+        # STr(N_4)
+        e = simplify(supertrace(chi, N4))
+        print(f"STr(N_4) = {e}")
+        print()
 
 
 def _build_parser():
@@ -1031,6 +1201,11 @@ def _build_parser():
         help="number of layers of a Matryoshka indecomposable representation "
              "with N layers (positive integer < 5; default 1 = plain R(a,b))",
     )
+    parser.add_argument(
+        "--casimirs", action="store_true",
+        help="also build and check the Killing metric and the quadratic and "
+             "cubic Casimir operators (slower; off by default)",
+    )
     return parser
 
 
@@ -1052,4 +1227,4 @@ if __name__ == "__main__":
     if not (1 <= N <= 4):
         parser.error("N must be a positive integer smaller than 5")
 
-    main(a, b, N)
+    main(a, b, N, casimirs=args.casimirs)
