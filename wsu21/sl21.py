@@ -385,6 +385,51 @@ def killing_metric(rep, chi, N):
     return Matrix(len(nums), len(nums), entry)
 
 
+def cubic_d(rep, chi):
+    """The 512 constants d_ABC = (1/6) STr(A [[B,C]]), keyed (A,B,C) over the
+    canonical numbers, with [[B,C]] = B C - C B when B,C both odd else B C + C B."""
+    nums = rep.numbers()
+    d = {}
+    for A in nums:
+        MA = rep[A]
+        for B in nums:
+            MB = rep[B]
+            for C in nums:
+                MC = rep[C]
+                if rep.parity(B) == ODD and rep.parity(C) == ODD:
+                    bc = MB @ MC - MC @ MB
+                else:
+                    bc = MB @ MC + MC @ MB
+                d[(A, B, C)] = simplify(supertrace(chi, MA @ bc) / 6)
+    return d
+
+
+def cubic_d_upper(d_lower, g_upper):
+    """The 512 upper-index constants d^ABC = g^AA' g^BB' g^CC' d_A'B'C',
+    keyed (A,B,C) over the canonical numbers."""
+    nums = range(8)
+    d_up = {}
+    for A in nums:
+        for B in nums:
+            for C in nums:
+                total = 0
+                for Ap in nums:
+                    gA = g_upper[A, Ap]
+                    if gA == 0:
+                        continue
+                    for Bp in nums:
+                        gB = g_upper[B, Bp]
+                        if gB == 0:
+                            continue
+                        for Cp in nums:
+                            gC = g_upper[C, Cp]
+                            if gC == 0:
+                                continue
+                            total += gA * gB * gC * d_lower[(Ap, Bp, Cp)]
+                d_up[(A, B, C)] = simplify(total)
+    return d_up
+
+
 def casimir_quadratic(rep, g_upper):
     """Compute the quadratic Casimir operator C_2 = (1/2) g^{AB} M_A M_B.
     
@@ -455,6 +500,42 @@ def casimir_quadratic(rep, g_upper):
         'is_scalar_multiple': is_scalar_multiple,
         'eigenvalue': eigenvalue
     }
+
+
+# One reported Casimir-commutation relation: generator label, whether the
+# bracket vanished, and the leftover matrix.
+CasimirCheck = namedtuple("CasimirCheck", "label ok residual")
+
+
+def casimir_commutes(rep, C2):
+    """Check that the quadratic Casimir C2 commutes with every generator.
+
+    Being a Casimir means exactly this: [C2, M_k] = 0 for all k. C2 is even,
+    so its super-bracket with any generator -- even OR odd -- is the ordinary
+    commutator C2 @ M_k - M_k @ C2 (the graded sign (-1)^(|C2||M_k|) is +1
+    because |C2| = 0). So no anticommutator ever arises here.
+
+    For N = 1, C2 is a scalar multiple of the identity (Schur on the irrep),
+    so commutation is automatic; the check is trivially satisfied. For the
+    Matryoshka N > 1 the module is indecomposable, C2 acquires an off-diagonal
+    (nilpotent) part and is no longer scalar -- yet a true Casimir must still
+    commute with every generator. That is the substantive content here, and the
+    proper N > 1 replacement for the ``is_scalar_multiple`` test.
+
+    Returns a list of CasimirCheck records -- data only, never printed.
+    Zero-testing goes through is_zero_scalar (invariant 4), same policy as
+    check() and chi_relations()."""
+    def is_zero_matrix(M):
+        return all(is_zero_scalar(M[i, j])
+                   for i in range(M.rows) for j in range(M.cols))
+
+    out = []
+    for k in rep.numbers():
+        M = rep[k]
+        br = C2 @ M - M @ C2                    # [C2, M_k]  (C2 even -> commutator)
+        out.append(CasimirCheck(f"[C2, {rep.title(k)}] = 0",
+                                is_zero_matrix(br), br))
+    return out
 
 
 def export_metrics(rep, chi, N, g_lower=None, g_upper=None):
@@ -767,20 +848,43 @@ def main(a, b, N=1):
               f"{c2_result['eigenvalue']}")
     else:
         print("✗ C_2 is NOT a scalar multiple of identity")
-        # Show some off-diagonal elements
+        # Show a few nonzero off-diagonal elements. For the Matryoshka these
+        # live in the [i, i+d] block band (d = 4(a+1)), not the top-left
+        # corner, so scan the whole matrix rather than a fixed 4x4 window.
         C2 = c2_result['total']
-        print("  Some off-diagonal elements:")
-        count = 0
-        for i in range(min(4, C2.rows)):
-            for j in range(i+1, min(4, C2.cols)):
-                val = simplify(C2[i, j])
-                if val != 0:
-                    print(f"    C_2[{i},{j}] = {val}")
-                    count += 1
-                    if count >= 3:
-                        break
-            if count >= 3:
+        found = []
+        for i in range(C2.rows):
+            for j in range(C2.cols):
+                if i != j and simplify(C2[i, j]) != 0:
+                    found.append((i, j, C2[i, j]))
+                    break                          # one per row is enough
+            if len(found) >= 3:
                 break
+        if found:
+            print("  Some nonzero off-diagonal elements:")
+            for i, j, val in found:
+                print(f"    C_2[{i},{j}] = {val}")
+
+    # -- C_2 commutes with every generator (the defining Casimir property) ---
+    # Being scalar is sufficient but not necessary: for N > 1 the Matryoshka
+    # C_2 is not proportional to the identity (it is not block-diagonal), yet a
+    # genuine Casimir must still commute with all generators. This is the real
+    # test in that regime.
+    print()
+    print("Testing that C_2 commutes with every generator: [C_2, M_k] = 0")
+    casimir_checks = casimir_commutes(rep, c2_result['total'])
+    for c in casimir_checks:
+        mark = "\u2713" if c.ok else "FAILED"
+        print(f"    {c.label:<16} {mark}")
+    print()
+    if all(c.ok for c in casimir_checks):
+        print("C_2 commutes with all generators: it is a Casimir operator. \u2713")
+    else:
+        for c in casimir_checks:
+            if not c.ok:
+                print(f"    {c.label} residual =")
+                print(c.residual)
+                print()
 
 
 def _build_parser():

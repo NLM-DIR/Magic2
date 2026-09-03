@@ -14,9 +14,9 @@ if ($?wiggle_step) then
 endif
 
 
-# check that all runs are available
+# check that all runs are available   
   foreach uu (u nu pp)
-    foreach fr (f r  ELF ELR ERF ERR)
+    foreach fr (f r ELF ELR ERF ERR)
       if (-e $out/$fr.$uu.chrom.list) \rm  $out/$fr.$uu.chrom.list
       touch $out/$fr.$uu.chrom.list
       set ok=0
@@ -30,15 +30,16 @@ endif
             if ($drop == 1) continue 
           endif
 	endif
+        set out2=tmp/$WRG/$group/$group.$chrom.$uu.$fr
 	set BBB=tmp/SA/$run/wiggles/$run.$chrom.$uu.$fr.az
         if (-e $BBB) then
-          echo $BBB >>   $out/$fr.$uu.chrom.list
+          echo $BBB >>  $out2.chrom.list
             set ok=1
 	  endif
         endif
 	set BBB=tmp/WIGGLERUN/$run.$chrom.$uu.$fr.az
         if (-e $BBB) then
-          echo $BBB >>   $out/$fr.$uu.chrom.list
+          echo $BBB >>   $out2.chrom.list
             set ok=1
 	  endif
         endif
@@ -46,8 +47,7 @@ endif
       echo "ok=$ok uu=$uu $fr"
       if ($ok == 1) then
           # contruct the combined wiggles
-        set out2=tmp/$WRG/$group/$group.$chrom.$uu.$fr
-	bin/wiggle -f $out/$fr.$uu.chrom.list -I AZ -O AZ $out_step  -o $out2 -cumul >&   $out/R.genes.$uu.$fr.cumul
+	bin/wiggle -f $out2.chrom.list -I AZ -O AZ $out_step  -o $out2 -cumul >&   $out/R.genes.$uu.$fr.cumul
       endif
     end
   end
