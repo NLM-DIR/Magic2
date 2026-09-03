@@ -387,7 +387,10 @@ def killing_metric(rep, chi, N):
 
 def cubic_d(rep, chi):
     """The 512 constants d_ABC = (1/6) STr(A [[B,C]]), keyed (A,B,C) over the
-    canonical numbers, with [[B,C]] = B C - C B when B,C both odd else B C + C B."""
+    canonical numbers, with [[B,C]] = B C - C B when B,C both odd else B C + C B.
+    
+    SIGN CORRECTION: flip the sign when exactly 2 of the three indices are ODD.
+    This is a necessary correction to the structure constants for superalgebra."""
     nums = rep.numbers()
     d = {}
     for A in nums:
@@ -400,7 +403,14 @@ def cubic_d(rep, chi):
                     bc = MB @ MC - MC @ MB
                 else:
                     bc = MB @ MC + MC @ MB
-                d[(A, B, C)] = simplify(supertrace(chi, MA @ bc) / 6)
+                value = simplify(supertrace(chi, MA @ bc) / 6)
+                
+                # Sign correction: count ODD indices
+                num_odd = (rep.parity(A) == ODD) + (rep.parity(B) == ODD) + (rep.parity(C) == ODD)
+                if num_odd == 2:
+                    value = -value
+                
+                d[(A, B, C)] = value
     return d
 
 
@@ -505,6 +515,67 @@ def casimir_quadratic(rep, g_upper):
 # One reported Casimir-commutation relation: generator label, whether the
 # bracket vanished, and the leftover matrix.
 CasimirCheck = namedtuple("CasimirCheck", "label ok residual")
+
+
+def casimir_cubic(rep, d_upper, debug=False):
+    """Compute the cubic Casimir operator C_3 = Σ d^ABC M_A M_B M_C.
+    
+    The structure constants d_ABC have been corrected (sign-flipped for 2-odd triples)
+    in cubic_d(), so here we simply compute the standard cubic form.
+    
+    WARNING: d_upper already includes the normalization factor (1/6),
+    so we do NOT apply another /6 here.
+    
+    If debug=True, prints each term's contribution to C_3[0,0] and C_3[3,3].
+    """
+    nums = rep.numbers()
+    d = rep.dim
+    titles = ['Y', 'e', 'f', 'h', 'u', 'v', 'w', 'x']
+    
+    # Initialize C_3 to zero matrix
+    C3 = Matrix.zero(d, d)
+    
+    if debug:
+        print("CASIMIR C_3 CUMULATIVE BUILD (debug=True):")
+        print("FORMULA: C_3 = Σ d^ABC M_A M_B M_C (with sign-corrected d^ABC)")
+        print("=" * 160)
+        print(f"{'Triple':<12} {'d^ABC':<15} {'Prod[0,0]':<18} {'Prod[3,3]':<18} {'C3[0,0] after':<20} {'C3[3,3] after':<20} {'Diff [0,0]-[3,3]':<20}")
+        print("=" * 160)
+    
+    # Sum over all d^ABC terms
+    for A in nums:
+        for B in nums:
+            for C in nums:
+                coeff = d_upper.get((A, B, C), 0)
+                
+                # Skip zero terms
+                if coeff == 0:
+                    continue
+                
+                # Compute M_A @ M_B @ M_C
+                M_A = rep[A]
+                M_B = rep[B]
+                M_C = rep[C]
+                product = M_A @ M_B @ M_C
+                
+                # Add this term to C_3
+                term = coeff * product
+                C3 = C3 + term
+                
+                if debug:
+                    triple_label = f"{titles[A]}{titles[B]}{titles[C]}"
+                    prod_00 = product[0, 0]
+                    prod_33 = product[3, 3]
+                    c3_00 = C3[0, 0]
+                    c3_33 = C3[3, 3]
+                    diff = c3_00 - c3_33
+                    print(f"{triple_label:<12} {str(coeff):<15} {str(prod_00):<18} {str(prod_33):<18} {str(c3_00):<20} {str(c3_33):<20} {str(diff):<20}")
+    
+    if debug:
+        print("=" * 160)
+        print()
+    
+    return C3
 
 
 def casimir_commutes(rep, C2):
@@ -881,6 +952,48 @@ def main(a, b, N=1):
         print("C_2 commutes with all generators: it is a Casimir operator. \u2713")
     else:
         for c in casimir_checks:
+            if not c.ok:
+                print(f"    {c.label} residual =")
+                print(c.residual)
+                print()
+
+    # -- the cubic Casimir operator C_3 -----------------------------------------------
+    print()
+    print("=" * 80)
+    print("Cubic Casimir operator: C_3 = Σ d^ABC M_A M_B M_C")
+    print("(with sign correction for 2-odd triples in d_ABC)")
+    print("=" * 80)
+    print()
+    
+    d_lower = cubic_d(rep, chi)
+    d_upper = cubic_d_upper(d_lower, g_up)
+    C3 = casimir_cubic(rep, d_upper, debug=False)
+    
+    print("C_3 total =")
+    print(C3)
+    print()
+    
+    # Check if C_3 is diagonal
+    C3_diag_00 = simplify(C3[0, 0])
+    C3_diag_33 = simplify(C3[3, 3]) if C3.rows > 3 else 0
+    diff = simplify(C3_diag_00 - C3_diag_33)
+    
+    print(f"C_3[0,0] = {C3_diag_00}")
+    print(f"C_3[3,3] = {C3_diag_33}")
+    print(f"Difference = {diff}")
+    print()
+    
+    # Test that C_3 commutes with all generators
+    print("Testing that C_3 commutes with every generator: [C_3, M_k] = 0")
+    c3_checks = casimir_commutes(rep, C3)
+    for c in c3_checks:
+        mark = "\u2713" if c.ok else "FAILED"
+        print(f"    {c.label:<16} {mark}")
+    print()
+    if all(c.ok for c in c3_checks):
+        print("C_3 commutes with all generators: it is a Casimir operator. \u2713")
+    else:
+        for c in c3_checks:
             if not c.ok:
                 print(f"    {c.label} residual =")
                 print(c.residual)
