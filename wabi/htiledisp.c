@@ -107,6 +107,7 @@ typedef struct HtileStruct {
   int tmFilter, exonicFilter, smoothing, ratio, ends ;
   int filter99, doMask, isMasked ;
   BOOL showGenome, showGenes, showGeneSignal, showCaptureProbes, showMask, showRZones ;
+  BOOL showRuns, showGroups, showClosedRuns ;
   int romainSmoothing ;
   float zoom ;
   int gaussWidth ;
@@ -2969,8 +2970,13 @@ static void htileDrawSolexa (Htile look, float offset, float probeOffset, ACEOUT
       np1 = 0 ; yy = offset ; oldx = -1 ;
       if (!pnx->signal) continue ;
       if (look->isSolexaClosed[ns]) continue ;
+      if (
+	  (!look->showRuns && !(pnx->flag & PGG_isGroup)) ||
+	  (!look->showGroups && (pnx->flag & PGG_isGroup))
+	  )
+	continue ;
 
-      if (!ao)
+      if (!ao) 
 	graphColor (pnx->col) ;
       else
 	aceOutf (ao, "\n%d", look->map->a1 + slx->a1 - 1) ;
@@ -3262,10 +3268,13 @@ static void htileDrawTileButtons (Htile look, float *offsetp)
       ccp =  look->ratio ? pns->nam2 : pns->nam ;
       if (*ccp == '.') continue ; 
       if (look->isClosed[ns] == 1) continue ;
+      if (!look->showClosedRuns && look->isClosed[ns] == 1) continue ;
+      if (!look->showRuns && !(pnx->flag & PGG_isGroup)) continue ;
+      if (!look->showGroups && (pnx->flag & PGG_isGroup)) continue ;
       bb[nt1].f = htileButtonAction ; 
       bb[nt1].text = ccp ;
       bb[nt1].fg = (int)BLACK ;
-      bb[nt1].bg = look->isClosed[ns] ? PALEGRAY : pnsAll[ns].col ;
+      bb[nt1].bg = look->isClosed[ns] ? LIGHTBLUE : pnsAll[ns].col ;
       bb[nt1].arg = assVoid (ns) ;
       bb[nt1].next = 0 ;
       nt1++ ;
@@ -3278,7 +3287,9 @@ static void htileDrawTileButtons (Htile look, float *offsetp)
 	continue ;
       ccp =  pnx->nam ;
       if (*ccp == '.') continue ;
-      if (look->isSolexaClosed[nt] == 1) continue ;
+      if (!look->showClosedRuns && look->isSolexaClosed[nt] == 1) continue ;
+      if (!look->showRuns && !(pnx->flag & PGG_isGroup)) continue ;
+      if (!look->showGroups && (pnx->flag & PGG_isGroup)) continue ;
       bb[nt1].f = htileSolexaButtonAction ;  
       bb[nt1].text = ccp ;
       bb[nt1].fg = (int)BLACK ;
@@ -4414,6 +4425,38 @@ static void htileGenomeAction (void *v)
   look->map->mapDraw () ;
 } /*  htileGenomeAction */
 
+/************************************************************/
+
+static void htileRunGroupAction (void *v)
+{
+  int ns = assInt (v) ;
+  HTYPE *tt ;
+  Htile look = currentHtile("htileFilterProbes") ;
+
+  switch (ns)
+    {
+    case 0x1:
+      look0->showRuns = look->showRuns = FALSE ;
+      break ;
+    case 0x2:
+      look0->showRuns = look->showRuns = TRUE ;
+      break ;
+    case 0x10:
+      look0->showGroups = look->showGroups = FALSE ;
+      break ;
+    case 0x20:
+      look0->showGroups = look->showGroups = TRUE ;
+      break ;
+    case 0x100:
+      look0->showClosedRuns = look->showClosedRuns = FALSE ;
+      break ;
+    case 0x200:
+      look0->showClosedRuns = look->showClosedRuns = TRUE ;
+      break ;
+    }
+  look->map->mapDraw () ;
+} /*  htileRunGroupAction */
+
 static void htileDrawGenomeButtons (Htile look, float *offsetp)
 {
   COLOUROPT bb[NSMAX] ;
@@ -4455,6 +4498,31 @@ static void htileDrawGenomeButtons (Htile look, float *offsetp)
 	bb[ns].next = 0 ;
 	ns++ ;
       }
+	  
+
+  bb[ns].f = htileRunGroupAction ;
+  bb[ns].text = look->showRuns ? "close run tracks" : "open run tracks" ;
+  bb[ns].fg = BLACK ;
+  bb[ns].bg = PALEGREEN ;
+  bb[ns].arg = look->showRuns ? assVoid(0x1) : assVoid(0x2) ;
+  bb[ns].next = 0 ;
+  ns++ ;
+
+  bb[ns].f = htileRunGroupAction ;
+  bb[ns].text = look->showGroups ? "close group tracks" : "open group tracks" ;
+  bb[ns].fg = BLACK ;
+  bb[ns].bg = PALEGREEN ;
+  bb[ns].arg = look->showGroups ? assVoid(0x10) : assVoid(0x20) ;
+  bb[ns].next = 0 ;
+  ns++ ;
+	  
+  bb[ns].f = htileRunGroupAction ;
+  bb[ns].text = look->showClosedRuns ? "close closed runs" : "open closed runs" ;
+  bb[ns].fg = BLACK ;
+  bb[ns].bg = PALEGREEN ;
+  bb[ns].arg = look->showClosedRuns ? assVoid(0x100) : assVoid(0x200) ;
+  bb[ns].next = 0 ;
+  ns++ ;
 	  
   bb[ns].text = 0 ;
   graphColouredButtons (bb, 2, offsetp, look->map->graphWidth) ;
@@ -6416,6 +6484,7 @@ static BOOL solexaAllInit (Htile look)
 	     if (keyFindTag (run, _RNA)) pnx->flag |= PGG_rna ;
 	     if (keyFindTag (run, _Total)) pnx->flag |= PGG_TOTAL ;
 	     if (keyFindTag (run, _Cap)) pnx->flag |= PGG_CAP ;
+	     if (keyFindTag (run, str2tag("Union_of"))) pnx->flag |= PGG_isGroup ;
 	     
 	     pnx->s99 = 1 ;
 	     if ( 

@@ -1172,10 +1172,7 @@ def main(a, b, N=1, casimirs=False):
         # d_YYY = -6(a+1)(y-1)
         d_yyy_actual = simplify(d_lower[(0, 0, 0)])
         d_yyy_formula = -6 * (a + 1) * (y_val - 1)
-        if d_yyy_formula == 0:
-            d_yyy_ratio = 1 if d_yyy_actual == 0 else "undef"
-        else:
-            d_yyy_ratio = simplify(d_yyy_actual / d_yyy_formula)
+        d_yyy_ratio = simplify(d_yyy_actual / d_yyy_formula) if d_yyy_formula != 0 else "undef"
         mark_d = "✓" if d_yyy_ratio == 1 else "✗"
         print(f"d_YYY = {d_yyy_actual}")
         print(f"  Formula:  -6(a+1)(y-1) = {d_yyy_formula}")
@@ -1184,17 +1181,9 @@ def main(a, b, N=1, casimirs=False):
         
         # C_2 = -1/(4(a+1)) * (y+a)(y-a-2)
         c2_result = casimir_quadratic(rep, g_upper)
-        C2_matrix = c2_result['total']
-        # For scalar case (N=1): extract eigenvalue; for Matryoshka (N>1): use diagonal element
-        if c2_result['is_scalar_multiple']:
-            c2_actual = c2_result['eigenvalue']
-        else:
-            c2_actual = simplify(C2_matrix[0, 0])  # Take first diagonal for non-scalar
+        c2_actual = c2_result['eigenvalue']
         c2_formula = -Rational(1, 4*(a+1)) * (y_val + a) * (y_val - a - 2)
-        if c2_formula == 0:
-            c2_ratio = 1 if c2_actual == 0 else "undef"
-        else:
-            c2_ratio = simplify(c2_actual / c2_formula)
+        c2_ratio = simplify(c2_actual / c2_formula) if c2_formula != 0 else "undef"
         mark_c2 = "✓" if c2_ratio == 1 else "✗"
         print(f"C_2 = {c2_actual}")
         print(f"  Formula:  -1/(4(a+1))·(y+a)(y-a-2) = {c2_formula}")
@@ -1205,10 +1194,7 @@ def main(a, b, N=1, casimirs=False):
         C3 = casimir_cubic(rep, d_upper, debug=False)
         c3_actual = simplify(C3[0, 0])
         c3_formula = -Rational(1, 2*(a+1)) * c2_formula * (y_val - 1)**2
-        if c3_formula == 0:
-            c3_ratio = 1 if c3_actual == 0 else "undef"
-        else:
-            c3_ratio = simplify(c3_actual / c3_formula)
+        c3_ratio = simplify(c3_actual / c3_formula) if c3_formula != 0 else "undef"
         mark_c3 = "✓" if c3_ratio == 1 else "✗"
         print(f"C_3 = {c3_actual}")
         print(f"  Formula:  -1/(2(a+1))·C_2·(y-1)² = {c3_formula}")
@@ -1226,10 +1212,92 @@ def main(a, b, N=1, casimirs=False):
         print(f"  Ratio: {t_ratio}  {mark_t}")
         print()
         
+        # T = 12 (C_3 - 2 C_2^2): the anticenter eigenvalue as a polynomial in
+        # the Casimirs, so that T^2 = 144 (C_3 - 2 C_2^2)^2 is central
+        # (Gorelik: the anticenter squares into the center). Uses the
+        # ACTUAL C_2, C_3 eigenvalues computed above, not their formulas.
+        t_casimir_formula = 12 * (c3_actual - 2 * c2_actual**2)
+        t_casimir_ratio = (simplify(t_eigenvalue / t_casimir_formula)
+                           if t_casimir_formula != 0 else "undef")
+        mark_tc = "✓" if t_casimir_ratio == 1 else "✗"
+        print(f"T = {t_eigenvalue}")
+        print(f"  Formula:  12·(C_3 - 2·C_2²) = {t_casimir_formula}")
+        print(f"  Ratio: {t_casimir_ratio}  {mark_tc}")
+        print()
+
         # STr(N_4)
         e = simplify(supertrace(chi, N4))
         print(f"STr(N_4) = {e}")
         print()
+
+
+# -- command-line argument types -------------------------------------------
+
+A_MAX = 10          # largest a accepted (dimension 4(a+1) = 44)
+N_MAX = 4           # largest Matryoshka depth accepted
+TOO_HEAVY = "valid but this would make the calculation too heavy, sorry"
+
+
+def _weight_a(s):
+    """a: a non-negative integer, at most A_MAX."""
+    try:
+        a = int(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"a must be an integer, got {s!r}") from None
+    if a < 0:
+        raise argparse.ArgumentTypeError("a must be a non-negative integer")
+    if a > A_MAX:
+        raise argparse.ArgumentTypeError(f"a = {a} is {TOO_HEAVY} (max {A_MAX})")
+    return a
+
+
+def _layers_N(s):
+    """N: a positive integer, at most N_MAX."""
+    try:
+        n = int(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"N must be an integer, got {s!r}") from None
+    if n < 1:
+        raise argparse.ArgumentTypeError("N must be a positive integer")
+    if n > N_MAX:
+        raise argparse.ArgumentTypeError(f"N = {n} is {TOO_HEAVY} (max {N_MAX})")
+    return n
+
+
+def _fraction(s):
+    """b or y: an exact rational such as 3, -2, 3/2, -7/3, (-7/3) or 1.5.
+
+    Surrounding parentheses and blanks are ignored, so that a negative fraction
+    can be written either as  -y -7/3  or  -y "(-7/3)"."""
+    text = s.strip()
+    while text.startswith("(") and text.endswith(")"):
+        text = text[1:-1].strip()
+    text = text.replace(" ", "")
+    try:
+        return Rational(text)
+    except (TypeError, ValueError, SyntaxError):
+        raise argparse.ArgumentTypeError(
+            f"expected a rational number like 3/2 or -7/3, got {s!r}") from None
+
+
+def _protect_negative_fractions(argv):
+    """Rewrite  -b -7/3  as  -b=-7/3  so argparse does not mistake the value for
+    an option; argparse already accepts plain negative integers like -7."""
+    out = []
+    skip = False
+    for i, tok in enumerate(argv):
+        if skip:
+            skip = False
+            continue
+        if tok in ("-b", "-y") and i + 1 < len(argv) \
+                and argv[i + 1].startswith("-"):
+            out.append(f"{tok}={argv[i + 1]}")
+            skip = True
+        else:
+            out.append(tok)
+    return out
 
 
 def _build_parser():
@@ -1246,22 +1314,22 @@ def _build_parser():
         ),
     )
     parser.add_argument(
-        "-a", metavar="A", type=int, required=True,
-        help="Kac-Dynkin weight a (non-negative integer)",
+        "-a", metavar="A", type=_weight_a, required=True,
+        help=f"Kac-Dynkin weight a (non-negative integer, at most {A_MAX})",
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "-b", metavar="B", type=str,
-        help="Kac-Dynkin weight b (integer or fraction, e.g. 3/2)",
+        "-b", metavar="B", type=_fraction,
+        help="Kac-Dynkin weight b (integer or fraction, e.g. 3/2 or -7/3)",
     )
     group.add_argument(
-        "-y", metavar="Y", type=str,
-        help="weight y = (a+b)/2 (integer or fraction, e.g. 3/2)",
+        "-y", metavar="Y", type=_fraction,
+        help="weight y = (a+b)/2 (integer or fraction, e.g. 3/2 or -7/3)",
     )
     parser.add_argument(
-        "-N", metavar="N", type=int, default=1,
+        "-N", metavar="N", type=_layers_N, default=1,
         help="number of layers of a Matryoshka indecomposable representation "
-             "with N layers (positive integer < 5; default 1 = plain R(a,b))",
+             f"(positive integer, at most {N_MAX}; default 1 = plain R(a,b))",
     )
     parser.add_argument(
         "--casimirs", action="store_true",
@@ -1276,17 +1344,9 @@ if __name__ == "__main__":
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(0)
-    args = parser.parse_args()
+    args = parser.parse_args(_protect_negative_fractions(sys.argv[1:]))
 
     a = args.a
-    if args.b is not None:
-        b = Rational(args.b)
-    else:
-        y = Rational(args.y)
-        b = 2 * y - a
+    b = args.b if args.b is not None else 2 * args.y - a
 
-    N = args.N
-    if not (1 <= N <= 4):
-        parser.error("N must be a positive integer smaller than 5")
-
-    main(a, b, N, casimirs=args.casimirs)
+    main(a, b, args.N, casimirs=args.casimirs)
