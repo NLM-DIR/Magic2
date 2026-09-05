@@ -26,6 +26,15 @@ operators u, w (upper-triangular), through the four reduced matrix elements
 below. Each odd block is an sl(2) doublet intertwiner in the integer basis used
 by sl2.py, so all entries stay rational.
 
+Casimirs are normalised ONCE, on the reference Kac module R(0,0) (a singlet
+plus the fundamental triplet), and the resulting fixed elements of U(g) are
+then evaluated in whatever module is asked for.  Inverting each module's own
+supertrace form would instead divide C_2 by that module's Dynkin index and C_3
+by A(R)/I(R)^3, giving a different operator per module.  See
+``reference_tensors``.  The adjoint R(1,1) cannot serve as the reference: it is
+self-conjugate, so its d-tensor vanishes identically and C_3 has no anchor
+there.
+
 Structure constants:
 
         [h,e]=2e  [h,f]=-2f  [e,f]=h
@@ -713,6 +722,78 @@ def upper_killing_metric(g_lower, rep):
     return Matrix(n, n, g_upper_entry)
 
 
+# -- the reference module and the FIXED, module-independent tensors ---------
+#
+# A Casimir is an element of U(g), not of a representation. Inverting the
+# supertrace form of whatever module happens to be on the table gives a
+# DIFFERENT operator in each module: sl(2|1) is simple, so its invariant
+# supersymmetric form is unique up to one scalar, and the module's own form is
+#
+#       g_AB(R)   = I(R) * g_AB(ref)              I(R) = Dynkin index
+#       d_ABC(R)  = A(R) * d_ABC(ref)             A(R) = anomaly coefficient
+#
+# Inverting g(R) therefore divides the Casimir by I(R) (this is the 1/(4(a+1))
+# that used to sit in front of C_2), and raising d with it divides C_3 by
+# A(R)/I(R)^3.  We fix the tensors ONCE, on the reference module, and evaluate
+# that one pair of operators in every module.
+#
+# Reference module: the Kac module R(0, 0), dimension 4 -- a singlet plus the
+# fundamental triplet.  Its form is nondegenerate and its d-tensor is nonzero,
+# which is exactly what the adjoint R(1,1) cannot offer: the adjoint is
+# self-conjugate, d_ABC changes sign under x -> -x^st, so d_ABC(adjoint) = 0
+# identically and the cubic cannot be anchored there (A(1,1) = 0 below).
+
+REF_A, REF_B = 0, 0                 # the reference module R(0,0)
+
+_REF_CACHE = {}
+
+
+def reference_tensors():
+    """The fixed tensors, computed once on R(0,0) and cached.
+
+    Returns a dict with 'g_lower', 'g_upper', 'd_lower', 'd_upper', 'rep',
+    'chi'.  g_upper and d_upper are THE structure used to define C_2 and C_3;
+    they never depend on the module being studied."""
+    if not _REF_CACHE:
+        rep = Rsl21(REF_A, REF_B)
+        chi = Rchi(REF_A, 1)
+        g_lower = killing_metric(rep, chi, 1)
+        g_upper = upper_killing_metric(g_lower, rep)
+        d_lower = cubic_d(rep, chi, 1)
+        d_upper = cubic_d_upper(d_lower, g_upper)
+        _REF_CACHE.update(rep=rep, chi=chi, g_lower=g_lower, g_upper=g_upper,
+                          d_lower=d_lower, d_upper=d_upper)
+    return _REF_CACHE
+
+
+def module_index(g_lower):
+    """The Dynkin index I(R): the single scalar with g_AB(R) = I(R) g_AB(ref).
+
+    Returns (I, failures).  ``failures`` lists any (A, B) where the module's
+    form is NOT that multiple of the reference -- it must stay empty, and that
+    it does is the whole justification for using one fixed metric."""
+    g_ref = reference_tensors()['g_lower']
+    I = simplify(g_lower[H, H] / g_ref[H, H])       # h is nonzero in every R
+    failures = []
+    for p in range(8):
+        for q in range(8):
+            if not is_zero_scalar(g_lower[p, q] - I * g_ref[p, q]):
+                failures.append((p, q))
+    return I, failures
+
+
+def module_anomaly(rep, chi, N):
+    """The anomaly coefficient A(R): the scalar with d_ABC(R) = A(R) d_ABC(ref).
+
+    Read off the cheapest component, d_YYY = STr(Y^3)/N, instead of rebuilding
+    all 512 constants.  A(R) = 0 exactly on the self-conjugate modules -- the
+    adjoint R(1,1) among them -- which is why the cubic cannot be normalised
+    there."""
+    Ym = rep[Y]
+    d_yyy = simplify(supertrace(chi, Ym @ Ym @ Ym) / N)
+    return simplify(d_yyy / reference_tensors()['d_lower'][(Y, Y, Y)])
+
+
 # -- the Gorelik anticenter element T_4 (built from N_2 and N_4) -------------
 
 # the four odd generators, in canonical order
@@ -861,82 +942,101 @@ def _null_label(rep, i, j):
 
 
 def _casimir_report(rep, chi, N):
-    """Killing metric + quadratic/cubic Casimir constructors and their
-    commutation checks. Only run when --casimirs is given."""
-    # -- the lower-index Killing metric --------------------------------------
-    print()
-    g = killing_metric(rep, chi, N)
+    """Killing metric, the normalisation against the reference module, and the
+    FIXED Casimirs C_2, C_3 with their commutation checks.
+
+    Only run when --casimirs is given.  Returns the pieces main() needs for the
+    analytic-formula section, so nothing is computed twice."""
     titles = [rep.title(k) for k in rep.numbers()]
-
-    def _row(r, cols):
-        return "(" + " ".join(f"{g[r, c]!s:>4}" for c in cols) + ")"
-
     even_c, odd_c = range(0, 4), range(4, 8)
-    print(f"Lower-index Killing metric   "
-          f"g_ab=(1/2N)STr(ab+ba), g_ij=(1/2N)STr(ij-ji),  N={N}")
-    print(f"  even [{' '.join(titles[:4])}]:  "
-          + "  ".join(_row(r, even_c) for r in range(4)))
-    print(f"  odd  [{' '.join(titles[4:])}]:  "
-          + "  ".join(_row(r, odd_c) for r in range(4, 8)))
 
-    # -- the upper-index Killing metric (inverse) ----------------------------
-    print()
-    g_up = upper_killing_metric(g, rep)
-    print(f"Upper-index Killing metric (inverse)   g^ij = (g_lower)^-1_ij")
-    
-    def _row_up(r, cols):
-        return "(" + " ".join(f"{g_up[r, c]!s:>4}" for c in cols) + ")"
-    
-    print(f"  even [{' '.join(titles[:4])}]:  "
-          + "  ".join(_row_up(r, even_c) for r in range(4)))
-    print(f"  odd  [{' '.join(titles[4:])}]:  "
-          + "  ".join(_row_up(r, odd_c) for r in range(4, 8)))
+    def _row(M, r, cols):
+        return "(" + " ".join(f"{M[r, c]!s:>6}" for c in cols) + ")"
 
-    # Test inverse property: g^ij g_jk = delta^i_k
+    def _show_form(label, M):
+        print(label)
+        print(f"  even [{' '.join(titles[:4])}]:  "
+              + "  ".join(_row(M, r, even_c) for r in range(4)))
+        print(f"  odd  [{' '.join(titles[4:])}]:  "
+              + "  ".join(_row(M, r, odd_c) for r in range(4, 8)))
+
+    # -- this module's own supertrace form -----------------------------------
     print()
-    print("Testing metric inverse property: g^ij g_jk = delta^i_k")
-    failures = verify_metric_inverse(g, g_up)
-    if not failures:
-        print("  All components verified. \u2713")
+    g_own = killing_metric(rep, chi, N)
+    _show_form(f"Lower-index supertrace form of THIS module   "
+               f"g_ab=(1/2N)STr(ab+ba), g_ij=(1/2N)STr(ij-ji),  N={N}", g_own)
+
+    # -- the reference module R(0,0) and the two normalisation numbers -------
+    print()
+    print("=" * 80)
+    print(f"Normalisation against the reference module R({REF_A},{REF_B})  "
+          f"(singlet + fundamental triplet, dim 4)")
+    print("=" * 80)
+    ref = reference_tensors()
+    g_up, d_up = ref['g_upper'], ref['d_upper']
+    print()
+    _show_form("Reference lower-index form  g_AB(ref)", ref['g_lower'])
+    print()
+    _show_form("Reference upper-index form  g^AB(ref) = g_AB(ref)^-1", g_up)
+
+    print()
+    I, bad = module_index(g_own)
+    A = module_anomaly(rep, chi, N)
+    print(f"Dynkin index         I(R) = g_AB(R) / g_AB(ref)   = {I}"
+          f"        [formula  I = mu = a+1]")
+    if bad:
+        print(f"  *** {len(bad)} component(s) are NOT that multiple: {bad[:6]}")
+        print("  *** the module's form is not proportional to the reference; "
+              "the fixed-tensor construction below is invalid.")
     else:
-        print(f"  {len(failures)} component(s) failed:")
-        for i, k, got, expected in failures:
-            print(f"    g^{titles[i]}{titles[k]} * g_{k}? should be "
-                  f"{expected}, got {got}")
-
-    # -- the quadratic Casimir operator C_2 --------------------------------
+        print("  every component of g_AB(R) is exactly I(R) times the "
+              "reference. \u2713")
+    print(f"Anomaly coefficient  A(R) = d_ABC(R) / d_ABC(ref) = {A}"
+          f"        [formula  A = -mu*lambda = -(a+1)(y-1)]")
+    if A == 0:
+        print("  A(R) = 0: this module is self-conjugate, its own d-tensor "
+              "vanishes identically.")
+        print("  (That is why the cubic Casimir cannot be anchored on the "
+              "adjoint R(1,1).)")
     print()
-    print("Quadratic Casimir operator: C_2 = (1/2) g^{AB} M_A M_B")
+    print("C_2 and C_3 below are built from the REFERENCE tensors, so they are "
+          "one fixed pair")
+    print("of elements of U(g) evaluated here -- not this module's own "
+          "inverse form.")
+
+    # -- the quadratic Casimir operator C_2 ----------------------------------
+    print()
+    print("=" * 80)
+    print("Quadratic Casimir operator: C_2 = (1/2) g^{AB}(ref) M_A M_B")
+    print("=" * 80)
     c2_result = casimir_quadratic(rep, g_up)
-    
+    C2 = c2_result['total']
+
     print()
     print("C_2 even sector (generators Y, e, f, h only):")
     print(c2_result['even_sector'])
-    
+
     print()
     print("C_2 odd sector (generators u, v, w, x only):")
     print(c2_result['odd_sector'])
-    
+
     print()
     print("C_2 total = even + odd:")
-    print(c2_result['total'])
-    
+    print(C2)
+
     print()
     if c2_result['is_scalar_multiple']:
-        print(f"✓ C_2 is a scalar multiple of identity with eigenvalue: "
+        print(f"\u2713 C_2 is a scalar multiple of identity with eigenvalue: "
               f"{c2_result['eigenvalue']}")
     else:
-        print("✗ C_2 is NOT a scalar multiple of identity")
-        # Show a few nonzero off-diagonal elements. For the Matryoshka these
-        # live in the [i, i+d] block band (d = 4(a+1)), not the top-left
-        # corner, so scan the whole matrix rather than a fixed 4x4 window.
-        C2 = c2_result['total']
+        print("C_2 is NOT a scalar multiple of identity "
+              "(expected for the Matryoshka N > 1)")
         found = []
         for i in range(C2.rows):
             for j in range(C2.cols):
                 if i != j and simplify(C2[i, j]) != 0:
                     found.append((i, j, C2[i, j]))
-                    break                          # one per row is enough
+                    break
             if len(found) >= 3:
                 break
         if found:
@@ -944,14 +1044,9 @@ def _casimir_report(rep, chi, N):
             for i, j, val in found:
                 print(f"    C_2[{i},{j}] = {val}")
 
-    # -- C_2 commutes with every generator (the defining Casimir property) ---
-    # Being scalar is sufficient but not necessary: for N > 1 the Matryoshka
-    # C_2 is not proportional to the identity (it is not block-diagonal), yet a
-    # genuine Casimir must still commute with all generators. This is the real
-    # test in that regime.
     print()
     print("Testing that C_2 commutes with every generator: [C_2, M_k] = 0")
-    casimir_checks = casimir_commutes(rep, c2_result['total'],"C2")
+    casimir_checks = casimir_commutes(rep, C2, "C2")
     for c in casimir_checks:
         mark = "\u2713" if c.ok else "FAILED"
         print(f"    {c.label:<16} {mark}")
@@ -965,36 +1060,20 @@ def _casimir_report(rep, chi, N):
                 print(c.residual)
                 print()
 
-    # -- the cubic Casimir operator C_3 -----------------------------------------------
+    # -- the cubic Casimir operator C_3 --------------------------------------
     print()
     print("=" * 80)
-    print("Cubic Casimir operator: C_3 = Σ d^ABC M_A M_B M_C")
-    print("(with sign correction for 2-odd triples in d_ABC)")
+    print("Cubic Casimir operator: C_3 = Sum d^{ABC}(ref) M_A M_B M_C")
     print("=" * 80)
     print()
-    
-    d_lower = cubic_d(rep, chi, N)
-    d_upper = cubic_d_upper(d_lower, g_up)
-    C3 = casimir_cubic(rep, d_upper, debug=False)
-    
+
+    C3 = casimir_cubic(rep, d_up, debug=False)
     print("C_3 total =")
     print(C3)
     print()
-    
-    # Check if C_3 is diagonal
-    if (0):
-        C3_diag_00 = simplify(C3[0, 0])
-        C3_diag_33 = simplify(C3[3, 3]) if C3.rows > 3 else 0
-        diff = simplify(C3_diag_00 - C3_diag_33)
-        
-        print(f"C_3[0,0] = {C3_diag_00}")
-        print(f"C_3[3,3] = {C3_diag_33}")
-        print(f"Difference = {diff}")
-        print()
-    
-    # Test that C_3 commutes with all generators
+
     print("Testing that C_3 commutes with every generator: [C_3, M_k] = 0")
-    c3_checks = casimir_commutes(rep, C3,"C3")
+    c3_checks = casimir_commutes(rep, C3, "C3")
     for c in c3_checks:
         mark = "\u2713" if c.ok else "FAILED"
         print(f"    {c.label:<16} {mark}")
@@ -1008,6 +1087,101 @@ def _casimir_report(rep, chi, N):
                 print(c.residual)
                 print()
 
+    return {'g_own': g_own, 'index': I, 'anomaly': A,
+            'C2': C2, 'C3': C3, 'c2_result': c2_result}
+
+
+def _check_line(label, actual, formula, expr):
+    """Print one 'actual vs formula' line with its verification ratio."""
+    actual, formula = simplify(actual), simplify(formula)
+    if formula == 0 and actual == 0:
+        ratio, mark = "0/0", "\u2713"
+    elif formula == 0:
+        ratio, mark = "undefined", "\u2717"
+    else:
+        ratio = simplify(actual / formula)
+        mark = "\u2713" if ratio == 1 else "\u2717"
+    print(f"{label} = {actual}")
+    print(f"  Formula:  {expr} = {formula}")
+    print(f"  Ratio: {ratio}  {mark}")
+    print()
+
+
+def _analytic_formulas(rep, chi, N, a, b, info, T, N4):
+    """The closed-form invariants in the rho-shifted weights
+
+        mu = a + 1,      lambda = y - 1,      y = (a+b)/2
+
+    Written this way every invariant is a polynomial in lambda and mu^2 (mu^2
+    because the sl(2) Weyl reflection is mu -> -mu), and all of them except
+    d_YYY carry the single atypicality factor
+
+        mu^2 - lambda^2  =  -(y+a)(y-a-2),
+
+    which is why C_2, C_3 and T vanish together on the atypical modules
+    y = -a and y = a+2.
+
+    With the FIXED (reference-normalised) tensors the module-dependent index
+    drops out of every formula: no (a+1) survives in C_2, and the old
+    C_2 = -(y+a)(y-a-2)/(4(a+1)) is recovered as C_2 / I(R)."""
+    print()
+    print("=" * 80)
+    print("ANALYTIC FORMULAS & VERIFICATION   (rho-shifted weights)")
+    print("=" * 80)
+    print()
+
+    y = Rational(a + b, 2)
+    mu = a + 1
+    lam = y - 1
+    atyp = mu ** 2 - lam ** 2                 # = -(y+a)(y-a-2)
+
+    print(f"  a = {a}   b = {b}   y = (a+b)/2 = {y}")
+    print(f"  mu = a+1 = {mu}      lambda = y-1 = {lam}")
+    print(f"  atypicality factor  mu^2 - lambda^2 = {atyp}"
+          f"   [= -(y+a)(y-a-2)]")
+    print()
+
+    # -- the two normalisation numbers ---------------------------------------
+    _check_line("I(R)  index  ", info['index'], mu, "mu")
+    _check_line("A(R)  anomaly", info['anomaly'], -mu * lam, "-mu*lambda")
+
+    # -- d_YYY of this module (the cheapest component of its d-tensor) -------
+    Ym = rep[Y]
+    d_yyy = simplify(supertrace(chi, Ym @ Ym @ Ym) / N)
+    _check_line("d_YYY ", d_yyy, -6 * mu * lam, "-6*mu*lambda")
+
+    # -- the fixed quadratic Casimir ----------------------------------------
+    c2r = info['c2_result']
+    c2_actual = (c2r['eigenvalue'] if c2r['eigenvalue'] is not None
+                 else simplify(info['C2'][0, 0]))
+    c2_formula = Rational(1, 4) * atyp
+    _check_line("C_2   ", c2_actual, c2_formula, "(mu^2 - lambda^2)/4")
+
+    # -- the fixed cubic Casimir --------------------------------------------
+    c3_actual = simplify(info['C3'][0, 0])
+    c3_formula = Rational(1, 8) * lam * atyp
+    _check_line("C_3   ", c3_actual, c3_formula,
+                "lambda*(mu^2 - lambda^2)/8")
+    _check_line("C_3   ", c3_actual, lam * c2_actual / 2,
+                "(lambda/2)*C_2")
+
+    # -- the anticenter ------------------------------------------------------
+    t_actual = simplify(T[0, 0])
+    _check_line("T     ", t_actual, Rational(3, 2) * (lam ** 2 - mu ** 2),
+                "(3/2)*(lambda^2 - mu^2)")
+    _check_line("T     ", t_actual, -6 * c2_actual, "-6*C_2")
+    _check_line("T^2   ", t_actual ** 2, 36 * c2_actual ** 2, "36*C_2^2")
+
+    print("STr(N_4) = " + str(simplify(supertrace(chi, N4))))
+    print()
+
+    # -- what the same numbers look like in the module's own normalisation ---
+    I = info['index']
+    if I != 0:
+        print("For reference, the module's own (index-divided) normalisation:")
+        print(f"  C_2 / I(R) = {simplify(c2_actual / I)}"
+              f"   [= -(y+a)(y-a-2)/(4(a+1))]")
+        print()
 
 
 def main(a, b, N=1, casimirs=False):
@@ -1078,10 +1252,9 @@ def main(a, b, N=1, casimirs=False):
                 print()
 
     if casimirs:
-        _casimir_report(rep, chi, N)
+        info = _casimir_report(rep, chi, N)
 
-    if casimirs:
-        # -- the Gorelik anticenter element T_4: N_2 and N_4 ---------------------
+        # -- the Gorelik anticenter element T_4: N_2 and N_4 -----------------
         print()
         print("=" * 80)
         print("Gorelik anticenter T_4:  N_2 then N_4  (compare by eye)")
@@ -1094,7 +1267,7 @@ def main(a, b, N=1, casimirs=False):
         print()
 
         N4 = anticenter_N4(rep)
-        print("N_4 = Σ_σ sign(σ) (u v w x permuted), fully antisymmetric =")
+        print("N_4 = \u03a3_\u03c3 sign(\u03c3) (u v w x permuted), fully antisymmetric =")
         print(N4)
         print()
 
@@ -1111,8 +1284,8 @@ def main(a, b, N=1, casimirs=False):
             print(f"    {c.label:<16} {mark}")
         print()
         if all(c.ok for c in t_checks):
-            print("T commutes with all even generators and anticommutes with all "
-                  "odd ones. \u2713")
+            print("T commutes with all even generators and anticommutes with "
+                  "all odd ones. \u2713")
         else:
             for c in t_checks:
                 if not c.ok:
@@ -1120,115 +1293,7 @@ def main(a, b, N=1, casimirs=False):
                     print(c.residual)
                     print()
 
-        # -- Export data for analytic formula discovery -----
-        print()
-        print("=" * 80)
-        print("EXPORT: Non-zero metric elements, d_YYY, STr(N_4)")
-        print("=" * 80)
-        print()
-
-        chi = Rchi(a, N)
-        g_lower = killing_metric(rep, chi, N)
-        g_upper = upper_killing_metric(g_lower, rep)
-        d_lower = cubic_d(rep, chi, N)
-        d_upper = cubic_d_upper(d_lower, g_upper)
-
-        # Non-zero metric values
-        print(f"Non-zero metric values (lower index):")
-        metric_entries = []
-        for i in range(8):
-            for j in range(i, 8):
-                val = g_lower[i, j]
-                if val != 0:
-                    metric_entries.append((i, j, val))
-                    titles = ['Y', 'e', 'f', 'h', 'u', 'v', 'w', 'x']
-                    print(f"  g_{{{titles[i]}{titles[j]}}} = {val}")
-        if not metric_entries:
-            print("  (all zero)")
-        print()
-
-        print(f"Non-zero metric values (upper index):")
-        metric_entries_up = []
-        for i in range(8):
-            for j in range(i, 8):
-                val = g_upper[i, j]
-                if val != 0:
-                    metric_entries_up.append((i, j, val))
-                    titles = ['Y', 'e', 'f', 'h', 'u', 'v', 'w', 'x']
-                    print(f"  g^{{{titles[i]}{titles[j]}}} = {val}")
-        if not metric_entries_up:
-            print("  (all zero)")
-        print()
-
-        # Analytic formulas with automatic verification
-        print()
-        print("=" * 80)
-        print("ANALYTIC FORMULAS & VERIFICATION")
-        print("=" * 80)
-        print()
-
-        y_val = Rational(a + b, 2)
-        
-        # d_YYY = -6(a+1)(y-1)
-        d_yyy_actual = simplify(d_lower[(0, 0, 0)])
-        d_yyy_formula = -6 * (a + 1) * (y_val - 1)
-        d_yyy_ratio = simplify(d_yyy_actual / d_yyy_formula) if d_yyy_formula != 0 else "undef"
-        mark_d = "✓" if d_yyy_ratio == 1 else "✗"
-        print(f"d_YYY = {d_yyy_actual}")
-        print(f"  Formula:  -6(a+1)(y-1) = {d_yyy_formula}")
-        print(f"  Ratio: {d_yyy_ratio}  {mark_d}")
-        print()
-        
-        # C_2 = -1/(4(a+1)) * (y+a)(y-a-2)
-        c2_result = casimir_quadratic(rep, g_upper)
-        c2_actual = c2_result['eigenvalue']
-        c2_formula = -Rational(1, 4*(a+1)) * (y_val + a) * (y_val - a - 2)
-        c2_ratio = simplify(c2_actual / c2_formula) if c2_formula != 0 else "undef"
-        mark_c2 = "✓" if c2_ratio == 1 else "✗"
-        print(f"C_2 = {c2_actual}")
-        print(f"  Formula:  -1/(4(a+1))·(y+a)(y-a-2) = {c2_formula}")
-        print(f"  Ratio: {c2_ratio}  {mark_c2}")
-        print()
-        
-        # C_3 = -1/(2(a+1)) * C_2 * (y-1)²
-        C3 = casimir_cubic(rep, d_upper, debug=False)
-        c3_actual = simplify(C3[0, 0])
-        c3_formula = -Rational(1, 2*(a+1)) * c2_formula * (y_val - 1)**2
-        c3_ratio = simplify(c3_actual / c3_formula) if c3_formula != 0 else "undef"
-        mark_c3 = "✓" if c3_ratio == 1 else "✗"
-        print(f"C_3 = {c3_actual}")
-        print(f"  Formula:  -1/(2(a+1))·C_2·(y-1)² = {c3_formula}")
-        print(f"  Ratio: {c3_ratio}  {mark_c3}")
-        print()
-        
-        # T anticenter eigenvalue with formula check
-        T = (N4 - N2).applyfunc(simplify)
-        t_eigenvalue = simplify(T[0, 0])
-        t_formula = Rational(3, 2) * (y_val + a) * (y_val - a - 2)
-        t_ratio = simplify(t_eigenvalue / t_formula) if t_formula != 0 else "undef"
-        mark_t = "✓" if t_ratio == 1 else "✗"
-        print(f"T = {t_eigenvalue}")
-        print(f"  Formula:  (3/2)·(y+a)·(y-a-2) = {t_formula}")
-        print(f"  Ratio: {t_ratio}  {mark_t}")
-        print()
-        
-        # T = 12 (C_3 - 2 C_2^2): the anticenter eigenvalue as a polynomial in
-        # the Casimirs, so that T^2 = 144 (C_3 - 2 C_2^2)^2 is central
-        # (Gorelik: the anticenter squares into the center). Uses the
-        # ACTUAL C_2, C_3 eigenvalues computed above, not their formulas.
-        t_casimir_formula = 12 * (c3_actual - 2 * c2_actual**2)
-        t_casimir_ratio = (simplify(t_eigenvalue / t_casimir_formula)
-                           if t_casimir_formula != 0 else "undef")
-        mark_tc = "✓" if t_casimir_ratio == 1 else "✗"
-        print(f"T = {t_eigenvalue}")
-        print(f"  Formula:  12·(C_3 - 2·C_2²) = {t_casimir_formula}")
-        print(f"  Ratio: {t_casimir_ratio}  {mark_tc}")
-        print()
-
-        # STr(N_4)
-        e = simplify(supertrace(chi, N4))
-        print(f"STr(N_4) = {e}")
-        print()
+        _analytic_formulas(rep, chi, N, a, b, info, T, N4)
 
 
 # -- command-line argument types -------------------------------------------
