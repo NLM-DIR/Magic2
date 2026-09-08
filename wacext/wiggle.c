@@ -1063,7 +1063,7 @@ int main (int argc, const char **argv)
 
   freeinit () ; 
   messErrorInit (argv[0]) ;
-
+    
   h = ac_new_handle () ;
   memset (&sx, 0, sizeof (WIGGLE)) ;
   sx.h = h ;
@@ -1078,6 +1078,8 @@ int main (int argc, const char **argv)
   sx.ventilate = getCmdLineBool(&argc, argv, "-ventilate") ;
   sx.cumul = getCmdLineBool(&argc, argv, "-cumul") ; 
   sx.peaks = getCmdLineBool (&argc, argv, "-peaks") ;
+  sx.proeminence = 3.0 ; /* default */
+  getCmdLineFloat (&argc, argv, "-proeminence", &sx.proeminence) ;
   if (getCmdLineInt (&argc, argv, "-multiPeaks", &(sx.multiPeaks)))
     sx.peaks = TRUE ;
   if (getCmdLineOption(&argc, argv, "-transcriptsEnds", &(sx.transcriptsEndsFileName)))

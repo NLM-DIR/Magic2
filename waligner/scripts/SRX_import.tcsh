@@ -121,6 +121,7 @@ if ($species == mays) then
   set ff='/home/mieg/ACEVIEWHELP/ZeaMaize_DATA/DNA.RNA.Histone.SraRunInfo.txt'
   set ff='/home/mieg/ACEVIEWHELP/ZeaMaize_DATA/20260821_b73_SraRunInfo.clean.txt'
   set ff='/home/mieg/ACEVIEWHELP/ZeaMaize_DATA/20260831_Zea_mays_B73_all_23896_DNA_RNA_SraRunInfo.txt'
+  set ff='/home/mieg/ACEVIEWHELP/ZeaMaize_DATA/20260907_Zea_Mays_orgn_ChIP_2369SraRunInfo.txt'
 endif
 if ($species == Campylobacter || $species == jejuni) then
   set date=2017_03_07

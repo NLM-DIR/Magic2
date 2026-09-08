@@ -8,6 +8,7 @@
  */
 
 #include "wiggle.h"
+#include "peaks.h"
 #include "fastItoA.h"
 #include <zlib.h>
 
@@ -810,6 +811,63 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 }  /* sxWiggleParse */
 
 /*************************************************************************************/
+/* aa: possibly gaussed wiggle, bb original wiggle
+ * Export a list of peaks with autadjusted widht see wh/peaks.h
+ */
+
+static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  PEAKPARAMS pp ;
+  Array peaks = 0, bg = 0 ;
+  double sigma = 0 ;
+  ACEOUT ao = 0 ;
+  int step = (sx->out_step  ? sx->out_step : 1) ;
+  peakParamsDefault (&pp) ;
+  pp.baseWindow = 15000 / step ;
+  pp.smooth     = (step >= 10) ? 0 : 1 ;
+  pp.minWidth   = 3 ;
+  pp.minSnr     = 0 ;            /* filter afterwards, not here */
+  int posMin = 4870/step ;
+  
+  Array cc = arrayHandleCreate (arrayMax (aa) + posMin, int, h) ;
+
+  if (arrayMax (aa))
+    {
+      int iMax = arrayMax (aa) ;
+      WIGGLEPOINT *wp = arrp (aa, 0, WIGGLEPOINT) ;
+      int *ip = arrayp (cc, posMin + iMax - 1, int) ;
+
+      ip = arrayp (cc, posMin, int) ;
+      for (int i = 0 ; i < arrayMax (aa) ; ip++, wp++, i++)
+	*ip = wp->y ;
+    }
+	
+  peaks = findPeaksFull (cc, &pp, &bg, &sigma, h) ;
+
+  fprintf (stderr, "// %s : %d bins, sigma %.2f, baseWindow %d bins, %d peaks\n",
+           "chrom", arrayMax (cc), sigma, pp.baseWindow, arrayMax (peaks)) ;
+
+  ao = aceOutCreate (sx->outFileName, ".newPeaks", sx->gzo, sx->h) ;
+  peakShow (ao, peaks, step) ;
+
+  ac_free (h) ;   /* frees peaks and bg, both allocated on h */
+} /* sxWiggleExportMultiPeaks */
+#ifdef JUNK
+  Array histo = peakNoiseCreate (h) ;
+  /* pass 1 : parallel, one histogram per thread, no allocation per bin */
+  for each nuclear chromosome, in parallel
+	     peakNoiseAccumulate (myHisto, wiggle->aa) ;
+  /* then serially */
+  peakNoiseMerge (histo, myHisto) ;
+  pp.sigma = peakNoiseSigma (histo) ;
+  
+  /* pass 2 : parallel, independent, nothing shared */
+  for each chromosome
+	     peaks = findPeaksWithParams (wiggle->aa, &pp, h) ;
+#endif  
+
+/*************************************************************************************/
 /* aa: possibly gaussed wiggle, bb original wiggle */
 /* In the multipeaks option
  *  try to export a collection of non overlapping peaks
@@ -818,7 +876,7 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
  * every factor multiPeaks, starting a 1 
  */
 typedef struct mpkStruct { int x1, x2, ln, yMin, yMax, level ; long int cover ;} MPK ;
-static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap)
+static void sxWiggleExportMultiPeaksOld (WIGGLE *sx, Array aa0, Array bb, int remap)
 {
   WIGGLEPOINT *wp, *wq ;
   int ii, jj, nn ;
@@ -834,7 +892,7 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa0, Array bb, int remap
   Array mmm = arrayCreate (10000, MPK) ;
   MPK *mp ;
   BOOL debug = FALSE ;
-
+  
   if (ratio < 2) ratio = 2 ;
   if (minCover < 1)
     minCover = 1 ;
@@ -1080,7 +1138,8 @@ static void sxWiggleExportTranscriptsEnds (WIGGLE *sx, Array aa0, Array bb, int 
   Array mmm = arrayCreate (10000, MPK) ;
   MPK *mp ;
   BOOL debug = FALSE ;
-
+  float proeminence = sx->proeminence ;
+  
   if (minCover < 10)
     minCover = 10 ;
   if (! ao)
@@ -1133,7 +1192,7 @@ static void sxWiggleExportTranscriptsEnds (WIGGLE *sx, Array aa0, Array bb, int 
 		}
 	      if (ln > 0)
 		{
-		  if (cover > 1.5 * minCover) /* avoid fluctuations just around minCover */
+		  if (cover > proeminence * minCover) /* avoid fluctuations just around minCover */
 		    {
 		      mp = arrayp (mmm, imm++, MPK) ;
 		      mp->x1 = wp->x - step/2 ; 
@@ -1195,6 +1254,7 @@ static void sxWiggleExportPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
   int minCover = sx->minCover ;
   int oldx1 = -1, oldx2 = 0, x1 = 0, n ;
   double y, yMax = 0, aliBp = 0, area = 0, cumulatedArea = 0 ;
+  float proeminence = sx->proeminence ;
   ACEOUT ao = sx->aoPeaks ;
 
   if (sx->multiPeaks)
@@ -1222,7 +1282,7 @@ static void sxWiggleExportPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
 	}
       if (ii == iiMax || (oldx2 > 0 && x1 > oldx2 + 50))
 	{
-	  if (oldx2 > 0 && area > 1.5 * (oldx2 - oldx1) * minCover)
+	  if (oldx2 > 0 && area > proeminence * (oldx2 - oldx1) * minCover)
 	    {
 	      if (bb) /* squeeze back on the unsmoothed data */
 		{

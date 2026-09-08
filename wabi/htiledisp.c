@@ -40,8 +40,8 @@ static AC_DB ac_db = 0 ;
 
 #define NSMAX 100
 #define SOLEXAVERSION 2
-#define SOLEXAMAX 300
-#define SOLEXAMAX2 600
+#define SOLEXAMAX 4096
+#define SOLEXAMAX2 4096
 #define slxFormatNint 162
 #define slxFormatNfloat SOLEXAMAX2
 
@@ -6494,7 +6494,7 @@ static BOOL solexaAllInit (Htile look)
 		  )
 	       pnx->s99 = ac_table_float (tbl, 0, 4, 1.0e+9)/1.0e+9 ; /* count in accepted Tb, since z is in kb */
 	     col = 0 ;
-	     if (j >= 18)
+	     if (j >= 1)  // was >= 18, why ?
 	       {
 		 if (flag[j] & PGG_f) col = keyGetKey (run, str2tag ("W_colour_plus")) ; 
 		 if (flag[j] & PGG_r) col = keyGetKey (run, str2tag ("W_colour_minus")) ; 

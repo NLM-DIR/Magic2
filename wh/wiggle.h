@@ -72,7 +72,8 @@ typedef struct wiggleStruct {
   BOOL RNA_seq ;
   BOOL ventilate, cumul, peaks, hierarchic, lengthCoverage, flagEnds ;
   int wiggleRatio, wiggleRatioDamper ;
-  int multiPeaks ;  
+  int multiPeaks ;
+  float proeminence ;
   int BF_predictor ; /* degree of the polynome used to compress the BF format */
   int BF_compressor ; /* degree of the polynome used to compress the BF format */
 } WIGGLE ;

@@ -1171,6 +1171,133 @@ into exonic read coordinates, and the final alignment score is
 computed (Section~\ref{sec:scoring}).
 This is the score used for all downstream comparisons.
 
+\section{Peak detection}
+\label{sec:peak_detection}
+
+A recurrent problem in the analysis of alignments is to detect and list
+the significant peaks of a coverage plot, here called a wiggle
+(Section~\ref{sec:wiggle}).
+There is no unique optimal solution. One may be looking just for
+Gaussian peaks, or for peaks of arbitrary shape: in RNA-seq we hope to
+see approximately rectangular peaks covering each exon. Neither is there
+a natural height threshold, since each gene has its own expression
+level, with extremely wide variation across genes in any given sample.
+The problem is to find the \emph{natural} width of each peak, and to
+decide how many peaks a given region contains. Magic2 treats these as
+two separate questions, answered by two different criteria, because
+conflating them is the classic failure of this kind of analysis.
+
+\paragraph{How wide: the half-mean width.}
+Suppose a region $[x_1,x_2]$ contains a single peak, and let
+$g(x) = f(x) - b(x)$ be the coverage above the local baseline $b$, the
+straight line joining the two valleys bounding the region. Subtracting
+$b$ is essential: an exon abutting a more highly expressed neighbour
+sits on a pedestal, and its width and area would otherwise both be
+inflated by the neighbour.
+A classic choice is then to report the band $[x'_1,x'_2]$,
+$x_1 \leq x'_1 < x'_2 \leq x_2$, maximising the collected area relative
+to the white noise expected in the same band, which grows as
+$\sqrt{x'_2 - x'_1}$:
+\begin{equation}
+  J(x'_1,x'_2) \;=\;
+  \frac{\displaystyle\int_{x'_1}^{x'_2} g(x)\,dx}{\sqrt{x'_2 - x'_1}}\;.
+  \label{eq:matched_filter}
+\end{equation}
+This is a matched filter with a top-hat kernel. In astronomy it is
+called the optimal boxcar aperture; other disciplines have other names.
+We call the resulting width the \emph{half-mean width}, for the
+following reason.
+
+The elegant property of \eqref{eq:matched_filter} is that optimising
+with respect to the two boundaries independently gives an extremely
+simple condition:
+\begin{equation}
+  g(x'_1) \;=\; g(x'_2) \;=\;
+  \tfrac{1}{2}\,\bar g\,,
+  \qquad
+  \bar g \;=\; \frac{1}{x'_2 - x'_1}\int_{x'_1}^{x'_2} g(x)\,dx\;,
+  \label{eq:half_mean}
+\end{equation}
+i.e.\ the band is cut where the curve falls to half of its own mean over
+that band. The name ``full width at half mean'' would be more explicit
+but collides with the standard ``full width at half maximum'' (FWHM),
+which cuts at half of the \emph{maximum} instead. Two differences with
+FWHM are worth noting. Condition~\eqref{eq:half_mean} is implicit, since
+$\bar g$ depends on the interval it defines, and is solved by a fixed
+point iteration converging in a few steps. And the two boundaries obey
+independent conditions, so asymmetric peaks --- the rule rather than the
+exception in exon coverage --- are handled without any symmetry
+assumption.
+
+On the shapes for which one has an intuition, the estimator does the
+expected thing:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Peak shape & Half-mean width & For comparison \\
+\midrule
+Rectangle of width $W$      & $W$ exactly     & --- \\
+Gaussian of width $\sigma$  & $2.80\,\sigma$  & FWHM $= 2.355\,\sigma$ \\
+Triangle of base $2W$       & $1.333\,W$      & --- \\
+Lorentzian of HWHM $\gamma$ & $2.78\,\gamma$  & FWHM $= 2\,\gamma$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+A true rectangle is recovered exactly, as one would demand. A Gaussian
+gives a band slightly wider than its FWHM: a narrower band would discard
+signal faster than it discards noise.
+
+\paragraph{How many: prominence.}
+Maximising \eqref{eq:matched_filter} alone is not a peak detector. Given
+two equal Gaussians of width $\sigma$ separated by $d$, a single band
+swallowing both scores higher than either band alone whenever
+$d < 8.4\,\sigma$, so blind optimisation returns one wide peak where the
+eye plainly sees two, and unequal peaks merge even more readily. The
+reason is structural: $J$ rewards collected area, and the $\sqrt{L}$
+penalty is too weak to punish the dead gap between two summits.
+
+Magic2 therefore decides how many peaks are present \emph{before}
+fitting any band. Each interior local minimum separating two local
+maxima is scored by its topographic prominence --- the drop from the
+lower of the two summits down to the valley --- and the region is split
+there when the prominence exceeds $\max(3\sigma_n,\,0.2\,h)$, where
+$\sigma_n$ is the noise level and $h$ the height of the smaller summit.
+The first term asks whether the dip is real, the second whether it is
+worth reporting. All prominences are obtained in a single sweep of the
+samples from the highest down, maintaining a union--find over the
+sublevel sets: this is the merge tree of the profile, and each branch
+records the level at which it was born and the level at which it was
+absorbed by a taller neighbour. The construction is hierarchical, so the
+splitting threshold can be changed without recomputing anything.
+
+\paragraph{Implementation.}
+The noise level $\sigma_n$ is estimated robustly, from the median
+absolute deviation of the successive differences of the wiggle: the
+differencing removes any smooth background, and a peak contributes only
+a handful of large values, which the median ignores. The slow background
+is a morphological opening --- a running minimum followed by a running
+maximum over a window several times wider than the widest expected peak,
+both in $O(n)$ with a monotonic deque --- lifted by the median residual,
+since an opening tracks the bottom of the noise rather than its centre.
+Candidate regions are the connected components of
+$f > \text{background} + 3\sigma_n$, extended downhill on both flanks.
+That threshold is a detection device only: the half-mean band is then
+free to open below it, so areas are not truncated at an arbitrary height.
+Areas are integrated on the raw wiggle, while peak positions and
+boundaries are located on a lightly smoothed copy, so that noise neither
+biases the reported areas nor chops the bands short.
+
+Peak detection is run automatically on all exported wiggle files, and
+the statistics are reported in the global quality control report of the
+run (Section~\ref{sec:runstats}). Each peak is reported with its apex,
+its maximum, its optimal boundaries and width, its area, its prominence,
+and its signal-to-noise ratio; peaks whose band is clipped by a
+neighbouring valley are flagged as blended, their width and area being
+biased in that case.
+
 \section {Final scoring}
 \label{sec:scoring}
 
