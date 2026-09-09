@@ -42,13 +42,6 @@ static double pkMedian (Array a)   /* a : Array of double, destroyed order */
 }
 
 /*----------------------------------------------------------------------*/
-/* Robust noise level.  The successive differences of f kill any smooth
- * background and any peak contributes only a handful of large values,
- * which the median absolute deviation ignores.
- *    sigma = 1.4826 * median |d| / sqrt(2)
- */
-
-/*----------------------------------------------------------------------*/
 /* Noise level measured AT THE SCALE OF THE PEAKS, not at the scale of
  * one bin.
  *
@@ -672,119 +665,6 @@ Array findPeaks (Array aa, AC_HANDLE h)
 /*======================================================================*/
 /*=================== pooled cross-chromosome noise ====================*/
 /*======================================================================*/
-#ifdef JUNK
-
-#define PK_HISTO_MAX 4096      /* |df| above this is saturated, and is
-				* necessarily far above any median      */
-
-Array peakNoiseCreate (AC_HANDLE h)
-{
-  int i ;
-  Array histo = arrayHandleCreate (PK_HISTO_MAX, long int, h) ;
-  for (i = 0 ; i < PK_HISTO_MAX ; i++) array (histo, i, long int) = 0 ;
-  return histo ;
-}
-
-void peakNoiseAccumulate (Array histo, Array aa)
-{
-  int i, n = aa ? arrayMax (aa) : 0 ;
-  for (i = 1 ; i < n ; i++)
-    {
-      int d, u = arr (aa, i, int), v = arr (aa, i-1, int) ;
-      if (u <= 0 && v <= 0) continue ;   /* see pkNoiseSigma */
-      d = u - v ;
-      if (d < 0) d = -d ;
-      if (d >= PK_HISTO_MAX) d = PK_HISTO_MAX - 1 ;
-      arr (histo, d, long int) += 1 ;
-    }
-}
-
-void peakNoiseMerge (Array dest, Array src)
-{
-  int i ;
-  if (!dest || !src) return ;
-  for (i = 0 ; i < PK_HISTO_MAX ; i++)
-    arr (dest, i, long int) += arr (src, i, long int) ;
-}
-
-double peakNoiseSigma (Array histo)
-{ return peakNoiseSigmaQ (histo, 0.50) ; }
-
-/*----------------------------------------------------------------------*/
-/* Sigma from an arbitrary quantile of |df|.
- *
- * For independent Gaussian samples the successive difference has
- * standard deviation sqrt(2)*sigma, so the q-th quantile of |df| equals
- *      sqrt(2) * Phi^-1((1+q)/2) * sigma
- * The median, q = 0.5, gives the familiar 1.4826/sqrt(2) = 1.0483 factor.
- *
- * The median is the right choice on raw counts.  It fails when the data
- * are quantised or pre-smoothed, because more than half the covered
- * pairs are then exactly equal and the median is 0; a higher quantile,
- * 0.75 or 0.90, still sees the noise in that case.
- */
-
-double peakNoiseSigmaQ (Array histo, double q)
-{
-  int i ;
-  long int cum = 0, tot = 0 ;
-  double quant = 0, z, sigma ;
-
-  if (!histo) return 1.0 ;
-  if (q <= 0 || q >= 1) q = 0.50 ;
-  for (i = 0 ; i < PK_HISTO_MAX ; i++) tot += arr (histo, i, long int) ;
-  if (tot < 16) return 1.0 ;
-
-  for (i = 0 ; i < PK_HISTO_MAX ; i++)
-    {
-      cum += arr (histo, i, long int) ;
-      if ((double) cum >= q * tot) { quant = i ; break ; }
-    }
-  /* sqrt(2) * Phi^-1((1+q)/2), tabulated for the usual quantiles */
-  if      (q <= 0.30) z = 0.4506 ;   /* 0.25 */
-  else if (q <= 0.60) z = 0.9539 ;   /* 0.50 */
-  else if (q <= 0.80) z = 1.6268 ;   /* 0.75 */
-  else if (q <= 0.92) z = 2.3262 ;   /* 0.90 */
-  else if (q <= 0.97) z = 2.7718 ;   /* 0.95 */
-  else                z = 3.6427 ;   /* 0.99 */
-
-  sigma = quant / z ;
-  if (sigma < 1.0) sigma = 1.0 ;
-  return sigma ;
-}
-
-/*----------------------------------------------------------------------*/
-/* Print the |df| distribution and the sigma each quantile would imply.
- * If the low quantiles are all 0 while the high ones are not, the data
- * are quantised or pre-smoothed: use a high quantile, or set the sigma
- * by hand.  If they all agree, the median estimate is trustworthy.
- */
-
-void peakNoiseShow (Array histo, FILE *fo)
-{
-  int i ;
-  long int cum = 0, tot = 0 ;
-  double qq[6] = { 0.25, 0.50, 0.75, 0.90, 0.95, 0.99 } ;
-
-  if (!fo) fo = stderr ;
-  if (!histo) { fprintf (fo, "// no noise histogram\n") ; return ; }
-  for (i = 0 ; i < PK_HISTO_MAX ; i++) tot += arr (histo, i, long int) ;
-  fprintf (fo, "// noise: %ld covered adjacent pairs\n", tot) ;
-  if (!tot) return ;
-
-  cum = arr (histo, 0, long int) ;
-  fprintf (fo, "//   |df| == 0 : %.1f%% of pairs%s\n",
-	   100.0 * cum / tot,
-	   (2 * cum >= tot) ? "   <-- median is 0, use a high quantile" : "") ;
-  for (i = 0 ; i < 6 ; i++)
-    fprintf (fo, "//   q=%4.2f  |df| = %6.0f   sigma = %8.2f\n",
-	     qq[i], peakNoiseSigmaQ (histo, qq[i]) *
-	     (qq[i] <= 0.30 ? 0.4506 : qq[i] <= 0.60 ? 0.9539 :
-	      qq[i] <= 0.80 ? 1.6268 : qq[i] <= 0.92 ? 2.3262 :
-	      qq[i] <= 0.97 ? 2.7718 : 3.6427),
-	     peakNoiseSigmaQ (histo, qq[i])) ;
-}
-#endif
 /*----------------------------------------------------------------------*/
 
 static void peakShow (ACEOUT ao, Array peaks, const char *target, int step, int posMin, int minCover)
