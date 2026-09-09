@@ -166,7 +166,11 @@
                               Genome  Whole_genome    UNIQUE  ?Text  
                                       Enhancer_STARR   UNIQUE ?Text
                                       Exome   UNIQUE ?Text 
-                                      ChIP    UNIQUE ?Text UNIQUE ?Text
+                                      ChIP    ?Text UNIQUE ?Text
+	                              ChIA_PET    UNIQUE ?Text	 UNIQUE ?Text				      
+                                      ChIP_Input    UNIQUE ?Text UNIQUE ?Text				      
+				      Input ?SRR XREF Input_of
+     				      Input_of ?SRR XREF Input
                               Microbiome
                               RNA_extraction RIN UNIQUE Float UNIQUE Float // range in case of a group
                                              Ligation
@@ -192,6 +196,7 @@
                                   sraGenome  sraWhole_genome    ?Text  
                                              sraExome   UNIQUE ?Text
                                              sraChIP    UNIQUE ?Text
+                                             sraChIA_PET    UNIQUE ?Text					     
                                   sraMicrobiome
                                   sraRNA_extraction sraRIN UNIQUE Float UNIQUE Float // range in case of a group
                                                     sraLigation

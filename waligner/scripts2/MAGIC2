@@ -9875,14 +9875,19 @@ if (! -d tmp/Peaks) mkdir tmp/Peaks
 set toto=tmp/Peaks/$MAGIC.peaks2genes.ace
 echo '#' > $toto 
 
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
+foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
   foreach chrom ($chromSetAll)
-    if (! -e tmp/Peaks/$run.$chrom.multiPeaks && -e tmp/SA/$run/wiggles/$run.$chrom.u.f.az) then
-      echo "bin/wiggle -wiggle1 tmp/SA/$run/wiggles/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 10 -O COUNT -o tmp/Peaks/$run.$chrom" > tmp/Peaks/$run.$chrom.err
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -wiggle1 tmp/SA/$run/wiggles/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 10 -O COUNT -o tmp/Peaks/$run.$chrom"
+    if (! -d tmp/Peaks/$run) mkdir tmp/Peaks/$run
+    if (! -e tmp/Peaks/$run.$chrom.newPeaks && -e tmp/WIGGLEGROUP/$run/$run.$chrom.u.f.az) then
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/WIGGLEGROUP/$run/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom"
+    endif
+    if (! -e tmp/Peaks/$run.$chrom.newPeaks && -e tmp/SA/$run/wiggles/$run.$chrom.u.f.az) then
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/SA/$run/wiggles/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom"
     endif
   end
 end
+
+goto phaseLoop
 
 foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
   foreach chrom ($chromSetAllZZZ)

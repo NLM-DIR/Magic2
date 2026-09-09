@@ -3259,9 +3259,9 @@ static void htileDrawTileButtons (Htile look, float *offsetp)
 {
   COLOUROPT *bb = look->map->bb ;
   int ii, ns, nt1=0, nt ;
-  PNS *pns ;
-  PNX *pnx ;
-  const char *ccp ;
+  PNS *pns = 0 ;
+  PNX *pnx = 0 ;
+  const char *ccp = 0 ;
 
   for (ns = 0, pns = pnsAll ; pns->p && nt1 < SOLEXAMAX ; ns += look->ratio ? 2 : 1, pns += look->ratio ? 2 : 1)
     {

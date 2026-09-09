@@ -811,61 +811,43 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 }  /* sxWiggleParse */
 
 /*************************************************************************************/
-/* aa: possibly gaussed wiggle, bb original wiggle
+/* aa: possibly gaussed wiggle,
  * Export a list of peaks with autadjusted widht see wh/peaks.h
  */
 
 static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
 {
-  AC_HANDLE h = ac_new_handle () ;
-  PEAKPARAMS pp ;
-  Array peaks = 0, bg = 0 ;
-  double sigma = 0 ;
+  AC_HANDLE h = ac_new_handle ();
+  const char *target = dictName (sx->remapDict, remap) ;
   ACEOUT ao = 0 ;
   int step = (sx->out_step  ? sx->out_step : 1) ;
-  peakParamsDefault (&pp) ;
-  pp.baseWindow = 15000 / step ;
-  pp.smooth     = (step >= 10) ? 0 : 1 ;
-  pp.minWidth   = 3 ;
-  pp.minSnr     = 0 ;            /* filter afterwards, not here */
-  int posMin = 4870/step ;
-  
+  ao = aceOutCreate (sx->outFileName, ".newPeaks", sx->gzo, h) ;
+  int posMin = 0 ;
   Array cc = arrayHandleCreate (arrayMax (aa) + posMin, int, h) ;
-
+  int minCover = sx->minCover > 0 ? sx->minCover : 30 ;
+ 
   if (arrayMax (aa))
     {
       int iMax = arrayMax (aa) ;
       WIGGLEPOINT *wp = arrp (aa, 0, WIGGLEPOINT) ;
-      int *ip = arrayp (cc, posMin + iMax - 1, int) ;
+      posMin = 0 ;
+      int ii, jj, jMax, *ip = arrayp (cc, iMax + 12, int) ;
 
-      ip = arrayp (cc, posMin, int) ;
-      for (int i = 0 ; i < arrayMax (aa) ; ip++, wp++, i++)
-	*ip = wp->y ;
+      ip = arrayp (cc, 0, int) ;
+      if (0)
+	for (ii = 0 ; ii < iMax ; wp++, ii++)
+	  if (wp->y > 0) break ;
+      posMin = wp->x - step ;
+      *ip++ = 0 ; /* always add a start zero */
+      for (jj = jMax = 1 ; ii < iMax ; ip++, wp++, ii++, jj++)
+	{ *ip = wp->y ; if (wp->y) jMax = jj + 1 ; }
+      *ip = 0 ; /* always add a terminal zero */
+      arrayMax (cc) = jMax + 1 ;
     }
-	
-  peaks = findPeaksFull (cc, &pp, &bg, &sigma, h) ;
 
-  fprintf (stderr, "// %s : %d bins, sigma %.2f, baseWindow %d bins, %d peaks\n",
-           "chrom", arrayMax (cc), sigma, pp.baseWindow, arrayMax (peaks)) ;
-
-  ao = aceOutCreate (sx->outFileName, ".newPeaks", sx->gzo, sx->h) ;
-  peakShow (ao, peaks, step) ;
-
-  ac_free (h) ;   /* frees peaks and bg, both allocated on h */
-} /* sxWiggleExportMultiPeaks */
-#ifdef JUNK
-  Array histo = peakNoiseCreate (h) ;
-  /* pass 1 : parallel, one histogram per thread, no allocation per bin */
-  for each nuclear chromosome, in parallel
-	     peakNoiseAccumulate (myHisto, wiggle->aa) ;
-  /* then serially */
-  peakNoiseMerge (histo, myHisto) ;
-  pp.sigma = peakNoiseSigma (histo) ;
-  
-  /* pass 2 : parallel, independent, nothing shared */
-  for each chromosome
-	     peaks = findPeaksWithParams (wiggle->aa, &pp, h) ;
-#endif  
+  peaksCreateExport (ao, target, posMin, step, minCover, cc) ;
+  ac_free (h) ;
+}
 
 /*************************************************************************************/
 /* aa: possibly gaussed wiggle, bb original wiggle */
@@ -2103,10 +2085,10 @@ AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints,
       WIGGLEPOINT *wp = wMax ? arrp (wPoints, 0, WIGGLEPOINT) : 0 ;
       az->xMin = posMin = wp ? wp->x : 0 ;
       wp = wMax ? arrp (wPoints, wMax - 1, WIGGLEPOINT) : 0 ;
-      posMax = wp ? wp->x : 0 ;
+      posMax = posMin + (wMax - 1) * step ;
     }
   az->bMax = BMAX ;
-  int xMax = (posMax - posMin + 1) / step + 1 ;
+  int xMax = (posMax - posMin) / step + 1 ;
   if (xMax > arrayMax (aa)) xMax = arrayMax (aa) ;
   az->NB = xMax ? ((xMax - 1) >> BMAX) + 1 : 0 ;
   az->xMax = xMax ;
@@ -2118,6 +2100,7 @@ AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints,
   if (! ao) messcrash ("wigAzWrite cannot create %s/header", az->fName) ;
   
   aceOutf (ao, "Step\t%d\n", az->step) ;
+  aceOutf (ao, "Span\t%d\n", 1) ;
   aceOutf (ao, "PosMin\t%d\n", posMin) ;
   aceOutf (ao, "PosMax\t%d\n", posMax) ;
   aceOutf (ao, "xMax\t%d\n", xMax) ;

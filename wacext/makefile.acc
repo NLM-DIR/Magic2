@@ -110,7 +110,7 @@ ALL_ACC_OBJS = go2gene.o bly2hosac.o kscount.o akg.o gene_nm_remap.o \
 	dnastitch.o kmercount.o g2x.o qcsummary.o snpsummary.o dnabloom.o snpbloom.o \
 	cnv.o sv.o chanserver.o chanclient.o chanscript.o chantest.o sra_metadata.o \
 	demazure.o dnawalk.o pi_channel_test.o introns.o table_histo.o tsf.o sam2gold.o \
-	tfali.o postMagicBlast.o altintrons.o mir.o dirsync_nfs.o peaks_test.o
+	tfali.o postMagicBlast.o altintrons.o mir.o dirsync_nfs.o 
 	
 ALL_ACC_SOURCES =  $(ALL_ACC_OBJS:.o=.c) 
 
@@ -142,7 +142,7 @@ all: go2gene bly2hosac kscount akg sakg gene_nm_remap sgene_nm_remap gene2gene g
 	mega3psort2ace  geneindex pg2pg seqc g2x qcsummary snpsummary dnabloom snpbloom \
 	chanserver chanclient mir cnv sv chantest dnawalk pi_channel_test \
 	sra_metadata introns table_histo tsf sam2gold tfali postMagicBlast altintrons \
-	dirsync_nfs peaks_test
+	dirsync_nfs 
 
 dirsync_nfs: dirsync_nfs.o $(LINK_ACC)
 	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS)
@@ -239,10 +239,6 @@ wiggle_smoother: wiggle_smoother.o
 
 wiggle: wiggle.o $(LINK_ACS)
 	$(LINKER) -o $@  $@.o  $(LINK_ACS) $(LIBS) -lz 
-
-peaks_test:peaks_test.o $(LINK_ACS)
-	$(LINKER) -o $@  $@.o  $(LINK_ACS) $(LIBS) -lz 
-
 
 nico_worf: nico_worf.o $(LINK_ACS)
 	$(LINKER)  -o $@  $@.o  $(LINK_ACS) $(LIBS) 

@@ -3650,7 +3650,11 @@
                                           Capture  UNIQUE ?Capture
                               Genome  Whole_genome   UNIQUE   Text  
                                       Exome   UNIQUE ?Text
-                                      ChIP    UNIQUE ?Text UNIQUE ?Text
+                                      ChIP    ?Text UNIQUE ?Text
+     	                              ChIA_PET    UNIQUE ?Text	 UNIQUE ?Text
+                                      ChIP_Input    UNIQUE ?Text UNIQUE ?Text				      
+				      Input ?Run XREF Input_of
+     				      Input_of ?Run XREF Input
                               Microbiome
                               RNA_extraction RIN UNIQUE Float UNIQUE Float // range in case of a group
                                              Ligation

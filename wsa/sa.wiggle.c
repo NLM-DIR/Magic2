@@ -21,6 +21,7 @@
 #define WIGGLETYPEMAX 2 /* strand */
 #include "sa.h"
 #include "wiggle.h"
+#include "peaks.h"
 #include "fastItoA.h"
 #include <fcntl.h>  // for O_WRONLY if using write()
 #include <unistd.h> // for write()
@@ -368,7 +369,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   const int demiStep = (wiggle_step - 1)/2 ;
   const char *typeNam ;
   char wigStrand = (strand == 'f' ? 0x0 : 0x1) ;
-
+  BOOL wantPeaks = FALSE ;
+  
   if (0 && chrom != 2) return ;
   switch (type)
     {
@@ -376,7 +378,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 
       typeNam = (strand == 'f' ? "u.f" : "u.r") ;
       wiggles = pp->wiggles ;
-
+      wantPeaks = TRUE ;
       if (1)
 	{
 	  geneB = pp->geneBoxes ? array (pp->geneBoxes, chrom >> 1, BigArray) : 0 ;
@@ -442,6 +444,31 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	    }
 	}
 
+      if (wantPeaks && arrayMax(a))
+	{
+	  AC_HANDLE h = ac_new_handle ();
+	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
+	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
+	  Stack s = stackHandleCreate (0x1<<23, h) ;
+	  ACEOUT ao = 0 ;
+	  gzFile gzf = 0 ;
+	  int minCover = 30 ;
+	  
+	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.peaks%s", pp->outFileName, runNam, chromNam, typeNam, pp->gzo ? ".gz" : "") ;
+	  ao = aceOutCreateToStack (s,h) ; 
+	  gzf = gzopen (fNam, "wb") ;
+	  if (gzf)
+	    {
+	      peaksCreateExport (ao, chromNam, 0, wiggle_step, minCover, a) ;
+	      char *cp = stackText (s, 0) ;
+	      int k = strlen (cp) ;
+	      gzwrite (gzf, cp, k) ;
+	      if (gzclose(gzf) != Z_OK)
+		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
+	    }
+	  ac_free (h) ;
+	}
+      
       if (arrayMax(a))
 	{
 #define BUFFER_SIZE (2 * 1024 * 1024)  // 2MB
