@@ -1366,7 +1366,7 @@ static int sxWiggleGaussOne (WIGGLE *sx, Array aa, Array bb)
   for (ii = 0 ; ii < nn ; ii++)
     weight[ii]  /= wTotal ;
   for (wTotal = weight[0], ii = 1 ; ii < nn ; ii++)
-    wTotal += 2*weight[ii] ;
+    wTotal += 2*weight[ii] ;  /* the cumul should be 1.00000 */
  
   for (ii = 0, wp = arrp (aa, ii, WIGGLEPOINT) ; ii < arrayMax (aa) ; ii++, wp++) 
     if (wp->y > 0) break ;
@@ -2398,8 +2398,8 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
   if (x1 < 0)
     messcrash ("wigAzZone called x1 < 0: x1 = %d, xMin = %d", x1) ;
   int step = az->step ;
-  x1 = x1 + step - 1 - az->posMin ; x1 /= step ; // transform true position in array offsets
-  x2 = x2 + step - 1 - az->posMin ; x2 /= step ; x2++ ; // transform true position in array offsets
+  x1 = x1 + step - 1 - 0*az->posMin ; x1 /= step ; // transform true position in array offsets
+  x2 = x2 + step - 1 - 0*az->posMin ; x2 /= step ; x2++ ; // transform true position in array offsets
   if (! cumul)
     {
       if (x2 > x1)
@@ -2424,7 +2424,7 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
 	{
 	  while (x < x2 && x < az->c2)
 	    {
-	      wp = arrp (wPoints, jj, WIGGLEPOINT) ;
+	      wp = arrp (wPoints, x - x1 + az->posMin/step, WIGGLEPOINT) ;
 	      wp->x = x * step + az->posMin ;
 	      if (cumul)
 		wp->y += array (az->cache, x - az->c1, unsigned int) ;

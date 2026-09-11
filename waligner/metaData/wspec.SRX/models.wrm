@@ -167,10 +167,11 @@
                                       Enhancer_STARR   UNIQUE ?Text
                                       Exome   UNIQUE ?Text 
                                       ChIP    ?Text UNIQUE ?Text
-	                              ChIA_PET    UNIQUE ?Text	 UNIQUE ?Text				      
                                       ChIP_Input    UNIQUE ?Text UNIQUE ?Text				      
 				      Input ?SRR XREF Input_of
      				      Input_of ?SRR XREF Input
+	                              HiChIP    UNIQUE ?Text	 UNIQUE ?Text  // 3D genomic with ligation like HiC
+	                              ChIA_PET    UNIQUE ?Text	 UNIQUE ?Text				      
                               Microbiome
                               RNA_extraction RIN UNIQUE Float UNIQUE Float // range in case of a group
                                              Ligation

@@ -4602,7 +4602,7 @@ static void htileDrawScale (Htile look, float offset)
 
   sc3 = v1 + i0*sc1 ;
   u3 = TMAP2GRAPH (look->map, sc3 - look->map->a1 + 1) ;
-  sc4 = 10*sc1 + look->map->a1 ; ;
+  sc4 = 10*sc1 + look->map->a1 ; 
   if (sc4 >= 1000000 && sc3%1000000 == 0)
     graphText (messprintf ("%dM", sc3/1000000), u3 - .3 , y1 - 1.4) ;
   else if (sc4 >= 1000 && sc3%1000 == 0)

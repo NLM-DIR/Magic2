@@ -9875,74 +9875,105 @@ if (! -d tmp/Peaks) mkdir tmp/Peaks
 set toto=tmp/Peaks/$MAGIC.peaks2genes.ace
 echo '#' > $toto 
 
+set nonS=1
+if ($nonS == 0) then
 foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
   foreach chrom ($chromSetAll)
+  foreach uu (u nu)
+  foreach fr (f r)
     if (! -d tmp/Peaks/$run) mkdir tmp/Peaks/$run
-    if (! -e tmp/Peaks/$run.$chrom.newPeaks && -e tmp/WIGGLEGROUP/$run/$run.$chrom.u.f.az) then
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/WIGGLEGROUP/$run/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom"
+    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.newPeaks && -e tmp/SA/$run/wiggles/$run.$chrom.$uu.$fr.az) then
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/SA/$run/wiggles/$run.$chrom.$uu.$fr.az -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
     endif
-    if (! -e tmp/Peaks/$run.$chrom.newPeaks && -e tmp/SA/$run/wiggles/$run.$chrom.u.f.az) then
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/SA/$run/wiggles/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom"
+    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.newPeaks && -e tmp/WIGGLERUN/$run/$run.$chrom.$uu.$fr.az) then
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/WIGGLERUN/$run/$run.$chrom.$uu.$fr.az -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
+    endif
+    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.newPeaks && -e tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.$fr.az) then
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.$fr.az -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
     endif
   end
+  end
+  end
 end
+endif
+
+if ($nonS == 1) then
+foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
+  foreach chrom ($chromSetAll)
+  foreach uu (u nu)
+  foreach fr (fr)
+    if (! -d tmp/Peaks/$run) mkdir tmp/Peaks/$run
+    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.newPeaks && -e tmp/SA/$run/wiggles/$run.$chrom.$uu.f.az) then
+      echo tmp/SA/$run/wiggles/$run.$chrom.$uu.f.az > tmp/Peaks/_mm
+      echo tmp/SA/$run/wiggles/$run.$chrom.$uu.r.az >> tmp/Peaks/_mm
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -f tmp/Peaks/_mm -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
+    endif
+    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.newPeaks && -e tmp/WIGGLERUN/$run/$run.$chrom.$uu.f.az) then
+      echo tmp/WIGGLERUN/$run/$run.$chrom.$uu.f.az > tmp/Peaks/_mm
+      echo tmp/WIGGLERUN/$run/$run.$chrom.$uu.r.az >> tmp/Peaks/_mm
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -f tmp/Peaks/_mm -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
+    endif
+    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.newPeaks && -e tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.f.az) then
+      echo tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.f.az > tmp/Peaks/_mm
+      echo tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.r.az >> tmp/Peaks/_mm
+      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -f tmp/Peaks/_mm -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
+    endif
+  end
+  end
+  end
+end
+endif
 
 goto phaseLoop
 
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
-  foreach chrom ($chromSetAllZZZ)
-    if (0 && ! -E tmp/Peaks/$run.$chrom.multiPeaks2 && -e tmp/SA/$run/wiggles/$run.$chrom.u.f.az) then
-      echo -n "$run $chrom : "
-      date
-      echo "bin/wiggle -wiggle1 tmp/SA/$run/wiggles/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 10 -O COUNT -o titi88/$run.$chrom"
-            bin/wiggle -wiggle1 tmp/SA/$run/wiggles/$run.$chrom.u.f.az -I AZ -multiPeaks 2 -minCover 10 -O COUNT -o titi88/$run.$chrom
-      date
-    endif
-  end
-end
-
-# Count per threshold
+###############
+# Count per u/nu f/r types
 set toto=tmp/Peaks/count
 echo # > $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
-  cat tmp/Peaks/$run.*.multiPeaks | gawk -F '\t' '/^#/{next;}{m=$8;nn[m]++;}END{for(m in nn)if(m>0)printf("%s\t%d\ti\t%d\n",run,m,nn[m]);}' run=$run >> $toto.tsf
+foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
+  foreach uu (u nu)
+    foreach fr (f r fr)
+      cat tmp/Peaks/$run/$run.*.$uu.$fr.newPeaks | gawk -F '\t' '/^#/{next;}{nn++;}END{printf("%s\t%s.%s\ti\t%d\n",run,uu,fr,nn);}' run=$run uu=$uu fr=$fr >> $toto.tsf
+    end
+  end
 end
 cat $toto.tsf | sort -k 2,2n -k 1,1  | bin/tsf -i $toto.tsf -O table -o $toto
 
-#for a given threshold extract all peaks in all runs, then sort and merge them by continuity, construct a shadow file, extract the counts, run a profile
+###############
+#for all groups, extract all peaks, then sort and merge them by continuity, construct a shadow file, extract the counts, run a profile
+
 # extract the peaks
-foreach th (20 40 80 160 320 640 1280 2560)
-  set toto=tmp/Peaks/peaks.$th
-  echo # > $toto.all
-  foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
-    cat tmp/Peaks/$run.*.multiPeaks | gawk -F '\t' '/^#/{next;}{m=$8;if(m==th)printf("%s\t%d\t%d\n",$1,$2,$3);}'  th=$th >> $toto.all
-  end
-  cat $toto.all | sort -k 1,1 -k 2,2n -k 3,3n > $toto.sorted
-  echo >> $toto.sorted
-  cat $toto.sorted | gawk -F '\t' '/^#/{next;}{if($1!=chrom||$2>a2){if (a1>0)printf("Peak.%d.%d\t1\t%s\t%d\t%d\tP.%d.%d\n",th,np,chrom,a1,a2,th,np);np++;chrom=$1;a1=$2;a2=$3;}if(a2<$3)a2=$3;}' th=$th > $toto.sponge
+set toto=tmp/Peaks/peaks
+echo # > $toto.all
+foreach run (`cat MetaDB/$MAGIC/GroupWiggleList `)
+  cat tmp/Peaks/$run/$run.*.u.fr.newPeaks | gawk -F '\t' '/^#/{next;}{printf("%s\t%d\t%d\n",$1,$2,$3);}' >> $toto.all
 end
+cat $toto.all | sort -k 1,1 -k 2,2n -k 3,3n > $toto.sorted
+echo >> $toto.sorted
+cat $toto.sorted | gawk -F '\t' '/^#/{next;}{if($1!=chrom||$2>a2+10){if (a1>0)printf("Peak.%d.%d\t1\t%s\t%d\t%d\tP.%d.%d\n",th,np,chrom,a1,a2,th,np);np++;chrom=$1;a1=$2;a2=$3;}if(a2<$3)a2=$3;}' th=$th > $toto.sponge
+wc $toto.sponge
 
 #sensitivity specificity
 set toto2=tmp/Peaks/Findex
 echo ZZZZZ > ZZZZZ
 echo '#' > $toto.countIntersect
-foreach th (20 40 80 160 320 640 1280 2560)
-  set toto=tmp/Peaks/peaks.$th
+
+  set toto=tmp/Peaks/peaks
   foreach chrom ($chromSetAll)
     cat $toto.sponge | gawk '{if($3==chrom)print;}' chrom=$chrom > $toto.known
-    foreach run (`cat MetaDB/$MAGIC/RunWiggleList`)
-      cat tmp/Peaks/$run.$chrom.multiPeaks | gawk -F '\t' '/^#/{next;}{m=$8;if(m==th)printf("%s\t%d\t%d\n",$1,$2,$3);}'  th=$th > $toto.run
-      cat $toto.known ZZZZZ $toto.run | gawk -F '\t' '/^ZZZZZ/{zz=1;iMax=ii;ii=0;next;}{if(zz+0<1){ii=0+ii;pp[ii]=$1;a1[ii]=$4;a2[ii]=$5;ii++;next;}}{jMax++;b1=$2;b2=$3;x=0;while(ii<iMax && b1>a2[ii])ii++;if(a2[ii]>b1&&a1[ii]<b2){xx[ii]++;if(xx[ii]==1)niX++;ii++;x++;}ii--;if(x>0)njX++;}END{printf("%s\t%s\t%d\t%d\t%d\t%d\t%d\n",run,chrom,th,iMax,jMax,niX,njX);}' run=$run chrom=$chrom th=$th >> $toto.countIntersect
+    foreach run (`cat MetaDB/$MAGIC/g2r | gawk '{if($1==g)print $2;}' g=H3K4me3_shoots_14d_3 | sort`)
+      cat tmp/Peaks/$run/$run.$chrom.u.fr.newPeaks | gawk -F '\t' '/^#/{next;}{printf("%s\t%d\t%d\n",$1,$2,$3);}'  > $toto.run
+      cat $toto.known ZZZZZ $toto.run | gawk -F '\t' '/^ZZZZZ/{zz=1;iMax=ii;ii=0;next;}{if(zz+0<1){ii=0+ii;pp[ii]=$1;a1[ii]=$4;a2[ii]=$5;ii++;next;}}{jMax++;b1=$2;b2=$3;x=0;while(ii<iMax && b1>a2[ii])ii++;if(a2[ii]>b1&&a1[ii]<b2){xx[ii]++;if(xx[ii]==1)niX++;ii++;x++;}ii--;if(x>0)njX++;}END{printf("%s\t%s\t%d\t%d\t%d\t%d\n",run,chrom,iMax,jMax,niX,njX);}' run=$run chrom=$chrom  >> $toto.countIntersect
     end
   end
-end
+
 
 set toto2=tmp/Peaks/Findex
 echo '#' > $toto2
-foreach th (20 40 80 160 320 640 1280 2560)
-  set toto=tmp/Peaks/peaks.$th
-  cat $toto.countIntersect | gawk -F '\t' '{r=$1;iMax[r]+=$4;jMax[r]+=$5;niX[r]+=$6;njX[r]+=$7;}END{for(r in iMax){pp=100.0*niX[r]/(.000001+iMax[r]);rr=100.0*njX[r]/(.00001+jMax[r]);printf("%s\t%d\t%d\t%d\t%d\t%d\t%.2f\t%.2f\t%.2f\n",r,th,iMax[r],jMax[r],niX[r],njX[r],pp,rr,2*pp*rr/(0.00000001+pp+rr));}}' th=$th >> $toto2
-end
+
+  set toto=tmp/Peaks/peaks
+  cat $toto.countIntersect | gawk -F '\t' '{r=$1;iMax[r]+=$3;jMax[r]+=$4;niX[r]+=$5;njX[r]+=$6;}END{for(r in iMax){pp=100.0*niX[r]/(.000001+iMax[r]);rr=100.0*njX[r]/(.00001+jMax[r]);printf("%s\t%d\t%d\t%d\t%d\t%.2f\t%.2f\t%.2f\n",r,iMax[r],jMax[r],niX[r],njX[r],pp,rr,2*pp*rr/(0.00000001+pp+rr));}}' th=$th >> $toto2
+
   
 
 goto phaseLoop
