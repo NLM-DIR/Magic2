@@ -139,8 +139,12 @@ static void pkMovingAverage (Array src, Array dst, int w)
   int i, n = arrayMax (src), half = w / 2, i0, i1 ;
   Array s = arrayCreate (n + 1, double) ;
 
-  if (half < 1) { for (i = 0 ; i < n ; i++) array (dst, i, double) = arr (src, i, double) ;
-                  arrayDestroy (s) ; return ; }
+  if (half < 1)
+    {
+      for (i = 0 ; i < n ; i++) array (dst, i, double) = arr (src, i, double) ;
+      arrayDestroy (s) ;
+      return ;
+    }
   array (s, 0, double) = 0 ;
   for (i = 0 ; i < n ; i++)
     array (s, i+1, double) = arr (s, i, double) + arr (src, i, double) ;
@@ -483,8 +487,8 @@ Array findPeaksFull (Array aa, PEAKPARAMS *pp,
   if (pp) par = *pp ; else peakParamsDefault (&par) ;
 
   /*--- 0. raw profile as doubles, and its prefix sum -----------------*/
-  fd  = arrayCreate (n, double) ;
-  sum = arrayCreate (n + 1, double) ;
+  fd  = arrayHandleCreate (n, double, h) ;
+  sum = arrayHandleCreate (n + 1, double, h) ;
   array (sum, 0, double) = 0 ;
   for (i = 0 ; i < n ; i++)
     {
@@ -494,12 +498,13 @@ Array findPeaksFull (Array aa, PEAKPARAMS *pp,
 
   /*--- 1. slow background --------------------------------------------*/
   w = par.baseWindow > 2 ? par.baseWindow : (n / 16 > 9 ? n / 16 : 9) ;
-  bg = arrayHandleCreate (n, double, backgroundp ? h : 0) ;
+  bg = arrayHandleCreate (n, double, h) ;
   pkBackground (fd, bg, w) ;
 
   /*--- 2. noise, measured at the scale of the peaks -------------------*/
   L = par.noiseScale > 1 ? par.noiseScale : (w / 64 > 4 ? w / 64 : 4) ;
   if (L > 256) L = 256 ;
+  par.sigma = par.minCover ;
   sigma = par.sigma > 0 ? par.sigma : pkNoiseSigma (fd, bg, L) ;
   if (sigmap) *sigmap = sigma ;
 
@@ -516,13 +521,13 @@ Array findPeaksFull (Array aa, PEAKPARAMS *pp,
   }
 
   /*--- 3. detection copy ---------------------------------------------*/
-  fs = arrayCreate (n, double) ;
+  fs = arrayHandleCreate (n, double, h) ;
   if (par.smooth > 0) pkMovingAverage (fd, fs, 2 * par.smooth + 1) ;
   else for (i = 0 ; i < n ; i++) array (fs, i, double) = arr (fd, i, double) ;
 
-  nodes = arrayCreate (64, PKNODE) ;
-  label = arrayCreate (n, int) ;
-  keep  = arrayCreate (32, int) ;
+  nodes = arrayHandleCreate (64, PKNODE, h) ;
+  label = arrayHandleCreate (n, int, h) ;
+  keep  = arrayHandleCreate (32, int, h) ;
 
   /*--- 4..8 one connected component at a time ------------------------*/
   i = 0 ;
@@ -679,10 +684,11 @@ static void peakShow (ACEOUT ao, Array peaks, const char *target, int step, int 
       float av = (float)p->area / ((p->x4 - p->x3 + 1) * step) ;
       if (av < 30)
 	continue ;
-      aceOutf (ao, "%s\t%d\t%d\t%d"
+
+  aceOutf (ao, "%s\t%d\t%d\t%d"
 	       , target
-	       , p->x3  * step + posMin - step/2, p->x4  * step + posMin + step/2
-	       , (p->x4 - p->x3 + 1) * step
+	       , p->x3 + posMin - step/2, p->x4  + posMin + step/2
+	       , (p->x4 - p->x3 + 1) 
 	       ) ;
       aceOutf (ao, "\t%.1f\t%.1f\t%.1f\t%.1f"
 	       , (float)p->fApex / step 
@@ -715,7 +721,7 @@ void peaksCreateExport (ACEOUT ao, const char *target, int posMin, int step, int
   fprintf (stderr, "// %s : %d bins, sigma %.2f, baseWindow %d bins, minCover %d, %d peaks\n",
            "chrom", arrayMax (cc), pp.sigma, pp.baseWindow, pp.minCover, arrayMax (peaks)) ;
 
-  peakShow (ao, peaks, target, step, posMin, minCover) ;
+  if (0) peakShow (ao, peaks, target, step, posMin, minCover) ;
 
   ac_free (h) ;   /* frees peaks and bg, both allocated on h */
 } /* sxWiggleExportMultiPeaks */

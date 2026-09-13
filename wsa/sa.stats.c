@@ -843,9 +843,9 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		}
 	      LD[5] = mode ;
 	      LD[6] = j ? LD[6]/j : 0 ; /* average */
-	      /* construct the cumulated distrib */
+	      /* construct the cumulated distrib */  
 	      xp = arrp (up->p.lengthDistribution, 0, long int) ;
-	      for (i = 1 ; i < iMax ; i++, xp++)
+	      for (xp++, i = 1 ; i < iMax ; i++, xp++)
 		{
 		  xp[0] += xp[-1] ;
 		  if (! LD[0] && *xp >= j/100) LD[0] = i ;

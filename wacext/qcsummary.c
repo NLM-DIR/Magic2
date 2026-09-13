@@ -1830,7 +1830,7 @@ static void qcDoPair (QC *qc, RC *rc, BOOL doPercent)
 		  break ;
 		}
 	      else
-		aceOutf (qc->ao, "\t\t\t\t\t\t\t\t") ;
+		aceOutf (qc->ao, "\t\t\t\t\t\t\t\t\t") ;
 	    }
 	}
       else

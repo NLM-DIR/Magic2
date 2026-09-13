@@ -443,7 +443,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 		xp[i] += wp->weight ;
 	    }
 	}
-
+      wantPeaks = FALSE ;
       if (wantPeaks && arrayMax(a))
 	{
 	  AC_HANDLE h = ac_new_handle ();
@@ -459,12 +459,18 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	  gzf = gzopen (fNam, "wb") ;
 	  if (gzf)
 	    {
-	      peaksCreateExport (ao, chromNam, 0, wiggle_step, minCover, a) ;
+	      if (1)
+		peaksCreateExport (ao, chromNam, 0, wiggle_step, minCover, a) ;
+
+	      pushText (s, "Hellow world\n") ;
+
 	      char *cp = stackText (s, 0) ;
 	      int k = strlen (cp) ;
 	      gzwrite (gzf, cp, k) ;
+
 	      if (gzclose(gzf) != Z_OK)
 		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
+	      fprintf (stderr, "peaksCreateExport exported %d bytes to %s\n", k, fNam) ;
 	    }
 	  ac_free (h) ;
 	}
@@ -684,15 +690,15 @@ static float geneIndex (const PP *pp, GC *gc)
   int run = gc->run ;
   RunSTAT *rs = arrayp (pp->runStats, run, RunSTAT) ;
   double wall = 1 ;
-  double logDeux = log((double)2.0) ;
-  BOOL isLow = FALSE ;
+  // double logDeux = log((double)2.0) ;
+  // BOOL isLow = FALSE ;
   float index = 0 ;  /* depends on total counts */
-  double damper = 1000 ; /* damper in bp */
+  // double damper = 1000 ; /* damper in bp */
   int geneLength = 3000 ;
   long int average_read_ln = (rs->p.nBase1 + rs->p.nBase2) /(1L + rs->p.nReads) ;
-  int ln = geneLength, ln0 ;
+  int ln = geneLength ;
   int accessibleLength = 5000 ;
-  double z, abp, bp, genomicKb ;
+  // double z, abp, bp, genomicKb ;
 
   
   if (rs->accessibleLength8kb > 0)
