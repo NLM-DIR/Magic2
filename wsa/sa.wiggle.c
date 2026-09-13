@@ -443,34 +443,47 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 		xp[i] += wp->weight ;
 	    }
 	}
-      wantPeaks = FALSE ;
-      if (wantPeaks && arrayMax(a))
+      //  static int nnnn = 0 ;
+      wantPeaks = TRUE ;
+      if (1 && wantPeaks && arrayMax(a))
 	{
 	  AC_HANDLE h = ac_new_handle ();
 	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
-	  Stack s = stackHandleCreate (0x1<<23, h) ;
-	  ACEOUT ao = 0 ;
-	  gzFile gzf = 0 ;
-	  int minCover = 30 ;
+	  ACEOUT ao = 0, aoLevels = 0 ;
+	  gzFile gzf = 0, gzf2 = 0 ;
+	  int minCover = 100 ;
 	  
 	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.peaks%s", pp->outFileName, runNam, chromNam, typeNam, pp->gzo ? ".gz" : "") ;
-	  ao = aceOutCreateToStack (s,h) ; 
-	  gzf = gzopen (fNam, "wb") ;
-	  if (gzf)
+	  char *fNam2 = hprintf (h, "%s/wiggles/%s.%s.%s.peakCounts%s", pp->outFileName, runNam, chromNam, typeNam, pp->gzo ? ".gz" : "") ;
+	  if (1)
 	    {
-	      if (1)
-		peaksCreateExport (ao, chromNam, 0, wiggle_step, minCover, a) ;
+	      Stack s = stackHandleCreate (0x1<<23, h) ;
+	      Stack s2 = stackHandleCreate (0x1<<23, h) ;
+	      ao = aceOutCreateToStack (s,h) ;
+	      aoLevels = aceOutCreateToStack (s2,h) ; 
 
-	      pushText (s, "Hellow world\n") ;
+	      peaksCreateExport (ao, aoLevels, chromNam, 0, wiggle_step, minCover, 3, a) ;
 
 	      char *cp = stackText (s, 0) ;
 	      int k = strlen (cp) ;
+	      gzf = gzopen (fNam, "wb") ;
 	      gzwrite (gzf, cp, k) ;
-
 	      if (gzclose(gzf) != Z_OK)
 		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
-	      fprintf (stderr, "peaksCreateExport exported %d bytes to %s\n", k, fNam) ;
+
+	      gzf2 = gzopen (fNam2, "wb") ;
+	      cp = stackText (s2, 0) ;
+	      k = strlen (cp) ;
+	      gzwrite (gzf2, cp, k) ;
+	      if (gzclose(gzf2) != Z_OK)
+		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
+	    }
+	  else
+	    {
+	      ao = aceOutCreate (fNam, 0, pp->gzo, h) ;
+	      aoLevels = aceOutCreate (fNam2, 0, pp->gzo, h) ;
+	      peaksCreateExport (ao, aoLevels, chromNam, 0, wiggle_step, minCover, 1.5, a) ;
 	    }
 	  ac_free (h) ;
 	}
