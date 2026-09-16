@@ -2148,4 +2148,60 @@ BOOL isExecutableInPath (const char *name)
 /************************* end of file ****************************/
 /*******************************************************************/
 
+#include <stdint.h>
+#include <string.h>
 
+#define LIN   128                     /* exact bins for v < 128            */
+#define SUB   4                       /* 2^SUB sub-bins per octave above   */
+#define NBINS (LIN + 25 * (1 << SUB)) /* 528 bins covers all uint32        */
+
+static inline unsigned bin_of(uint32_t v) {
+    if (v < LIN) return v;                          /* exact region */
+    unsigned e = 31 - __builtin_clz(v);             /* e >= 7       */
+    unsigned m = (v >> (e - SUB)) & ((1u << SUB) - 1);
+    return LIN + ((e - 7) << SUB) + m;
+}
+
+static inline uint32_t bin_lo(unsigned b) {         /* smallest value in bin b */
+    if (b < LIN) return b;
+    unsigned k = b - LIN, e = 7 + (k >> SUB), m = k & ((1u << SUB) - 1);
+    return ((1u << SUB) + m) << (e - SUB);
+}
+
+/* Returns lower median bin's lowest value; *exact = 1 if the value is exact. */
+unsigned int arrayUintMedian (Array aa, BOOL noZero, int *exact, unsigned *bin_out,
+                     size_t *rank_in_bin) {
+    uint32_t h0[NBINS], h1[NBINS], h2[NBINS], h3[NBINS];
+    uint64_t h[NBINS];
+    int n = a ? arrayMax (a) : 0 ;
+    if (n < 1) return FALSE ;
+    if (n<2) 
+    memset(h0, 0, sizeof h0);
+    memset(h1, 0, sizeof h1);
+    memset(h2, 0, sizeof h2);
+    memset(h3, 0, sizeof h3);
+
+    size_t i = 0;
+    size_t n4 = n & ~(size_t)3;                     /* n rounded down to multiple of 4 */
+    for (; i < n4; i += 4) {
+        h0[bin_of(f[i    ])]++;
+        h1[bin_of(f[i + 1])]++;
+        h2[bin_of(f[i + 2])]++;
+        h3[bin_of(f[i + 3])]++;
+    }
+    for (; i < n; i++)                              /* tail: 0..3 elements */
+        h0[bin_of(f[i])]++;
+
+    for (unsigned b = 0; b < NBINS; b++)            /* merge (64-bit, no overflow) */
+        h[b] = (uint64_t)h0[b] + h1[b] + h2[b] + h3[b];
+
+    size_t k = (n - 1) / 2;                         /* 0-based rank of lower median */
+    uint64_t cum = 0;
+    unsigned b = 0;
+    while (cum + h[b] <= k) cum += h[b++];
+
+    *exact = (b < LIN);
+    *bin_out = b;
+    *rank_in_bin = (size_t)(k - cum);
+    return bin_lo(b);
+}
