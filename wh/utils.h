@@ -139,6 +139,11 @@ int regExpMatch (const char *data, const char *pattern) ;
  * ac_free (br) ;
  */
 
+
+/* fast calculation of the median of an array of unsigned int */
+unsigned int arrayUintMedian (Array aa, BOOL noZero) ;
+unsigned int bigArrayUintMedian (BigArray aa, BOOL noZero) ;
+
 #endif
 
 /*********************** end of file ********************************/

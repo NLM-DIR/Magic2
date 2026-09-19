@@ -2,197 +2,169 @@
  *  Implementation of peaks.h, see that file for the method.
  */
 
-#include "peaks.h"
 #include "ac.h"
+#include "peaks.h"
 
-/*----------------------------------------------------------------------*/
-/* Prefix sum of the raw profile, for O(1) area queries.  One double
- * array of length n+1: this is the only O(n) buffer this module needs.
- */
+typedef struct peakStruct {
+  int x1, x2 ;   /* array coordinates */
+  int yMax, area, level ;
+} PEAK ;
 
-static Array pkPrefixSum (Array aa)
+/***********************************************************************/
+/*
+  bin/wiggle -f tmp/SA/SRR3740166/wiggles/SRR3740166.NC_050103.1.u.fr -I AZ -multiPeaks 2 -O COUNT -o tmp/Peaks/SRR3740166/SRR3740166.NC_050103.1.u.fr
+*/
+static void peakFind (Array aa, Array peaks, int minCover) 
 {
-  int i, n = arrayMax (aa) ;
-  Array sum = arrayCreate (n + 1, double) ;
+  int iMax = arrayMax (aa), iPeak = 0 ;
+  double z1 = 1.5 ;
+  unsigned int *yp ;
 
-  array (sum, 0, double) = 0 ;
-  for (i = 0 ; i < n ; i++)
-    array (sum, i+1, double) = arr (sum, i, double) + arr (aa, i, unsigned int) ;
-  return sum ;
-}
-
-/*----------------------------------------------------------------------*/
-/* Scan [x1,x2] for maximal runs with f(x) >= cover.  A run's shape stays
- * exactly the same for every cover up to and including the minimum
- * value of f inside it: nothing breaks until cover exceeds that
- * minimum, at which point the bin(s) achieving it drop out and the run
- * must shrink or split.  That minimum is tracked for free while doing
- * the one scan that finds the run in the first place, so instead of
- * stepping cover by cover*z and re-scanning the same bins over and
- * over just to confirm nothing changed, we jump cover straight to the
- * first geometric level that exceeds the minimum.  The shape-rule test
- * (area > z*length*cover) is then just arithmetic on the fixed
- * (area,length) of the persisting run, so the intervening geometric
- * levels are filled into the level-count histogram at O(1) each, with
- * no re-scan of the bin array at all.  A real re-scan only happens
- * once the jump lands on a cover that can actually change the shape --
- * i.e. exactly when there is something genuinely new to find.
- *
- * A run is only ADDED TO THE PEAK TABLE the first time its shape
- * appears (see isNew below): re-confirming an unchanged run at higher
- * levels would just duplicate the same row.
- */
-
-static void pkRecurse (Array aa, Array sum, int x1, int x2,
-		       double cover, double z, int level,
-		       Array peaks, Array levelCount)
-{
-  int i = x1 ;
-
-  while (i <= x2)
+  if (minCover < 5) minCover = 5 ;
+  for (int i = 0 ; i < iMax ; i++)   /* scan whole wiggle */
     {
-      int j, compEnd, length ;
-      unsigned int minVal, v ;
-      double area, curCover ;
-      int curLevel ;
-      BOOL isNew, stillPassing ;
-
-      while (i <= x2 && arr (aa, i, unsigned int) < cover) i++ ;
-      if (i > x2) break ;
-
-      minVal = arr (aa, i, unsigned int) ;
-      j = i ;
-      while (j <= x2 && (v = arr (aa, j, unsigned int)) >= cover)
-	{
-	  if (v < minVal) minVal = v ;
-	  j++ ;
+      int j, x1 = i, x2 = i, dx ;
+      int yMax = 0 ;
+      int area = 0 ;
+      int areaBelow = 0 ;
+      
+      yp = arrp (aa, i, unsigned int) ;      /* passing over minCover */
+      for (j = i ; j < iMax && *yp < minCover ; yp++, j++)
+	areaBelow += *yp ;
+      x1 = x2 = j ; area = 0 ;
+      
+      for ( ; j < iMax && *yp >= minCover ; yp++, j++)
+	{    /* untill we fall below */
+	  yMax = (*yp > yMax ? *yp : yMax) ;
+	  area += *yp ;
 	}
-      compEnd = j - 1 ;
-      length = compEnd - i + 1 ;
-      area = arr (sum, compEnd + 1, double) - arr (sum, i, double) ;
+      x2 = j - 1 ;
+      dx = x2 - x1 + 1 ;
 
-      isNew = (level == 0) || i != x1 || compEnd != x2 ;
-
-      /* this exact shape is valid for every cover in [cover, minVal];
-       * walk the geometric levels in that range at O(1) each, with no
-       * further scanning of the bins.  curCover/curLevel are always
-       * advanced through to just past minVal before recursing below --
-       * skipping that would call pkRecurse again with an unchanged
-       * (cover,level) and recurse forever -- so only the levelCount
-       * bookkeeping, not the advance itself, is skipped once the shape
-       * rule stops passing (by monotonicity, fixed area/length can
-       * never pass again once cover has grown past the point it fails).
-       */
-      curCover = cover ;
-      curLevel = level ;
-      stillPassing = TRUE ;
-      while (curCover <= (double) minVal)
-	{
-	  if (stillPassing && area > z * length * curCover)
-	    {
-	      array (levelCount, curLevel, int) += 1 ;
-	      if (isNew && curLevel == level)
-		{
-		  PEAK *pk = arrayp (peaks, arrayMax (peaks), PEAK) ;
-		  pk->x1 = i ; pk->x2 = compEnd ;
-		  pk->level = level ;
-		  pk->cover = cover ;
-		  pk->area  = area ;
-		  pk->avg   = area / length ;
-		}
+      if (area > z1 * dx * minCover)
+	{    /* register */
+	  PEAK *pk = iPeak ? arrayp (peaks, iPeak - 1, PEAK) : 0 ;
+	  if (pk && areaBelow > .8 * (x1 - pk->x2) * minCover &&
+	      (area + pk->area + areaBelow) > z1 * (x2 - pk->x1) * minCover
+	      )
+	    { /* extend previous peak */
+	      pk->x2 = x2 ;
+	      pk->yMax = (yMax > pk->yMax ? yMax : pk->yMax) ;
+	      pk->area += area + areaBelow ;
 	    }
 	  else
-	    stillPassing = FALSE ;
-	  curCover *= z ;
-	  curLevel++ ;
+	    {
+	      pk = arrayp (peaks, iPeak++, PEAK) ;
+	      pk->x1 = x1 ;
+	      pk->x2 = x2 ;
+	      pk->yMax = yMax ;
+	      pk->area  = area ;
+	    }
 	}
-
-      /* a real re-scan only happens once curCover exceeds minVal, i.e.
-       * exactly when the shape can actually be different
-       */
-      pkRecurse (aa, sum, i, compEnd, curCover, z, curLevel, peaks, levelCount) ;
-
-      i = j ;
+      i = j - 1 ;
     }
-}
+} /* peakFind */
 
-/*----------------------------------------------------------------------*/
+/**********************************************************/
 
-Array peakCaller (Array aa, int minCover, double z, Array *levelCountp, AC_HANDLE h)
-{
-  Array peaks = arrayHandleCreate (256, PEAK, h) ;
-  Array levelCount = arrayHandleCreate (32, int, h) ;
-  Array sum ;
-  int n ;
-
-  if (!aa || ! (n = arrayMax (aa)))
-    { if (levelCountp) *levelCountp = levelCount ; else arrayDestroy (levelCount) ;
-      return peaks ; }
-  if (minCover < 1 || z <= 1)
-    messcrash ("peakCaller: need minCover >= 1 and z > 1") ;
-
-  sum = pkPrefixSum (aa) ;
-  pkRecurse (aa, sum, 0, n - 1, (double) minCover, z, 0, peaks, levelCount) ;
-  arrayDestroy (sum) ;
-
-  if (levelCountp) *levelCountp = levelCount ; else arrayDestroy (levelCount) ;
-  return peaks ;
-} /* peakCaller */
-
-/*----------------------------------------------------------------------*/
-
-void peaksExport (ACEOUT ao, ACEOUT aoLevels, const char *target,
-		  int minCover, int posMin, int step, double z, Array peaks, Array levelCount)
+void peaksExport (ACEOUT ao, ACEOUT aoLevels,
+		  Array peaks, int minCover, 
+		  const char *target, int posMin, int step,
+		  unsigned int median, unsigned int medianNoZero
+		  )
 {
   int i, n = peaks ? arrayMax (peaks) : 0 ;
-
-  if (ao)
+  KEYSET histo = 0 ;
+  
+  if (aoLevels)
     {
-      aceOutf (ao, "# %d distinct peak shape%s\n", n, n == 1 ? "" : "s") ;
-      aceOutf (ao, "# target\tx1\tx2\twidth\tlevel\tcover\tarea\tavg\n") ;
+      histo = keySetCreate () ;
       for (i = 0 ; i < n ; i++)
 	{
-	  PEAK *p = arrp (peaks, i, PEAK) ;
-
-	  aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%.1f\t%.1f\t%.1f\n",
-		   target,
-		   p->x1 * step + posMin, p->x2 * step + posMin,
-		   (p->x2 - p->x1 + 1) * step,
-		   p->level, p->cover, p->area * step, p->avg) ;
+	  PEAK *pk = arrp (peaks, i, PEAK) ;
+	  int ln = pk->x2 - pk->x1 + 1 ;
+	  float y = pk->area / ln ;
+	  int k = utMainPart (y) ;
+	  int k1 = 0 ;
+	  int k2 = 10 ;
+	  int k0 = k ;
+	  while (k0 >= k2) {k1+=3; k0 /= 10 ;}
+	  k1 += (k0 >= 2 ? 1 : 0) + (k0 >= 5 ? 1 : 0) ;
+	  keySet (histo, k1) += 1 ;
+	  pk->level = k ;
 	}
     }
-
-  if (aoLevels && levelCount)
+  if (ao)
     {
-      aceOutf (aoLevels, "# target\tminCover\tnPeaks\n") ;
-      for (i = 0 ; i < arrayMax (levelCount) ; i++)
+      aceOutf (ao, "# %d distinct peak shape%s threshold\t%.1f\n", n, n == 1 ? "" : "s", (float)minCover/step) ;
+      aceOutf (ao, "# target\tx1\tx2\twidth\theight\tavg\tarea kb\tlevel\n") ;
+      for (i = 0 ; i < n ; i++)
 	{
-	  aceOutf (aoLevels, "%s\t%d\t%d\n", target, minCover, arr (levelCount, i, int)) ;
-	  minCover *= z ;
+	  PEAK *pk = arrp (peaks, i, PEAK) ;
+	  int ln = step * (pk->x2 - pk->x1 + 1) ;
+	  aceOutf (ao, "%s\t%d\t%d\t%d\t%.1f\t%.0f\t%.1f\t%d\n",
+		   target,
+		   pk->x1 * step + posMin - step/2,
+		   pk->x2 * step + posMin + step/2,
+		   ln, 
+		   (float)pk->yMax / step,  /* yMax = nb of bases in one bin */
+		   (float)pk->area / ln, (float)pk->area/1000.0, pk->level/step
+		   ) ;
 	}
     }
+
+  if (aoLevels)
+    {
+      aceOutf (aoLevels, "# target\tminCover\tnPeaks\t median=%u medianNoZero=%u\n", median, medianNoZero) ;
+      int k1 = 1, dk = 0 ;
+      for (i = 0 ; i < keySetMax (histo) ; i++, dk = (dk + 1) % 3)
+	{
+	  aceOutf (aoLevels, "%s\t%d\t%d\n", target, k1, keySet (histo,i)) ;
+	  switch (dk)
+	    {
+	    case 0:
+	    case 2:
+	      k1 *= 2 ;
+	      break ;
+	    case 1:
+	      k1 /= 2 ; k1 *= 5 ;
+	      break ;
+	    }
+	}
+    }
+
+  keySetDestroy (histo) ;
   /* levelCount and peaks are owned by whichever AC_HANDLE allocated them
    * in peakCaller (see peaksCreateExport below) -- not destroyed here,
    * or ac_free(h) would double-free them
    */
 } /* peaksExport */
 
-/*----------------------------------------------------------------------*/
+/***********************************************************************/
 
-void peaksCreateExport (ACEOUT ao, ACEOUT aoLevels, const char *target, int posMin, int step,
-			int minCover, double z, Array aa)
+void peaksCreateExport (ACEOUT ao, ACEOUT aoLevels,
+			Array aa ,    // array of unsigned int
+			const char *target,
+			int posMin, int step, // x = i * step + posMin
+			int minCover   // default 3 median (aa) no zero
+			)
 {
   AC_HANDLE h = ac_new_handle () ;
-  Array levelCount = 0 ;
-  Array peaks = peakCaller (aa, minCover, z, &levelCount, h) ;
+  Array peaks = arrayHandleCreate (0x1 << 15, PEAK, h) ;  
+  unsigned int median = arrayUintMedian (aa, FALSE) ;
+  unsigned int medianNoZero = arrayUintMedian (aa, TRUE) ;
+  minCover = 3 * medianNoZero ;
 
-  fprintf (stderr, "// %s : %d bins, minCover %d, z %.2f, %d distinct peak shapes\n",
-	   target, aa ? arrayMax (aa) : 0, minCover, z,
-	   (int) arrayMax (peaks)) ;
+  peakFind (aa, peaks, minCover) ;
+  
+  fprintf (stderr, "// %s : found %d peaks at minCover %d\n",
+	   target, arrayMax (peaks), minCover) ;
 
-  peaksExport (ao, aoLevels, target, minCover, posMin, step, z, peaks, levelCount) ;
+  peaksExport (ao, aoLevels, peaks, minCover, target, posMin, step, median, medianNoZero) ;
 
   ac_free (h) ;   /* frees peaks */
 } /* peaksCreateExport */
 
+/***********************************************************************/
 /**************************** End of File ******************************/
+/***********************************************************************/

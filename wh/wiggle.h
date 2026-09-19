@@ -67,12 +67,14 @@ typedef struct wiggleStruct {
   BOOL strand, antistrand, stranded, mrnaWiggle ;
   int strandShift_max, minErrRate, minAliRate, minAliLength, pair ;
   int maxErr, maxErrRate ;
-  const char *strandShift_f, *strandShift_r ;
+  const char *strandShift_f, *strandShift_r ;   /* file names */
+  const char *strandShift_F, *strandShift_R ;   /* file of file names */
   const char *strategy ;
   BOOL RNA_seq ;
   BOOL ventilate, cumul, peaks, hierarchic, lengthCoverage, flagEnds ;
   int wiggleRatio, wiggleRatioDamper ;
   int multiPeaks ;
+  int pair_shift ;
   float proeminence ;
   int BF_predictor ; /* degree of the polynome used to compress the BF format */
   int BF_compressor ; /* degree of the polynome used to compress the BF format */
@@ -122,9 +124,4 @@ typedef struct azStruct {
 } AZZ ;
 
 AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, int bMax, AC_HANDLE h0) ; /* Write the data */
-AZZ *wigAzOpen (const char *fName, AC_HANDLE h) ;    /* Open an AZZ file, return NULL on error. */
-BOOL wigAzAt (AZZ *az, int x, unsigned int *value) ; /* Value at position x, FALSE if out of range */
-BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPos, long int *nBpp, BOOL cumul) ; /* Out of range values are just set to zero */
-void azDoClose (AZZ *az) ;     /* free az */
-#define azClose(_az) {azDoClose(_az);_az=0}
 #endif

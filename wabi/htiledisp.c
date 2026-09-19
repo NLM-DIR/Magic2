@@ -4430,7 +4430,6 @@ static void htileGenomeAction (void *v)
 static void htileRunGroupAction (void *v)
 {
   int ns = assInt (v) ;
-  HTYPE *tt ;
   Htile look = currentHtile("htileFilterProbes") ;
 
   switch (ns)
@@ -6469,7 +6468,13 @@ static BOOL solexaAllInit (Htile look)
       const char *suffix[14] = {".LF", ".RF", ".LR", ".RR", "nu+", "nu-", "pp+", "pp-", "+", "-", ".eLF", ".eRF", ".eLR", ".eRR" } ;
       const int colors[14] = { BROWN, GREEN, MAGENTA, CYAN, PALEORANGE, YELLOW, BLACK, GRAY, ORANGE, DARKBLUE, PALEGREEN, PALEVIOLET, PALEMAGENTA, PALECYAN  } ;
       aa = look->solexaAll = arrayHandleCreate (128, PNX, look->h) ;
-      iter = ac_dbquery_iter (look->db, "find run w_colour || wiggle", h) ;
+      AC_OBJ Map = 0 ;
+      if (look->key && keyFindTag (look->key, str2tag("IntMap")) &&
+	  (Map = ac_get_obj (look->db, className(look->key), name(look->key), h))
+	  )
+	iter = ac_objquery_iter (Map, "follow intMap ; follow wiggle", h) ;
+      else
+	iter = ac_dbquery_iter (look->db, "find run w_colour || wiggle", h) ;
       ir = -1 ;
       while (ac_free (Run), ir++, Run = ac_next_obj (iter))
 	{
@@ -6620,8 +6625,8 @@ BOOL htileDisplay (KEY key, KEY from, BOOL isOldGraph)
 
   look->db = ac_db ;          /* cosmetic, since we are inside xace */
   look->h = handle ;
-  solexaAllInit (look) ;
   look->key = key ;
+  solexaAllInit (look) ;
   look->from = from ;
 
   look->hideHeader = oldHideHeader ;

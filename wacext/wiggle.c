@@ -46,7 +46,7 @@ static int sxGetMap (WIGGLE *sx)
   SXMAP *sxmap, *sxmap2 ;
 
   sx->mapDict = dictHandleCreate (1024, sx->h) ;
-  sx->map2remap = keySetHandleCreate (h) ;
+  sx->map2remap = keySetHandleCreate (sx->h) ;
   sx->target_mapDict = dictHandleCreate (32, sx->h) ;
   sx->remapDict = dictHandleCreate (1024, sx->h) ;
   if (! sx->mapFileName) 
@@ -201,7 +201,7 @@ static void sxGetSelection (WIGGLE *sx)
 
 static void sxVentilate (WIGGLE *sx)
 {
-  AC_HANDLE h = 0 ;
+  AC_HANDLE h = ac_new_handle () ;
   ACEIN ai = sx->ai ;
   ACEOUT ao = 0, eo = 0, po = 0 ;
   Array aos = arrayHandleCreate (64,ACEOUT,h) ;
@@ -638,11 +638,137 @@ static void sxVentilate (WIGGLE *sx)
 
 /***********/
 
+static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const char *fNamr, int step, int dxmax, WIGGLE *sxf, WIGGLE *sxr)
+{
+  Array aaf, aar ;
+  int i, ii, jj, iMax, k, iLimitMax = 0, iaaa ;
+  int dx, dx0 ;
+  double z, uu, vv, u1, v1, nu ;
+  double uv[dxmax], u2[dxmax] ;
+  WIGGLEPOINT *z1p, *z2p ;
+  int *limitp, limits[] = {50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 10000000, -1} ;
+  long int cumul[100000], any[100], both[100], just[100] ;
+  
+  memset (cumul, 0, sizeof(cumul)) ;
+  memset (both, 0, sizeof(both)) ;
+  memset (just, 0, sizeof(just)) ;
+  memset (any, 0, sizeof(any)) ;
+  memset (u2, 0, sizeof(u2)) ;
+  memset (uv, 0, sizeof(uv)) ;
+  
+  nu = uu = vv = u1 = v1 = 0 ; 
+  
+  for (iaaa = 0 ; iaaa < arrayMax (sxf->aaa) ; iaaa++)
+    {
+      if (0 && iaaa != 2) continue ;
+      aaf = array (sxf->aaa, iaaa, Array) ;  /* i do not know why it has to be 2 */
+      aar = array (sxr->aaa, iaaa, Array) ;
+      ii = aaf ? arrayMax (aaf) : 0 ; 
+      jj = aar ? arrayMax (aar) : 0 ;
+      iMax = ii < jj ? ii : jj ; iMax -= dxmax ;
+      if (iMax <= 0) continue ;
+      
+      z1p = arrp(aaf,0,WIGGLEPOINT) ; z2p = arrp(aar,0,WIGGLEPOINT) ;
+      dx0 = (z2p->x - z1p->x)/step ;
+      if (dx0 > 0) 
+	{ z1p += dx0 ; iMax -= dx0 ; }
+      if (dx0 < 0) 
+	{ z2p += dx0 ; iMax += dx0 ; }
+      for (ii = 0 ; ii < iMax ; z1p++, z2p++, ii++)
+	{ 
+	  z = z1p->y ; uu += z*z ; u1 += z ;  nu++ ;
+	  if (z > 0) 
+	    for (dx = 0 ; dx < dxmax ; dx++)
+	      { u2[dx] += z * ((z1p+dx)->y) ; uv[dx] += z * ((z2p+dx)->y) ; }
+	  z = z2p->y ; vv += z*z ; v1 += z ;
+	  z = z1p->y +  z2p->y ; 
+	  for (i = 0, limitp = limits ; *limitp > -1 ; i++, limitp++)
+	    if (z >= *limitp)
+	      {
+		/* at various thresholds, compute the number of position at a given strand percentage */
+		k = .49 + 100 * z1p->y/z ; 
+		cumul[k + 200 * i] += step ;
+		if (i > iLimitMax) iLimitMax = i ;
+		if ((k >= 30 && k <= 70) || (z1p->y >= 5 && z2p->y >= 5))
+		  both[i] +=  step ;
+		if (k < 1 || k > 99) just[i] +=  step ;
+		any[i] +=  step ;
+		
+	      }
+	}
+    }
+  if (0)
+    {  /* we cannot substract the mean values, they are too close to zero, sorry */
+      uu -= u1 * u1 / nu ; vv -= v1 * v1 / nu ;
+      z = sqrt (uu * vv) ;
+      for (dx = 0 ; dx < dxmax ; dx++)
+	{
+	  uv[dx] = (uv[dx] - u1 * v1 / nu) / z ;
+	  u2[dx] = (u2[dx] - u1 * u1 / nu) / uu ;
+	}
+    }
+  else
+    {
+      z = sqrt (uu * vv) ;
+      for (dx = 0 ; dx < dxmax ; dx++)
+	{
+	  uv[dx] = (uv[dx]) / z  ;
+	  u2[dx] = (u2[dx]) / uu ;
+	}
+    }	  
+  
+  if (ao)
+    {
+      aceOutf (ao, "# %s\n", timeShowNow()) ;
+      aceOutf (ao, "# Autocorrelation of the wiggle on the top strand, used as control\n") ;
+      aceOutf (ao, "# Trans correlation of the 2 strand showing the average lag of the minus strand wiggle\n") ;
+      aceOutf (ao, "# Distance\tCis autocorrelation\tTrans correlation\t\n") ;
+      aceOutf (ao, "# file_f = %s\n", fNamf) ;
+      aceOutf (ao, "# file_r = %s\n", fNamr) ;
+      
+      for (dx = 0 ; dx < dxmax ; dx++)
+	aceOutf (ao, "%d\t%g\t%g\n", step * dx, u2[dx], uv[dx]) ;
+      aceOutf (ao, "\n\n") ;
+    }
+
+  if (ao2)
+    {
+      aceOutf (ao2, "# %s\n", timeShowNow()) ;
+      aceOutf (ao2, "# Histogram above various thresholds of the percentage of coverage on the plus strand\n") ;
+      aceOutf (ao2, "# Percent +") ;
+      for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
+	aceOutf (ao2, "\tthr %d", *limitp) ;
+      for (k = 0 ; k <= 100 ; k++)
+	{
+	  aceOutf (ao2, "\n%d", k) ;
+	  for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
+	  aceOutf (ao2, "\t%ld", cumul[k + 200 * i]) ;
+      }
+    aceOutf (ao2, "\nTotal") ;
+    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
+      aceOutf (ao2, "\t%ld", any[i]) ;
+    aceOutf (ao2, "\nOnly_read_on_one_strand") ;
+    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
+      aceOutf (ao2, "\t%ld", just[i]) ;
+    aceOutf (ao2, "\nReliably_read_on_both_strands") ;
+    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
+      aceOutf (ao2, "\t%ld", both[i]) ;
+    /* 
+       any
+       Only read on single strand (0 or 100/any)
+       Reliably read on both strand (30% to 70% or at least 5 on each strand)
+    */
+    aceOutf (ao2, "\n\n") ;
+  }
+}
+  
 static void sxStrandShift (WIGGLE *sx)
 {
-  AC_HANDLE h = 0 ;
+  AC_HANDLE h = ac_new_handle () ;
   WIGGLE sxf, sxr ; 
-  ACEOUT ao ;
+  ACEOUT ao = 0, ao2 = 0 ;
+  int dxmax = 1+sx->strandShift_max/sx->out_step ;
+
 
   /* prepare 2 WIGGLE structures */
   memcpy (&sxf, sx, sizeof (WIGGLE)) ;
@@ -650,138 +776,95 @@ static void sxStrandShift (WIGGLE *sx)
   sxf.h = h ;
   sxr.h = h ;
 
-  ao = aceOutCreate (sx->outFileName, ".strand_shift.txt", sx->gzo, h) ;
-
   sxf.dict = dictHandleCreate (100000, h) ;
   sxf.aaa = arrayHandleCreate (100, Array, h) ;
-  
-  sxf.ai = aceInCreate (sx->strandShift_f, sx->gzi, h) ;
-  if (! sxf.ai) messcrash ("Cannot file open %s, sorry", sx->strandShift_f) ;
-
   sxr.dict = dictHandleCreate (100000, h) ;
   sxr.aaa = arrayHandleCreate (100, Array, h) ;
-  
-  sxr.ai = aceInCreate (sx->strandShift_r, sx->gzi, h) ;
-  if (! sxr.ai) messcrash ("Cannot file open %s, sorry", sx->strandShift_r) ;
 
   /* parse the 2 wiggles */
-  sxWiggleParse (&sxf, 0, 0) ;
-  sxWiggleParse (&sxr, 0, 0) ;
-
+  if (sx->strandShift_f && sx->strandShift_r)
+    {
+      if (1)
+	{
+	  AC_HANDLE h1 = ac_new_handle () ;
+	  char *cp = strnew (sx->strandShift_f, h1) ;
+	  while (cp)
+	    {
+	      AC_HANDLE h2 = ac_new_handle () ;
+	      char *cq = strchr (cp, ',') ;
+	      if (cq) *cq = 0 ;
+	      sxf.ai = aceInCreate (cp, sx->gzi, h2) ;
+	      if (! sxf.ai) messcrash ("Cannot file open %s, sorry", cp) ;
+	      sxWiggleParse (&sxf, 0, 0) ;
+	      cp = cq ? cq+1 : 0 ;
+	      ac_free (h2) ;
+	    }
+	  ac_free (h1) ;
+	}
+      if (1)
+	{
+	  AC_HANDLE h1 = ac_new_handle () ;
+	  char *cp = strnew (sx->strandShift_r, h1) ;
+	  while (cp)
+	    {
+	      AC_HANDLE h2 = ac_new_handle () ;
+	      char *cq = strchr (cp, ',') ;
+	      if (cq) *cq = 0 ;
+	      sxr.ai = aceInCreate (cp, sx->gzi, h2) ;
+	      if (! sxr.ai) messcrash ("Cannot file open %s, sorry", cp) ;
+	      sxWiggleParse (&sxr, 0, 0) ;
+	      cp = cq ? cq+1 : 0 ;
+	      ac_free (h2) ;
+	    }
+	  ac_free (h1) ;
+	}
+    }
+  else if (sx->strandShift_F && sx->strandShift_R)
+    {
+      if (1)
+	{
+	  AC_HANDLE h1 = ac_new_handle () ;
+	  ACEIN ai = aceInCreate (sx->strandShift_F, 0, h1) ;
+	  if (ai)
+	    while (aceInCard (ai))
+	      {
+		char *cp = aceInWord (ai) ;
+		if (! cp || *cp == '#') continue ;
+		AC_HANDLE h2 = ac_new_handle () ;
+		sxf.ai = aceInCreate (cp, sx->gzi, h2) ;
+		if (! sxf.ai) messcrash ("Cannot file open %s, sorry", cp) ;
+		sxWiggleParse (&sxf, 0, 0) ;
+		ac_free (h2) ;
+	      }
+	  ac_free (h1) ;
+	}
+  
+      if (1)
+	{
+	  AC_HANDLE h1 = ac_new_handle () ;
+	  ACEIN ai = aceInCreate (sx->strandShift_R, 0, h1) ;
+	  if (ai)
+	    while (aceInCard (ai))
+	      {
+		char *cp = aceInWord (ai) ;
+		if (! cp || *cp == '#') continue ;
+		AC_HANDLE h2 = ac_new_handle () ;
+		sxr.ai = aceInCreate (cp, sx->gzi, h2) ;
+		if (! sxr.ai) messcrash ("Cannot file open %s, sorry", cp) ;
+		sxWiggleParse (&sxr, 0, 0) ;
+		ac_free (h2) ;
+	      }
+	  ac_free (h1) ;
+	}
+    }  
   /* compare */
-  {
-    Array aaf, aar ;
-    int i, ii, jj, iMax, k, iLimitMax = 0, iaaa ;
-    int dx, dx0, dxmax = 1+sx->strandShift_max/sx->out_step ;
-    double z, uu, vv, u1, v1, uv[dxmax], u2[dxmax], nu ;
-    WIGGLEPOINT *z1p, *z2p ;
-    int *limitp, limits[] = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 10000000, -1} ;
-    long int cumul[100000], any[100], both[100], just[100] ;
+  ao = aceOutCreate (sx->outFileName, ".strand_shift.txt", sx->gzo, h) ;
+  ao2 = aceOutCreate (sx->outFileName, ".strand_coverage_per_threshold.txt", sx->gzo, h) ;
 
-    memset (cumul, 0, sizeof(cumul)) ;
-    memset (both, 0, sizeof(both)) ;
-    memset (just, 0, sizeof(just)) ;
-    memset (any, 0, sizeof(any)) ;
-
-    nu = uu = vv = u1 = v1 = 0 ; 
-    for (dx = 0 ; dx < dxmax ; dx++)
-      uv[dx] = u2[dx] = 0 ;
-
-    for (iaaa = 0 ; iaaa < arrayMax (sxf.aaa) ; iaaa++)
-      {
-	if (0 && iaaa != 2) continue ;
-	aaf = array (sxf.aaa, iaaa, Array) ;  /* i do not know why it has to be 2 */
-	aar = array (sxr.aaa, iaaa, Array) ;
-	ii = aaf ? arrayMax (aaf) : 0 ; 
-	jj = aar ? arrayMax (aar) : 0 ;
-	iMax = ii < jj ? ii : jj ; iMax -= dxmax ;
-	if (iMax <= 0) continue ;
-	
-	z1p = arrp(aaf,0,WIGGLEPOINT) ; z2p = arrp(aar,0,WIGGLEPOINT) ;
-	dx0 = (z2p->x - z1p->x)/sx->out_step ;
-	if (dx0 > 0) 
-	  { z1p += dx0 ; iMax -= dx0 ; }
-	if (dx0 < 0) 
-	  { z2p += dx0 ; iMax += dx0 ; }
-	for (ii = 0 ; ii < iMax ; z1p++, z2p++, ii++)
-	  { 
-	    z = z1p->y ; uu += z*z ; u1 += z ;  nu++ ;
-	    if (z > 0) 
-	      for (dx = 0 ; dx < dxmax ; dx++)
-		{ u2[dx] += z * ((z1p+dx)->y) ; uv[dx] += z * ((z2p+dx)->y) ; }
-	    z = z2p->y ; vv += z*z ; v1 += z ;
-	    z = z1p->y +  z2p->y ; 
-	    for (i = 0, limitp = limits ; *limitp > -1 ; i++, limitp++)
-	      if (z >= *limitp)
-		{
-		  /* at various thresholds, compute the number of position at a given strand percentage */
-		  k = .49 + 100 * z1p->y/z ; 
-		  cumul[k + 200 * i] += sx->out_step ;
-		  if (i > iLimitMax) iLimitMax = i ;
-		  if ((k >= 30 && k <= 70) || (z1p->y >= 5 && z2p->y >= 5))
-		    both[i] +=  sx->out_step ;
-		  if (k < 1 || k > 99) just[i] +=  sx->out_step ;
-		  any[i] +=  sx->out_step ;
-
-		}
-	  }
-      }
-    if (0)
-      {  /* we cannot substract the mean values, they are too close to zero, sorry */
-	uu -= u1 * u1 / nu ; vv -= v1 * v1 / nu ;
-	z = sqrt (uu * vv) ;
-	for (dx = 0 ; dx < dxmax ; dx++)
-	  {
-	    uv[dx] = (uv[dx] - u1 * v1 / nu) / z ;
-	    u2[dx] = (u2[dx] - u1 * u1 / nu) / uu ;
-	  }
-      }
-    else
-      {
-	z = sqrt (uu * vv) ;
-	for (dx = 0 ; dx < dxmax ; dx++)
-	  {
-	    uv[dx] = (uv[dx]) / z  ;
-	    u2[dx] = (u2[dx]) / uu ;
-	  }
-      }	  
-
-    aceOutf (ao, "# %s\n", timeShowNow()) ;
-    aceOutf (ao, "# Autocorrelation of the wiggle on the top strand, used as control\n") ;
-    aceOutf (ao, "# Trans correlation of the 2 strand showing the average lag of the minus strand wiggle\n") ;
-    aceOutf (ao, "# Distance\tCis autocorrelation\tTrans correlation\t\n") ;
-    for (dx = 0 ; dx < dxmax ; dx++)
-      aceOutf (ao, "%d\t%g\t%g\n", sx->out_step * dx, u2[dx], uv[dx]) ;
-    aceOutf (ao, "\n\n") ;
-
-    ao = aceOutCreate (sx->outFileName, ".strand_coverage_per_threshold.txt", sx->gzo, h) ;
-    aceOutf (ao, "# %s\n", timeShowNow()) ;
-    aceOutf (ao, "# Histogram above various thresholds of the percentage of coverage on the plus strand\n") ;
-    aceOutf (ao, "# Percent +") ;
-    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-      aceOutf (ao, "\tthr %d", *limitp) ;
-    for (k = 0 ; k <= 100 ; k++)
-      {
-	aceOutf (ao, "\n%d", k) ;
-	for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-	  aceOutf (ao, "\t%ld", cumul[k + 200 * i]) ;
-      }
-    aceOutf (ao, "\nTotal") ;
-    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-      aceOutf (ao, "\t%ld", any[i]) ;
-    aceOutf (ao, "\nOnly_read_on_one_strand") ;
-    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-      aceOutf (ao, "\t%ld", just[i]) ;
-    aceOutf (ao, "\nReliably_read_on_both_strands") ;
-    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-      aceOutf (ao, "\t%ld", both[i]) ;
-    /* 
-       any
-       Only read on single strand (0 or 100/any)
-       Reliably read on both strand (30% to 70% or at least 5 on each strand)
-    */
-    aceOutf (ao, "\n\n") ;
-  }
+  const char *fNamf = sx->strandShift_f ? sx->strandShift_f : sx->strandShift_F ;
+  const char *fNamr = sx->strandShift_r ? sx->strandShift_r : sx->strandShift_R ;
+    
+  wiggleCisTransShift (ao, ao2, fNamf, fNamr, sx->out_step, dxmax, &sxf, &sxr) ;
 
   ac_free (h) ;
   return ;
@@ -1039,6 +1122,7 @@ static void usage (const char *error)
 	   "// -strand_shift max -ssf file1.f -ssr file2.r : auto-correlation of forward and reverse wiggles\n"
 	   "//    In ChIP-seq for example the reads on the 2 strands are shifted by the effective length of the library\n"
 	   "//    This function reports the correlation (cosine in the scalar product) for shifts up to max bp\n"
+	   "//    This function accepts two coma separated lists of files, so it can analyze many chomosomes at once\n"
 	   "// -ventilate [-hierarchic] [-minAliRate number -minAliLength number -naxSnp number -maxErrRate number] [-pair fragmentLength]\n"
 	   "//    Implies -I BHIT -O BHIT, requires -o, splits a HIT file in one BG file per chromosome\n" 
 	   "//    in -hierarchic mode, a single target per target_class is exported , excluding the genome\n"
@@ -1060,7 +1144,7 @@ int main (int argc, const char **argv)
   const char *ccp ;
   char iType[13] ;
   AC_HANDLE h = 0 ;
-
+  
   freeinit () ; 
   messErrorInit (argv[0]) ;
     
@@ -1097,6 +1181,7 @@ int main (int argc, const char **argv)
   getCmdLineInt(&argc, argv, "-BF_predictor", &(sx.BF_predictor)) ;
 
   getCmdLineInt(&argc, argv, "-pair", &(sx.pair)) ;
+  getCmdLineInt(&argc, argv, "-pair_shift", &(sx.pair_shift)) ;
   sx.wiggleScale1 = 1.0 ; sx.wiggleScale2 = 0 ;
   if (getCmdLineFloat(&argc, argv, "-stranding", &(sx.wiggleScale2)))
     {
@@ -1109,8 +1194,10 @@ int main (int argc, const char **argv)
 
   /* strand shift */
   getCmdLineInt(&argc, argv, "-strand_shift", &(sx.strandShift_max)) ;
-  getCmdLineOption (&argc, argv, "-ssf", &(sx.strandShift_f));
+  getCmdLineOption (&argc, argv, "-ssf", &(sx.strandShift_f));  /* file name */
   getCmdLineOption (&argc, argv, "-ssr", &(sx.strandShift_r));
+  getCmdLineOption (&argc, argv, "-ssF", &(sx.strandShift_F));  /* file of file names */
+  getCmdLineOption (&argc, argv, "-ssR", &(sx.strandShift_R));
 
   /* input output selection */
 
@@ -1471,6 +1558,8 @@ int main (int argc, const char **argv)
 	  else if (sx.inFileOfFileList)  /* list of wiggle files */
 	    {
 	      ACEIN ai = aceInCreate (sx.inFileOfFileList, 0, h) ;
+	      int nnF = 0 ;
+	      int pair_shift = sx.pair_shift ;
 	      if (ai)
 		{
 		  char *fNam = 0 ;
@@ -1480,16 +1569,19 @@ int main (int argc, const char **argv)
 			{
 			  if (*fNam == '#') continue ;
 			  sx.ai = aceInCreate (fNam, sx.gzi, h) ;
-			  if (sx.ai)
+			  sx.pair_shift = (nnF == 0 ? pair_shift/2 : -pair_shift/2) ;
+ 			  if (sx.ai)
 			    {
 			      aceInSpecial (sx.ai,"\t\n") ;
 			      sxWiggleParse (&sx, 0, 0) ;
 			      ac_free (sx.ai) ;
+			      nnF++ ;
 			    }
 			}
 		    }
 		  ac_free (ai) ;
 		}
+	      sx.pair_shift = pair_shift ;
 	    }
 	  else  /* single wiggle or pipe from stdin */
 	    { 

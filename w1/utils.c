@@ -2147,61 +2147,125 @@ BOOL isExecutableInPath (const char *name)
 /*******************************************************************/
 /************************* end of file ****************************/
 /*******************************************************************/
-
 #include <stdint.h>
-#include <string.h>
 
 #define LIN   128                     /* exact bins for v < 128            */
 #define SUB   4                       /* 2^SUB sub-bins per octave above   */
 #define NBINS (LIN + 25 * (1 << SUB)) /* 528 bins covers all uint32        */
 
-static inline unsigned bin_of(uint32_t v) {
-    if (v < LIN) return v;                          /* exact region */
-    unsigned e = 31 - __builtin_clz(v);             /* e >= 7       */
-    unsigned m = (v >> (e - SUB)) & ((1u << SUB) - 1);
-    return LIN + ((e - 7) << SUB) + m;
-}
+static inline unsigned int bin_of (uint32_t v)
+{
+  if (v < LIN) return v ;
+  unsigned e = 31 - __builtin_clz (v) ;
+  unsigned m = (v >> (e - SUB)) & ((1u << SUB) - 1) ;
+  return LIN + ((e - 7) << SUB) + m ;
+} /* bin_of */
 
-static inline uint32_t bin_lo(unsigned b) {         /* smallest value in bin b */
-    if (b < LIN) return b;
-    unsigned k = b - LIN, e = 7 + (k >> SUB), m = k & ((1u << SUB) - 1);
-    return ((1u << SUB) + m) << (e - SUB);
-}
-
-/* Returns lower median bin's lowest value; *exact = 1 if the value is exact. */
-unsigned int arrayUintMedian (Array aa, BOOL noZero, int *exact, unsigned *bin_out,
-                     size_t *rank_in_bin) {
-    uint32_t h0[NBINS], h1[NBINS], h2[NBINS], h3[NBINS];
-    uint64_t h[NBINS];
-    int n = a ? arrayMax (a) : 0 ;
-    if (n < 1) return FALSE ;
-    if (n<2) 
-    memset(h0, 0, sizeof h0);
-    memset(h1, 0, sizeof h1);
-    memset(h2, 0, sizeof h2);
-    memset(h3, 0, sizeof h3);
-
-    size_t i = 0;
-    size_t n4 = n & ~(size_t)3;                     /* n rounded down to multiple of 4 */
-    for (; i < n4; i += 4) {
-        h0[bin_of(f[i    ])]++;
-        h1[bin_of(f[i + 1])]++;
-        h2[bin_of(f[i + 2])]++;
-        h3[bin_of(f[i + 3])]++;
+/**************************************/
+/* k-th smallest (0-based) of x[0..n-1], reorders x, O(n) average */
+static uint32_t select_kth (uint32_t *x, long n, long k)
+{
+  long lo = 0, hi = n - 1 ;
+  while (lo < hi)
+    {
+      uint32_t pivot = x[lo + (hi - lo) / 2] ;
+      long i = lo, j = hi ;
+      while (i <= j)
+        {
+          while (x[i] < pivot) i++ ;
+          while (x[j] > pivot) j-- ;
+          if (i <= j)
+            { uint32_t t = x[i] ; x[i] = x[j] ; x[j] = t ; i++ ; j-- ; }
+        }
+      if (k <= j) hi = j ;
+      else if (k >= i) lo = i ;
+      else return x[k] ;              /* x[j+1..i-1] all equal pivot */
     }
-    for (; i < n; i++)                              /* tail: 0..3 elements */
-        h0[bin_of(f[i])]++;
+  return x[k] ;
+} /* select_kth */
 
-    for (unsigned b = 0; b < NBINS; b++)            /* merge (64-bit, no overflow) */
-        h[b] = (uint64_t)h0[b] + h1[b] + h2[b] + h3[b];
+/**************************************/
+/* Exact lower median of an Array of unsigned int.
+ * noZero: ignore zero values.
+ * Returns 0 if there are no (non-zero) values.
+ */
+static unsigned int uIntMedian (unsigned int *f, long n, BOOL noZero)
+{
+  uint32_t h0[NBINS], h1[NBINS], h2[NBINS], h3[NBINS] ;
+  uint64_t h[NBINS] ;
+  long i ;
 
-    size_t k = (n - 1) / 2;                         /* 0-based rank of lower median */
-    uint64_t cum = 0;
-    unsigned b = 0;
-    while (cum + h[b] <= k) cum += h[b++];
+  memset (h0, 0, sizeof h0) ; memset (h1, 0, sizeof h1) ;
+  memset (h2, 0, sizeof h2) ; memset (h3, 0, sizeof h3) ;
 
-    *exact = (b < LIN);
-    *bin_out = b;
-    *rank_in_bin = (size_t)(k - cum);
-    return bin_lo(b);
+  /* pass 1: histogram */
+  long n4 = n & ~3L ;
+  for (i = 0 ; i < n4 ; i += 4)
+    {
+      h0[bin_of (f[i    ])]++ ;
+      h1[bin_of (f[i + 1])]++ ;
+      h2[bin_of (f[i + 2])]++ ;
+      h3[bin_of (f[i + 3])]++ ;
+    }
+  for ( ; i < n ; i++)
+    h0[bin_of (f[i])]++ ;
+
+  for (unsigned b = 0 ; b < NBINS ; b++)
+    h[b] = (uint64_t)h0[b] + h1[b] + h2[b] + h3[b] ;
+
+  uint64_t nn = n ;
+  if (noZero) { nn -= h[0] ; h[0] = 0 ; }
+  if (nn == 0) return 0 ;
+
+  /* locate the bin holding the lower median */
+  uint64_t k = (nn - 1) / 2, cum = 0 ;
+  unsigned b = 0 ;
+  while (cum + h[b] <= k) cum += h[b++] ;
+
+  if (b < LIN)                        /* one value per bin: exact */
+    return b ;
+
+  /* pass 2: gather only that bin's values, select inside it */
+  long m = (long)h[b] ;
+  uint32_t *buf = malloc (m * sizeof *buf) ;
+  if (!buf)
+    messcrash ("arrayUintMedian cannot malloc buf") ;
+
+  long j = 0 ;
+  for (i = 0 ; i < n ; i++)
+    if (bin_of (f[i]) == b)           /* zeros never land here since b >= LIN */
+      buf[j++] = f[i] ;
+
+  unsigned int med = select_kth (buf, m, (long)(k - cum)) ;
+  free (buf) ;
+  return med ;
+} /* arrayUintMedian */
+
+/**************************************/
+
+unsigned int arrayUintMedian (Array aa, BOOL noZero)
+{
+  long n = aa ? arrayMax (aa) : 0 ;
+  if (n == 0) return 0 ;
+
+  if (aa->size != sizeof (unsigned int))
+    messcrash ("arrayUnintMedian can only be called on arrays of unsigned ints") ;
+  unsigned int *ip = arrp (aa, 0, unsigned int) ;
+  return uIntMedian (ip, n, noZero) ;
 }
+
+/**************************************/
+
+unsigned int bigArrayUintMedian (BigArray aa, BOOL noZero)
+{
+  long n = aa ? bigArrayMax (aa) : 0 ;
+  if (n == 0) return 0 ;
+
+  if (aa->size != sizeof (unsigned int))
+    messcrash ("bigArrayUnintMedian can only be called on arrays of unsigned ints") ;
+  unsigned int *ip = bigArrp (aa, 0, unsigned int) ;
+  return uIntMedian (ip, n, noZero) ;
+}
+/*******************************************************************/
+/************************* end of file ****************************/
+/*******************************************************************/

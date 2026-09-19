@@ -426,6 +426,7 @@
              S_100_intergenic  UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text  UNIQUE Float UNIQUE Text  // Mb in the genome seuil 100
              S_1000_intergenic  UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text  UNIQUE Float UNIQUE Text  // Mb in the genome seuil 100
              S_10000_intergenic  UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text  UNIQUE Float UNIQUE Text  // Mb in the genome seuil 100
+      Peaks Genomic_peaks GP_non_stranded UNIQUE Int UNIQUE Text UNIQUE Int UNIQUE Text UNIQUE Int // any known  new
       Rejected_alignments At_least_10_sites UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
                           Diffuse_mapping  UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 
                           Low_quality_mapping  UNIQUE Float UNIQUE Text UNIQUE Float UNIQUE Text 

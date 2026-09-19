@@ -11,6 +11,8 @@
 #include "peaks.h"
 #include "fastItoA.h"
 #include <zlib.h>
+static AZZ *wigAzOpen (const char *fName, AC_HANDLE h) ;    /* Open an AZZ file, return NULL on error. */
+static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *nPosp, long int *nBpp, BOOL cumul) ;
 
 /*************************************************************************************/
 
@@ -158,7 +160,9 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
       sx->remapDict = dictHandleCreate (1000, sx->h) ;
       dictAdd (sx->remapDict, "toto", 0) ;
     }
-  
+
+  if (sx->pair_shift && sx->in != AZ)
+    messcrash ("Sorry -pair_shift is only implemented for AZ format") ;
   stepIn = (sx->in_step  ? sx->in_step : 1) ;
   stepOut = (sx->out_step  ? sx->out_step : stepIn) ;
   switch (sx->in)
@@ -333,7 +337,7 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 	  aa = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
 	array (sx->aaa, 0, Array) = aa ;
 	array (sx->aaa, remap, Array) = aa ;
-	wigAzZone (az, z1, z2 ? z2 : az->posMax, aa, &nn, &nBp, sx->inFileOfFileList ? TRUE : FALSE) ;
+	wigAzZone (az, z1, z2 ? z2 : az->posMax, sx->pair_shift, aa, &nn, &nBp, sx->inFileOfFileList ? TRUE : FALSE) ;
 	ac_free (h) ;
       }
       break ;
@@ -819,9 +823,10 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
 {
   AC_HANDLE h = ac_new_handle ();
   const char *target = dictName (sx->remapDict, remap) ;
-  ACEOUT ao = 0 ;
+  ACEOUT ao = 0, aoLevels = 0 ;
   int step = (sx->out_step  ? sx->out_step : 1) ;
-  ao = aceOutCreate (sx->outFileName, ".newPeaks", sx->gzo, h) ;
+  ao = aceOutCreate (sx->outFileName, ".peaks", sx->gzo, h) ;
+  aoLevels = aceOutCreate (sx->outFileName, ".peaksCounts", sx->gzo, h) ;
   int posMin = 0 ;
   Array cc = arrayHandleCreate (arrayMax (aa) + posMin, int, h) ;
   int minCover = sx->minCover > 0 ? sx->minCover : 30 ;
@@ -844,8 +849,8 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
       *ip = 0 ; /* always add a terminal zero */
       arrayMax (cc) = jMax + 1 ;
     }
-
-  peaksCreateExport (ao, target, posMin, step, minCover, cc) ;
+  fprintf (stderr, "call peakCreateExport target=%s\n", target) ;
+  peaksCreateExport (ao, aoLevels, cc, target, posMin, step, minCover) ;
   ac_free (h) ;
 }
 
@@ -858,6 +863,7 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
  * every factor multiPeaks, starting a 1 
  */
 typedef struct mpkStruct { int x1, x2, ln, yMin, yMax, level ; long int cover ;} MPK ;
+#ifdef JUNK
 static void sxWiggleExportMultiPeaksOld (WIGGLE *sx, Array aa0, Array bb, int remap)
 {
   WIGGLEPOINT *wp, *wq ;
@@ -1098,7 +1104,7 @@ static void sxWiggleExportMultiPeaksOld (WIGGLE *sx, Array aa0, Array bb, int re
   ac_free (mmm) ;
   return ;
 } /* sxWiggleExportMultiPeaks */
-
+#endif
 /*************************************************************************************/
 /* aa: possibly gaussed wiggle, bb original wiggle */
 /* In the transcriptsEnds option
@@ -2236,7 +2242,7 @@ AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints,
 
 /**************************************************************/
 
-AZZ *wigAzOpen (const char *fName, AC_HANDLE h0)
+static AZZ *wigAzOpen (const char *fName, AC_HANDLE h0)
 {
   AC_HANDLE h = ac_new_handle () ;
   
@@ -2356,7 +2362,9 @@ static BOOL azParseOneBlock (AZZ *az, int nb)
 
 /**************************************************************/
 /* x is given as entries in the table (not multiplied by step) */
-BOOL wigAzAt (AZZ *az, int x, unsigned int *value)
+#ifdef JUNK
+static BOOL wigAzAt (AZZ *az, int x, unsigned int *value) ; /* Value at position x, FALSE if out of range */
+static BOOL wigAzAt (AZZ *az, int x, unsigned int *value)
 {
   if (! az)
     messcrash ("wigAzGet called on null az") ;
@@ -2379,11 +2387,11 @@ BOOL wigAzAt (AZZ *az, int x, unsigned int *value)
     }
   
   return FALSE ;
-} /* azGet */
-     
+} /* wigAzAt */
+#endif     
 /**************************************************************/
 /* x1, x2 are given as entries in the table (not multiplied by step) */
-BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nBpp, BOOL cumul)
+static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *nPosp, long int *nBpp, BOOL cumul)
 {
   WIGGLEPOINT *wp ;
   
@@ -2404,13 +2412,13 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
     {
       if (x2 > x1)
 	{
-	  array (wPoints, x2 - x1 -1, WIGGLEPOINT).x = 0 ;
-	  memset (arrp (wPoints, 0, int), 0, (x2 - x1) * sizeof(WIGGLEPOINT)) ;
+	  array (wPoints, x2 - x1 -1 + az->posMin/step, WIGGLEPOINT).x = 0 ;
+	  memset (arrp (wPoints, 0, int), 0, (x2 - x1 + az->posMin/step) * sizeof(WIGGLEPOINT)) ;
 	}
       arrayMax (wPoints ) = x2 - x1 ;
     }
   else
-    array (wPoints, x2 - x1 -1, WIGGLEPOINT).x += 0 ;
+    array (wPoints, x2 - x1 -1 + az->posMin/step, WIGGLEPOINT).x += 0 ;
   
   if (x1 < 0)
     x1 = 0 ;  
@@ -2425,7 +2433,7 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
 	  while (x < x2 && x < az->c2)
 	    {
 	      wp = arrp (wPoints, x - x1 + az->posMin/step, WIGGLEPOINT) ;
-	      wp->x = x * step + az->posMin ;
+	      wp->x = x * step + az->posMin + shift/step ;
 	      if (cumul)
 		wp->y += array (az->cache, x - az->c1, unsigned int) ;
 	      else
@@ -2440,18 +2448,6 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, Array wPoints, int *nPosp, long int *nB
   return TRUE ;
 } /* azZone */
      
-/**************************************************************/
-
-void wigAzDoClose (AZZ *az)
-{
-  if (az && az->magic)
-    {
-      if (az->magic != AZMAGIC)
-	messcrash ("wigAzDoClose called on corrupted az") ;
-      ac_free (az) ;
-    }
-} /* azDoClose */
-
 /**************************************************************/
 /**************************************************************/
 /**************************************************************/

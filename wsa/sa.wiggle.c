@@ -370,6 +370,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
   const char *typeNam ;
   char wigStrand = (strand == 'f' ? 0x0 : 0x1) ;
   BOOL wantPeaks = FALSE ;
+  BOOL wantAutocorrel = FALSE ;
   
   if (0 && chrom != 2) return ;
   switch (type)
@@ -379,6 +380,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
       typeNam = (strand == 'f' ? "u.f" : "u.r") ;
       wiggles = pp->wiggles ;
       wantPeaks = TRUE ;
+      wantAutocorrel = TRUE ;
       if (1)
 	{
 	  geneB = pp->geneBoxes ? array (pp->geneBoxes, chrom >> 1, BigArray) : 0 ;
@@ -395,6 +397,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
     case 2:
       typeNam = (strand == 'f' ? "u.ERF" : "u.ELR") ;
       wiggles = pp->wigglesR ;
+      wantPeaks = TRUE ;
       break ;
       
     case 3:
@@ -463,7 +466,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      ao = aceOutCreateToStack (s,h) ;
 	      aoLevels = aceOutCreateToStack (s2,h) ; 
 
-	      peaksCreateExport (ao, aoLevels, chromNam, 0, wiggle_step, minCover, 3, a) ;
+	      peaksCreateExport (ao, aoLevels, a, chromNam, 0, wiggle_step, minCover) ;
 
 	      char *cp = stackText (s, 0) ;
 	      int k = strlen (cp) ;
@@ -483,9 +486,15 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	    {
 	      ao = aceOutCreate (fNam, 0, pp->gzo, h) ;
 	      aoLevels = aceOutCreate (fNam2, 0, pp->gzo, h) ;
-	      peaksCreateExport (ao, aoLevels, chromNam, 0, wiggle_step, minCover, 1.5, a) ;
+	      peaksCreateExport (ao, aoLevels, a, chromNam, 0, wiggle_step, minCover) ;
 	    }
 	  ac_free (h) ;
+	}
+
+      if (wantAutocorrel)
+	{
+
+
 	}
       
       if (arrayMax(a))
