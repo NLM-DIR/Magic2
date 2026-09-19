@@ -49,8 +49,11 @@ Structure constants:
         [h,e]=2e  [h,f]=-2f  [e,f]=h
         [Y,u]=u   [Y,v]=-v   [Y,w]=w   [Y,x]=-x
         [h,u]=-u  [h,v]=v     [h,w]=w   [h,x]=-x
-        [e,u]=w  [e,x]=-v     [f,v]=-x   [f,w]=-u
-        {u,v}=(Y+h)/2   {w,x}=(Y-h)/2   {v,w}=-e   {u,x}=-f
+        [e,u]=w   [f,w]=u     [e,x]=v    [f,v]=x      (two natural doublets)
+        {u,v}=(Y+h)/2   {w,x}=(h-Y)/2   {v,w}=-e   {u,x}=f
+
+Basis convention: v has only non-negative entries, so that in the fundamental
+R(0,0) the basis is exactly  L, vL, fvL, vfvL  (v = E21 + E43).
 
 The three invariants
 --------------------
@@ -62,8 +65,8 @@ study ever supplies the tensors used to build them.
         C_3 = 8 . Sum d^ABC(ref) M_A M_B M_C
         T   = (2/3) (N_4 - N_2)
 
-with N_2 = uv - vu + wx - xw, N_4 the fully antisymmetric quartic in the odd
-generators, and d^ABC(ref) the fixed cubic tensor of the anchor R(0,0).  In the
+with N_2 = uv - vu + xw - wx, N_4 the fully antisymmetric quartic in the odd
+generators (reference order u, v, x, w), and d^ABC(ref) the fixed cubic tensor of the anchor R(0,0).  In the
 rho-shifted weights mu = a+1, lambda = y-1 their eigenvalues are
 
         C_2 = mu^2 - lambda^2            [the atypicality polynomial, monic]
@@ -96,9 +99,9 @@ INDEPENDENT = {
     (E, F): {H: 1}, (E, H): {E: -2}, (F, H): {F: 2},
     (Y, U): {U: 1}, (Y, V): {V: -1}, (Y, W): {W: 1}, (Y, X): {X: -1},
     (H, U): {U: -1}, (H, V): {V: 1}, (H, W): {W: 1}, (H, X): {X: -1},
-    (E, U): {W: 1}, (E, X): {V: -1}, (F, V): {X: -1}, (F, W): {U: 1},
-    (U, V): {Y: _half, H: _half}, (W, X): {Y: _half, H: -_half},
-    (V, W): {E: -1}, (U, X): {F: -1},
+    (E, U): {W: 1}, (E, X): {V: 1}, (F, V): {X: 1}, (F, W): {U: 1},
+    (U, V): {Y: _half, H: _half}, (W, X): {Y: -_half, H: _half},
+    (V, W): {E: -1}, (U, X): {F: 1},
 }
 
 
@@ -171,11 +174,11 @@ def _scales(a, b):
     In the Kac label the two atypicality conditions are manifest:
     m21, m43 vanish at b = 0;  m31, m42 vanish at b = a+1."""
     D = 4 * (a + 1)
-    s12, s13, s24, s34 = 1, 1, -1, 1
+    s12, s13, s24, s34 = 1, 1, 1, -1        # v >= 0 on L1->L2, L1->L3, L2->L4
     m21 = Rational(4, D) * b
-    m43 = Rational(4, D) * b
+    m43 = -Rational(4, D) * b
     m31 = Rational(4, D) * (a + 1 - b)
-    m42 = -Rational(4, D) * (a + 1 - b)
+    m42 = Rational(4, D) * (a + 1 - b)
     return (s12, s13, s24, s34, m21, m31, m42, m43)
 
 
@@ -223,7 +226,7 @@ def _build(a, b):
         if d[Lt] == 0 or d[Ls] == 0:
             continue
         put(Vmat, Lt, Ls, _shape(kind, js, 'v'), sc)
-        put(Xmat, Lt, Ls, _shape(kind, js, 'x'), -sc)   # x sign flipped
+        put(Xmat, Lt, Ls, _shape(kind, js, 'x'), sc)    # [e,x]=v, [f,v]=x
 
     # raising blocks carry u, w  (all the b-dependence)
     for (Lt, Ls, kind, js, sc) in [(0, 1, 'down', a + 1, m21),
@@ -918,14 +921,16 @@ def upper_killing_metric(g_lower, rep):
 
 # -- the Gorelik anticenter element T_4 (built from N_2 and N_4) -------------
 
-# the four odd generators, in canonical order
-ODD_GENS = [U, V, W, X]
+# the four odd generators, in the reference order (u, v, x, w) that fixes the
+# sign of N_4: pairs (u,v) and (x,w), each (raising-type, lowering-type) as in
+# {u,v} = (Y+h)/2 and {x,w} = (h-Y)/2.
+ODD_GENS = [U, V, X, W]
 
 
 def _perm_sign(perm):
     """Sign (+1/-1) of a permutation given as a sequence, by inversion count
-    against ascending order (so (U,V,W,X) itself is +1)."""
-    perm = list(perm)
+    against the reference order ODD_GENS (so (U,V,X,W) itself is +1)."""
+    perm = [ODD_GENS.index(p) for p in perm]
     n = len(perm)
     s = 1
     for i in range(n):
@@ -936,11 +941,11 @@ def _perm_sign(perm):
 
 
 def anticenter_N2(rep):
-    """N_2 = UV - VU + WX - XW  (ordinary matrix products of the odd gens).
+    """N_2 = UV - VU + XW - WX  (ordinary matrix products of the odd gens).
 
     U,V,W,X are u,v,w,x (canonical 4,5,6,7). Returns a Matrix (simplified)."""
     u, v, w, x = rep[U], rep[V], rep[W], rep[X]
-    N2 = u @ v - v @ u + w @ x - x @ w
+    N2 = u @ v - v @ u + x @ w - w @ x
     return N2.applyfunc(simplify)
 
 
@@ -949,7 +954,7 @@ def anticenter_N4(rep):
 
         N_4 = Σ_{σ ∈ S_4} sign(σ) · M_{σ(1)} M_{σ(2)} M_{σ(3)} M_{σ(4)}
 
-    where σ permutes (u, v, w, x): 24 signed quartic matrix products. Returns a
+    where σ permutes (u, v, x, w): 24 signed quartic matrix products. Returns a
     Matrix (simplified)."""
     d = rep.dim
     N4 = Matrix.zero(d, d)
@@ -1004,7 +1009,7 @@ def casimir_quadratic_direct(rep):
     The split reported below is by sector, as in ``casimir_quadratic``:
 
         even sector:  h^2 - Y^2 + 2(ef + fe)
-        odd  sector:  2 N_2 = 2(uv - vu + wx - xw)
+        odd  sector:  2 N_2 = 2(uv - vu + xw - wx)
 
     Returns the same dict shape as ``casimir_quadratic``."""
     Ym, e, f, h = rep[Y], rep[E], rep[F], rep[H]
@@ -1438,7 +1443,7 @@ def main(a, b, N=1, casimirs=False):
         print()
 
         N2 = anticenter_N2(rep)
-        print("N_2 = UV - VU + WX - XW =")
+        print("N_2 = UV - VU + XW - WX =")
         print(N2)
         print()
 
