@@ -46,6 +46,7 @@
 #include <stdatomic.h>
 #include "../wsra/sra_read.h"
 #include "sa.parse.h"
+#include "scratch.h"
 #include "sa.common.h"
 
 #define ERRMAXMAX 1000000
@@ -239,6 +240,7 @@ typedef struct pStruct {
   BOOL snps ;
   BOOL ignoreIntronSeeds ;
   BOOL isWorm ;
+  BOOL useScratch ;
   const char *runName ;
   const char *inFileName ;
   const char *inConfigFileName ;
@@ -300,6 +302,11 @@ typedef struct pStruct {
   Array wiggleRCumuls ;
   Array wigglesP ;
   Array wigglesNU ;
+  Array scratches ;
+  Array scratchesL ;
+  Array scratchesR ;
+  Array scratchesP ;
+  Array scratchesNU ;
   Array cdss ;
   Array utrs ;
   Array intronics ;

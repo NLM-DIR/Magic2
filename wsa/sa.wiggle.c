@@ -216,10 +216,12 @@ static long int wigCumul (BigArray wig)
 void saWiggleCumulate (const PP *pp, BB *bb)
 {
   Array ppWiggles = 0 ;
+  Array ppScratches = 0 ;
   Array bbWiggles = 0 ;
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   int iwMax = wiggleCreate (pp, bb) ; /* max number of bb->wiggles */
-  BigArray *ap1, *ap0 ;
+  SCR **sp0 ;
+  BOOL useScratch = pp->useScratch ;
 
   if (iwMax > 2 * chromMax) messcrash ("iwMax too large ?") ;
 
@@ -229,22 +231,27 @@ void saWiggleCumulate (const PP *pp, BB *bb)
 	{
 	case 0:
 	  ppWiggles = pp->wiggles ;
+	  ppScratches = pp->scratches ;
 	  bbWiggles = bb->wiggles ;
 	  break ;
 	case 1:
 	  ppWiggles = pp->wigglesL ;
+	  ppScratches = pp->scratchesL ;
 	  bbWiggles = bb->wigglesL ;
 	  break ;
 	case 2:
 	  ppWiggles = pp->wigglesR ;
+	  ppScratches = pp->scratchesR ;
 	  bbWiggles = bb->wigglesR ;
 	break ;
 	case 3:
 	  ppWiggles = pp->wigglesP ;
+	  ppScratches = pp->scratchesP ;
 	  bbWiggles = bb->wigglesP ;
 	break ;
 	case 4:
 	  ppWiggles = pp->wigglesNU ;
+	  ppScratches = pp->scratchesNU ;
 	  bbWiggles = bb->wigglesNU ;
 	break ;
 	}
@@ -253,32 +260,43 @@ void saWiggleCumulate (const PP *pp, BB *bb)
       if (! iwMax) continue ;
       if (iwMax > 2 * chromMax)
 	messcrash ("Too many bbWigggles type %d :: %d >= %d", type, iwMax, 2*chromMax) ;
-      ap0 = arrayp (ppWiggles, 0, BigArray) ;
-      for (int iw = 0 ; iw < iwMax ; iw++)
+      if (useScratch)
 	{
-	  BigArray aa = array (bbWiggles, iw, BigArray) ;
-	  
-	  if (aa)
+	  SCR *sp0 = arrayp (ppScratches, 0, SCR) ;
+	  for (int iw = 0 ; iw < iwMax ; iw++)
 	    {
-	      BigArray aaa = array (ppWiggles, 2 * bb->run * chromMax + iw, BigArray) ;
-	      if (! aaa)
-		aaa = array (ppWiggles, 2 * bb->run * chromMax + iw, BigArray) = bigArrayHandleCreate (10000, WP, pp->h) ;
-	      long int naaa1 = 0 ;
-	      if (0) naaa1 = wigCumul (aaa) ;
-	      wiggleCumulate (aaa, aa) ;
-	      if (0)
+	      BigArray aa = array (bbWiggles, iw, BigArray) ;
+	      if (aa)
 		{
-		  long int naa = wigCumul (aa) ;
-		  long int naaa2 = wigCumul (aaa) ;
-		  fprintf (stderr, "%ld + %ld = %ld verif %ld\n"
-			   , naa, naaa1, naaa2, naaa2-naa-naaa1) ;
+		  SCR scr = array (ppScratches, 2 * bb->run * chromMax + iw, SCR) ;
+		  if (! scr)
+		    scr = array (ppScratches, 2 * bb->run * chromMax + iw, SCR) = scratchCreate (0, pp->h) ;
+		  scratchPut (scr, aa) ;
 		}
 	    }
+	  SCR *sp1 = arrayp (ppScratches, 0, SCR) ;
+	  if (sp1 != sp0)
+	    messcrash ("pp->scratches was relocalized which is not allowed here because of multithreading") ;
 	}
-      ap1 = arrp (ppWiggles, 0, BigArray) ;
-      if (ap1 != ap0)
-	messcrash ("pp->wiggles was relocalized which is not allowed here because of multithreading") ;
-
+      else
+	{
+	  BigArray *ap0 = arrayp (ppWiggles, 0, BigArray) ;
+	  for (int iw = 0 ; iw < iwMax ; iw++)
+	    {
+	      BigArray aa = array (bbWiggles, iw, BigArray) ;
+	      if (aa)
+		{
+		  BigArray aaa = array (ppWiggles, 2 * bb->run * chromMax + iw, BigArray) ;
+		  if (! aaa)
+		    aaa = array (ppWiggles, 2 * bb->run * chromMax + iw, BigArray) = bigArrayHandleCreate (10000, WP, pp->h) ;
+		  wiggleCumulate (aaa, aa) ;
+		}
+	    }
+	
+	  BigArray *ap1 = arrp (ppWiggles, 0, BigArray) ;
+	  if (ap1 != ap0)
+	    messcrash ("pp->wiggles was relocalized which is not allowed here because of multithreading") ;
+	}
     }
   
   return ;

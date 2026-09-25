@@ -2000,6 +2000,7 @@ int main (int argc, const char *argv[])
   p.align = getCmdLineBool (&argc, argv, "--align") ;          /* left for back compatibility, over-ridden by --do_not_align */
   p.align = ! getCmdLineBool (&argc, argv, "--do_not_align") ; /* default is to align */
   p.ignoreIntronSeeds = getCmdLineBool (&argc, argv, "--ignoreIntronSeeds") ;
+  p.useScratch = getCmdLineBool (&argc, argv, "--useScratch") ;
 
   p.hitsFormat = TRUE ; /* default */
   p.introns = TRUE ; /* default */
@@ -2578,7 +2579,7 @@ int main (int argc, const char *argv[])
     }
 
   GeneCounts gcs = {0} ;
-  if (p.wiggle)
+  if (0 && p.wiggle)
     gcs = saWiggleExport (&p, nAgents) ;
   if (p.debug) saCpuStatExport (&p, cpuStats) ;
   saPolyAsExport (&p, p.confirmedPolyAs) ;

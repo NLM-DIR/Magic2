@@ -11,7 +11,8 @@ the Chevalley commutators
  
 with everything else zero. Run it as
  
-        python sl2.py [a]          (a defaults to 2)
+        python sl2.py -a <int>     (e.g. -a 2: the adjoint)
+        python sl2.py -h           (help)
  
 It prints the three matrices, the formal nonzero commutators, and either
 "verified" or the residual matrices for whatever failed.
@@ -26,6 +27,7 @@ once f is the sub-diagonal of ones and h is the given diagonal, the requirement
                                       rising then falling, ends = a
 """
  
+import argparse
 import sys
  
 from matrix import Matrix
@@ -131,12 +133,57 @@ def main(a):
     else:
         print(f"{len(residuals)} relation(s) FAILED:\n")
         for r in residuals:
-            print(f"    [{r.title_i}, {r.title_j}}} residual =")
+            print(f"    [{r.title_i}, {r.title_j}] residual =")
             print(r.matrix)
             print()
  
  
+# -- command line ------------------------------------------------------------
+
+A_MAX = 20          # largest a accepted (dimension a+1 = 21)
+TOO_HEAVY = "valid but this would make the calculation too heavy, sorry"
+
+
+def _weight_a(s):
+    """a: a non-negative integer, at most A_MAX."""
+    try:
+        a = int(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"a must be an integer, got {s!r}") from None
+    if a < 0:
+        raise argparse.ArgumentTypeError("a must be a non-negative integer")
+    if a > A_MAX:
+        raise argparse.ArgumentTypeError(f"a = {a} is {TOO_HEAVY} (max {A_MAX})")
+    return a
+
+
+def _build_parser():
+    parser = argparse.ArgumentParser(
+        prog="sl2.py",
+        description=(
+            "This program computes the matrices of the sl(2) Lie algebra in "
+            "the (a+1)-dimensional irreducible representation R[a]: please "
+            "specify the Dynkin weight a (a=1: the doublet, a=2: the adjoint)."
+        ),
+        epilog=(
+            "Authors: Jean Thierry-Mieg (NLM/NIH) and Claude.  "
+            "License: public domain; no rights reserved."
+        ),
+    )
+    parser.add_argument(
+        "-a", metavar="A", type=_weight_a, required=True,
+        help=f"Dynkin weight a (non-negative integer, at most {A_MAX}); "
+             "the representation has dimension a+1",
+    )
+    return parser
+
+
 if __name__ == "__main__":
-    a = int(sys.argv[1]) if len(sys.argv) > 1 else 2
-    main(a)
+    parser = _build_parser()
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+    args = parser.parse_args()
+    main(args.a)
  

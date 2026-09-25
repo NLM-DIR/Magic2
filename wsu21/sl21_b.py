@@ -1958,7 +1958,6 @@ def _casimir_report(rep, chi, N, a, y):
 
 
 
-
 def _trace_identities_report(rep, N, titles=None):
     """The last section of every run: the two trace identities.
 
