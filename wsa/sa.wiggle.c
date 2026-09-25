@@ -31,7 +31,6 @@ typedef struct wigPosStruct {
   unsigned int pos ; unsigned short ln ; unsigned short weight ; unsigned int dummy ;
 } __attribute__((aligned(16))) WP ;
 
-/**************************************************************/
 
 static int wpOrder (const void *va, const void *vb)
 {
@@ -56,11 +55,7 @@ static void wiggleCumulate (BigArray aaa, BigArray aa)
       up = bigArrp (aaa, iiMax, WP) ;
       vp = bigArrp (aa, 0, WP) ;
       memcpy (up, vp, iMax * sizeof (WP)) ;
-      vp = bigArrp (aa, iMax -1, WP) ;
-      if ((int)vp->pos < 1)
-	vp->pos = 1 ;
-      if ((int)vp->pos < 1)
-	messcrash ("bad negative value in wiggleCumulate pos=%d ln=%d\n", vp->pos, vp->ln) ;
+      bigArrayMax (aa) = 0 ;
     }
   return ;
 } /* wiggleCumulate */
@@ -425,12 +420,12 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
       AC_HANDLE h = ac_new_handle () ;
       WP *wp0, *wp = bigArrp (wig, iMax - 1, WP) ;
       unsigned int posMax = wp->pos ;
-      Array a = arrayHandleCreate (posMax + 1000, int, h) ;
-      unsigned int *xp = arrayp (a, posMax, unsigned int) ;
+      Array aaa = arrayHandleCreate (posMax + 1000, unsigned int, h) ;
+      unsigned int *xp = arrayp (aaa, posMax, unsigned int) ;
       Array aAZ= 0 ;
 
-      if (!pp->bigWig && pp->wigAZ && arrayMax(a))
-	aAZ = arrayHandleCreate (arrayMax (a)/wiggle_step + 1, unsigned int, h) ;
+      if (!pp->bigWig && pp->wigAZ && arrayMax(aaa))
+	aAZ = arrayHandleCreate (arrayMax (aaa)/wiggle_step + 1, unsigned int, h) ;
       
       wp = bigArrp (wig, 0, WP) ;
       wp0 = bigArrp (wig, 0, WP) ;
@@ -439,7 +434,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	{
 	  if (wp->weight)
 	    {
-	      xp = arrayp (a, wp->pos + wp->ln - pos0, unsigned int) ;
+	      xp = arrayp (aaa, (wp->pos + wp->ln - pos0), unsigned int) ;
 	      xp -= wp->ln ;
 	      posMax = wp->pos + wp->ln - 1 ;
 	      for (int i = 0 ; i < wp->ln ; i++)
@@ -448,17 +443,17 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	}
       //  static int nnnn = 0 ;
       wantPeaks = TRUE ;
-      if (1 && wantPeaks && arrayMax(a))
+      if (1 && wantPeaks && arrayMax(aaa))
 	{
 	  AC_HANDLE h = ac_new_handle ();
-	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
+	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ; 
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
 	  ACEOUT ao = 0, aoLevels = 0 ;
 	  gzFile gzf = 0, gzf2 = 0 ;
 	  int minCover = 100 ;
 	  
-	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.peaks%s", pp->outFileName, runNam, chromNam, typeNam, pp->gzo ? ".gz" : "") ;
-	  char *fNam2 = hprintf (h, "%s/wiggles/%s.%s.%s.peakCounts%s", pp->outFileName, runNam, chromNam, typeNam, pp->gzo ? ".gz" : "") ;
+	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.peaks%s", pp->outFileName, runNam, chromNam, typeNam, ".gz") ;
+	  char *fNam2 = hprintf (h, "%s/wiggles/%s.%s.%s.peakCounts%s", pp->outFileName, runNam, chromNam, typeNam, ".gz") ;
 	  if (1)
 	    {
 	      Stack s = stackHandleCreate (0x1<<23, h) ;
@@ -466,7 +461,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      ao = aceOutCreateToStack (s,h) ;
 	      aoLevels = aceOutCreateToStack (s2,h) ; 
 
-	      peaksCreateExport (ao, aoLevels, a, chromNam, 0, wiggle_step, minCover) ;
+	      peaksCreateExport (ao, aoLevels, aaa, chromNam, pos0, 1, minCover, 720) ;
 
 	      char *cp = stackText (s, 0) ;
 	      int k = strlen (cp) ;
@@ -486,7 +481,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	    {
 	      ao = aceOutCreate (fNam, 0, pp->gzo, h) ;
 	      aoLevels = aceOutCreate (fNam2, 0, pp->gzo, h) ;
-	      peaksCreateExport (ao, aoLevels, a, chromNam, 0, wiggle_step, minCover) ;
+	      peaksCreateExport (ao, aoLevels, aaa, chromNam, 0, 1, minCover, 720) ;
 	    }
 	  ac_free (h) ;
 	}
@@ -497,7 +492,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 
 	}
       
-      if (arrayMax(a))
+      if (arrayMax(aaa))
 	{
 #define BUFFER_SIZE (2 * 1024 * 1024)  // 2MB
 	  char *writeBuffer = malloc(BUFFER_SIZE) ;
@@ -542,8 +537,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 		}
 	    }
 
-      	  xp = arrayp (a, 0, unsigned int) ;
-	  for (int localCumul = 0, j = 0, jMax = arrayMax(a) ; j < jMax && pos0 + j < posMax + wiggle_step  ; j++)
+      	  xp = arrayp (aaa, 0, unsigned int) ;
+	  for (int localCumul = 0, j = 0, jMax = arrayMax(aaa) ; j < jMax && pos0 + j < posMax + wiggle_step  ; j++)
 	    {
 	      unsigned int w = xp[j] ;
 	      cumul += w ;
@@ -592,7 +587,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
 	    }
 	  if (aAZ)
-	    {
+	    { 
 	      const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) ;
 	      const char *runNam = dictName (pp->runDict, run) ;
 	      
@@ -604,13 +599,13 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	    }
 	  free(writeBuffer) ;
 	}
-      if (!pp->bigWig && pp->wigAZ && arrayMax(a))
-      if (arrayMax(a) && geneB)
+      if (!pp->bigWig && pp->wigAZ && arrayMax(aaa))
+      if (arrayMax(aaa) && geneB)
 	{
 	  long int ib, ibMax = bigArrayMax (geneB) ;
-	  int jMax = arrayMax (a) ;
+	  int jMax = arrayMax (aaa) ;
 	  GBX *gb = bigArrayp (geneB, 0, GBX) ;
-      	  xp = arrayp (a, 0, unsigned int) ;
+      	  xp = arrayp (aaa, 0, unsigned int) ;
 	  
 	  /* the candidate gene segments that may cover position x are
 	   * not earlier than the first segment igOld  covering the previous position
@@ -1001,7 +996,7 @@ static void wiggleExportWiggleStats (PP *pp)
       pp->cds += rc->cds ;
       pp->utr += rc->utr ;
       pp->intronic += rc->intronic ;
-      pp->intergenic += rc->intergenic ;
+      pp->intergenic += rc->intergenic ; 
 
       const char *runNam = dictName (pp->runDict, run) ;
       

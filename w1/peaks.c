@@ -7,7 +7,8 @@
 
 typedef struct peakStruct {
   int x1, x2 ;   /* array coordinates */
-  int yMax, area, level ;
+  int yMax ;
+  long int area, level ;
 } PEAK ;
 
 /***********************************************************************/
@@ -19,14 +20,12 @@ static void peakFind (Array aa, Array peaks, int minCover)
   int iMax = arrayMax (aa), iPeak = 0 ;
   double z1 = 1.5 ;
   unsigned int *yp ;
-
-  if (minCover < 5) minCover = 5 ;
   for (int i = 0 ; i < iMax ; i++)   /* scan whole wiggle */
     {
       int j, x1 = i, x2 = i, dx ;
       int yMax = 0 ;
-      int area = 0 ;
-      int areaBelow = 0 ;
+      long int area = 0 ;
+      long int areaBelow = 0 ;
       
       yp = arrp (aa, i, unsigned int) ;      /* passing over minCover */
       for (j = i ; j < iMax && *yp < minCover ; yp++, j++)
@@ -70,7 +69,8 @@ static void peakFind (Array aa, Array peaks, int minCover)
 void peaksExport (ACEOUT ao, ACEOUT aoLevels,
 		  Array peaks, int minCover, 
 		  const char *target, int posMin, int step,
-		  unsigned int median, unsigned int medianNoZero
+		  unsigned int median, unsigned int medianNoZero,
+		  int scale
 		  )
 {
   int i, n = peaks ? arrayMax (peaks) : 0 ;
@@ -83,7 +83,7 @@ void peaksExport (ACEOUT ao, ACEOUT aoLevels,
 	{
 	  PEAK *pk = arrp (peaks, i, PEAK) ;
 	  int ln = pk->x2 - pk->x1 + 1 ;
-	  float y = pk->area / ln ;
+	  float y = pk->area / (scale * ln) ;
 	  int k = utMainPart (y) ;
 	  int k1 = 0 ;
 	  int k2 = 10 ;
@@ -101,14 +101,14 @@ void peaksExport (ACEOUT ao, ACEOUT aoLevels,
       for (i = 0 ; i < n ; i++)
 	{
 	  PEAK *pk = arrp (peaks, i, PEAK) ;
-	  int ln = step * (pk->x2 - pk->x1 + 1) ;
+	  int ln = (pk->x2 - pk->x1 + 1) ;
 	  aceOutf (ao, "%s\t%d\t%d\t%d\t%.1f\t%.0f\t%.1f\t%d\n",
 		   target,
-		   pk->x1 * step + posMin - step/2,
-		   pk->x2 * step + posMin + step/2,
-		   ln, 
-		   (float)pk->yMax / step,  /* yMax = nb of bases in one bin */
-		   (float)pk->area / ln, (float)pk->area/1000.0, pk->level/step
+		   step * pk->x1 + posMin - step/2,
+		   step * pk->x2 + posMin + step/2,
+		   step * ln, 
+		   (float)pk->yMax / (step * scale),  /* yMax = nb of bases in one bin */
+		   (float)pk->area / (ln * step * scale), (float) pk->area/(1000.0 * scale), pk->level/step
 		   ) ;
 	}
     }
@@ -146,21 +146,23 @@ void peaksCreateExport (ACEOUT ao, ACEOUT aoLevels,
 			Array aa ,    // array of unsigned int
 			const char *target,
 			int posMin, int step, // x = i * step + posMin
-			int minCover   // default 3 median (aa) no zero
+			int minCover,   // default 3 median (aa) no zero
+			int scale      // divide aa values by scale
 			)
 {
   AC_HANDLE h = ac_new_handle () ;
   Array peaks = arrayHandleCreate (0x1 << 15, PEAK, h) ;  
   unsigned int median = arrayUintMedian (aa, FALSE) ;
   unsigned int medianNoZero = arrayUintMedian (aa, TRUE) ;
-  minCover = 3 * medianNoZero ;
-
-  peakFind (aa, peaks, minCover) ;
+  minCover = 5 * medianNoZero ; // was 3
+  if (minCover < 5) minCover = 5 ;
+  if (scale < 1) scale = 1 ;
+  peakFind (aa, peaks, scale * minCover) ;
   
-  fprintf (stderr, "// %s : found %d peaks at minCover %d\n",
-	   target, arrayMax (peaks), minCover) ;
+  fprintf (stderr, "// %s : found %d peaks at minCover %d  medianNoZero %.2f\n",
+	   target, arrayMax (peaks), minCover, (float)medianNoZero/scale) ;
 
-  peaksExport (ao, aoLevels, peaks, minCover, target, posMin, step, median, medianNoZero) ;
+  peaksExport (ao, aoLevels, peaks, minCover, target, posMin, step, median, medianNoZero, scale) ;
 
   ac_free (h) ;   /* frees peaks */
 } /* peaksCreateExport */

@@ -8,6 +8,9 @@ invariant comes out as an exact function of b.  Run it as
 
         python sl21_b.py -a <int>                 (e.g. -a 1: R(1, b))
         python sl21_b.py -a <int> -N <k>          (k-jet Matryoshka, 1 <= k <= 4)
+        python sl21_b.py -a <int> --zetaH --case C [--rescale]
+                                                  (zeta-Hermitian basis, optionally
+                                                   conjugated by the block M)
         python sl21_b.py -h                       (help)
 
 There is no -b and no -y: that is the whole point of this file.
@@ -84,8 +87,11 @@ Structure constants:
         [h,e]=2e  [h,f]=-2f  [e,f]=h
         [Y,u]=u   [Y,v]=-v   [Y,w]=w   [Y,x]=-x
         [h,u]=-u  [h,v]=v     [h,w]=w   [h,x]=-x
-        [e,u]=w  [e,x]=-v     [f,v]=-x   [f,w]=-u
-        {u,v}=(Y+h)/2   {w,x}=(Y-h)/2   {v,w}=-e   {u,x}=-f
+        [e,u]=w   [f,w]=u     [e,x]=v    [f,v]=x      (two natural doublets)
+        {u,v}=(Y+h)/2   {w,x}=(h-Y)/2   {v,w}=-e   {u,x}=f
+
+Basis convention: v has only non-negative entries, so that in the fundamental
+R(0,b) the basis is exactly  L, vL, fvL, vfvL  (v = E21 + E43).
 
 The three invariants
 --------------------
@@ -97,8 +103,8 @@ study ever supplies the tensors used to build them.
         C_3 = 8 . Sum d^ABC(ref) M_A M_B M_C
         T   = (2/3) (N_4 - N_2)
 
-with N_2 = uv - vu + wx - xw, N_4 the fully antisymmetric quartic in the odd
-generators, and d^ABC(ref) the fixed cubic tensor of the anchor R(0,0).  In the
+with N_2 = uv - vu + xw - wx, N_4 the fully antisymmetric quartic in the odd
+generators (reference order u, v, x, w), and d^ABC(ref) the fixed cubic tensor of the anchor R(0,0).  In the
 rho-shifted weights mu = a+1, lambda = y-1 their eigenvalues are
 
         C_2 = mu^2 - lambda^2            [the atypicality polynomial, monic]
@@ -146,9 +152,9 @@ INDEPENDENT = {
     (E, F): {H: 1}, (E, H): {E: -2}, (F, H): {F: 2},
     (Y, U): {U: 1}, (Y, V): {V: -1}, (Y, W): {W: 1}, (Y, X): {X: -1},
     (H, U): {U: -1}, (H, V): {V: 1}, (H, W): {W: 1}, (H, X): {X: -1},
-    (E, U): {W: 1}, (E, X): {V: -1}, (F, V): {X: -1}, (F, W): {U: 1},
-    (U, V): {Y: _half, H: _half}, (W, X): {Y: _half, H: -_half},
-    (V, W): {E: -1}, (U, X): {F: -1},
+    (E, U): {W: 1}, (E, X): {V: 1}, (F, V): {X: 1}, (F, W): {U: 1},
+    (U, V): {Y: _half, H: _half}, (W, X): {Y: -_half, H: _half},
+    (V, W): {E: -1}, (U, X): {F: 1},
 }
 
 
@@ -221,11 +227,11 @@ def _scales(a, b):
     In the Kac label the two atypicality conditions are manifest:
     m21, m43 vanish at b = 0;  m31, m42 vanish at b = a+1."""
     D = 4 * (a + 1)
-    s12, s13, s24, s34 = 1, 1, -1, 1
+    s12, s13, s24, s34 = 1, 1, 1, -1        # v >= 0 on L1->L2, L1->L3, L2->L4
     m21 = Rational(4, D) * b
-    m43 = Rational(4, D) * b
+    m43 = -Rational(4, D) * b
     m31 = Rational(4, D) * (a + 1 - b)
-    m42 = -Rational(4, D) * (a + 1 - b)
+    m42 = Rational(4, D) * (a + 1 - b)
     return (s12, s13, s24, s34, m21, m31, m42, m43)
 
 
@@ -280,7 +286,7 @@ def _build(a, b, scales=None):
         if d[Lt] == 0 or d[Ls] == 0:
             continue
         put(Vmat, Lt, Ls, _shape(kind, js, 'v'), sc)
-        put(Xmat, Lt, Ls, _shape(kind, js, 'x'), -sc)   # x sign flipped
+        put(Xmat, Lt, Ls, _shape(kind, js, 'x'), sc)    # [e,x]=v, [f,v]=x
 
     # raising blocks carry u, w  (all the b-dependence)
     for (Lt, Ls, kind, js, sc) in [(0, 1, 'down', a + 1, m21),
@@ -477,21 +483,28 @@ CASE_REGION = {
     3: "b < 0          (K_1 < 0, K_2 < 0)",
 }
 
-# zeta M_k^dagger zeta = M_{PAIR[k]}.  Not "each generator is zeta-Hermitian":
+# zeta M_k^dagger zeta = PAIR_SIGN[k] M_{PAIR[k]}.  Not "each generator is zeta-Hermitian":
 # in the Chevalley basis the raising and lowering partners are exchanged.  It is
 # the Hermitian combinations lambda_1..lambda_7 of the paper that are fixed
 # individually; e = (l1+i l2)/2 and f = (l1-i l2)/2 give zeta e^dag zeta = f,
 # and likewise (u,v) <-> l6,l7 and (w,x) <-> l4,l5.
+#
+# With the natural-doublet convention [e,u]=w, [f,v]=x the (w,x) pair carries a
+# sign:  zeta w^dag zeta = -x,  zeta x^dag zeta = -w.  This is forced by the
+# algebra, not by the gauge: daggering [e,u] = w gives [v, f] = zeta w^dag zeta,
+# i.e. zeta w^dag zeta = -[f,v] = -x.  Equivalently {v,w} = -e and {u,x} = +f
+# are only compatible with the dagger if the two pairs get opposite signs.
 PAIR = {Y: Y, H: H, E: F, F: E, U: V, V: U, W: X, X: W}
+PAIR_SIGN = {Y: 1, H: 1, E: 1, F: 1, U: 1, V: 1, W: -1, X: -1}
 
 
 def _scales_zeta(a):
     """``_scales`` written in AL and GA:  b -> AL^2,  a+1-b -> -GA^2."""
-    s12, s13, s24, s34 = 1, 1, -1, 1
+    s12, s13, s24, s34 = 1, 1, 1, -1
     m21 = AL**2 / (a + 1)
-    m43 = AL**2 / (a + 1)
+    m43 = -AL**2 / (a + 1)
     m31 = -GA**2 / (a + 1)
-    m42 = GA**2 / (a + 1)
+    m42 = -GA**2 / (a + 1)
     return (s12, s13, s24, s34, m21, m31, m42, m43)
 
 
@@ -675,7 +688,7 @@ def _is_zero_matrix(M, is_zero):
 def zeta_relations(rep, Z, case, is_zero):
     """The reality condition, checked on the finished matrices:
 
-        zeta M_k^dagger zeta = M_{PAIR(k)}        for all eight
+        zeta M_k^dagger zeta = PAIR_SIGN(k) M_{PAIR(k)}      for all eight
         zeta^2 = 1
 
     This is the a-posteriori proof.  Nothing about how the gauge diagonal was
@@ -683,10 +696,11 @@ def zeta_relations(rep, Z, case, is_zero):
     them out.  Returns data only, never printed."""
     out = []
     for k in rep.numbers():
-        partner = PAIR[k]
-        r = Z @ dagger(rep[k], case) @ Z - rep[partner]
+        partner, sgn = PAIR[k], PAIR_SIGN[k]
+        r = Z @ dagger(rep[k], case) @ Z - sgn * rep[partner]
         lhs = f"zeta {rep.title(k)}^dag zeta"
-        out.append(ZetaCheck(f"{lhs} = {rep.title(partner)}",
+        rhs = ("" if sgn == 1 else "-") + rep.title(partner)
+        out.append(ZetaCheck(f"{lhs} = {rhs}",
                              _is_zero_matrix(r, is_zero), r))
     sq = Z @ Z - Matrix.one(Z.rows)
     out.append(ZetaCheck("zeta^2 = 1", _is_zero_matrix(sq, is_zero), sq))
@@ -707,13 +721,107 @@ def zeta_jet_relations(rep, a, case, N, is_zero):
         ok = True
         worst = None
         for k in rep.numbers():
-            r = Z1 @ dagger(J[k], case) @ Z1 - J[PAIR[k]]
+            r = Z1 @ dagger(J[k], case) @ Z1 - PAIR_SIGN[k] * J[PAIR[k]]
             if not _is_zero_matrix(r, is_zero):
                 ok = False
                 worst = r
-        out.append(ZetaCheck(f"jet p={p}: zeta mu_p^dag zeta = mu_p(pair)",
+        out.append(ZetaCheck(f"jet p={p}: zeta mu_p^dag zeta = +-mu_p(pair)",
                              ok, worst))
     return out
+
+
+# -- 2e. the block rescaling M on top of the zeta gauge -----------------------
+#
+# M is block diagonal, a scalar on each of the four sl(2) layers, so it commutes
+# with e, f, h and Y (L2 and L3 share Y = y-1 but carry different sl(2) irreps,
+# so they may carry different scalars):
+#
+#       M = diag( 1 . Id_{a+1},  alpha . Id_{a+2},  gamma . Id_a,  1 . Id_{a+1} )
+#
+# with alpha = sqrt(b), gamma = sqrt(b-a-1)  (= sqrt(b-1) at a = 0, where the
+# layer L3 is empty).  Every generator becomes  M mu M^-1.  Only the odd
+# blocks change: a block from layer s to layer t is multiplied by m_t / m_s.
+#
+# M is a similarity, so the structure constants are untouched (checked, not
+# assumed).  It is NOT unitary, so the reality condition must be transported:
+# with eta = M^-dag zeta M^-1,
+#
+#       eta^-1 mu'^dag eta = M (zeta mu^dag zeta) M^-1 = +- M partner M^-1
+#                          = +- partner'
+#
+# For the Matryoshka the same holds with M replaced by its own Taylor jet M_N
+# (the jet of a product is the product of the jets) and zeta by J (x) zeta.
+
+RESCALE_LAYERS = (Integer(1), AL, GA, Integer(1))      # L1, L2, L3, L4
+
+
+def rescale_diagonal(a, inverse=False):
+    """The 4(a+1) diagonal entries of M (or of M^-1), constant on each layer."""
+    dims = [a + 1, a + 2, a, a + 1]
+    D = []
+    for c, dl in zip(RESCALE_LAYERS, dims):
+        D.extend([1 / c if inverse else c] * dl)
+    return D
+
+
+def Rzeta_rescaled(a):
+    """M . Rzeta(a) . M^-1 : the zeta-Hermitian matrices, block-rescaled."""
+    base = Rzeta(a)
+    m = rescale_diagonal(a)
+    n = base.dim
+    g = Algebra(name=f"M Rzeta({a}) M^-1")
+    for k in base.numbers():
+        A = base[k]
+        g.add(Matrix(n, n, lambda i, j, A=A: cancel(m[i] * A[i, j] / m[j])),
+              base.title(k), base.parity(k), number=k)
+    return g
+
+
+def rescale_jet_matrix(a, N, inverse=False):
+    """M_N: the N-layer Taylor jet of the diagonal M (or of M^-1), in y.
+
+    Block (I, J) = (1/p!) (d/dy)^p M,  p = I - J >= 0.  Because the jet of a
+    product is the product of the jets, the Matryoshka of M mu M^-1 is
+    M_N (Matryoshka of mu) M_N^-1, and jet(M^-1) is exactly M_N^-1."""
+    diag = rescale_diagonal(a, inverse)
+    d = len(diag)
+    bands = [diag]
+    for _ in range(1, N):
+        bands.append([dy_zeta(x) for x in bands[-1]])
+    bands = [[Rational(1, factorial(p)) * x for x in band]
+             for p, band in enumerate(bands)]
+
+    def entry(i, j):
+        I, J = i // d, j // d
+        if I < J or i % d != j % d:
+            return 0
+        return cancel(bands[I - J][i % d])
+
+    return Matrix(N * d, N * d, entry)
+
+
+def rescaled_reality_relations(rep, a, case, N, is_zero):
+    """The transported reality condition on the finished rescaled matrices:
+
+        eta^-1 mu^dag eta = PAIR_SIGN(k) mu_{PAIR(k)} ,   eta = M_N^-dag Z M_N^-1
+
+    with Z = zeta (N = 1) or J (x) zeta (N > 1), so eta^-1 = M_N Z M_N^dag.
+    Data only, never printed."""
+    Z = zeta_matrix(a, case, N)
+    Mn = rescale_jet_matrix(a, N)
+    Mi = rescale_jet_matrix(a, N, inverse=True)
+    eta = dagger(Mi, case) @ Z @ Mi
+    eta_inv = Mn @ Z @ dagger(Mn, case)
+    out = []
+    for k in rep.numbers():
+        partner, sgn = PAIR[k], PAIR_SIGN[k]
+        r = eta_inv @ dagger(rep[k], case) @ eta - sgn * rep[partner]
+        rhs = ("" if sgn == 1 else "-") + rep.title(partner)
+        out.append(ZetaCheck(f"eta^-1 {rep.title(k)}^dag eta = {rhs}",
+                             _is_zero_matrix(r, is_zero), r))
+    one = eta_inv @ eta - Matrix.one(eta.rows)
+    out.append(ZetaCheck("eta^-1 eta = 1", _is_zero_matrix(one, is_zero), one))
+    return out, eta
 
 
 def Rchi(a, N=1):
@@ -1317,14 +1425,16 @@ def upper_killing_metric(g_lower, rep):
 
 # -- the Gorelik anticenter element T_4 (built from N_2 and N_4) -------------
 
-# the four odd generators, in canonical order
-ODD_GENS = [U, V, W, X]
+# the four odd generators, in the reference order (u, v, x, w) that fixes the
+# sign of N_4: pairs (u,v) and (x,w), each (raising-type, lowering-type) as in
+# {u,v} = (Y+h)/2 and {x,w} = (h-Y)/2.
+ODD_GENS = [U, V, X, W]
 
 
 def _perm_sign(perm):
     """Sign (+1/-1) of a permutation given as a sequence, by inversion count
-    against ascending order (so (U,V,W,X) itself is +1)."""
-    perm = list(perm)
+    against the reference order ODD_GENS (so (U,V,X,W) itself is +1)."""
+    perm = [ODD_GENS.index(p) for p in perm]
     n = len(perm)
     s = 1
     for i in range(n):
@@ -1335,11 +1445,11 @@ def _perm_sign(perm):
 
 
 def anticenter_N2(rep):
-    """N_2 = UV - VU + WX - XW  (ordinary matrix products of the odd gens).
+    """N_2 = UV - VU + XW - WX  (ordinary matrix products of the odd gens).
 
     U,V,W,X are u,v,w,x (canonical 4,5,6,7). Returns a Matrix (simplified)."""
     u, v, w, x = rep[U], rep[V], rep[W], rep[X]
-    N2 = u @ v - v @ u + w @ x - x @ w
+    N2 = u @ v - v @ u + x @ w - w @ x
     return N2.applyfunc(simplify)
 
 
@@ -1348,7 +1458,7 @@ def anticenter_N4(rep):
 
         N_4 = Σ_{σ ∈ S_4} sign(σ) · M_{σ(1)} M_{σ(2)} M_{σ(3)} M_{σ(4)}
 
-    where σ permutes (u, v, w, x): 24 signed quartic matrix products. Returns a
+    where σ permutes (u, v, x, w): 24 signed quartic matrix products. Returns a
     Matrix (simplified)."""
     d = rep.dim
     N4 = Matrix.zero(d, d)
@@ -1403,7 +1513,7 @@ def casimir_quadratic_direct(rep):
     The split reported below is by sector, as in ``casimir_quadratic``:
 
         even sector:  h^2 - Y^2 + 2(ef + fe)
-        odd  sector:  2 N_2 = 2(uv - vu + wx - xw)
+        odd  sector:  2 N_2 = 2(uv - vu + xw - wx)
 
     Returns the same dict shape as ``casimir_quadratic``."""
     Ym, e, f, h = rep[Y], rep[E], rep[F], rep[H]
@@ -1486,6 +1596,96 @@ def anticenter_casimir_relations(rep, T, C2, chi, is_zero=is_zero_scalar):
         TCheck("T = C_2 . chi", is_zero_matrix(r_ident), r_ident),
         TCheck("T^2 = C_2^2", is_zero_matrix(r_square), r_square),
     ]
+
+
+# -- 2f. the odd bilinear trace tensor  t_{AB,ij} ----------------------------
+#
+#       t_{AB,ij}  =  (1/N) Tr( [A,i][B,j] + [A,j][B,i] )
+#
+# with A, B even (Y, e, f, h) and i, j odd (u, v, w, x).  This is the second
+# instance of the master-equation pattern: like d_ABC, the whole tensor is one
+# FIXED array of numbers times the single module-dependent number Tr(Y),
+#
+#       t_{AB,ij}(R)  =  Tr(Y)_R . k_{AB,ij} ,     k = t(R(0,0)) / Tr(Y)_{R(0,0)}
+#
+# so all of the (a, b) dependence again sits in the trace of the hypercharge.
+# 32 of the 256 components are nonzero.  Note the ordinary trace, not STr.
+#
+# t is symmetric under A <-> B and under i <-> j (cyclicity of the trace), so
+# only the 100 pairs A <= B, i <= j are computed and the rest filled in.
+
+EVEN_NUMS = (Y, E, F, H)
+ODD_NUMS = (U, V, W, X)
+
+
+def _trace_of_product(P, Q):
+    """Tr(P Q) without forming the product."""
+    return sum(P[i, k] * Q[k, i]
+               for i in range(P.rows) for k in range(P.cols))
+
+
+def odd_bilinear_t(rep, N=1):
+    """The 256 constants t_{AB,ij}, keyed (A, B, i, j) over canonical numbers.
+
+    Divided by N so that the Matryoshka gives the same tensor as its N = 1
+    layer, exactly as ``cubic_d`` does."""
+    ad = {(A, i): rep[A] @ rep[i] - rep[i] @ rep[A]
+          for A in EVEN_NUMS for i in ODD_NUMS}
+
+    t = {}
+    for m, A in enumerate(EVEN_NUMS):
+        for B in EVEN_NUMS[m:]:
+            for n, i in enumerate(ODD_NUMS):
+                for j in ODD_NUMS[n:]:
+                    v = simplify((_trace_of_product(ad[A, i], ad[B, j])
+                                  + _trace_of_product(ad[A, j], ad[B, i])) / N)
+                    for key in ((A, B, i, j), (A, B, j, i),
+                                (B, A, i, j), (B, A, j, i)):
+                        t[key] = v
+    return t
+
+
+_T_REF_CACHE = {}
+
+
+def odd_bilinear_reference():
+    """t and Tr(Y) of the anchor R(0,0), computed once.  Tr(Y)_ref = -4."""
+    if not _T_REF_CACHE:
+        rep = Rsl21(0, 0)
+        _T_REF_CACHE['t'] = odd_bilinear_t(rep, 1)
+        _T_REF_CACHE['trY'] = trace(rep[Y])
+    return _T_REF_CACHE['t'], _T_REF_CACHE['trY']
+
+
+def odd_bilinear_proportionality(t, tr_Y):
+    """Check t_{AB,ij}(R) = (fixed tensor) . Tr(Y), on all 256 components.
+
+    Cross-multiplied rather than divided, so the self-conjugate modules
+    (Tr(Y) = 0, whole tensor zero) are tested like everything else:
+
+        t_{AB,ij}(R) . Tr(Y)_ref  ==  t_{AB,ij}(ref) . Tr(Y)_R
+
+    Returns (ratio, failures, k) -- the proportionality constant
+    Tr(Y)_R/Tr(Y)_ref = A(R), the list of components that fail as
+    (key, got, expected), and the fixed tensor k itself.  Data only."""
+    t_ref, trY_ref = odd_bilinear_reference()
+    k = {key: simplify(val / trY_ref) for key, val in t_ref.items()}
+
+    failures = []
+    for key, val in t.items():
+        lhs = simplify(val * trY_ref)
+        rhs = simplify(t_ref[key] * tr_Y)
+        if not is_zero_scalar(lhs - rhs):
+            failures.append((key, val, simplify(rhs / trY_ref)))
+
+    return simplify(tr_Y / trY_ref), failures, k
+
+
+def odd_quartic_traces(rep):
+    """(Tr N_2, Tr N_4).  Both vanish: N_2 is a sum of commutators, and in N_4
+    the permutations pair off under cyclic rotation.  Cheap, and a genuine
+    check of the matrices -- the traces are built from every entry."""
+    return simplify(trace(anticenter_N2(rep))), simplify(trace(anticenter_N4(rep)))
 
 
 # -- 3. verification ---------------------------------------------------------
@@ -1758,9 +1958,78 @@ def _casimir_report(rep, chi, N, a, y):
 
 
 
-def main(a, N=1, casimirs=False, zetaH=False, case=None):
+
+def _trace_identities_report(rep, N, titles=None):
+    """The last section of every run: the two trace identities.
+
+    Both are cheap and both touch every entry of every matrix, so they are run
+    unconditionally, with or without --casimirs."""
+    print()
+    print("=" * 80)
+    print("Trace identities:  Tr(N_2) = Tr(N_4) = 0,  and  "
+          "Tr([A,i][B,j] + [A,j][B,i]) = Tr(Y) . k")
+    print("=" * 80)
+    print()
+
+    tr_N2, tr_N4 = odd_quartic_traces(rep)
+    ok2, ok4 = is_zero_scalar(tr_N2), is_zero_scalar(tr_N4)
+    print(f"    Tr(N_2) = {tr_N2}   {'✓' if ok2 else '✗'}")
+    print(f"    Tr(N_4) = {tr_N4}   {'✓' if ok4 else '✗'}")
+    print("    [N_2 is a sum of commutators; in N_4 the 24 permutations cancel")
+    print("     in cyclic pairs.  Both are traces over every entry, so they are")
+    print("     a cheap global check of the matrices.]")
+    print()
+
+    tr_Y = simplify(trace(rep[Y]) / N)
+    t = odd_bilinear_t(rep, N)
+    ratio, failures, k = odd_bilinear_proportionality(t, tr_Y)
+
+    print(f"Tr(Y) = {tr_Y}     (per layer; Tr(Y) = 4(a+1)(y-1) = 4 mu lambda)")
+    print()
+    print("t_{AB,ij} = Tr([A,i][B,j] + [A,j][B,i]),  A,B even, i,j odd:")
+    print("    the 32 nonzero components of the fixed tensor "
+          "k = t / Tr(Y), from the anchor R(0,0)")
+    print()
+
+    nm = titles or {Y: 'Y', E: 'e', F: 'f', H: 'h',
+                    U: 'u', V: 'v', W: 'w', X: 'x'}
+    seen, line = set(), []
+    for (A, B, i, j), val in k.items():
+        if val == 0 or (A, B, i, j) in seen:
+            continue
+        seen.update({(A, B, i, j), (A, B, j, i), (B, A, i, j), (B, A, j, i)})
+        line.append(f"k({nm[A]}{nm[B]},{nm[i]}{nm[j]}) = {str(val):>5}")
+        if len(line) == 4:
+            print("    " + "   ".join(line))
+            line = []
+    if line:
+        print("    " + "   ".join(line))
+    print("    [each entry stands for the 2, 3 or 4 components equal to it by "
+          "the symmetries A<->B, i<->j]")
+    print()
+
+    if not failures:
+        print(f"All 256 components satisfy  t_{{AB,ij}}(R) = Tr(Y) . k_{{AB,ij}} "
+              f"with the SAME k as the anchor R(0,0),")
+        print(f"i.e. the tensor is one fixed array of numbers times Tr(Y), "
+              f"exactly as d_ABC is. ✓")
+        print(f"    proportionality constant Tr(Y)_R / Tr(Y)_ref = {ratio} "
+              f"= A(R) = -mu.lambda")
+    else:
+        print(f"{len(failures)} of 256 components FAILED "
+              f"t_{{AB,ij}}(R) . Tr(Y)_ref = t_{{AB,ij}}(ref) . Tr(Y)_R:")
+        for key, got, expected in failures[:12]:
+            lbl = "".join(nm[q] for q in key)
+            print(f"    t({lbl}) = {got}   expected {expected} . Tr(Y)")
+        if len(failures) > 12:
+            print(f"    ... and {len(failures) - 12} more")
+    print()
+
+
+def main(a, N=1, casimirs=False, zetaH=False, case=None, rescale=False):
     if zetaH:
-        base, dy, is0 = Rzeta(a), dy_zeta, zeta_is_zero(a)
+        base = Rzeta_rescaled(a) if rescale else Rzeta(a)
+        dy, is0 = dy_zeta, zeta_is_zero(a)
         b = AL**2
     else:
         base, dy, is0 = Rsl21(a), dy_chevalley, is_zero_scalar
@@ -1769,6 +2038,8 @@ def main(a, N=1, casimirs=False, zetaH=False, case=None):
 
     y = 2 * b - a
     basis = ("zeta-Hermitian basis" if zetaH else "Chevalley basis")
+    if rescale:
+        basis = "zeta-Hermitian basis, rescaled by M"
     if N == 1:
         print(f"sl(2|1) Kac module R(a={a}, b={b})  [y={y}]   "
               f"(dimension {rep.dim} = 4(a+1))   b is FORMAL, {basis}")
@@ -1779,6 +2050,9 @@ def main(a, N=1, casimirs=False, zetaH=False, case=None):
     if zetaH:
         print(f"case {case}:  {CASE_REGION[case]}      "
               f"alpha = sqrt(b) = sqrt(K_1),  gamma = sqrt(b-a-1) = sqrt(K_2)")
+    if rescale:
+        print("M = diag(1, alpha, gamma, 1) per sl(2) layer (commutes with "
+              "e, f, h, Y);  every matrix below is  M mu M^-1")
     print("=" * 46, "\n")
 
     # Which Taylor jets are alive.  In the Chevalley basis every generator is
@@ -1856,7 +2130,28 @@ def main(a, N=1, casimirs=False, zetaH=False, case=None):
     # This is the a-posteriori proof.  The eight matrices were produced above by
     # whatever means; nothing about their derivation enters here.  What is
     # checked is what they satisfy, by explicit multiplication, entry by entry.
-    if zetaH:
+    if zetaH and rescale:
+        print()
+        r_checks, eta = rescaled_reality_relations(rep, a, case, N, is0)
+        _show_matrix("eta = M_N^-dag zeta_N M_N^-1  (the transported metric)"
+                     if N > 1 else
+                     "eta = M^-dag zeta M^-1  (the transported metric)", eta)
+        print("Reality conditions to verify "
+              "(eta^-1 M^dag eta = +-partner):")
+        for c in r_checks:
+            print(f"    {c.label:<34} {'✓' if c.ok else 'FAILED'}")
+        print()
+        if all(c.ok for c in r_checks):
+            print(f"All eight rescaled matrices are eta-Hermitian in case "
+                  f"{case}. ✓")
+        else:
+            for c in r_checks:
+                if not c.ok:
+                    print(f"    {c.label} residual =")
+                    print(c.residual)
+                    print()
+
+    if zetaH and not rescale:
         print()
         Z = zeta_matrix(a, case, N)
         label = ("zeta  (per layer: 1, sign K_1, sign K_2, sign K_1 sign K_2)"
@@ -1865,7 +2160,7 @@ def main(a, N=1, casimirs=False, zetaH=False, case=None):
         _show_matrix(label, Z)
 
         print("Reality conditions to verify "
-              "(zeta M^dag zeta = partner, zeta^2 = 1):")
+              "(zeta M^dag zeta = +-partner, zeta^2 = 1):")
         z_checks = zeta_relations(rep, Z, case, is0)
         for c in z_checks:
             print(f"    {c.label:<34} {'✓' if c.ok else 'FAILED'}")
@@ -1915,7 +2210,7 @@ def main(a, N=1, casimirs=False, zetaH=False, case=None):
         print()
 
         N2 = anticenter_N2(crep)
-        print("N_2 = UV - VU + WX - XW =")
+        print("N_2 = UV - VU + XW - WX =")
         print(N2)
         print()
 
@@ -2111,6 +2406,15 @@ def main(a, N=1, casimirs=False, zetaH=False, case=None):
         print(f"STr(N_4) = {e}")
         print()
 
+    # -- the trace identities (always, with or without --casimirs) -----------
+    #
+    # Run on the GA-eliminated copy in the zeta basis, for the same reason the
+    # Casimir section is: these helpers use bare ``simplify``.  A similarity
+    # transformation leaves every trace alone, so the zeta basis and the
+    # rescaled basis must give the same tensor as the Chevalley one -- which
+    # makes this a check of the gauge as well.
+    _trace_identities_report(zeta_reduce(a)(rep) if zetaH else rep, N)
+
 
 # -- command-line argument types -------------------------------------------
 #
@@ -2181,7 +2485,7 @@ def _build_parser():
         "--zetaH", action="store_true",
         help="build in the zeta-Hermitian basis: conjugate by a diagonal so "
              "that the odd blocks are symmetric in alpha=sqrt(b) and "
-             "gamma=sqrt(b-a-1), then verify zeta M^dag zeta = partner on the "
+             "gamma=sqrt(b-a-1), then verify zeta M^dag zeta = +-partner on the "
              "finished matrices.  Requires --case",
     )
     parser.add_argument(
@@ -2191,6 +2495,14 @@ def _build_parser():
              "The eight matrices are the same in all three; only the signs of "
              "zeta and of the conjugation change.  The atypical points "
              "b(b-a-1)=0 are out of scope",
+    )
+    parser.add_argument(
+        "--rescale", action="store_true",
+        help="with --zetaH: conjugate every matrix by the block-diagonal "
+             "M = diag(1, sqrt(b), sqrt(b-a-1), 1) on the four sl(2) layers "
+             "(M commutes with e, f, h, Y), i.e. print M mu M^-1.  The reality "
+             "condition is checked with the transported metric "
+             "eta = M^-dag zeta M^-1",
     )
     parser.add_argument(
         "--casimirs", action="store_true",
@@ -2213,6 +2525,9 @@ if __name__ == "__main__":
                      "see --help")
     if args.case is not None and not args.zetaH:
         parser.error("--case only means something with --zetaH")
+    if args.rescale and not args.zetaH:
+        parser.error("--rescale acts on the zeta-Hermitian basis: "
+                     "add --zetaH --case C")
     if (args.a + 1) * args.N > SIZE_LIMIT:
         parser.error(
             f"(a+1)*N = {(args.a + 1) * args.N} exceeds SIZE_LIMIT = "
@@ -2223,4 +2538,4 @@ if __name__ == "__main__":
         )
 
     main(args.a, args.N, casimirs=args.casimirs,
-         zetaH=args.zetaH, case=args.case)
+         zetaH=args.zetaH, case=args.case, rescale=args.rescale)

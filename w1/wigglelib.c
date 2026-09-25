@@ -850,7 +850,7 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
       arrayMax (cc) = jMax + 1 ;
     }
   fprintf (stderr, "call peakCreateExport target=%s\n", target) ;
-  peaksCreateExport (ao, aoLevels, cc, target, posMin, step, minCover) ;
+  peaksCreateExport (ao, aoLevels, cc, target, posMin, step, minCover, 1) ;
   ac_free (h) ;
 }
 
@@ -2425,6 +2425,8 @@ static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *n
   if (x2 > az->xMax)
     x2 = az->xMax ;
 
+  if (shift > 0) shift += step - 1 ;   /* we prefer to over-reach a little when we divide by step */
+  if (shift > 0) shift -= step - 1 ;
   for (int jj = 0, x = x1 ; x < x2 ; )
     {
       int nb = x >> az->bMax ;

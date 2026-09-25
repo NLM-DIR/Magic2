@@ -49,8 +49,11 @@ Structure constants:
         [h,e]=2e  [h,f]=-2f  [e,f]=h
         [Y,u]=u   [Y,v]=-v   [Y,w]=w   [Y,x]=-x
         [h,u]=-u  [h,v]=v     [h,w]=w   [h,x]=-x
-        [e,u]=w  [e,x]=-v     [f,v]=-x   [f,w]=-u
-        {u,v}=(Y+h)/2   {w,x}=(Y-h)/2   {v,w}=-e   {u,x}=-f
+        [e,u]=w   [f,w]=u     [e,x]=v    [f,v]=x      (two natural doublets)
+        {u,v}=(Y+h)/2   {w,x}=(h-Y)/2   {v,w}=-e   {u,x}=f
+
+Basis convention: v has only non-negative entries, so that in the fundamental
+R(0,0) the basis is exactly  L, vL, fvL, vfvL  (v = E21 + E43).
 
 The three invariants
 --------------------
@@ -62,8 +65,8 @@ study ever supplies the tensors used to build them.
         C_3 = 8 . Sum d^ABC(ref) M_A M_B M_C
         T   = (2/3) (N_4 - N_2)
 
-with N_2 = uv - vu + wx - xw, N_4 the fully antisymmetric quartic in the odd
-generators, and d^ABC(ref) the fixed cubic tensor of the anchor R(0,0).  In the
+with N_2 = uv - vu + xw - wx, N_4 the fully antisymmetric quartic in the odd
+generators (reference order u, v, x, w), and d^ABC(ref) the fixed cubic tensor of the anchor R(0,0).  In the
 rho-shifted weights mu = a+1, lambda = y-1 their eigenvalues are
 
         C_2 = mu^2 - lambda^2            [the atypicality polynomial, monic]
@@ -96,9 +99,9 @@ INDEPENDENT = {
     (E, F): {H: 1}, (E, H): {E: -2}, (F, H): {F: 2},
     (Y, U): {U: 1}, (Y, V): {V: -1}, (Y, W): {W: 1}, (Y, X): {X: -1},
     (H, U): {U: -1}, (H, V): {V: 1}, (H, W): {W: 1}, (H, X): {X: -1},
-    (E, U): {W: 1}, (E, X): {V: -1}, (F, V): {X: -1}, (F, W): {U: 1},
-    (U, V): {Y: _half, H: _half}, (W, X): {Y: _half, H: -_half},
-    (V, W): {E: -1}, (U, X): {F: -1},
+    (E, U): {W: 1}, (E, X): {V: 1}, (F, V): {X: 1}, (F, W): {U: 1},
+    (U, V): {Y: _half, H: _half}, (W, X): {Y: -_half, H: _half},
+    (V, W): {E: -1}, (U, X): {F: 1},
 }
 
 
@@ -171,11 +174,11 @@ def _scales(a, b):
     In the Kac label the two atypicality conditions are manifest:
     m21, m43 vanish at b = 0;  m31, m42 vanish at b = a+1."""
     D = 4 * (a + 1)
-    s12, s13, s24, s34 = 1, 1, -1, 1
+    s12, s13, s24, s34 = 1, 1, 1, -1        # v >= 0 on L1->L2, L1->L3, L2->L4
     m21 = Rational(4, D) * b
-    m43 = Rational(4, D) * b
+    m43 = -Rational(4, D) * b
     m31 = Rational(4, D) * (a + 1 - b)
-    m42 = -Rational(4, D) * (a + 1 - b)
+    m42 = Rational(4, D) * (a + 1 - b)
     return (s12, s13, s24, s34, m21, m31, m42, m43)
 
 
@@ -223,7 +226,7 @@ def _build(a, b):
         if d[Lt] == 0 or d[Ls] == 0:
             continue
         put(Vmat, Lt, Ls, _shape(kind, js, 'v'), sc)
-        put(Xmat, Lt, Ls, _shape(kind, js, 'x'), -sc)   # x sign flipped
+        put(Xmat, Lt, Ls, _shape(kind, js, 'x'), sc)    # [e,x]=v, [f,v]=x
 
     # raising blocks carry u, w  (all the b-dependence)
     for (Lt, Ls, kind, js, sc) in [(0, 1, 'down', a + 1, m21),
@@ -918,14 +921,16 @@ def upper_killing_metric(g_lower, rep):
 
 # -- the Gorelik anticenter element T_4 (built from N_2 and N_4) -------------
 
-# the four odd generators, in canonical order
-ODD_GENS = [U, V, W, X]
+# the four odd generators, in the reference order (u, v, x, w) that fixes the
+# sign of N_4: pairs (u,v) and (x,w), each (raising-type, lowering-type) as in
+# {u,v} = (Y+h)/2 and {x,w} = (h-Y)/2.
+ODD_GENS = [U, V, X, W]
 
 
 def _perm_sign(perm):
     """Sign (+1/-1) of a permutation given as a sequence, by inversion count
-    against ascending order (so (U,V,W,X) itself is +1)."""
-    perm = list(perm)
+    against the reference order ODD_GENS (so (U,V,X,W) itself is +1)."""
+    perm = [ODD_GENS.index(p) for p in perm]
     n = len(perm)
     s = 1
     for i in range(n):
@@ -936,11 +941,11 @@ def _perm_sign(perm):
 
 
 def anticenter_N2(rep):
-    """N_2 = UV - VU + WX - XW  (ordinary matrix products of the odd gens).
+    """N_2 = UV - VU + XW - WX  (ordinary matrix products of the odd gens).
 
     U,V,W,X are u,v,w,x (canonical 4,5,6,7). Returns a Matrix (simplified)."""
     u, v, w, x = rep[U], rep[V], rep[W], rep[X]
-    N2 = u @ v - v @ u + w @ x - x @ w
+    N2 = u @ v - v @ u + x @ w - w @ x
     return N2.applyfunc(simplify)
 
 
@@ -949,7 +954,7 @@ def anticenter_N4(rep):
 
         N_4 = Σ_{σ ∈ S_4} sign(σ) · M_{σ(1)} M_{σ(2)} M_{σ(3)} M_{σ(4)}
 
-    where σ permutes (u, v, w, x): 24 signed quartic matrix products. Returns a
+    where σ permutes (u, v, x, w): 24 signed quartic matrix products. Returns a
     Matrix (simplified)."""
     d = rep.dim
     N4 = Matrix.zero(d, d)
@@ -1004,7 +1009,7 @@ def casimir_quadratic_direct(rep):
     The split reported below is by sector, as in ``casimir_quadratic``:
 
         even sector:  h^2 - Y^2 + 2(ef + fe)
-        odd  sector:  2 N_2 = 2(uv - vu + wx - xw)
+        odd  sector:  2 N_2 = 2(uv - vu + xw - wx)
 
     Returns the same dict shape as ``casimir_quadratic``."""
     Ym, e, f, h = rep[Y], rep[E], rep[F], rep[H]
@@ -1087,6 +1092,96 @@ def anticenter_casimir_relations(rep, T, C2, chi):
         TCheck("T = C_2 . chi", is_zero_matrix(r_ident), r_ident),
         TCheck("T^2 = C_2^2", is_zero_matrix(r_square), r_square),
     ]
+
+
+# -- 2f. the odd bilinear trace tensor  t_{AB,ij} ----------------------------
+#
+#       t_{AB,ij}  =  (1/N) Tr( [A,i][B,j] + [A,j][B,i] )
+#
+# with A, B even (Y, e, f, h) and i, j odd (u, v, w, x).  This is the second
+# instance of the master-equation pattern: like d_ABC, the whole tensor is one
+# FIXED array of numbers times the single module-dependent number Tr(Y),
+#
+#       t_{AB,ij}(R)  =  Tr(Y)_R . k_{AB,ij} ,     k = t(R(0,0)) / Tr(Y)_{R(0,0)}
+#
+# so all of the (a, b) dependence again sits in the trace of the hypercharge.
+# 32 of the 256 components are nonzero.  Note the ordinary trace, not STr.
+#
+# t is symmetric under A <-> B and under i <-> j (cyclicity of the trace), so
+# only the 100 pairs A <= B, i <= j are computed and the rest filled in.
+
+EVEN_NUMS = (Y, E, F, H)
+ODD_NUMS = (U, V, W, X)
+
+
+def _trace_of_product(P, Q):
+    """Tr(P Q) without forming the product."""
+    return sum(P[i, k] * Q[k, i]
+               for i in range(P.rows) for k in range(P.cols))
+
+
+def odd_bilinear_t(rep, N=1):
+    """The 256 constants t_{AB,ij}, keyed (A, B, i, j) over canonical numbers.
+
+    Divided by N so that the Matryoshka gives the same tensor as its N = 1
+    layer, exactly as ``cubic_d`` does."""
+    ad = {(A, i): rep[A] @ rep[i] - rep[i] @ rep[A]
+          for A in EVEN_NUMS for i in ODD_NUMS}
+
+    t = {}
+    for m, A in enumerate(EVEN_NUMS):
+        for B in EVEN_NUMS[m:]:
+            for n, i in enumerate(ODD_NUMS):
+                for j in ODD_NUMS[n:]:
+                    v = simplify((_trace_of_product(ad[A, i], ad[B, j])
+                                  + _trace_of_product(ad[A, j], ad[B, i])) / N)
+                    for key in ((A, B, i, j), (A, B, j, i),
+                                (B, A, i, j), (B, A, j, i)):
+                        t[key] = v
+    return t
+
+
+_T_REF_CACHE = {}
+
+
+def odd_bilinear_reference():
+    """t and Tr(Y) of the anchor R(0,0), computed once.  Tr(Y)_ref = -4."""
+    if not _T_REF_CACHE:
+        rep = Rsl21(0, 0)
+        _T_REF_CACHE['t'] = odd_bilinear_t(rep, 1)
+        _T_REF_CACHE['trY'] = trace(rep[Y])
+    return _T_REF_CACHE['t'], _T_REF_CACHE['trY']
+
+
+def odd_bilinear_proportionality(t, tr_Y):
+    """Check t_{AB,ij}(R) = (fixed tensor) . Tr(Y), on all 256 components.
+
+    Cross-multiplied rather than divided, so the self-conjugate modules
+    (Tr(Y) = 0, whole tensor zero) are tested like everything else:
+
+        t_{AB,ij}(R) . Tr(Y)_ref  ==  t_{AB,ij}(ref) . Tr(Y)_R
+
+    Returns (ratio, failures, k) -- the proportionality constant
+    Tr(Y)_R/Tr(Y)_ref = A(R), the list of components that fail as
+    (key, got, expected), and the fixed tensor k itself.  Data only."""
+    t_ref, trY_ref = odd_bilinear_reference()
+    k = {key: simplify(val / trY_ref) for key, val in t_ref.items()}
+
+    failures = []
+    for key, val in t.items():
+        lhs = simplify(val * trY_ref)
+        rhs = simplify(t_ref[key] * tr_Y)
+        if not is_zero_scalar(lhs - rhs):
+            failures.append((key, val, simplify(rhs / trY_ref)))
+
+    return simplify(tr_Y / trY_ref), failures, k
+
+
+def odd_quartic_traces(rep):
+    """(Tr N_2, Tr N_4).  Both vanish: N_2 is a sum of commutators, and in N_4
+    the permutations pair off under cyclic rotation.  Cheap, and a genuine
+    check of the matrices -- the traces are built from every entry."""
+    return simplify(trace(anticenter_N2(rep))), simplify(trace(anticenter_N4(rep)))
 
 
 # -- 3. verification ---------------------------------------------------------
@@ -1359,6 +1454,74 @@ def _casimir_report(rep, chi, N, a, y):
 
 
 
+
+def _trace_identities_report(rep, N, titles=None):
+    """The last section of every run: the two trace identities.
+
+    Both are cheap and both touch every entry of every matrix, so they are run
+    unconditionally, with or without --casimirs."""
+    print()
+    print("=" * 80)
+    print("Trace identities:  Tr(N_2) = Tr(N_4) = 0,  and  "
+          "Tr([A,i][B,j] + [A,j][B,i]) = Tr(Y) . k")
+    print("=" * 80)
+    print()
+
+    tr_N2, tr_N4 = odd_quartic_traces(rep)
+    ok2, ok4 = is_zero_scalar(tr_N2), is_zero_scalar(tr_N4)
+    print(f"    Tr(N_2) = {tr_N2}   {'✓' if ok2 else '✗'}")
+    print(f"    Tr(N_4) = {tr_N4}   {'✓' if ok4 else '✗'}")
+    print("    [N_2 is a sum of commutators; in N_4 the 24 permutations cancel")
+    print("     in cyclic pairs.  Both are traces over every entry, so they are")
+    print("     a cheap global check of the matrices.]")
+    print()
+
+    tr_Y = simplify(trace(rep[Y]) / N)
+    t = odd_bilinear_t(rep, N)
+    ratio, failures, k = odd_bilinear_proportionality(t, tr_Y)
+
+    print(f"Tr(Y) = {tr_Y}     (per layer; Tr(Y) = 4(a+1)(y-1) = 4 mu lambda)")
+    print()
+    print("t_{AB,ij} = Tr([A,i][B,j] + [A,j][B,i]),  A,B even, i,j odd:")
+    print("    the 32 nonzero components of the fixed tensor "
+          "k = t / Tr(Y), from the anchor R(0,0)")
+    print()
+
+    nm = titles or {Y: 'Y', E: 'e', F: 'f', H: 'h',
+                    U: 'u', V: 'v', W: 'w', X: 'x'}
+    seen, line = set(), []
+    for (A, B, i, j), val in k.items():
+        if val == 0 or (A, B, i, j) in seen:
+            continue
+        seen.update({(A, B, i, j), (A, B, j, i), (B, A, i, j), (B, A, j, i)})
+        line.append(f"k({nm[A]}{nm[B]},{nm[i]}{nm[j]}) = {str(val):>5}")
+        if len(line) == 4:
+            print("    " + "   ".join(line))
+            line = []
+    if line:
+        print("    " + "   ".join(line))
+    print("    [each entry stands for the 2, 3 or 4 components equal to it by "
+          "the symmetries A<->B, i<->j]")
+    print()
+
+    if not failures:
+        print(f"All 256 components satisfy  t_{{AB,ij}}(R) = Tr(Y) . k_{{AB,ij}} "
+              f"with the SAME k as the anchor R(0,0),")
+        print(f"i.e. the tensor is one fixed array of numbers times Tr(Y), "
+              f"exactly as d_ABC is. ✓")
+        print(f"    proportionality constant Tr(Y)_R / Tr(Y)_ref = {ratio} "
+              f"= A(R) = -mu.lambda")
+    else:
+        print(f"{len(failures)} of 256 components FAILED "
+              f"t_{{AB,ij}}(R) . Tr(Y)_ref = t_{{AB,ij}}(ref) . Tr(Y)_R:")
+        for key, got, expected in failures[:12]:
+            lbl = "".join(nm[q] for q in key)
+            print(f"    t({lbl}) = {got}   expected {expected} . Tr(Y)")
+        if len(failures) > 12:
+            print(f"    ... and {len(failures) - 12} more")
+    print()
+
+
 def main(a, b, N=1, casimirs=False):
     rep = Rmatryoshka(a, b, N)
 
@@ -1438,7 +1601,7 @@ def main(a, b, N=1, casimirs=False):
         print()
 
         N2 = anticenter_N2(rep)
-        print("N_2 = UV - VU + WX - XW =")
+        print("N_2 = UV - VU + XW - WX =")
         print(N2)
         print()
 
@@ -1633,6 +1796,9 @@ def main(a, b, N=1, casimirs=False):
         e = simplify(supertrace(chi, N4))
         print(f"STr(N_4) = {e}")
         print()
+
+    # -- the trace identities (always, with or without --casimirs) -----------
+    _trace_identities_report(rep, N)
 
 
 # -- command-line argument types -------------------------------------------

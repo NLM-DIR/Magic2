@@ -976,7 +976,7 @@ static void usage (const char *error)
 	   "//   -I input_format : [default: BV = tab-delimited hits] format of the input file, defined below\n"
 	   "// Output\n"
 	   "//   -f <file_name> : file of file names\n"
-	   "//      File contains a list of files, comma or space or tab or line separated\n"
+	   "//      File contains a list of files, one per line, with optional shift in column 2 (only works in AZ format)\n"
 	   "//      ATTENTION all file names must be local or fully qualified starting at /\n"
 	   "//   -o output_file_prefix : [default: stdout] prefix for the name of the processed sequence\n"
 	   "//   -O output_format : [mandatory] format of the output file, defined below\n"
@@ -1569,7 +1569,10 @@ int main (int argc, const char **argv)
 			{
 			  if (*fNam == '#') continue ;
 			  sx.ai = aceInCreate (fNam, sx.gzi, h) ;
-			  sx.pair_shift = (nnF == 0 ? pair_shift/2 : -pair_shift/2) ;
+			  sx.pair_shift = 0 ;
+			  int shift = 0 ;
+			  if (aceInStep (ai, '\t') && aceInInt (ai, &shift))
+			    sx.pair_shift = shift ;
  			  if (sx.ai)
 			    {
 			      aceInSpecial (sx.ai,"\t\n") ;
