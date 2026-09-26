@@ -2424,21 +2424,48 @@ int main (int argc, const char *argv[])
   p.wigglesR = 0 ;
   p.wigglesP = 0 ;
   p.wigglesNU = 0 ;
+  p.scratches = 0 ;
+  p.scratchesL = 0 ;
+  p.scratchesR = 0 ;
+  p.scratchesP = 0 ;
+  p.scratchesNU = 0 ;
   if (p.wiggle)
     {
-      p.wiggles = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
-      array (p.wiggles, 2 * chromMax * runMax - 1, Array) = 0 ; /* initialize */
-      p.wigglesP = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
-      array (p.wigglesP, 2 * chromMax * runMax - 1, Array) = 0 ; /* initialize */
-      p.wigglesNU = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
-      array (p.wigglesNU, 2 * chromMax * runMax - 1, Array) = 0 ; /* initialize */
+      if (p.useScratch)
+	{
+	  p.scratches = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
+	  array (p.scratches, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
+	  p.scratchesP = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
+	  array (p.scratchesP, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
+	  p.scratchesNU = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
+	  array (p.scratchesNU, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
+	}
+      else
+	{
+	  p.wiggles = arrayHandleCreate (2 * chromMax * runMax, BigArray, h) ;
+	  array (p.wiggles, 2 * chromMax * runMax - 1, BigArray) = 0 ; /* initialize */
+	  p.wigglesP = arrayHandleCreate (2 * chromMax * runMax, BigArray, h) ;
+	  array (p.wigglesP, 2 * chromMax * runMax - 1, BigArray) = 0 ; /* initialize */
+	  p.wigglesNU = arrayHandleCreate (2 * chromMax * runMax, BigArray, h) ;
+	  array (p.wigglesNU, 2 * chromMax * runMax - 1, BigArray) = 0 ; /* initialize */
+	}
     }
   if (p.wiggleEnds)
     {
-      p.wigglesL = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
-      p.wigglesR = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
-      array (p.wigglesR, 2 * chromMax * runMax - 1, Array) = 0 ; /* initialize */
-      array (p.wigglesR, 2 * chromMax * runMax - 1, Array) = 0 ; /* initialize */
+      if (p.useScratch)
+	{
+	  p.scratchesL = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
+	  p.scratchesR = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
+	  array (p.scratchesR, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
+	  array (p.scratchesR, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
+	}
+      else
+	{
+	  p.wigglesL = arrayHandleCreate (2 * chromMax * runMax, BigArray, h) ;
+	  p.wigglesR = arrayHandleCreate (2 * chromMax * runMax, BigArray, h) ;
+	  array (p.wigglesR, 2 * chromMax * runMax - 1, BigArray) = 0 ; /* initialize */
+	  array (p.wigglesR, 2 * chromMax * runMax - 1, BigArray) = 0 ; /* initialize */
+	}
     }
 
   int nDone = 0 ;

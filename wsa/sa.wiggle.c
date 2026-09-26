@@ -272,6 +272,7 @@ void saWiggleCumulate (const PP *pp, BB *bb)
 		  if (! scr)
 		    scr = array (ppScratches, 2 * bb->run * chromMax + iw, SCR) = scratchCreate (0, pp->h) ;
 		  scratchPut (scr, aa) ;
+		  arrayMax (aa) = 0 ;
 		}
 	    }
 	  SCR *sp1 = arrayp (ppScratches, 0, SCR) ;

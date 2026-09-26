@@ -2434,13 +2434,16 @@ static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *n
 	{
 	  while (x < x2 && x < az->c2)
 	    {
-	      wp = arrp (wPoints, x - x1 + az->posMin/step, WIGGLEPOINT) ;
-	      wp->x = x * step + az->posMin + shift/step ;
-	      if (cumul)
-		wp->y += array (az->cache, x - az->c1, unsigned int) ;
-	      else
-		wp->y = array (az->cache, x - az->c1, unsigned int) ;
-	      *nBpp += wp->y * step ;
+	      if ( x - x1 + az->posMin/step >= 0)
+		{
+		  wp = arrayp (wPoints, x - x1 + az->posMin/step, WIGGLEPOINT) ;
+		  wp->x = x * step + az->posMin + shift/step ;
+		  if (cumul)
+		    wp->y += array (az->cache, x - az->c1, unsigned int) ;
+		  else
+		    wp->y = array (az->cache, x - az->c1, unsigned int) ;
+		  *nBpp += wp->y * step ;
+		}
 	      jj++ ; x++ ; (*nPosp)++ ;
 	    }
 	}

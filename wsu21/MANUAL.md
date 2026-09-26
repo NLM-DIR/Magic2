@@ -3,6 +3,28 @@
 This manual describes what the programs compute and how to run them.
 Installation is covered in `README.md`.
 
+Authors: Jean Thierry-Mieg (NLM/NIH) for the concepts
+         Claude.AI:fable 5 for the programming and documentation
+
+About using Claude AI:
+         I have a very long history of programming on superalgebra.
+	 In 1984, I published what was probably the first table of characters for all
+	 the basic classical Lie-Kac superalgebra of type A,B,C,D,F(4) and G(3).
+	   ftps:
+	 I wrote such codes first in Basic (not my choice !), then C. It always took time.
+	   As of septembre 2026, I asked the AI Claude (opus 5) to write the present program.
+	 It was done in a couple of days with very little trial an errors as I knew the solution.
+	 But in addition Claude then wrote the symbolic code sl21_b.py, which relies on sympy.
+	 Then added without hesitation in minutes the documentation and the exact verification
+	 of all the Casimir identities, including selecting the best normalisations. I am very
+	 impressed by the gain in productivity, by the quality of the interaction with the AI,
+	 and by the quality of the code. All of this was unconceivable just a few months ago.
+	 Next year, the AI will probably conceive the subject by herself.
+
+License: public domain; no rights reserved.
+
+###############################################################################
+
 The programs build the representation matrices of the Lie superalgebra
 sl(2|1) in exact arithmetic (rational numbers, or symbolic expressions in the
 weight b). They then verify every (super-)commutator and the classical
@@ -25,6 +47,7 @@ themselves, on the full matrices, each time they run.
 
 ---
 
+###############################################################################
 ## 1. The library
 
 `matrix.py` provides an exact matrix class. Matrices are built by addressing
@@ -48,6 +71,7 @@ Every pair i ≤ j is checked, including those whose bracket should vanish. A
 residual is declared zero only after symbolic simplification, so an
 expression such as `sqrt(b)**2 − b` is correctly recognised as zero.
 
+###############################################################################
 ## 2. sl(2): `sl2.py`
 
 `sl2.py` builds the (a+1)-dimensional irreducible representation R[a] of
@@ -61,6 +85,7 @@ and verifies [h,e] = 2e, [h,f] = −2f, [e,f] = h. This integer basis, with f
 made of ones, is used for every sl(2) layer below, so all sl(2|1) matrices
 stay rational.
 
+###############################################################################
 ## 3. sl(2|1) and its Kac modules: `sl21.py`
 
 ### Generators and structure constants
@@ -143,6 +168,7 @@ representation, but it becomes reducible and indecomposable. Landmarks:
 | atypical fundamental   | 1 | 0   | −1 |
 | adjoint                | 1 | 1   | 1  |
 
+###############################################################################
 ## 4. The grading operator χ
 
 χ is diagonal, constant on each layer, with values
@@ -152,6 +178,7 @@ representation, but it becomes reducible and indecomposable. Landmarks:
 It commutes with the even generators and anticommutes with the odd ones
 (*verified*). The supertrace is STr(M) = Tr(χ M).
 
+###############################################################################
 ## 5. Indecomposable representations: the Matryoshka and its jets
 
 Replace the weight y by y·1 + n, where n is the nilpotent shift of order N
@@ -177,6 +204,7 @@ On the Matryoshka, C₂, C₃ and T are no longer multiples of the identity. The
 identities of §7 and §8 are nevertheless *verified* as operator identities on
 the full matrices.
 
+###############################################################################
 ## 6. Invariant forms and the master equation for the cubic tensor
 
 ### The invariant form
@@ -220,6 +248,29 @@ The module-dependent numbers are:
 
     anomaly coefficient     A(R)  = −μ λ = −Tr(Y)/4
     cubic constant          d_YYY = STr(Y³) = −6 μ λ
+
+### A second master equation
+
+The same pattern holds for a quadratic trace built from one even and one odd
+index. With A, B even and i, j odd, set
+
+    t_{AB,ij} = Tr( [A,i][B,j] + [A,j][B,i] )
+
+(the ordinary trace, and the expression is symmetric under A ↔ B and i ↔ j).
+Then, *verified* on all 256 components,
+
+    t_{AB,ij}(R) = Tr(Y)_R · k_{AB,ij}
+
+with k again a fixed array of numbers, read off the anchor and independent of
+a and b. Only 32 components are nonzero. Up to the symmetries, and with the
+pairs written (u,v) and (w,x), they are
+
+    k(YY,uv) = −1/2    k(YY,wx) =  1/2    k(Ye,ux) =  1/2    k(Yf,vw) = −1/2
+    k(Yh,uv) =  1/2    k(Yh,wx) =  1/2    k(ef,uv) = −1/4    k(ef,wx) =  1/4
+    k(hh,uv) = −1/2    k(hh,wx) =  1/2
+
+So this trace, like the cubic tensor, carries its whole module dependence in
+Tr(Y), and vanishes identically on the self-conjugate line b = (a+1)/2.
 
 ## 7. The Casimir operators C₂ and C₃
 
@@ -314,6 +365,7 @@ The anchors of the cubic tensor stay numeric. `--casimirs` is exact here too,
 but slower than in `sl21.py`, because the metric and the 512 components of the
 d-tensor are symbolic.
 
+###############################################################################
 ## 10. The ζ-Hermitian real forms
 
 ### The gauge
@@ -381,6 +433,7 @@ For the Matryoshka, M is replaced by its own jet M_N. For a = 0:
     u = E₁₂ + αγ E₃₄               v = b E₂₁ + (γ/α) E₄₃
     w = −E₁₃ + αγ E₂₄              x = b E₃₁ − (γ/α) E₄₂
 
+###############################################################################
 ## 11. Command-line reference
 
 Each program prints its help when called with no arguments or with `-h`. On
@@ -428,6 +481,11 @@ Windows, type `py` instead of `python3`.
    equation, C₂, C₃ and T with their eigenvalues next to the closed formulas,
    the weight recovered from (C₂, C₃), and the identities T = C₂χ, T² = C₂².
 
+
+6. The trace identities: Tr(N₂) = Tr(N₄) = 0, and the second master equation
+   of §6. These run with or without `--casimirs`. Because traces are
+   unchanged by a similarity, they also check the ζ gauge and the rescaling.
+
 Any line containing `FAILED` or `✗` indicates a relation that does not hold.
 The exception is the line stating that C₂ is not a multiple of the identity
 for N > 1, which is expected (§5). Output can be redirected to a file:
@@ -441,6 +499,7 @@ for N > 1, which is expected (§5). Output can be redirected to a file:
     python3 sl21_b.py -a 0 --zetaH --case 2 -N 2  # real form, 2-layer jet
     python3 sl21_b.py -a 0 --zetaH --case 1 --rescale
 
+###############################################################################
 ## 12. Reference values
 
 Closed forms on R(a,b):
@@ -473,7 +532,7 @@ top layer.
 The first three rows are atypical (C₂ = C₃ = T = 0). On the adjoint R(1,1),
 Tr(Y) = 0 and the whole cubic tensor vanishes, not just C₃.
 
----
+###############################################################################
+###############################################################################
 
-Authors: Jean Thierry-Mieg (NLM/NIH) and Claude. License: public domain; no
-rights reserved.
+

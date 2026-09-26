@@ -109,7 +109,7 @@ int scratchPut (SCR scr, BigArray aa)
   size_t n ;
 
   scratchCheck (scr, "scratchBigArrayPut") ;
-  if (! arrayExists (aa))
+  if (! bigArrayExists (aa))
     messcrash ("scratchBigArrayPut called on a bad BigArray") ;
 
   k = arrayMax (scr->blocks) ;

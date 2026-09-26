@@ -5,7 +5,9 @@ and of the Lie superalgebra sl(2|1) in exact rational (and symbolic)
 arithmetic, and verify every (super-)commutator, the grading operator, and the
 Casimir and anticenter invariants.
 
-Authors: Jean Thierry-Mieg (NLM/NIH) and Claude.
+Authors: Jean Thierry-Mieg (NLM/NIH) for the concepts
+         Claude.AI:fable 5 for the programming and documentation
+	 
 License: public domain; no rights reserved.
 
 ## Contents

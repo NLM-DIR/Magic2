@@ -9793,7 +9793,7 @@ EOF
 
 if (! -d tmp/TABIX) mkdir tmp/TABIX
 set toto=tmp/TABIX/$MAGIC.tabix.ace
-echo '#' > $toto 
+echo ' ' > $toto 
 
 foreach chrom ($chromSetAll)
   echo "Map $chrom" >> $toto
@@ -9803,7 +9803,7 @@ foreach chrom ($chromSetAll)
       echo "Wiggle $run tmp/SA/$run/wiggles/$run.$chrom" >>  $toto
     endif
   end
-  foreach group (`cat MetaDB/$MAGIC/r2sublib MetaDB/$MAGIC/g2r | cut -f 1 | sort -u`)
+  foreach group (`cat MetaDB/$MAGIC/r2sublib MetaDB/$MAGIC/g2r MetaDB/$MAGIC/GroupWiggleList | cut -f 1 | sort -u`)
     if (-e tmp/WIGGLERUN/$group/$group.$chrom.u.f.az) then
       echo "Wiggle $group tmp/WIGGLERUN/$group/$group.$chrom" >>  $toto
     endif
