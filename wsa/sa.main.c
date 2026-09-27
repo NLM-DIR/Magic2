@@ -1650,6 +1650,26 @@ int main (int argc, const char *argv[])
   h = ac_new_handle () ;
   p.h = h ;
 
+  if (0)
+    {
+      SCR scr = scratchCreate (0, h) ;
+      BigArray a1, a = bigArrayHandleCreate (10, int, h) ;
+
+      for (int ii = 0 ; ii < 4 ; ii++)
+	{
+	  bigArrayMax (a) = 0 ;
+	  for (int j = 0 ;  j < 5 ; j++)
+	    bigArray (a, j, int) = 10*ii + j ;
+	  scratchPut (scr, a) ;
+	}
+      a1 = scratchWhole (scr, 0, int, h) ;
+      printf ("a1Max = %ld\n", bigArrayMax (a1)) ;
+      exit (0) ;
+      
+    }
+
+
+
   /**************************  trivial parameters *********************************/
   
   if (argc < 2)
@@ -2001,6 +2021,7 @@ int main (int argc, const char *argv[])
   p.align = ! getCmdLineBool (&argc, argv, "--do_not_align") ; /* default is to align */
   p.ignoreIntronSeeds = getCmdLineBool (&argc, argv, "--ignoreIntronSeeds") ;
   p.useScratch = getCmdLineBool (&argc, argv, "--useScratch") ;
+  p.useScratch = TRUE ;
 
   p.hitsFormat = TRUE ; /* default */
   p.introns = TRUE ; /* default */
@@ -2606,7 +2627,7 @@ int main (int argc, const char *argv[])
     }
 
   GeneCounts gcs = {0} ;
-  if (0 && p.wiggle)
+  if (p.wiggle)
     gcs = saWiggleExport (&p, nAgents) ;
   if (p.debug) saCpuStatExport (&p, cpuStats) ;
   saPolyAsExport (&p, p.confirmedPolyAs) ;

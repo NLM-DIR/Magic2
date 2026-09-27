@@ -9869,14 +9869,14 @@ foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | so
 	ls tmp/SA/$run/wiggles/$run.*.$uu.f.az > $ssF
         set ssR=tmp/Peaks/$run/$run.$uu.ssR
 	ls tmp/SA/$run/wiggles/$run.*.$uu.r.az > $ssR
-        scripts/submit tmp/Peaks/$run/strand_shift "bin/wiggle -strand_shift 500 -ssF $ssF -ssR $ssR -I AZ -O COUNT -o tmp/Peaks/$run/$run.$uu.strand_shift"
+        scripts/submit tmp/Peaks/$run/strand_shift "bin/wiggle -strand_shift 5000 -ssF $ssF -ssR $ssR -I AZ -O COUNT -o tmp/Peaks/$run/$run.$uu.strand_shift"
     endif
     if (! -e tmp/Peaks/$run/$run.$uu.strand_shift.strand_shift.txt && -d tmp/WIGGLERUN/$run) then
 	set ssF=tmp/Peaks/$run/$run.$uu.ssF
 	ls tmp/WIGGLERUN/$run/$run.*.$uu.f.az > $ssF
 	set ssR=tmp/Peaks/$run/$run.$uu.ssR
 	ls tmp/WIGGLERUN/$run/$run.*.$uu.r.az > $ssR
-        scripts/submit tmp/Peaks/$run/strand_shift "bin/wiggle -strand_shift 500 -ssF $ssF -ssR $ssR -I AZ -O COUNT -o tmp/Peaks/$run/$run.$uu.strand_shift"
+        scripts/submit tmp/Peaks/$run/strand_shift "bin/wiggle -strand_shift 5000 -ssF $ssF -ssR $ssR -I AZ -O COUNT -o tmp/Peaks/$run/$run.$uu.strand_shift"
     endif
   end
   end

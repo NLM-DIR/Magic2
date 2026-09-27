@@ -14,6 +14,8 @@
  *    k > kMax is forbidden
  *    if (aa == 0) Get allocates a new array of TYPE on h 
  *    if (aa != 0) Get checks aa->size, reuses aa and adjust aa->max
+ * scratchWhole (scr, aa, k, TYPE, h)
+ *    return all the data at once as a single bigArray
  */
 
 typedef struct scrStruct *SCR ;
@@ -22,5 +24,6 @@ int   scratchCount (SCR scr) ;
 int   scratchPut (SCR scr, BigArray aa) ;
 BigArray uScratchGet (SCR scr, int k, BigArray aa, int typeSize, AC_HANDLE h) ;
 #define scratchGet(scr,k,aa,TYPE,h) uScratchGet((scr),(k),aa,sizeof(TYPE),(h))
+#define scratchWhole(scr,aa,TYPE,h) uScratchGet((scr),-999,aa,sizeof(TYPE),(h))
 
 #endif

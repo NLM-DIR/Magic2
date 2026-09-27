@@ -32,8 +32,8 @@
 #include "scratch.h"
 #define SCRATCHMAGIC 3154992
 
-typedef struct scrBlockStruct { off_t pos ; int aMax ; int aSize ; } SCR_ ;
-struct scrStruct { int magic ; int fd ; off_t end ; Array blocks ; } ;
+typedef struct scrBlockStruct { off_t pos ; int aMax ; } SCR_ ;
+struct scrStruct { int magic ; int fd ; off_t end ; int aSize ; Array blocks ; } ;
 static void scratchCheck (SCR scr, const char *caller) ;
 
 int scratchCount (SCR scr)
@@ -116,9 +116,11 @@ int scratchPut (SCR scr, BigArray aa)
   s = arrayp (scr->blocks, k, SCR_) ;
   s->pos = scr->end ;
   s->aMax = arrayMax (aa) ;
-  if (k == 0) s->aSize = aa->size ;  /* set even if aa is empty */
-
-  n = (size_t) s->aMax * s->aSize ;
+  if (k == 0)
+    scr->aSize = aa->size ;  /* set even if aa is empty */
+  if (aa->size != scr->aSize)
+    messcrash ("scratchPut received a bigArray not of proper type : a->size=%d, scr->size = %d", aa->size, scr->aSize) ;
+  n = (size_t) s->aMax * scr->aSize ;
   if (n && fdReadWrite (scr->fd, aa->base, n, scr->end, 1))
     messcrash ("scratchBigArrayPut failed: %s", strerror (errno)) ;
   scr->end += n ;
@@ -132,27 +134,43 @@ BigArray uScratchGet (SCR scr, int k, BigArray aa, int typeSize, AC_HANDLE h)
 {
   SCR_ *s ;
 
+  
   scratchCheck (scr, "scratchBigArrayGet") ;
-  if (k < 0 || k >= arrayMax (scr->blocks))
-    messcrash ("scratchBigArrayGet: block %d not in [0, %d[", k, arrayMax (scr->blocks)) ;
-  s = arrp (scr->blocks, k, SCR_) ;
-  if (typeSize != s->aSize)
+
+  int kMax = arrayMax (scr->blocks) ;
+  long int nn = 0, pos = 0 ;
+  
+  if (k == -999 && kMax > 0)   /* whole set */
+    {
+      nn = scr->end / scr->aSize ;
+      pos = 0 ;
+    }
+  else
+    {
+      if (k < 0 || k >= kMax)
+	messcrash ("scratchBigArrayGet: block %d not in [0, %d[", k, arrayMax (scr->blocks)) ;
+      s = arrp (scr->blocks, k, SCR_) ;
+      nn = s->aMax ;
+      pos = s->pos ;
+    }
+  
+  if (typeSize != scr->aSize)
     messcrash ("scratchBigArrayGet: block %d has records size %d, not %d"
-               , k, s->aSize, typeSize) ;
+               , k, scr->aSize, typeSize) ;
 
   if (! aa)
-    aa = uBigArrayCreate (s->aMax, s->aSize, h, TRUE) ;  
-  else if (aa->size != s->aSize)
+    aa = uBigArrayCreate (nn, scr->aSize, h, FALSE) ;  
+  else if (aa->size != scr->aSize)
     messcrash ("scratchBigArrayGet: block %d has records of size %d, the BigArray has size %d"
-               , k, s->aSize, aa->size) ;
+               , k, scr->aSize, aa->size) ;
 
-  if (s->aMax > 0)
+  if (nn > 0)
     {
-      uBigArray (aa, s->aMax - 1) ;                 /* = arrayp (aa, iMax-1, TYPE): make room */
-      if (fdReadWrite (scr->fd, aa->base, (size_t) s->aMax * s->aSize, s->pos, 0))
+      uBigArray (aa, nn - 1) ;                 /* = arrayp (aa, iMax-1, TYPE): make room */
+      if (fdReadWrite (scr->fd, aa->base, (size_t) nn * scr->aSize, pos, 0))
         messcrash ("scratchBigArrayGet block %d failed: %s", k, strerror (errno)) ;
     }
-  arrayMax (aa) = s->aMax ;
+  arrayMax (aa) = nn ;
   return aa ;
 } /* uScratchGet */
 

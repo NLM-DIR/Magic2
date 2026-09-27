@@ -220,7 +220,6 @@ void saWiggleCumulate (const PP *pp, BB *bb)
   Array bbWiggles = 0 ;
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   int iwMax = wiggleCreate (pp, bb) ; /* max number of bb->wiggles */
-  SCR **sp0 ;
   BOOL useScratch = pp->useScratch ;
 
   if (iwMax > 2 * chromMax) messcrash ("iwMax too large ?") ;
@@ -271,6 +270,7 @@ void saWiggleCumulate (const PP *pp, BB *bb)
 		  SCR scr = array (ppScratches, 2 * bb->run * chromMax + iw, SCR) ;
 		  if (! scr)
 		    scr = array (ppScratches, 2 * bb->run * chromMax + iw, SCR) = scratchCreate (0, pp->h) ;
+		  saSort (aa, 1) ;
 		  scratchPut (scr, aa) ;
 		  arrayMax (aa) = 0 ;
 		}
@@ -364,7 +364,9 @@ static inline int fast_itoa_nl(char *buf, int val)
 
 static void wiggleExportOne (const PP *pp, int nw, int type)
 {
+  AC_HANDLE hs = 0 ;
   Array wiggles = 0 ;
+  Array scratches = 0 ;
   BigArray wig = 0 ;
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   int run = nw / (2 * chromMax) ;
@@ -393,6 +395,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 
       typeNam = (strand == 'f' ? "u.f" : "u.r") ;
       wiggles = pp->wiggles ;
+      scratches = pp->scratches ;
       wantPeaks = TRUE ;
       wantAutocorrel = TRUE ;
       if (1)
@@ -406,26 +409,37 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
     case 1:
       typeNam = (strand == 'f' ? "u.ELF" : "u.ERR") ;
       wiggles = pp->wigglesL ;
+      scratches = pp->scratchesL ;
       break ;
       
     case 2:
       typeNam = (strand == 'f' ? "u.ERF" : "u.ELR") ;
       wiggles = pp->wigglesR ;
+      scratches = pp->scratchesR ;
       wantPeaks = TRUE ;
       break ;
       
     case 3:
       typeNam = (strand == 'f' ? "pp.f" : "pp.r") ;		 
       wiggles = pp->wigglesP ;
+      scratches = pp->scratchesP ;
       break ;
       
     case 4:
       typeNam = (strand == 'f' ? "nu.f" : "nu.r") ;		 
       wiggles = pp->wigglesNU ;
+      scratches = pp->scratchesNU ;
       break ;
-      
     }
-  wig = array (wiggles, nw, BigArray) ;
+  if (pp->useScratch)
+    {
+      SCR scr = array (scratches, nw, SCR) ;
+
+      hs = ac_new_handle () ;
+      wig = scratchWhole (scr, 0, WP, hs) ;
+    }
+  else
+    wig = array (wiggles, nw, BigArray) ;
   iMax = wig ? bigArrayMax (wig) : 0 ;
   if (! iMax) return ;
   
@@ -671,6 +685,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
       arr (pp->intronics, nw, long int) += cumuls[1] ;
       arr (pp->intergenics, nw, long int) += cumul - cumuls[1] - cumuls[2] - cumuls[4] ;
     }
+  ac_free (hs) ;
   return ;
 } /* wiggleExportOne */
 
@@ -870,7 +885,8 @@ static float geneIndex (const PP *pp, GC *gc)
 static GeneCounts wiggleExportGeneCounts (const PP *pp)
 {
   AC_HANDLE h = ac_new_handle () ;
-  int nw, wMax = arrayMax (pp->wiggles) ;
+  int nw ;
+  int wMax = pp->wiggles ? arrayMax (pp->wiggles) : arrayMax (pp->scratches) ;
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   BigArray allGeneC ;
   long int igc = 0, jgc, igcMax = 0, nnn = 0 ;
@@ -954,7 +970,7 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
 static void wiggleExportWiggleStats (PP *pp)
 {
   AC_HANDLE h = ac_new_handle () ;
-  int wMax = arrayMax (pp->wiggles) ;
+  int wMax =  pp->wiggles ? arrayMax (pp->wiggles) : arrayMax (pp->scratches) ;
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   long int nnn = 0 ;
   ACEOUT ao = aceOutCreate (pp->outFileName, ".wiggleCumuls.tsf", pp->gzo, h) ;
@@ -1040,7 +1056,7 @@ static void wiggleExportWiggleStats (PP *pp)
 GeneCounts saWiggleExport (PP *pp, int nAgents)
 {
   AC_HANDLE h = ac_new_handle () ;
-  int wMax = arrayMax (pp->wiggles) ;
+  int wMax = pp->wiggles ? arrayMax (pp->wiggles) : arrayMax (pp->scratches) ;
   BOOL debug = FALSE ;
   char tBuf[25] ;
   GeneCounts gcs = {0} ;
@@ -1064,11 +1080,23 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
     pp->geneCounts = arrayHandleCreate (wMax, Array, h) ;
 
   int k = 0, n = 0 ;
-  for (int nw = 0 ; nw < wMax ; nw++)
+  if (pp->wiggles)
     {
-      Array wig = arr (pp->wiggles, nw, Array) ;
-      if (wig)
-	n++ ;
+      for (int nw = 0 ; nw < wMax ; nw++)
+	{
+	  Array wig = arr (pp->wiggles, nw, Array) ;
+	  if (wig)
+	    n++ ;
+	}
+    }
+  else
+    {
+      for (int nw = 0 ; nw < wMax ; nw++)
+	{
+	  SCR scr = arr (pp->scratches, nw, SCR) ;
+	  if (scr)
+	    n++ ;
+	}
     }
   fprintf (stderr, "%s: start exportation of  %d wiggles\n", timeBufShowNow (tBuf), n) ;
   /* parallelize: open a channel and start agents */
@@ -1092,8 +1120,10 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
   k = n = 0 ;
   for (int nw = 0 ; nw < wMax ; nw++)
     {
-      Array wig = arr (pp->wiggles, nw, Array) ;
-      if (wig)
+      if (
+	  (pp->wiggles && arr (pp->wiggles, nw, Array)) ||
+	  (pp->scratches && arr (pp->scratches, nw, Array))
+	  )
 	{
 	  if (pp->geneCounts)
 	    {

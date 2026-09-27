@@ -697,8 +697,8 @@ static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const
 	      }
 	}
     }
-  if (0)
-    {  /* we cannot substract the mean values, they are too close to zero, sorry */
+  if (1)
+    {  
       uu -= u1 * u1 / nu ; vv -= v1 * v1 / nu ;
       z = sqrt (uu * vv) ;
       for (dx = 0 ; dx < dxmax ; dx++)
@@ -707,15 +707,6 @@ static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const
 	  u2[dx] = (u2[dx] - u1 * u1 / nu) / uu ;
 	}
     }
-  else
-    {
-      z = sqrt (uu * vv) ;
-      for (dx = 0 ; dx < dxmax ; dx++)
-	{
-	  uv[dx] = (uv[dx]) / z  ;
-	  u2[dx] = (u2[dx]) / uu ;
-	}
-    }	  
   
   if (ao)
     {
@@ -760,8 +751,10 @@ static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const
     */
     aceOutf (ao2, "\n\n") ;
   }
-}
-  
+} /* wiggleCisTransShift */
+
+/************************************************************************************************************************/
+
 static void sxStrandShift (WIGGLE *sx)
 {
   AC_HANDLE h = ac_new_handle () ;
@@ -870,13 +863,12 @@ static void sxStrandShift (WIGGLE *sx)
   return ;
 } /* sxStrandShift */
 
-/* this method does not work well, if gives a compression rate 
- *  on 60% or 70% relative to BF.gz
- */
-
 /**********************************************************/
 /*************  predictor/compressor, modelled on CTF *****/
 /**********************************************************/
+/* this method does not work well, if gives a compression rate 
+ *  on 60% or 70% relative to BF.gz
+ */
 
 static Array wiggle_compress_decorrelate (WIGGLE *sx, Array aa)
 {
