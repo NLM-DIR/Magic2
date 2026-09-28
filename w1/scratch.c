@@ -60,8 +60,12 @@ static int fdReadWrite (int fd, char *p, size_t n, off_t off, int isWrite)
 
 static void scratchCheck (SCR scr, const char *caller)
 {
-  if (! scr || scr->magic != SCRATCHMAGIC)
-    messcrash ("%s called on a bad or freed SCR", caller) ;
+  if (! scr)
+    messcrash ("%s called on null SCR", caller) ;
+  if (scr->magic == 0)
+    messcrash ("%s freed SCR", caller) ;
+  if (scr->magic != SCRATCHMAGIC)
+    messcrash ("%s called on bad SCR", caller) ;
 } /* scratchCheck */
 
 /**************************************************************/

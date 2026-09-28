@@ -6,8 +6,7 @@
  * Authors: Jean Thierry-Mieg, Danielle Thierry-Mieg and Greg Boratyn, NCBI/NLM/NIH
  * Created April 18, 2025
 
- * This is public.
-
+ * This code is public.
 
  * This module implements all operations related
  * to the "wiggle" coverage plots
@@ -436,12 +435,13 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
       SCR scr = array (scratches, nw, SCR) ;
 
       hs = ac_new_handle () ;
-      wig = scratchWhole (scr, 0, WP, hs) ;
+      wig = scr ? scratchWhole (scr, 0, WP, hs) : 0 ;
     }
   else
     wig = array (wiggles, nw, BigArray) ;
   iMax = wig ? bigArrayMax (wig) : 0 ;
-  if (! iMax) return ;
+  if (! iMax)
+    goto done ;
   
   if (0)
     bigArraySort (wig, wpOrder) ;
@@ -483,7 +483,6 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
 	  ACEOUT ao = 0, aoLevels = 0 ;
 	  gzFile gzf = 0, gzf2 = 0 ;
-	  int minCover = 100 ;
 	  
 	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.peaks%s", pp->outFileName, runNam, chromNam, typeNam, ".gz") ;
 	  char *fNam2 = hprintf (h, "%s/wiggles/%s.%s.%s.peakCounts%s", pp->outFileName, runNam, chromNam, typeNam, ".gz") ;
@@ -494,7 +493,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      ao = aceOutCreateToStack (s,h) ;
 	      aoLevels = aceOutCreateToStack (s2,h) ; 
 
-	      peaksCreateExport (ao, aoLevels, aaa, chromNam, pos0, 1, minCover, 720) ;
+	      peaksCreateExport (ao, aoLevels, aaa, chromNam, pos0, 1, 0, 720) ;
 
 	      char *cp = stackText (s, 0) ;
 	      int k = strlen (cp) ;
@@ -685,6 +684,8 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
       arr (pp->intronics, nw, long int) += cumuls[1] ;
       arr (pp->intergenics, nw, long int) += cumul - cumuls[1] - cumuls[2] - cumuls[4] ;
     }
+
+ done:
   ac_free (hs) ;
   return ;
 } /* wiggleExportOne */

@@ -9978,7 +9978,7 @@ set toto=tmp/Peaks/$MAGIC.peak_width.histo
 echo -n "### $toto : " > $toto
 date >> $toto
 echo "## Per run, what is the most frequent width of the peaks" >> $toto
-echo "## Width is the most frequently observed peak-width >> $toto
+echo "## Width is the most frequently observed peak-width" >> $toto
 echo "## N is the number of peaks with this width"
 echo "## Total is the total number of peaks seen in this run" >> $toto
 echo '#Run\tWidth\tN\tTotal' > $toto.tsf
