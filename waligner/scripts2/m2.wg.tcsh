@@ -38,7 +38,7 @@ set totoSS=tmp/Peaks/$MAGIC.strand_shifts.max.txt
 	if (! -e $BBB) set BBB=tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.$fr.az	
         set dx=0
 	if (-e $totoSS) then
-          set dx=`cat $totoSS | gawk '{if($1==run)dx=int($2/2);}END{dx2=0;if(fr=="f")dx2=dx;if (fr=="r")dx2=-dx;print dx2;}' fr=$fr run=$run`
+          set dx=`cat $totoSS | gawk '{if($1==run)dx=int($2/2);}END{dx2=0;dx2=dx;if (fr=="r"||fr=="ERF"||fr=="ERR")dx2=-dx;print dx2;}' fr=$fr run=$run`
         endif
 	if (-e $BBB) then
           echo "$BBB\t$dx" >>  $wigList
@@ -48,7 +48,9 @@ set totoSS=tmp/Peaks/$MAGIC.strand_shifts.max.txt
       end
       echo "ok=$ok uu=$uu $fr"            # contruct the combined wiggles
       if ($ok == 1) then
-	bin/wiggle -f $wigList -I AZ -O AZ $out_step  -o $out2 -cumul
+        echo "wiggle -f $wigList -I AZ -O AZ $out_step  -o $out2 -cumul"
+	cat $wigList
+	bin/wiggle   -f $wigList -I AZ -O AZ $out_step  -o $out2 -cumul
       endif
     end
   end

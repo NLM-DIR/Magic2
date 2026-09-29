@@ -154,8 +154,11 @@ void peaksCreateExport (ACEOUT ao, ACEOUT aoLevels,
   Array peaks = arrayHandleCreate (0x1 << 15, PEAK, h) ;  
   unsigned int median = arrayUintMedian (aa, FALSE) ;
   unsigned int medianNoZero = arrayUintMedian (aa, TRUE) ;
-  minCover = 5 * medianNoZero ; // was 3
-  if (minCover < 5) minCover = 5 ;
+  if (minCover <= 0)
+    {
+      minCover = 5 * medianNoZero ; // was 3
+      if (minCover < 5) minCover = 5 ;
+    }
   if (scale < 1) scale = 1 ;
   peakFind (aa, peaks, scale * minCover) ;
   

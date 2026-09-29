@@ -482,6 +482,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ; 
 	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
 	  ACEOUT ao = 0, aoLevels = 0 ;
+	  int minCover = 0 ;
 	  gzFile gzf = 0, gzf2 = 0 ;
 	  
 	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.peaks%s", pp->outFileName, runNam, chromNam, typeNam, ".gz") ;
@@ -493,7 +494,7 @@ static void wiggleExportOne (const PP *pp, int nw, int type)
 	      ao = aceOutCreateToStack (s,h) ;
 	      aoLevels = aceOutCreateToStack (s2,h) ; 
 
-	      peaksCreateExport (ao, aoLevels, aaa, chromNam, pos0, 1, 0, 720) ;
+	      peaksCreateExport (ao, aoLevels, aaa, chromNam, pos0, 1, minCover, 720) ;
 
 	      char *cp = stackText (s, 0) ;
 	      int k = strlen (cp) ;

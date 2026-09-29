@@ -2063,7 +2063,7 @@ int main (int argc, const char *argv[])
   p.wiggle = getCmdLineBool (&argc, argv, "--wiggles") ;
   p.wiggleEnds = getCmdLineBool (&argc, argv, "--wiggleEnds") ;
   p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
-  getCmdLineInt (&argc, argv, "--wiggleStep", &(p.wiggle_step)) ;
+  getCmdLineInt (&argc, argv, "--wiggle_step", &(p.wiggle_step)) ;
   p.wigBMAX = 18 ;
   getCmdLineInt (&argc, argv, "--wigBMAX", &(p.wigBMAX)) ;  /* technical tuning affects the speed of the graphic interface */
   if (p.wiggle && ! p.bigWig && ! p.wigAZ) p.wigBF = TRUE ;

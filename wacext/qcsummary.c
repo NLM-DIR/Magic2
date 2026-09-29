@@ -51,6 +51,8 @@ typedef struct tagtitleStruct { const char *tag, *title ; int col ; T_TYPE setVa
 
 #define EMPTY ""
 
+static BOOL isMagic2 = FALSE ;
+
 /*************************************************************************************/
 /*************************** actual work *********************************************/
 /*************************************************************************************/
@@ -284,6 +286,8 @@ static void qcSetAli (QC *qc, RC *rc)
     { 0, 0, 0, 0, 0 }
   } ;
   rc->ali = ac_tag_obj (rc->run, "Ali", rc->h) ;
+  if (rc->ali && ac_has_tag (rc->ali, "Multi_threading"))
+    isMagic2 = TRUE ;
   if (rc && rc->run && ! rc->srr) 
     rc->srr = ac_tag_obj (rc->run, "SRR", rc->h) ;
   if (rc && rc->run && ! rc->srx) 
@@ -721,7 +725,24 @@ static void qcAvLengthAli (QC *qc, RC *rc)
 	      strncpy (buf, ti->title, 255) ;
 	      { char *cp = strchr (buf, ':') ;
 		if (cp) *cp = 0 ;
-	      } 
+	      }
+	      if (isMagic2)
+		{
+		  if (!strcmp (buf, "1_DNASpikeIn"))
+		    strcpy (buf, "#") ;
+		  else if (!strcmp (buf, "0_SpikeIn"))
+		    strcpy (buf, "E") ;
+		  else if (!strcmp (buf, "C_chloro"))
+		    strcpy (buf, "C") ;
+		  else if (!strcmp (buf, "A_mito"))
+		    strcpy (buf, "M") ;
+		  else if (!strcmp (buf, "B_rRNA"))
+		    strcpy (buf, "R") ;
+		  else if (!strcmp (buf, "Z_genome"))
+		    strcpy (buf, "G") ;
+		  else
+		    strcpy (buf, "#") ;
+		}
 	      for (ir = 0 ; tt && ir < tt->rows; ir++)
 		{
 		  if (! strcasecmp (ac_table_printable (tt, ir, 0, ""), buf))

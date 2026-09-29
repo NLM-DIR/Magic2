@@ -1451,7 +1451,8 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
 
   stepOut = (sx->out_step  ? sx->out_step : 1) ;
   spanOut = (sx->out_span  ? sx->out_span : 1) ;
-
+  spanOut = stepOut ;
+      
   if (sx->out == AZ)
     {
       AC_HANDLE h = ac_new_handle () ;
@@ -1467,7 +1468,7 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
 	if (wp->y >= *limitp)
 	  {
 	    pos_covered[i] += stepOut ;
-	    cumul[i] += stepOut * wp->y ;
+	    cumul[i] += wp->y ;
 	  }
     }
 
@@ -1516,8 +1517,7 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
       if (remap) aceOutf (ao, " chrom=%s", dictName (sx->remapDict, remap)) ;
       aceOutf (ao, " start=%d", x1) ;
       aceOutf (ao, " step=%d", stepOut) ;
-      if (0 && spanOut > 1) aceOutf (ao, " span=%d", spanOut) ;
-      if (1) aceOutf (ao, " span=%d", stepOut) ; /* BF is supposed to export a coverage, so mass = value * (span==step) */
+      aceOutf (ao, " span=%d", spanOut) ; /* BF is supposed to export a coverage, so mass = value * (span==step) */
       aceOutf (ao, "\n") ;
       
       break ;
@@ -1528,9 +1528,7 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
       if (sx->title) aceOutf (ao, " description=\"%s\"", sx->title) ;
       aceOutf (ao, "\nvariableStep") ;
       if (remap) aceOutf (ao, " chrom=%s", dictName (sx->remapDict, remap)) ;
-      if (0) aceOutf (ao, " start=%d", stepOut*x1) ;
-      if (1) aceOutf (ao, " step=%d", stepOut) ;
-      if (0) aceOutf (ao, " span=%d", spanOut) ;
+      aceOutf (ao, " span=%d", spanOut) ; /* BV is supposed to export a coverage, so mass = value * (span==step) */
       aceOutf (ao, "\n") ;
       break ;
     case BG:
@@ -1581,6 +1579,9 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
 	      for (;  ii < arrayMax (aa) && wp->y == y ;  ii++, wp++) ;
 	      ii-- ; wp-- ; /* restore */
 	      aceOutf (ao, " %d", wp->x + 1) ;
+	      y /= spanOut ;
+	      iy = y + .001 ;
+	      dy = 10 * (y - iy) ;
 	      if (y > 100 || dy < 1)
 		aceOutf (ao, " %d", iy) ;
 	      else
@@ -1593,6 +1594,9 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
 	    for (x = oldx + stepOut + 1 ; x < wp->x ; x += stepOut)
 	      { nn++ ; aceOutf (ao, "0\n") ; }
 	  /* export with at most 2 decimals, but if possible as an integer */
+	  y /= spanOut ;
+	  iy = y + .001 ;
+	  dy = 100 * (y - iy) ;
 	  if (y > 100 || dy < 1)
 	    aceOutf (ao, "%d\n", iy) ;
 	  else
@@ -1601,6 +1605,9 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
 	  break ;
 	case BV:
 	  if (y == 0) continue ;
+	  y /= spanOut ;
+	  iy = y + .001 ;
+	  dy = 10 * (y - iy) ;
 	  if (y > 100 || dy < 1)
 	    aceOutf (ao, "%d\t%d\n", wp->x, iy) ;
 	  else
@@ -1614,6 +1621,9 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
 	    }
 	  for (y = (wp->y  >= sx->minCover && wp->y < sx->maxCover ? wp->y : 0) ;  ii < arrayMax (aa) && y == (wp->y >= sx->minCover  && wp->y < sx->maxCover ? wp->y : 0) ;  ii++, wp++) ;
 	  ii-- ; wp-- ; /* restore */
+	  y /= spanOut ;
+	  iy = y + .001 ;
+	  dy = 100 * (y - iy) ;
 	  if (y > 0)
 	    { /* wp->x 1-based, so we always know the strand */
 	      if (y > 100 || dy < 1)
@@ -2052,7 +2062,8 @@ static Array wigAzRegularTiling (AZZ *az, Array wPoints, AC_HANDLE h)
   int step = az->step ;
   WIGGLEPOINT *wp = iwMax ? arrp (wPoints, 0, WIGGLEPOINT) : 0 ;
   for (iw = 0 ; iw < iwMax ; iw++, wp++)
-    array (aa, (wp->x + step - 1)/step, int) = wp->y > 0 ? wp->y : 0 ;
+    if (wp->x + step -1 >= 0)
+      array (aa, (wp->x + step - 1)/step, int) = wp->y > 0 ? wp->y : 0 ;
   return aa ;
 } /* wigAzRegularTiling */
 
@@ -2107,7 +2118,7 @@ AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints,
   
   aceOutf (ao, "Step\t%d\n", az->step) ;
   aceOutf (ao, "Span\t%d\n", 1) ;
-  aceOutf (ao, "PosMin\t%d\n", posMin) ;
+  aceOutf (ao, "PosMin\t%d\n", 0) ; // always zero
   aceOutf (ao, "PosMax\t%d\n", posMax) ;
   aceOutf (ao, "xMax\t%d\n", xMax) ;
   aceOutf (ao, "NB\t%d\n", az->NB) ;
@@ -2394,7 +2405,7 @@ static BOOL wigAzAt (AZZ *az, int x, unsigned int *value)
 static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *nPosp, long int *nBpp, BOOL cumul)
 {
   WIGGLEPOINT *wp ;
-  
+
   if (! az)
     messcrash ("wigAzZone called on null az") ;
   if (az->magic != AZMAGIC)
@@ -2426,7 +2437,9 @@ static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *n
     x2 = az->xMax ;
 
   if (shift > 0) shift += step - 1 ;   /* we prefer to over-reach a little when we divide by step */
-  if (shift > 0) shift -= step - 1 ;
+  if (shift < 0) shift -= (step - 1) ;
+  shift = shift/step ; 
+  shift = shift * step ;
   for (int jj = 0, x = x1 ; x < x2 ; )
     {
       int nb = x >> az->bMax ;
@@ -2437,11 +2450,14 @@ static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *n
 	      if ( x - x1 + az->posMin/step >= 0)
 		{
 		  wp = arrayp (wPoints, x - x1 + az->posMin/step, WIGGLEPOINT) ;
-		  wp->x = x * step + az->posMin + shift/step ;
-		  if (cumul)
-		    wp->y += array (az->cache, x - az->c1, unsigned int) ;
-		  else
-		    wp->y = array (az->cache, x - az->c1, unsigned int) ;
+		  wp->x = x * step + az->posMin + shift ;
+		  if (x >= az->c1)
+		    {
+		      if (cumul)
+			wp->y += array (az->cache, x - az->c1, unsigned int) ;
+		      else
+			wp->y = array (az->cache, x - az->c1, unsigned int) ;
+		    }
 		  *nBpp += wp->y * step ;
 		}
 	      jj++ ; x++ ; (*nPosp)++ ;

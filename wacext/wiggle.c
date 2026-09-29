@@ -646,7 +646,7 @@ static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const
   double z, uu, vv, u1, v1, nu ;
   double uv[dxmax], u2[dxmax] ;
   WIGGLEPOINT *z1p, *z2p ;
-  int *limitp, limits[] = {50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 10000000, -1} ;
+  int *limitp, limits[] = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, -1} ; //, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 10000000, -1
   long int cumul[100000], any[100], both[100], just[100] ;
   
   memset (cumul, 0, sizeof(cumul)) ;
@@ -658,23 +658,26 @@ static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const
   
   nu = uu = vv = u1 = v1 = 0 ; 
   
-  for (iaaa = 0 ; iaaa < arrayMax (sxf->aaa) ; iaaa++)
-    {
-      if (0 && iaaa != 2) continue ;
-      aaf = array (sxf->aaa, iaaa, Array) ;  /* i do not know why it has to be 2 */
+  for (iaaa = 2 ; iaaa < arrayMax (sxf->aaa) ; iaaa++)
+    {  /* iaaa is offset in dict where we pushed "toto", so 2 is first true value */
+      aaf = array (sxf->aaa, iaaa, Array) ; 
       aar = array (sxr->aaa, iaaa, Array) ;
+      if (! arrayExists(aaf)) continue ;
+      if (! arrayExists(aar)) continue ;
       ii = aaf ? arrayMax (aaf) : 0 ; 
       jj = aar ? arrayMax (aar) : 0 ;
-      iMax = ii < jj ? ii : jj ; iMax -= dxmax ;
-      if (iMax <= 0) continue ;
-      
+      if (!ii || !jj) continue ;
+      iMax = ii > jj ? ii : jj ;
+      z1p = arrayp(aaf,iMax,WIGGLEPOINT) ; z2p = arrayp(aar,iMax + dxmax,WIGGLEPOINT) ;
+
+      ii = jj = 0 ;
       z1p = arrp(aaf,0,WIGGLEPOINT) ; z2p = arrp(aar,0,WIGGLEPOINT) ;
       dx0 = (z2p->x - z1p->x)/step ;
       if (dx0 > 0) 
-	{ z1p += dx0 ; iMax -= dx0 ; }
+	{ z1p += dx0 ; ii += dx0 ; }
       if (dx0 < 0) 
-	{ z2p += dx0 ; iMax += dx0 ; }
-      for (ii = 0 ; ii < iMax ; z1p++, z2p++, ii++)
+	{ z2p -= dx0 ; jj -= dx0 ; }
+      for (; ii < iMax  && jj < iMax ; z1p++, z2p++, ii++, jj++)
 	{ 
 	  z = z1p->y ; uu += z*z ; u1 += z ;  nu++ ;
 	  if (z > 0) 
@@ -686,18 +689,21 @@ static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const
 	    if (z >= *limitp)
 	      {
 		/* at various thresholds, compute the number of position at a given strand percentage */
-		k = .49 + 100 * z1p->y/z ; 
+		k = .49 + 100.0 * z1p->y/z ; 
 		cumul[k + 200 * i] += step ;
 		if (i > iLimitMax) iLimitMax = i ;
-		if ((k >= 30 && k <= 70) || (z1p->y >= 5 && z2p->y >= 5))
-		  both[i] +=  step ;
-		if (k < 1 || k > 99) just[i] +=  step ;
-		any[i] +=  step ;
-		
+		if (z > 10)
+		  {
+		    if (k >= 30 && k <= 70)
+		      both[i] +=  step ;
+		    if (k < 1 || k > 99)
+		      just[i] +=  step ;
+		    any[i] +=  step ;
+		  }		
 	      }
 	}
     }
-  if (1)
+  if (nu>0)
     {  
       uu -= u1 * u1 / nu ; vv -= v1 * v1 / nu ;
       z = sqrt (uu * vv) ;
@@ -771,7 +777,7 @@ static void sxStrandShift (WIGGLE *sx)
 
   sxf.dict = dictHandleCreate (100000, h) ;
   sxf.aaa = arrayHandleCreate (100, Array, h) ;
-  sxr.dict = dictHandleCreate (100000, h) ;
+  sxr.dict = sxf.dict ;
   sxr.aaa = arrayHandleCreate (100, Array, h) ;
 
   /* parse the 2 wiggles */
