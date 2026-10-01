@@ -9,6 +9,7 @@
 
 
 #include "wiggle.h"
+#include "peaks.h"
 static void usage (const char *error) ;
 
 /*************************************************************************************/
@@ -636,60 +637,51 @@ static void sxVentilate (WIGGLE *sx)
   ac_free (h) ; 
 } /* sxVentilate */
 
-/***********/
+/**************************************************************/
+
 
 static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const char *fNamr, int step, int dxmax, WIGGLE *sxf, WIGGLE *sxr)
 {
+  AC_HANDLE h = ac_new_handle () ;
   Array aaf, aar ;
-  int i, ii, jj, iMax, k, iLimitMax = 0, iaaa ;
-  int dx, dx0 ;
-  double z, uu, vv, u1, v1, nu ;
-  double uv[dxmax], u2[dxmax] ;
-  WIGGLEPOINT *z1p, *z2p ;
+  int i, ii, jj, k, iLimitMax = 0, iaaa ;
+  int dx ;
   int *limitp, limits[] = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, -1} ; //, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 10000000, -1
   long int cumul[100000], any[100], both[100], just[100] ;
-  
+  CST cst = cisTransCreate (dxmax, h) ;
+
   memset (cumul, 0, sizeof(cumul)) ;
   memset (both, 0, sizeof(both)) ;
   memset (just, 0, sizeof(just)) ;
   memset (any, 0, sizeof(any)) ;
-  memset (u2, 0, sizeof(u2)) ;
-  memset (uv, 0, sizeof(uv)) ;
-  
-  nu = uu = vv = u1 = v1 = 0 ; 
   
   for (iaaa = 2 ; iaaa < arrayMax (sxf->aaa) ; iaaa++)
     {  /* iaaa is offset in dict where we pushed "toto", so 2 is first true value */
       aaf = array (sxf->aaa, iaaa, Array) ; 
       aar = array (sxr->aaa, iaaa, Array) ;
+
       if (! arrayExists(aaf)) continue ;
       if (! arrayExists(aar)) continue ;
+
+
       ii = aaf ? arrayMax (aaf) : 0 ; 
       jj = aar ? arrayMax (aar) : 0 ;
       if (!ii || !jj) continue ;
-      iMax = ii > jj ? ii : jj ;
-      z1p = arrayp(aaf,iMax,WIGGLEPOINT) ; z2p = arrayp(aar,iMax + dxmax,WIGGLEPOINT) ;
+      cisTransCumulate (cst, step, aaf, aar) ;
 
-      ii = jj = 0 ;
-      z1p = arrp(aaf,0,WIGGLEPOINT) ; z2p = arrp(aar,0,WIGGLEPOINT) ;
-      dx0 = (z2p->x - z1p->x)/step ;
-      if (dx0 > 0) 
-	{ z1p += dx0 ; ii += dx0 ; }
-      if (dx0 < 0) 
-	{ z2p -= dx0 ; jj -= dx0 ; }
-      for (; ii < iMax  && jj < iMax ; z1p++, z2p++, ii++, jj++)
-	{ 
-	  z = z1p->y ; uu += z*z ; u1 += z ;  nu++ ;
-	  if (z > 0) 
-	    for (dx = 0 ; dx < dxmax ; dx++)
-	      { u2[dx] += z * ((z1p+dx)->y) ; uv[dx] += z * ((z2p+dx)->y) ; }
-	  z = z2p->y ; vv += z*z ; v1 += z ;
-	  z = z1p->y +  z2p->y ; 
+      int iMax = ii < jj ? ii : jj ;
+      WIGGLEPOINT *z1p = arrp(aaf, 0, WIGGLEPOINT) ;
+      WIGGLEPOINT *z2p = arrp(aar, 0, WIGGLEPOINT) ;
+
+      for (ii = 0 ; ii < iMax ; z1p++, z2p++, ii++) 
+	{
+	  int i ;
+	  double z = z1p->y + z2p->y ;
 	  for (i = 0, limitp = limits ; *limitp > -1 ; i++, limitp++)
 	    if (z >= *limitp)
 	      {
 		/* at various thresholds, compute the number of position at a given strand percentage */
-		k = .49 + 100.0 * z1p->y/z ; 
+		int k = .49 + 100.0 * z1p->y/z ; 
 		cumul[k + 200 * i] += step ;
 		if (i > iLimitMax) iLimitMax = i ;
 		if (z > 10)
@@ -703,28 +695,20 @@ static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const
 	      }
 	}
     }
-  if (nu>0)
-    {  
-      uu -= u1 * u1 / nu ; vv -= v1 * v1 / nu ;
-      z = sqrt (uu * vv) ;
-      for (dx = 0 ; dx < dxmax ; dx++)
-	{
-	  uv[dx] = (uv[dx] - u1 * v1 / nu) / z ;
-	  u2[dx] = (u2[dx] - u1 * u1 / nu) / uu ;
-	}
-    }
-  
+  cisTransNormalize (cst) ;
+
   if (ao)
     {
-      aceOutf (ao, "# %s\n", timeShowNow()) ;
-      aceOutf (ao, "# Autocorrelation of the wiggle on the top strand, used as control\n") ;
-      aceOutf (ao, "# Trans correlation of the 2 strand showing the average lag of the minus strand wiggle\n") ;
+      aceOutf (ao, "### %s\n", timeShowNow()) ;
+      aceOutf (ao, "## Autocorrelation of the wiggle on the top strand, used as control\n") ;
+      aceOutf (ao, "## Trans correlation of the 2 strand showing the average lag of the minus strand wiggle\n") ;
+      aceOutf (ao, "## bestShift=%d\t%.2f\n", cst->bestShift, cst->bestUv) ;
+      aceOutf (ao, "## file_f = %s\n", fNamf) ;
+      aceOutf (ao, "## file_r = %s\n", fNamr) ;
       aceOutf (ao, "# Distance\tCis autocorrelation\tTrans correlation\t\n") ;
-      aceOutf (ao, "# file_f = %s\n", fNamf) ;
-      aceOutf (ao, "# file_r = %s\n", fNamr) ;
       
       for (dx = 0 ; dx < dxmax ; dx++)
-	aceOutf (ao, "%d\t%g\t%g\n", step * dx, u2[dx], uv[dx]) ;
+	aceOutf (ao, "%d\t%g\t%g\n", step * dx, cst->uu[dx], cst->uv[dx]) ;
       aceOutf (ao, "\n\n") ;
     }
 

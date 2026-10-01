@@ -46,6 +46,7 @@
 #include <stdatomic.h>
 #include "../wsra/sra_read.h"
 #include "sa.parse.h"
+#include "peaks.h"
 #include "scratch.h"
 #include "sa.common.h"
 
@@ -103,8 +104,10 @@ typedef struct PSDstruct {
   int minReadLength, maxReadLength ;
   long int letterProfile1[5 * LETTERMAX] ;
   long int letterProfile2[5 * LETTERMAX] ;
+  long int aligned_letterProfile1[5 * LETTERMAX] ;
+  long int aligned_letterProfile2[5 * LETTERMAX] ;
   long int NATGC[5] ;
-
+  long int aligned_NATGC[5] ;
 } PSD ;
 
 typedef struct runStatStruct {
@@ -155,6 +158,7 @@ typedef struct runStatStruct {
   long int BF[256], BR[256] ; /* number of bases aligned per target_class on Forward/Reverse strand */
   Array errors ;  /* substitutions, insertions, deletions counts */
   /* coverage of long transcripts ? */
+  int bestShift ; double bestUv ;
 } RunSTAT ;
 		  
 typedef struct bStruct {
@@ -307,6 +311,7 @@ typedef struct pStruct {
   Array scratchesR ;
   Array scratchesP ;
   Array scratchesNU ;
+  Array csts ;
   Array cdss ;
   Array utrs ;
   Array intronics ;

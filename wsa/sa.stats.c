@@ -312,10 +312,16 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   
   for (int i = 0 ; i < 5 ; i++)
     up->p.NATGC[i] += vp->p.NATGC[i] ;
+  for (int i = 0 ; i < 5 ; i++)
+    up->p.aligned_NATGC[i] += vp->p.aligned_NATGC[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile1[i] += vp->p.letterProfile1[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile2[i] += vp->p.letterProfile2[i] ;
+  for (int i = 0 ; i < 5 * LETTERMAX; i++)
+    up->p.aligned_letterProfile1[i] += vp->p.aligned_letterProfile1[i] ;
+  for (int i = 0 ; i < 5 * LETTERMAX; i++)
+    up->p.aligned_letterProfile2[i] += vp->p.aligned_letterProfile2[i] ;
   for (int i = 0 ; i < 11 ; i++)
     up->nMultiAligned[i] += vp->nMultiAligned[i] ;
   for (int i = 0 ; i < 256 ; i++)
@@ -710,7 +716,14 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		   , up->p.NATGC[4]
 		   , up->p.NATGC[0]
 		   ) ;
-
+	  aceOutf (ao, "%s\tAligned_ATGCN\tiiiii\t%ld\t%ld\t%ld\t%ld\t%ld\n"
+		   , runNam
+		   , up->p.aligned_NATGC[1]
+		   , up->p.aligned_NATGC[2]
+		   , up->p.aligned_NATGC[3]
+		   , up->p.aligned_NATGC[4]
+		   , up->p.aligned_NATGC[0]
+		   ) ;
 
 	  if (1)
 	    {
@@ -784,6 +797,7 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		   ) ;
 	  
 	  aceOutf (ao, "%s\tWiggleCumul\ti\t%ld\n", runNam, up->wiggleCumul) ;
+	  aceOutf (ao, "%s\tSrand_shift\ti\t%d\t%.2f\n", runNam, up->bestShift, up->bestUv) ;
 	  aceOutf (ao, "%s\tErrors\tift\t%ld\t"
 		   , runNam
 		   , up->nErr

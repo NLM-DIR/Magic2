@@ -1,9 +1,11 @@
+
 /*  File: peaks.c
  *  Implementation of peaks.h, see that file for the method.
  */
 
 #include "ac.h"
 #include "peaks.h"
+#include "wiggle.h"
 
 typedef struct peakStruct {
   int x1, x2 ;   /* array coordinates */
@@ -11,7 +13,124 @@ typedef struct peakStruct {
   long int area, level ;
 } PEAK ;
 
-/***********************************************************************/
+/**************************************************************/
+/**************************************************************/
+#define CSTMAGIC 5441927
+
+static void cisTransCheck (CST cst, const char *caller)
+{
+  if (! cst)
+    messcrash ("%s called on null cst", caller) ;
+  if (cst->magic == 0)
+    messcrash ("%s freed cst", caller) ;
+  if (cst->magic != CSTMAGIC)
+    messcrash ("%s called on bad SCR", caller) ;
+} /* cisTransCheck */
+
+/**************************************************************/
+
+static void cisTransFinalize (void *vp)
+{
+  CST cst = (CST) vp ;
+  cisTransCheck (cst, "cisTransFinalize") ;
+  cst->magic = 0 ;
+  free (cst->uu) ;
+  free (cst->uv) ;
+} /* scratchFinalize */
+
+/**************************************************************/
+/* Finally compute the best shift between the 2 strands */
+void cisTransNormalize (CST cst)
+{
+  cisTransCheck (cst, "cisTransNormalize") ;
+  int nu = cst->nu ;
+  if (cst->nu > 0)
+    {
+      double u1 = cst->u1, v1 = cst->v1 ;
+      cst->u2 -= u1 * u1 / nu ;
+      cst->v2 -= v1 * v1 / nu ;
+      double z = sqrt (cst->u2 * cst->v2) ;
+      for (int dx = 0 ; dx < cst->dxMax ; dx++)
+	{
+	  cst->uv[dx] -= u1 * v1 / nu ; cst->uv[dx] /= z ;
+	  cst->uu[dx] -= u1 * u1 / nu ; cst->uu[dx] /= cst->u2 ;
+	  if (cst->bestUv < cst->uv[dx])
+	    {
+	      cst->bestUv = cst->uv[dx] ;
+	      cst->bestShift = dx ;
+	    }
+	}
+      cst->u1 /= nu ;
+      cst->v1 /= nu ;
+      cst->u2 /= nu ;
+      cst->v2 /= nu ;
+      cst->nu = -nu ;  /* to be sure we do not renormalize twice */
+    }
+  return ;
+} /* cisTransNormalize */
+
+/**************************************************************/
+/* Accumulate the counts chromosome per chromosome  */
+void cisTransCumulate (CST cst, int step, BigArray aaf, BigArray aar)
+{
+  long int ii, iMax = aaf ? bigArrayMax (aaf) : 0 ; 
+  long int jj, jMax = aar ? bigArrayMax (aar) : 0 ;
+
+  /* make room */
+  WIGGLEPOINT *z1p = bigArrp(aaf, 0, WIGGLEPOINT) ;
+  WIGGLEPOINT *z2p = bigArrp(aar, 0, WIGGLEPOINT) ;
+
+  cisTransCheck (cst, "cisTransCumulate") ;
+  ii = jj = 0 ;
+
+  int nu = 0, dx0 = (z2p->x - z1p->x)/step ;
+  double z, u1 = 0, v1 = 0, u2 = 0, v2 = 0 ;
+  double *uu = cst->uu, *uv = cst->uv ;
+  if (dx0 > 0) 
+    { z1p += dx0 ; ii += dx0 ; }
+  if (dx0 < 0) 
+    { z2p -= dx0 ; jj -= dx0 ; }
+  for (; ii < iMax  && jj < jMax ; z1p++, z2p++, ii++, jj++)
+    { 
+      z = z1p->y ; u2 += z*z ; u1 += z ;  nu++ ;
+      if (z > 0.0001) 
+	for (int dx = 0 ; dx < cst->dxMax ; dx++)
+	  {
+	    if (ii + dx < iMax) uu[dx] += z * ((z1p+dx)->y) ;
+	    if (jj + dx < jMax) uv[dx] += z * ((z2p+dx)->y) ;
+	  }
+      z = z2p->y ; v2 += z*z ; v1 += z ;
+    }
+  cst->nu += nu ;
+  cst->u1 += u1 ;
+  cst->v1 += v1 ;
+  cst->u2 += u2 ;
+  cst->v2 += v2 ;
+
+  return ;
+} /* cisTransCumulate */
+
+/**************************************************************/
+
+CST cisTransCreate (int dxMax, AC_HANDLE h)
+{
+  int n1 = sizeof (struct cstStruct) ;
+  int nn = dxMax * sizeof(double) ;
+  CST cst = (CST) handleAlloc (cisTransFinalize, h, n1) ;
+  memset (cst, 0, n1) ;
+  
+  cst->magic = CSTMAGIC ;
+  cst->dxMax = dxMax ;
+  cst->uu = malloc (nn) ;
+  cst->uv = malloc (nn) ;
+  memset (cst->uu, 0, nn) ;
+  memset (cst->uv, 0, nn) ;
+
+  return cst ;
+} /* cisTransCreate */
+
+/**************************************************************/
+/**************************************************************/
 /*
   bin/wiggle -f tmp/SA/SRR3740166/wiggles/SRR3740166.NC_050103.1.u.fr -I AZ -multiPeaks 2 -O COUNT -o tmp/Peaks/SRR3740166/SRR3740166.NC_050103.1.u.fr
 */

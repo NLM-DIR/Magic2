@@ -53,6 +53,18 @@ static int saScanDnaEncode (BB *bb)
       minDnaLn = (n < minDnaLn ? n : minDnaLn) ;
       maxDnaLn = (n > maxDnaLn ? n : maxDnaLn) ;
       nn += n ;
+
+      unsigned char *cq, *cp = arrp (*dnap, 0, unsigned char) ;
+      cq = cp ;
+      if (ii & 0x1)
+	for (int i = 0 ; i < n && i < LETTERMAX ; i++, cq++)
+	  bb->runStat.p.letterProfile2[5*i + natgc[(int)*cq]]++ ;
+      else
+	for (int i = 0 ; i < n && i < LETTERMAX ; i++, cq++)
+	  bb->runStat.p.letterProfile1[5*i + natgc[(int)*cq]]++ ;
+      cq = cp ;
+      for (int i = 0 ; i < n ; i++, cq++)
+	bb->runStat.p.NATGC[natgc[(int)*cq]]++ ;
     }
 
   bb->runStat.p.minReadLength = minDnaLn ;
@@ -217,7 +229,7 @@ static int readScanDna (unsigned char *buf, int *dnaLnp)
 	{
 	case 0: 
 	case '@':
-	case '>': *--cp = 0 ; goto done ; break ;
+	case '>': if (cp[1]!='<')cp--;*cp = 0 ; goto done ; break ;
 	case '\r': break ;
 	case '\n': break ;
 	default: *cq++ = *cp ; break ;
@@ -229,46 +241,48 @@ static int readScanDna (unsigned char *buf, int *dnaLnp)
   dnaLn = cq - buf ;
   *dnaLnp = dnaLn ;
   return ln ;
-} /* readScanDnaOld */
+} /* readScanDna */
 
 /********************************************************************************************************************/
 
-static int saRegisterId (BB *bb, unsigned char *cp, char prefix, Array idArray, int type)
+static int saRegisterId (BB *bb, unsigned char *cp, char prefix, Array idArray, int type, DnaFormat format)
 {
   Array dnaRecords = bb->dnaRecords ; 
   int nR = arrayMax (dnaRecords) ;
-  DnaRecord *r  = arrayp (dnaRecords, nR, DnaRecord) ;
   int suffix = 0 ;
   int ln = 0 ;
-  int nn = readScanId (cp, prefix, bb->nPairs ? &suffix : 0, &ln) ;
+  int nn ;
   int k ;
-  if (0)
-    {
-      r->xId = arrayMax (idArray) + 1 ;
-      unsigned char *cq = arrayp (idArray, r->xId + ln + 1, unsigned char) ;  /* make room */
-      cq = arrp (idArray, r->xId, unsigned char) ; 
-      memcpy (cq, cp + 1, ln + 1) ;
+  arrayp (dnaRecords, nR, DnaRecord) ;
+  if (format == FASTC)
+    { /* only called for type == 0 */
+      nn = readScanId (cp, prefix, 0, &ln) ;
+      dictAdd (bb->dict, (char *)(cp + 1), &k) ;
     }
-  dictAdd (bb->dict, (char *)(cp + 1), &k) ;
-  if (2 * k + type != nR)
+  else
     {
-      if (type)
-	messcrash ("Non matching identifiers in a pair %s and %s\n"
-		   , dictName (bb->dict, k - 1)
-		   , dictName (bb->dict, k)
-		   ) ;
-      else
-	messcrash ("synchrony problem parsing identifiers %s\n", cp) ;
-    }
-  if (bb->nPairs)
-    {
-      if (type == 0 && suffix != 1)
-	messcrash ("first identifier of a pair should end as \' 1\', or \'.1\' or \'/1\' : %s\n", cp) ;
-      if (type == 1 && suffix != 2)
-	messcrash ("second identifier of a pair should end as \' 2\', or \'.2\' or \'/2\' : %s\n", cp) ;
+      nn = readScanId (cp, prefix, bb->nPairs ? &suffix : 0, &ln) ;
+      dictAdd (bb->dict, (char *)(cp + 1), &k) ;
+      if (2 * k + type != nR)
+	{
+	  if (type)
+	    messcrash ("Non matching identifiers in a pair %s and %s\n"
+		       , dictName (bb->dict, k - 1)
+		       , dictName (bb->dict, k)
+		       ) ;
+	  else
+	    messcrash ("synchrony problem parsing identifiers %s\n", cp) ;
+	}
+      if (bb->nPairs)
+	{
+	  if (type == 0 && suffix != 1)
+	    messcrash ("first identifier of a pair should end as \' 1\', or \'.1\' or \'/1\' : %s\n", cp) ;
+	  if (type == 1 && suffix != 2)
+	    messcrash ("second identifier of a pair should end as \' 2\', or \'.2\' or \'/2\' : %s\n", cp) ;
+	}
     }
   return nn ;
-}
+} /* saRegisterId */
 
 /********************************************************************************************************************/
 
@@ -297,7 +311,7 @@ static int saRegisterDna (BB *bb, unsigned char *cp, Array dnaArray, int type)
   bb->runStat.p.nBase2 += (1 - type) * ln ;
 
   return nn ;
-}
+} /* saRegisterDna */
 
 /********************************************************************************************************************/
 
@@ -318,7 +332,7 @@ static int saRegisterQuality (BB *bb, unsigned char *cp, Array qualityArray)
       memcpy (cq, cp, ln + 1) ;
     }
   return nn ;
-}
+} /* saRegisterQuality */
 
 /********************************************************************************************************************/
 /* parse the fasta/fastq buffers into SAPRSE format
@@ -363,8 +377,15 @@ static void saParseR12Buffers (const PP *pp, BB *bb)
     {
       if (buf1)
 	{
-	  cp1 += saRegisterId (bb, cp1, prefix, idArray, 0) ; /* register id or read 1 */
+	  cp1 += saRegisterId (bb, cp1, prefix, idArray, 0, format) ; /* register id or read 1 */
 	  cp1 += saRegisterDna (bb, cp1, dnaArray, 0) ; /* register dna of read 1 */
+	  if (format == FASTC && *cp1 == '<')
+	    {
+	      array (bb->dnaRecords, arrayMax (bb->dnaRecords), DnaRecord).xId = 0 ;
+	      bb->nPairs++ ; cp1++ ;
+	      bb->runStat.p.nPairs++ ;
+	      cp1 += saRegisterDna (bb, cp1, dnaArray, 1) ; /* register dna of read 1 */
+	    }
 	  if (format == FASTQ || format == FASTQ2)
 	    cp1 += saRegisterQuality (bb, cp1, qualityArray) ;      /* register quality of read 1 */
 	}
@@ -372,7 +393,7 @@ static void saParseR12Buffers (const PP *pp, BB *bb)
       if (buf2)
 	{
 	  bb->nPairs++ ;
-	  cp2 += saRegisterId (bb, cp2, prefix, idArray, 1) ; /* register id or read 2 */
+	  cp2 += saRegisterId (bb, cp2, prefix, idArray, 1, format) ; /* register id or read 2 */
 	  cp2 += saRegisterDna (bb, cp2, dnaArray, 1) ; /* register dna of read 1 */
 	  if (format == FASTQ)
 	    cp2 += saRegisterQuality (bb, cp2, qualityArray) ;      /* register quality of read 2 */
@@ -382,7 +403,7 @@ static void saParseR12Buffers (const PP *pp, BB *bb)
 	{
 	  bb->nPairs++ ;
 	  bb->runStat.p.nPairs++ ;
-	  cp1 += saRegisterId (bb, cp1, prefix, idArray, 1) ; /* register id or read 2 */
+	  cp1 += saRegisterId (bb, cp1, prefix, idArray, 1, format) ; /* register id or read 2 */
 	  cp1 += saRegisterDna (bb, cp1, dnaArray, 1) ; /* register dna of read 2 */
 	  if (format == FASTQ2)
 	    cp1 += saRegisterQuality (bb, cp1, qualityArray) ;      /* register quality of read 2 */
@@ -452,9 +473,9 @@ static void saParseFastac (const PP *pp, RC *rc)
 {
   AC_HANDLE h = ac_new_handle () ;
   BB b, *bb = 0 ;
-  int BMAX = (pp->BMAX << 20) ;
-  unsigned char *buffer = halloc (BMAX, h) ;
-  unsigned char *buffer2 = halloc (BMAX, h) ;
+  int BMAX = (pp->BMAX << 20) - 8 ;
+  unsigned char *buffer = halloc (BMAX + 8, h) ;
+  unsigned char *buffer2 = halloc (BMAX + 8, h) ;
   int pos = 0 ;
   BOOL done = FALSE ;
   long int nBytes = 0 ;
@@ -529,6 +550,13 @@ static void saParseFastac (const PP *pp, RC *rc)
             {
             default: break ;
 
+            case FASTC:
+	      cq = ustrchr (cp + 0, '\n') ;
+	      if (!cq)          /* ID line not complete -- move back one record */
+		goto moveBack ;
+
+	      break ;
+	      
             case FASTA2:
               cq = ustrchr (cp + 1, '\n') ;
               if (!cq)          /* ID line not complete -- move back one record */

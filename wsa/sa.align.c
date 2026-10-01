@@ -846,7 +846,8 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 			  rightClip = x2 + 1 - di ;
 			  up->x2 -= di ;
 			  up->a2 -= (up->a1 < up->a2 ? di :- di) ;
-			  for (vp = up ; vp->read == up->read && vp->chain == up->chain ; vp--)
+			  int jj = ii0 ;
+			  for (vp = up ; jj >= 0 && vp->read == up->read && vp->chain == up->chain ; jj--, vp--)
 			    {
 			      vp->score += slBonus - di ;
 			      vp->chainScore += slBonus - di ;
@@ -903,7 +904,6 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 			    buf[i] = cp[i] ;
 			  buf[31] = 0 ;
 			}
-		      
 		      for (vp = up, jj = ii0 ; jj >= 0 && vp->read == up->read && vp->chain == up->chain ; jj--, vp--)
 			{
 			  vp->score -= di ;
@@ -3045,6 +3045,14 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      else
 		bb->runStat.nBaseAligned1 += vp->chainAli ;
 
+	      if (read == vp->read && nChains == 1)
+		{
+		  Array dna = (vp->read & 0x1) ? dna2 : dna1 ;
+		  unsigned char *cq = arrp (dna, 0, unsigned char) ;
+		  for (int i = vp->x1 - 1 ; i < vp->x2 ; i++)
+		    bb->runStat.p.aligned_NATGC[natgc[(int)cq[i]]]++ ;
+		}
+	      
 	      if (! allTc[tc])
 		{
 		  allTc[tc] = 1 ;
@@ -3857,7 +3865,7 @@ void saAlignDo (const PP *pp, BB *bb)
     bb->isAligned = bitSetHandleCreate (bb->nSeqs, bb->h) ;
   */
 
-  iiiMax = SMS ? bigArrayMax (bb->sms) : bigArrayMax (bb->hits) ;
+  iiiMax = SMS ? (bb->sms ? bigArrayMax (bb->sms) : 0) : (bb->hits ? bigArrayMax (bb->hits) : 0) ;
 
   for (iii = 0 ; iii < iiiMax ; iii++)
     {
@@ -4069,6 +4077,7 @@ void saAlignDo (const PP *pp, BB *bb)
     {
       PSD p = bb->runStat.p ;
 
+      memset (p.aligned_NATGC, 0, sizeof (p.aligned_NATGC)) ;
       memset (&bb->runStat, 0, sizeof (RunSTAT)) ;
       bb->runStat.p = p ;
 
