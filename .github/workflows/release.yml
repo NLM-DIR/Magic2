@@ -32,8 +32,6 @@ jobs:
       ACEDB_MACHINE: ${{ matrix.machine }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -47,6 +45,9 @@ jobs:
 
       - name: Build libraries
         run: make libs
+
+      - name: Build SRA
+        run: make -C wsra
 
       - name: Build magic2
         run: make -C wsa
