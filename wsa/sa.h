@@ -47,6 +47,7 @@
 #include "../wsra/sra_read.h"
 #include "sa.parse.h"
 #include "peaks.h"
+#include "wig.h"
 #include "scratch.h"
 #include "sa.common.h"
 
@@ -144,6 +145,7 @@ typedef struct runStatStruct {
   long int wiggleLCumul ; /* in million bases */
   long int wiggleRCumul ; /* in million bases */
   Array insertLengthDistribution ;
+  CST cst ;
   ADAPTORS adaptors ;
   long int nN, nErr, nMID ;
   int accessibleLength5kb ;
@@ -241,6 +243,7 @@ typedef struct pStruct {
   BOOL wiggle ;
   BOOL wiggleEnds ;
   BOOL introns ;
+  BOOL peaks ;
   BOOL snps ;
   BOOL ignoreIntronSeeds ;
   BOOL isWorm ;
@@ -323,7 +326,7 @@ typedef struct pStruct {
   long int nrIntronSupports[4] ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
   BOOL sam, bam, hitsFormat, tabular, blink ;
-  BOOL bigWig, wigBF, wigAZ ;
+  BOOL bigWig, wigBF, wigAZ, noWig ;
   BOOL exportSamSequence, exportSamQuality, qualityFactors ;
   BOOL strand, antiStrand ;
   BOOL isDna, isRna ;
@@ -373,6 +376,7 @@ typedef struct pStruct {
   long int cds, utr, intronic, intergenic ;
   BOOL splice ;
   long int nRawReads, nRawBases, genomeLength ;
+  int min_peak_coverage ;
   int wiggle_step ;
   int wigBMAX ; /* technical tuning, do not modify */
   float *runStranding ;
@@ -521,6 +525,10 @@ typedef struct cpuStatStruct {
   long int n ;
   clock_t tA ; /* time time active */
 } CpuSTAT ;
+
+typedef struct wigPosStruct {
+  unsigned int pos ; unsigned short ln ; unsigned short weight ; unsigned int dummy ;
+} __attribute__((aligned(16))) WSEG ;
 
 
 typedef struct geneCountsStruct {

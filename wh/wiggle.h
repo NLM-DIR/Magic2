@@ -102,26 +102,4 @@ void sxWiggleExport (WIGGLE *sx) ;
 Array sxGetWiggleZone (Array aa, const char *fNam, char *type, int *stepp, const char *chrom, int a1, int a2, AC_HANDLE h) ; /* returns an array of WIGGLEPOINT */
 
 
-/*
- * Disk compact AW file structures
- * In each block, the values are byte splitted creating long flows odf zeroes that compress better
- */
-
-typedef struct azStruct {
-  AC_HANDLE h ;
-  int magic ;
-  int step ;      /* recommended 10 for large genomes */
-  char *fName ;
-  char *target ;
-  int posMin, posMax ;
-  int xMin ;      /* minimal position */
-  int xMax ;      /* maximal position */
-  int NB ;        /* number of files */
-  int bMax ;      /* 0x1 << BMAX values in each file, default BMAX=18 => 2560 kilobases if step==10 */
-  int cNB ;       /* currently cached  file */
-  long int c1, c2 ;    /* min max coordinates [c1,c2] in current cache */
-  Array cache ;   /* values in current cache */
-} AZZ ;
-
-AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, int bMax, AC_HANDLE h0) ; /* Write the data */
 #endif

@@ -11,15 +11,16 @@ About using Claude AI:
 	 In 1984, I published what was probably the first table of characters for all
 	 the basic classical Lie-Kac superalgebra of type A,B,C,D,F(4) and G(3).
 	   ftps:
-	 I wrote such codes first in Basic (not my choice !), then C. It always took time.
-	   As of septembre 2026, I asked the AI Claude (opus 5) to write the present program.
+	 I wrote such codes first in Basic (unfortunately the only language available
+	 at the time on mini computers), then C. It always took time.
+	   As of septembre 2026, I asked the AI Claude (opus 5) to write the sl21 program.
 	 It was done in a couple of days with very little trial an errors as I knew the solution.
 	 But in addition Claude then wrote the symbolic code sl21_b.py, which relies on sympy.
-	 Then added without hesitation in minutes the documentation and the exact verification
-	 of all the Casimir identities, including selecting the best normalisations. I am very
-	 impressed by the gain in productivity, by the quality of the interaction with the AI,
-	 and by the quality of the code. All of this was unconceivable just a few months ago.
-	 Next year, the AI will probably conceive the subject by herself.
+	 Then Claude added without hesitation in minutes the documentation and the exact
+	 verification of all the Casimir identities, including selecting the best normalisations.
+	 I am very impressed by the gain in productivity, by the quality of the interaction with
+	 the AI, and by the quality of the code. All of this was unconceivable just a few months
+	 ago. Next year, the AI will probably conceive the subject by herself.
 
 License: public domain; no rights reserved.
 

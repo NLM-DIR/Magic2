@@ -357,7 +357,27 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	  if (cp && *cp && *cp != '#')
 	    dictAdd (pp->runDict, cp, &run) ;
 	  else
-	    dictAdd (pp->runDict, hprintf (h, "r.%d", nRuns), &run) ;
+	    {
+	      const char *cr = rc->fileName1 - 1 ;
+	      BOOL ok = TRUE ;
+	      while (*++cr && ok)
+		{
+		  if (
+		      (*cr >= 'a' && *cr <= 'z') ||
+		      (*cr >= 'A' && *cr <= 'Z') ||
+		      (*cr >= '0' && *cr <= '9') ||
+		      *cr == '_' ||
+		      *cr == '.'
+		      )
+		    ;
+		  else
+		    ok = FALSE ;
+		}
+	      if (ok)
+		dictAdd (pp->runDict, rc->fileName1, &run) ;
+	      else
+		dictAdd (pp->runDict, hprintf (h, "r.%d", nRuns), &run) ;
+	    }
 	  rc->run = run ;
 	  if (! saSanitizeRunName (dictName (pp->runDict, run)))
 	    {

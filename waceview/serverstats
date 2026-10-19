@@ -116,7 +116,7 @@ cat  <<EOF >! /tmp/_sstat3.awk
 EOF
 
 # (gold ara_1 worm_1 36a_1  mm_37_1 rat_1 any)
-foreach serv  (any gold ara_1 worm_1 36a_1 37a_1 mm_37_1 rat_1)
+foreach serv  (any gold ara_1 worm_1 37a_1 mm_37_1 rat_1)
   if ($serv == "ara_1") set nam =  " ARA BUIL jan 2007"
   if ($serv == "35g_1") set nam =  " BUILD 35 aug 2005 "
   if ($serv == "36a_1") set nam =  " BUILD 36 jun 2007 "
@@ -125,14 +125,15 @@ foreach serv  (any gold ara_1 worm_1 36a_1 37a_1 mm_37_1 rat_1)
   if ($serv == "mm_37_1") set nam =  " MOUSE 37 jun 2007 "
   if ($serv == "gold") set nam =  " GOLD aug 2004 "
   if ($serv == "worm_1") set nam =  " WORM jan 2010 "
+  if ($serv == "rat_1") set nam = " RAT 2007"
   if ($serv == "any") set nam =  " Any AceView server "
   echo ' '
-  echo -n  "server $serv $nam, statistics for $year $month, cumulated "
+  echo -n  "server $serv $nam, statistics for $mmm $year $month, cumulated "
   date
   if ($serv == any) then
     zcat  ../*/LOGS.$year'_'$mmm.gz | egrep '(webpfamg|REMOTE_ADDR)' >! ss.$serv.all
   else
-    zcat ../$serv/LOGS.$year'_'$mmm.gz | egrep '(webpfamg|REMOTE_ADDR)' >! ss.$serv.all
+    zcat  ../$serv/LOGS.$year'_'$mmm.gz | egrep '(webpfamg|REMOTE_ADDR)' >! ss.$serv.all
   endif
   if ($serv == "37a_1") cat ../BLAST/log_file | grep human >> ss.$serv.all
   if ($serv == "37a_2") cat ../BLAST/log_file | grep human >> ss.$serv.all

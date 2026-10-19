@@ -2810,7 +2810,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
   
   arraySort (aa, saAlignOrder) ;
   dna1 = arr (bb->dnas, read1, Array) ;
-  dna2 = arr (bb->dnas, read2, Array) ;
+  dna2 = read2 < arrayMax(bb->dnas) ? arr (bb->dnas, read2, Array) : 0 ;
   
   /* format the overhangs, possibly editing the scores*/
   iMax = arrayMax (aa) ;

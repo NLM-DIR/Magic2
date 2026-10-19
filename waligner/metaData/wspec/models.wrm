@@ -452,6 +452,7 @@
       ERCC_mix Text UNIQUE Float UNIQUE Float UNIQUE Text  // best fit to Mix1 or Mix2, R, R^2 correlation coefficient
       Letter_profile Text Int UNIQUE Float REPEAT
       ATGC_kb UNIQUE Float  REPEAT
+      Strand_shift UNIQUE Int UNIQUE  Float
       Bloom Text  UNIQUE Float REPEAT // number of fragments with 1 2 5 10 20 50 100 13-mer motifs
       Pair_fate Aligned_fragments UNIQUE Float
                 Aligned_pairs UNIQUE Float      // previous name of tag aligned_fragments

@@ -22,6 +22,11 @@
  *    if (aa != 0) Get checks aa->size, reuses aa and adjust aa->max
 
 */
+/*
+  #define ARRAY_CHECK
+  #define MALLOC_CHECK
+*/
+
 #define _GNU_SOURCE        /* O_TMPFILE, mkostemp: before ALL #include */
 #include <unistd.h>
 #include <fcntl.h>

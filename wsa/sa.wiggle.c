@@ -15,45 +15,30 @@
  *   annotating transcripts starts and ends
  *
  */
-#define ARRAY_CHECK
+/* #define ARRAY_CHECK */
 
 #define WIGGLETYPEMAX 2 /* strand */
 #include "sa.h"
 #include "wiggle.h"
+#include "wig.h"
 #include "peaks.h"
 #include "fastItoA.h"
 #include <fcntl.h>  // for O_WRONLY if using write()
 #include <unistd.h> // for write()
 
-
-typedef struct wigPosStruct {
-  unsigned int pos ; unsigned short ln ; unsigned short weight ; unsigned int dummy ;
-} __attribute__((aligned(16))) WP ;
-
-
-static int wpOrder (const void *va, const void *vb)
-{
-  const WP *up = va ;
-  const WP *vp = vb ;
-  int n ;
-  n = (up->pos > vp->pos ? 1 : (up->pos < vp->pos ? -1 : 0)) ; if (n) return n ;
-
-  return 0 ;
-} /* wiggleOrder */
-
 /*************************************************************************************/
 
 static void wiggleCumulate (BigArray aaa, BigArray aa)
 {
-  WP *up, *vp ;
+  WSEG *up, *vp ;
   long int iMax = bigArrayMax (aa), iiMax = bigArrayMax (aaa) ;
   if (iMax)
     {
       saSort (aa, 1) ;
-      up = bigArrayp (aaa, iMax + iiMax - 1, WP) ; /* make room */
-      up = bigArrp (aaa, iiMax, WP) ;
-      vp = bigArrp (aa, 0, WP) ;
-      memcpy (up, vp, iMax * sizeof (WP)) ;
+      up = bigArrayp (aaa, iMax + iiMax - 1, WSEG) ; /* make room */
+      up = bigArrp (aaa, iiMax, WSEG) ;
+      vp = bigArrp (aa, 0, WSEG) ;
+      memcpy (up, vp, iMax * sizeof (WSEG)) ;
       bigArrayMax (aa) = 0 ;
     }
   return ;
@@ -127,13 +112,13 @@ static int wiggleCreate (const PP *pp, BB *bb)
 		  {
 		    wig = array (wiggles, chrom, BigArray) ;
 		    if (! wig)
-		      wig = array (wiggles,  chrom, BigArray) = bigArrayHandleCreate (100000, WP, bb->h) ;
+		      wig = array (wiggles,  chrom, BigArray) = bigArrayHandleCreate (100000, WSEG, bb->h) ;
 		    wigP = array (wigglesP, chrom, BigArray) ;
 		    if (! wigP)
-		      wigP = array (wigglesP,  chrom, BigArray) = bigArrayHandleCreate (100000, WP, bb->h) ;
+		      wigP = array (wigglesP,  chrom, BigArray) = bigArrayHandleCreate (100000, WSEG, bb->h) ;
 		    wigNU = array (wigglesNU, chrom, BigArray) ;
 		    if (! wigNU)
-		      wigNU = array (wigglesNU,  chrom, BigArray) = bigArrayHandleCreate (100000, WP, bb->h) ;
+		      wigNU = array (wigglesNU,  chrom, BigArray) = bigArrayHandleCreate (100000, WSEG, bb->h) ;
 		  }
 		if (wiggleEnds)
 		  {
@@ -143,10 +128,10 @@ static int wiggleCreate (const PP *pp, BB *bb)
 		      {
 			wigL = array (wigglesL, chrom, BigArray) ;
 			if (! wigL)
-			  wigL = array (wigglesL,  chrom, BigArray) = bigArrayHandleCreate (100000, WP, bb->h) ;
+			  wigL = array (wigglesL,  chrom, BigArray) = bigArrayHandleCreate (100000, WSEG, bb->h) ;
 			wigR = array (wigglesR, chrom, BigArray) ;
 			if (! wigR)
-			  wigR = array (wigglesR,  chrom, BigArray) = bigArrayHandleCreate (100000, WP, bb->h) ;
+			  wigR = array (wigglesR,  chrom, BigArray) = bigArrayHandleCreate (100000, WSEG, bb->h) ;
 		      }
 		  }
 	      }
@@ -156,41 +141,41 @@ static int wiggleCreate (const PP *pp, BB *bb)
 		if (wigL && wigR && w1 < w2)
 		  {
 		    BigArray wig = isRead2 ? wigR : wigL ;
-		    WP *wp = bigArrayp (wig, bigArrayMax (wig), WP) ;
+		    WSEG *wp = bigArrayp (wig, bigArrayMax (wig), WSEG) ;
 		    wp->pos = w1 ; wp->ln = endLength ; wp->weight = weight ;
 		  }
 		if (wigL && wigR && w1 > w2 && w1 >= endLength)
 		  {
 		    BigArray wig = isRead2 ? wigR : wigL ;
-		    WP *wp = bigArrayp (wig, bigArrayMax (wig), WP) ;
+		    WSEG *wp = bigArrayp (wig, bigArrayMax (wig), WSEG) ;
 		    wp->pos = w1 - endLength ; wp->ln = endLength ; wp->weight = weight ;
 		  }
 	      }
 	    
 	    if (wigP && w1 > 10 && w1 > endLength &&  x1 > ap->leftClip + 25)
 	      {
-		WP *wp = bigArrayp (wigP, bigArrayMax (wigP), WP) ;
+		WSEG *wp = bigArrayp (wigP, bigArrayMax (wigP), WSEG) ;
 		if (w1 < w2) { wp->pos = w1 - endLength ; wp->ln = endLength ; }
 		else { wp->pos = w1 ; wp->ln = endLength ; }
 		wp->weight = weight ;
 	      }
 	    if (wigP && w2 > 10 && w2 > endLength &&  x2 < ap->rightClip - 25)
 	      {
-		WP *wp = bigArrayp (wigP, bigArrayMax (wigP), WP) ;
+		WSEG *wp = bigArrayp (wigP, bigArrayMax (wigP), WSEG) ;
 		if (w1 < w2) { wp->pos = w2 ; wp->ln = endLength ; }
 		else { wp->pos = w2 - endLength ; wp->ln = endLength ; }
 		wp->weight = weight ;
 	      }
 	    if (wig && ap->nTargetRepeats == 1)
 	      {
-		WP *wp = bigArrayp (wig, bigArrayMax (wig), WP) ;
+		WSEG *wp = bigArrayp (wig, bigArrayMax (wig), WSEG) ;
 		if (w1 > w2) { int w0 = w1 ; w1 = w2 ; w2 = w0 ; }
 		wp->pos = w1 ; wp->ln = w2 - w1 + 1 ; wp->weight = weight ;
 		if (w1 < 0) messcrash ("bad w1 in wiggleCreate") ;
 	      }
 	    if (wigNU && ap->nTargetRepeats > 1)
 	      {
-		WP *wp = bigArrayp (wigNU, bigArrayMax (wigNU), WP) ;
+		WSEG *wp = bigArrayp (wigNU, bigArrayMax (wigNU), WSEG) ;
 		if (w1 > w2) { int w0 = w1 ; w1 = w2 ; w2 = w0 ; }
 		wp->pos = w1 ; wp->ln = w2 - w1 + 1 ; wp->weight = weight ;
 	      }
@@ -201,17 +186,18 @@ static int wiggleCreate (const PP *pp, BB *bb)
 } /* wiggleCreate */
 
 /*************************************************************************************/
-
+#ifdef JUNK
 static long int wigCumul (BigArray wig)
 {
   long int ii, nn = 0 ;
-  WP *wp = wig ? bigArrp (wig, 0, WP) : 0 ;
+  WSEG *wp = wig ? bigArrp (wig, 0, WSEG) : 0 ;
   long int iMax = wig ? bigArrayMax (wig) : 0 ;
   
   for (ii = 0 ; ii < iMax ; ii++, wp++)
     nn += wp->ln * wp->weight ;
   return nn / 72 ;
 }
+#endif
 
 void saWiggleCumulate (const PP *pp, BB *bb)
 {
@@ -289,7 +275,7 @@ void saWiggleCumulate (const PP *pp, BB *bb)
 		{
 		  BigArray aaa = array (ppWiggles, 2 * bb->run * chromMax + iw, BigArray) ;
 		  if (! aaa)
-		    aaa = array (ppWiggles, 2 * bb->run * chromMax + iw, BigArray) = bigArrayHandleCreate (10000, WP, pp->h) ;
+		    aaa = array (ppWiggles, 2 * bb->run * chromMax + iw, BigArray) = bigArrayHandleCreate (10000, WSEG, pp->h) ;
 		  wiggleCumulate (aaa, aa) ;
 		}
 	    }
@@ -362,12 +348,12 @@ static inline int fast_itoa_nl(char *buf, int val)
 }
 
 
-static void wiggleExportOne (const PP *pp, int nw, int type, BigArray *aaap, AC_HANDLE hPair)
+static void wiggleExportOne (const PP *pp, int nw, int type, WIG *wigp, AC_HANDLE hPair)
 {
-  AC_HANDLE hs = 0 ;
+  AC_HANDLE hs = ac_new_handle () ;
   Array wiggles = 0 ;
   Array scratches = 0 ;
-  BigArray wig = 0 ;
+  BigArray wsegs = 0 ;
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   int run = nw / (2 * chromMax) ;
   int chrom = (nw % (2 * chromMax)) ;
@@ -376,19 +362,15 @@ static void wiggleExportOne (const PP *pp, int nw, int type, BigArray *aaap, AC_
   BOOL doFlip = (pp->antiStrand || (! pp->strand && nm > 3 && 100L * nm > 80L * (nm+np))) ;
   char flip = doFlip ? 0x1 : 0x0 ;  ;  
   char strand = ( nw & 0x1) ^ flip ? 'r' : 'f' ;
-  long int ii, iMax = 0 ;
-  long int cumul = 0, cumuls[8] = {0} ;
-  unsigned int pos0 ;
+  long int iMax = 0 ;
+  long int cumuls[8] = {0} ;
   BigArray geneC = 0 ;
   BigArray geneB = 0 ;
-  const int wiggle_step = pp->wiggle_step ;
-  const int demiStep = (wiggle_step - 1)/2 ;
   const char *typeNam ;
   char wigStrand = (strand == 'f' ? 0x0 : 0x1) ;
   BOOL wantPeaks = FALSE ;
   BOOL wantAutocorrel = FALSE ;
   
-  if (0 && chrom != 2) return ;
   switch (type)
     {
     case 0:
@@ -434,259 +416,60 @@ static void wiggleExportOne (const PP *pp, int nw, int type, BigArray *aaap, AC_
   if (pp->useScratch)
     {
       SCR scr = array (scratches, nw, SCR) ;
-      AC_HANDLE h2 = hPair ? hPair : (hs = ac_new_handle ()) ;
-      wig = scr ? scratchWhole (scr, 0, WP, h2) : 0 ;
+      wsegs = scr ? scratchWhole (scr, 0, WSEG, hs) : 0 ;
     }
   else
-    wig = array (wiggles, nw, BigArray) ;
-  iMax = wig ? bigArrayMax (wig) : 0 ;
+    wsegs = array (wiggles, nw, BigArray) ;
+  iMax = wsegs ? bigArrayMax (wsegs) : 0 ;
   if (! iMax)
-    goto done ;
-  
-  if (0)
-    bigArraySort (wig, wpOrder) ;
-  else
-    saSort (wig, 1) ;
-    
-  if (wig && iMax)
+    goto done ;   
+
+  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ; 
+  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
+
+  char *fNam = hprintf (hs, "%swiggles/%s.%s.%s", pp->outFileName, runNam, chromNam, typeNam) ;
+
+  /* create the wig at resolution 1, count the genes, compress, export */
+  WIG wig = 0 ;
+  if (hPair && wantAutocorrel)
     {
-      AC_HANDLE h = ac_new_handle () ;
-      WP *wp0, *wp = bigArrp (wig, iMax - 1, WP) ;
-      unsigned int posMax = wp->pos ;
-      Array aaa = arrayHandleCreate (posMax + 1000, unsigned int, h) ;
-      unsigned int *xp = arrayp (aaa, posMax, unsigned int) ;
-      Array aAZ= 0 ;
-      if (aaap) *aaap = wig ;
-
-      if (!pp->bigWig && pp->wigAZ && arrayMax(aaa))
-	aAZ = arrayHandleCreate (arrayMax (aaa)/wiggle_step + 1, unsigned int, h) ;
-      
-      wp = bigArrp (wig, 0, WP) ;
-      wp0 = bigArrp (wig, 0, WP) ;
-      pos0 = wp0->pos ; pos0 -= pos0 % wiggle_step ;
-      for (ii = 0 ; ii < iMax ; ii++, wp++)
-	{
-	  if (wp->weight)
-	    {
-	      xp = arrayp (aaa, (wp->pos + wp->ln - pos0), unsigned int) ;
-	      xp -= wp->ln ;
-	      posMax = wp->pos + wp->ln - 1 ;
-	      for (int i = 0 ; i < wp->ln ; i++)
-		xp[i] += wp->weight ;
-	    }
-	}
-      //  static int nnnn = 0 ;
-      wantPeaks = TRUE ;
-      if (1 && wantPeaks && arrayMax(aaa))
-	{
-	  AC_HANDLE h = ac_new_handle ();
-	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ; 
-	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
-	  ACEOUT ao = 0, aoLevels = 0 ;
-	  int minCover = 1 ;
-	  gzFile gzf = 0, gzf2 = 0 ;
-	  
-	  char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.peaks%s", pp->outFileName, runNam, chromNam, typeNam, ".gz") ;
-	  char *fNam2 = hprintf (h, "%s/wiggles/%s.%s.%s.peakCounts%s", pp->outFileName, runNam, chromNam, typeNam, ".gz") ;
-	  if (1)
-	    {
-	      Stack s = stackHandleCreate (0x1<<23, h) ;
-	      Stack s2 = stackHandleCreate (0x1<<23, h) ;
-	      ao = aceOutCreateToStack (s,h) ;
-	      aoLevels = aceOutCreateToStack (s2,h) ; 
-
-	      peaksCreateExport (ao, aoLevels, aaa, chromNam, pos0, 1, minCover, 720) ;
-
-	      char *cp = stackText (s, 0) ;
-	      int k = strlen (cp) ;
-	      gzf = gzopen (fNam, "wb") ;
-	      gzwrite (gzf, cp, k) ;
-	      if (gzclose(gzf) != Z_OK)
-		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
-
-	      gzf2 = gzopen (fNam2, "wb") ;
-	      cp = stackText (s2, 0) ;
-	      k = strlen (cp) ;
-	      gzwrite (gzf2, cp, k) ;
-	      if (gzclose(gzf2) != Z_OK)
-		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
-	    }
-	  else
-	    {
-	      ao = aceOutCreate (fNam, 0, pp->gzo, h) ;
-	      aoLevels = aceOutCreate (fNam2, 0, pp->gzo, h) ;
-	      peaksCreateExport (ao, aoLevels, aaa, chromNam, 0, 1, minCover, 720) ;
-	    }
-	  ac_free (h) ;
-	}
-
-      if (wantAutocorrel)
-	{
-
-
-	}
-      
-      if (arrayMax(aaa))
-	{
-#define BUFFER_SIZE (2 * 1024 * 1024)  // 2MB
-	  char *writeBuffer = malloc(BUFFER_SIZE) ;
-	  int bufPos = 0 ;
-	  int iAAZ = 0 ;
-	  const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
-	  const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
-	  ACEOUT ao = 0 ;
-	  Stack s = stackHandleCreate (1024, h) ;
-	  gzFile gzf = 0 ;
-	  if (! ao && pp->bigWig)
-	    {
-	      /* -clip avoids a crash if we go out of chromSizes */
-	      char *chromSizeNam = hprintf (h, "%s/targetSizes.txt", pp->indexName) ;
-	      char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.bw", pp->outFileName, runNam, chromNam, typeNam) ;
-	      char *cmd = hprintf (h, "wigToBigWig -clip stdin %s %s", chromSizeNam, fNam) ;
-	      ao = aceOutCreateToPipe (cmd, h) ; // the bw format allows direct access
-	    }
-	  if (! ao && pp->wigBF)
-	    {
-	      const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) + 2 ;
-	      const char *runNam = dictMax (pp->runDict) < run || ! run ? "runX" : dictName (pp->runDict, run) ;
-	      char *fNam = hprintf (h, "%s/wiggles/%s.%s.%s.BF%s", pp->outFileName, runNam, chromNam, typeNam, pp->gzo ? ".gz" : "") ;
-	      if (! pp->gzo)
-		ao = aceOutCreate (fNam, 0, 0, h) ;
-	      else  // compressing the BF files is extremelly good 100X
-		{
-		  ao = aceOutCreateToStack (s,h) ; 
-		  gzf = gzopen (fNam, "wb") ;
-		}
-	    }
-	  if (ao)
-	    {
-	      aceOutDate (ao, "##", "wiggle") ; 
-	      aceOutf (ao, "track type=wiggle_0\n") ;
-	      aceOutf (ao, "fixedStep chrom=%s start=%d step=%d span=%d\n", chromNam, pos0, wiggle_step, wiggle_step) ;
-	      if (gzf)
-		{
-		  char *cp = stackText (s, 0) ;
-		  int k = strlen (cp) ;
-		  gzwrite (gzf, cp, k) ;
-		}
-	    }
-
-      	  xp = arrayp (aaa, 0, unsigned int) ;
-	  for (int localCumul = 0, j = 0, jMax = arrayMax(aaa) ; j < jMax && pos0 + j < posMax + wiggle_step  ; j++)
-	    {
-	      unsigned int w = xp[j] ;
-	      cumul += w ;
-	      localCumul += w ;
-	      if ((j + demiStep) % wiggle_step == 0)
-		{
-		  if (ao)
-		    {
-		      char buf[32] ;
-		      int k = fast_itoa_nl(buf, (int)(0.49999 + localCumul / (720.0 * wiggle_step))) ;
-		      
-		      // Flush if buffer full
-		      if (bufPos + k + 1 >= BUFFER_SIZE)
-			{
-			  {
-			    if (gzf)
-			      gzwrite (gzf, writeBuffer, bufPos) ;
-			    else if (ao)
-			      aceOutBinary(ao, writeBuffer, bufPos) ;
-			  }
-			  bufPos = 0 ;
-			}
-		      // Copy to buffer
-		      memcpy(writeBuffer + bufPos, buf, k) ;
-		      bufPos += k ;
-		    }
-		  else if (aAZ)
-		    array (aAZ, iAAZ++, unsigned int) = localCumul / 720 ;
-		  
-		  localCumul = 0 ;
-		}
-	    }
-	  
-	  
-	  // Final flush
-	  if (bufPos > 0)
-	    {
-	      if (gzf)
-		gzwrite (gzf, writeBuffer, bufPos) ;
-	      else if (ao)
-		aceOutBinary(ao, writeBuffer, bufPos) ;
-	    }
-	  if (gzf)
-	    {
-	      if (gzclose(gzf) != Z_OK)
-		messcrash("gzclose failed");   /* important: the trailer/flush happens here */
-	    }
-	  if (aAZ)
-	    { 
-	      const char *chromNam = dictName (pp->bbG.dict, chrom >> 1) ;
-	      const char *runNam = dictName (pp->runDict, run) ;
-	      
-	      AC_HANDLE h1 = ac_new_handle () ;
-	      char *fNam = hprintf (h1, "%s/wiggles/%s.%s.%s.AZ", pp->outFileName, runNam, chromNam + 2, typeNam) ;
-	      int k = posMax % wiggle_step ; if (k) posMax += wiggle_step - k ;
-	      wigAzWrite (fNam, chromNam + 2, aAZ, 0, wiggle_step, pos0, posMax, pp->wigBMAX, h1) ;
-	      ac_free (h1) ;
-	    }
-	  free(writeBuffer) ;
-	}
-      if (!pp->bigWig && pp->wigAZ && arrayMax(aaa))
-      if (arrayMax(aaa) && geneB)
-	{
-	  long int ib, ibMax = bigArrayMax (geneB) ;
-	  int jMax = arrayMax (aaa) ;
-	  GBX *gb = bigArrayp (geneB, 0, GBX) ;
-      	  xp = arrayp (aaa, 0, unsigned int) ;
-	  
-	  /* the candidate gene segments that may cover position x are
-	   * not earlier than the first segment igOld  covering the previous position
-	   * not later than the fist gene ig1 starting after x
-	   */
-	  for (ib = 0, gb = bigArrp (geneB, ib, GBX) ; ib < ibMax ; ib++, gb++)
-	    {
-	      BOOL sameStrand = (gb->strand == wigStrand ? TRUE : FALSE) ;
-	      BOOL master = gb->flag & 0x10 ? TRUE : FALSE ;
-	      BOOL intronic = gb->flag & 0x1 ? TRUE : FALSE ;
-	      BOOL ambiguous = gb->flag & 0x8 ? TRUE : FALSE ;
-	      int friends = ambiguous && gb->friends > 0 ? gb->friends : 1 ;
-	      
-	      if (sameStrand)
-		{
-		  int j1 = gb->a1 - pos0 ;
-		  int j2 = gb->a2 - pos0 ;
-		  for (int j = (j1 > 0 ? j1 : 0) ; j <= j2 && j < jMax ; j++)
-		    {
-		      int weight = xp[j] ; 
-		      if (weight)
-			{
-			  if (gb->gene)
-			    {
-			      int gg = gb->gene ;
-			      if (! intronic)
-				bigArray (geneC, 2*gg, long int) += weight/friends ;
-			      bigArray (geneC, 2*gg + 1, long int) += weight/friends ;
-			    }
-			  if (master) cumuls[gb->flag & 0x7] += weight ;
-			}
-		    }
-		}
-	    }
-	}
-
-      ac_free (h) ;
+      wig = wigCreate (runNam, chromNam, 1, hPair) ;
+      *wigp = wig ;
     }
-  if (type == 0 || type == 4)
+  else
+    wig = wigCreate (runNam, chromNam, 1, hs) ;
+  wigFeed (wig, wsegs, 720) ;
+
+  if (wantPeaks && pp->peaks)
     {
-      arr (pp->wiggleCumuls, nw, long int) += cumul ;
+      wigFindPeaks (wig, pp->min_peak_coverage) ;
+      wigExportPeaks (wig, fNam, pp->gzo) ;
+    }
+
+  //   wigStrandShift (wigPlus, wigMinus) ;
+  if (geneB)
+    {
+      memset (cumuls, 0, sizeof (cumuls)) ;
+      wigCountGenes (wig, geneB, geneC, cumuls, wigStrand) ;
       arr (pp->cdss, nw, long int) += cumuls[4];
       arr (pp->utrs, nw, long int) += cumuls[2] ;
       arr (pp->intronics, nw, long int) += cumuls[1] ;
-      arr (pp->intergenics, nw, long int) += cumul - cumuls[1] - cumuls[2] - cumuls[4] ;
+      arr (pp->intergenics, nw, long int) += wig->nBp - cumuls[1] - cumuls[2] - cumuls[4] ;
     }
+  
+  arr (pp->wiggleCumuls, nw, long int) += wig->nBp ;
+  wigCompress (wig, pp->wiggle_step) ; /* set step, reset scale = 1*/
 
+  if (! pp->noWig)
+    {
+      if (pp->bigWig)
+	wigExportBigWig (wig, fNam, pp->indexName) ;
+      else if (pp->wigBF)
+	wigExportBF (wig, fNam, pp->gzo) ;
+      else if (pp->wigAZ)
+	wigExportAZ (wig, fNam) ;
+    }
+  
  done:
   ac_free (hs) ;
   return ;
@@ -698,20 +481,20 @@ static void wiggleExportPair (const PP *pp, int nw, int type)
 {
   if (type)
     {
-      wiggleExportOne (pp, nw    , 0, 0, 0) ;       /* f strand */
+      wiggleExportOne (pp, nw    , 0, 0, 0) ;   /* f strand */
       wiggleExportOne (pp, nw + 1, 0, 0, 0) ;   /* r strand */
     }
   else if (type == 0) /* unique forward or reverse */
     {         /* in this case only exportOne allocates aaa on hPair */
-      BigArray aaF = 0, aaR = 0 ;
+      WIG waF = 0, waR = 0 ;
       AC_HANDLE hPair = ac_new_handle () ;
 
-      wiggleExportOne (pp, nw, 0, &aaF, hPair) ;       /* f strand */
-      wiggleExportOne (pp, nw + 1, 0, &aaR, hPair) ;   /* r strand */
+      wiggleExportOne (pp, nw,     0, &waF, hPair) ;   /* f strand */
+      wiggleExportOne (pp, nw + 1, 0, &waR, hPair) ;   /* r strand */
 
       CST cst = pp->csts ? array (pp->csts, nw, CST) : 0 ;
-      if (cst && aaF && aaR && bigArrayMax (aaF) && bigArrayMax (aaR))
-	cisTransCumulate (cst, pp->wiggle_step, aaF, aaR) ;
+      if (cst && waF && waR)
+	cisTransFeed (cst, pp->wiggle_step, waF, waR) ;
       ac_free (hPair) ;
     } 
   return ;
@@ -1025,6 +808,8 @@ static void wiggleExportWiggleStats (PP *pp)
 	  const char *runNam = dictName (pp->runDict, run) ;
 
 	  RunSTAT *rc = arrayp (pp->runStats, run, RunSTAT) ;
+	  if (! rc->cst) rc->cst = cisTransCreate (5010, 0) ;
+	  if (cst && cst->nu) cisTransCumulate (rc->cst, cst) ;
 	  rc->wiggleCumul += cumul ;
 	  rc->cds += cds ;
 	  rc->utr += utr ;
@@ -1037,12 +822,6 @@ static void wiggleExportWiggleStats (PP *pp)
 		   , cumul / n720 
 		   , cds/n720, utr/n720, intronic / n720 , intergenic / n720 
 		   ) ;
-	  if (cst->nu)
-	    {
-	      cisTransNormalize (cst) ;
-	      rc->bestShift = cst->bestShift ;
-	      rc->bestUv = cst->bestUv ;
-	    }
 	}
     }
 
@@ -1079,6 +858,19 @@ static void wiggleExportWiggleStats (PP *pp)
 	       , rc->intronic
 	       , rc->intergenic
 	       ) ;
+
+      if (rc->cst)
+	{
+	  AC_HANDLE h3 = ac_new_handle () ;
+	  cisTransNormalize (rc->cst) ;
+	  char *fNam3 = hprintf (h3, "%s/%s.strand_shift", pp->outFileName, runNam) ;
+	  ACEOUT ao3 = aceOutCreate (fNam3, 0, FALSE, h3) ;
+	  cisTransExport (rc->cst, ao3) ;
+	  ac_free (h3) ;
+	  
+	  rc->bestShift = rc->cst->bestShift ;
+	  rc->bestUv = rc->cst->bestUv ;
+	}
     }
   
   ac_free (h) ;
@@ -1118,7 +910,7 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
 
   int k = 0, n = 0 ;
   for (k = 0 ; k < wMax ; k++)
-    array (pp->csts, k, CST) = cisTransCreate (500, 0) ;
+    array (pp->csts, k, CST) = cisTransCreate (5010, 0) ;
 
   if (pp->wiggles)
     {
@@ -1159,14 +951,12 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
   for (int nw = 0 ; nw < wMax ; nw += 2)
     {
       if (
-	  (pp->wiggles && arr (pp->wiggles, nw, Array)) ||
-	  (pp->scratches && arr (pp->scratches, nw, Array))
+	  (pp->wiggles && (arr (pp->wiggles, nw, Array) ||arr (pp->wiggles, nw+1, Array))) ||
+	  (pp->scratches && (arr (pp->scratches, nw, SCR) || arr (pp->scratches, nw+1, SCR)))
 	  )
 	{
 	  if (pp->geneCounts)
-	    {
-	      array (pp->geneCounts, nw, BigArray) = bigArrayHandleCreate (2048, long int, h) ;
-	    }
+	    array (pp->geneCounts, nw, BigArray) = bigArrayHandleCreate (2048, long int, h) ;
 	  channelPut (pp->wwChan, &nw, int) ;
 	}
     }

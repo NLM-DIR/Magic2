@@ -1,11 +1,18 @@
 #!/bin/csh -f
 cd /home/mieg/SERVER
-./servermonitor worm_1 stop
+./servermonitor 37a_1 stop
 ./servermonitor ara_1 stop
 ./servermonitor blast stop
-#./servermonitor gold stop
-./servermonitor worm_1 start 
-./servermonitor ara_1 start 
+./servermonitor gold_1 stop
+./servermonitor mm_37_1 stop
+./servermonitor rat_1 stop
+./servermonitor worm_1 stop
+
+./servermonitor 37a_1 start
+./servermonitor ara_1 start
 ./servermonitor blast start
-#./servermonitor gold start
+./servermonitor gold_1 start
+./servermonitor mm_37_1 start
+./servermonitor rat_1 start
+./servermonitor worm_1 start
 

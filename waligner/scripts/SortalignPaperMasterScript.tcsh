@@ -204,6 +204,10 @@ setenv SV     v122.81.18M.jul19     # errcost 4, no new index masking, no wig
 setenv SVlast v122.81.18M.jul19    # 
 setenv SV     v123.81.18M.aug25     # errcost 4, no new index masking, no wig
 setenv SVlast v123.81.18M.aug25    # 
+setenv SV     v124.81.18M.wig.oct3     # errcost 4, no new index masking, wig
+setenv SVlast v124.81.18M.wig.oct3    # 
+setenv SV     v125.81.18M.wig.oct15     # idem, added wigPeak and strand_shift, is it slower ?
+setenv SVlast v125.81.18M.wig.oct15    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -217,7 +221,7 @@ endif
 
 setenv NOINTRONSEEDS 0
 setenv EXPORTSAM 0
-setenv EXPORTWIGGLES 0
+setenv EXPORTWIGGLES 1
 setenv EXPORTWIGGLEENDS 0
 setenv SETERRCOST 4
 setenv seedLength 16

@@ -33,6 +33,7 @@ cat $ff | gawk -F '\t'  '/Intron_supports/{iTP=$12+$14;iFP=$16+$18;}/Supported_i
 
 cat $ff | gawk -F '\t'  '/CDS_utr_intronic_intergenic_Bases/{s=$4/1000000.0; printf("S_1_CDS %.2f \"Mb aligned\"\n",s);s=$6/1000000.0; printf("S_1_UTR %.2f \"Mb aligned\"\n",s);s=$8/1000000.0; printf("S_1_intronic %.2f \"Mb aligned\"\n",s);s=$10/1000000.0; printf("S_1_intergenic %.2f \"Mb aligned\"\n",s);}' >> $toto
 cat $ff | gawk -F '\t'  '/ATGCN/{k=1000;A=$4;T=$5;G=$6;C=$7;N=$8;Z=A+T+G+C+N;Z/=1000;printf("ATGC_kb %d %d %d %d %d %d %d %d %d %d\n", A/Z,T/Z,G/Z,C/Z,N/Z,A/k,T/k,G/k,C/k,N/k);}' >> $toto
+cat $ff | gawk -F '\t' '/Strand_shift/{ss=$4;uv=$5;printf("Strand_shift %d %s\n", ss, uv) ;}' >> $toto
 
 set gg=$dd/geneCounts.tsf
 

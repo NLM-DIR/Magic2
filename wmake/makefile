@@ -123,6 +123,9 @@ acenn:
 	echo "Making all NeuralNet applications in wnn"
 	cd wnn ; make  all
 
+magic:
+	echo "Making magic code"
+	cd wsa ; make  all
 
 #####################################################################
 #### binary directory bin.$(ACEDB_MACHINE)

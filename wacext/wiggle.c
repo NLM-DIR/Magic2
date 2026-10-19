@@ -9,6 +9,7 @@
 
 
 #include "wiggle.h"
+#include "wig.h"
 #include "peaks.h"
 static void usage (const char *error) ;
 
@@ -639,119 +640,10 @@ static void sxVentilate (WIGGLE *sx)
 
 /**************************************************************/
 
-
-static void wiggleCisTransShift (ACEOUT ao, ACEOUT ao2, const char *fNamf, const char *fNamr, int step, int dxmax, WIGGLE *sxf, WIGGLE *sxr)
-{
-  AC_HANDLE h = ac_new_handle () ;
-  Array aaf, aar ;
-  int i, ii, jj, k, iLimitMax = 0, iaaa ;
-  int dx ;
-  int *limitp, limits[] = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, -1} ; //, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 10000000, -1
-  long int cumul[100000], any[100], both[100], just[100] ;
-  CST cst = cisTransCreate (dxmax, h) ;
-
-  memset (cumul, 0, sizeof(cumul)) ;
-  memset (both, 0, sizeof(both)) ;
-  memset (just, 0, sizeof(just)) ;
-  memset (any, 0, sizeof(any)) ;
-  
-  for (iaaa = 2 ; iaaa < arrayMax (sxf->aaa) ; iaaa++)
-    {  /* iaaa is offset in dict where we pushed "toto", so 2 is first true value */
-      aaf = array (sxf->aaa, iaaa, Array) ; 
-      aar = array (sxr->aaa, iaaa, Array) ;
-
-      if (! arrayExists(aaf)) continue ;
-      if (! arrayExists(aar)) continue ;
-
-
-      ii = aaf ? arrayMax (aaf) : 0 ; 
-      jj = aar ? arrayMax (aar) : 0 ;
-      if (!ii || !jj) continue ;
-      cisTransCumulate (cst, step, aaf, aar) ;
-
-      int iMax = ii < jj ? ii : jj ;
-      WIGGLEPOINT *z1p = arrp(aaf, 0, WIGGLEPOINT) ;
-      WIGGLEPOINT *z2p = arrp(aar, 0, WIGGLEPOINT) ;
-
-      for (ii = 0 ; ii < iMax ; z1p++, z2p++, ii++) 
-	{
-	  int i ;
-	  double z = z1p->y + z2p->y ;
-	  for (i = 0, limitp = limits ; *limitp > -1 ; i++, limitp++)
-	    if (z >= *limitp)
-	      {
-		/* at various thresholds, compute the number of position at a given strand percentage */
-		int k = .49 + 100.0 * z1p->y/z ; 
-		cumul[k + 200 * i] += step ;
-		if (i > iLimitMax) iLimitMax = i ;
-		if (z > 10)
-		  {
-		    if (k >= 30 && k <= 70)
-		      both[i] +=  step ;
-		    if (k < 1 || k > 99)
-		      just[i] +=  step ;
-		    any[i] +=  step ;
-		  }		
-	      }
-	}
-    }
-  cisTransNormalize (cst) ;
-
-  if (ao)
-    {
-      aceOutf (ao, "### %s\n", timeShowNow()) ;
-      aceOutf (ao, "## Autocorrelation of the wiggle on the top strand, used as control\n") ;
-      aceOutf (ao, "## Trans correlation of the 2 strand showing the average lag of the minus strand wiggle\n") ;
-      aceOutf (ao, "## bestShift=%d\t%.2f\n", cst->bestShift, cst->bestUv) ;
-      aceOutf (ao, "## file_f = %s\n", fNamf) ;
-      aceOutf (ao, "## file_r = %s\n", fNamr) ;
-      aceOutf (ao, "# Distance\tCis autocorrelation\tTrans correlation\t\n") ;
-      
-      for (dx = 0 ; dx < dxmax ; dx++)
-	aceOutf (ao, "%d\t%g\t%g\n", step * dx, cst->uu[dx], cst->uv[dx]) ;
-      aceOutf (ao, "\n\n") ;
-    }
-
-  if (ao2)
-    {
-      aceOutf (ao2, "# %s\n", timeShowNow()) ;
-      aceOutf (ao2, "# Histogram above various thresholds of the percentage of coverage on the plus strand\n") ;
-      aceOutf (ao2, "# Percent +") ;
-      for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-	aceOutf (ao2, "\tthr %d", *limitp) ;
-      for (k = 0 ; k <= 100 ; k++)
-	{
-	  aceOutf (ao2, "\n%d", k) ;
-	  for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-	  aceOutf (ao2, "\t%ld", cumul[k + 200 * i]) ;
-      }
-    aceOutf (ao2, "\nTotal") ;
-    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-      aceOutf (ao2, "\t%ld", any[i]) ;
-    aceOutf (ao2, "\nOnly_read_on_one_strand") ;
-    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-      aceOutf (ao2, "\t%ld", just[i]) ;
-    aceOutf (ao2, "\nReliably_read_on_both_strands") ;
-    for (i = 0, limitp = limits ; *limitp > -1 && i <= iLimitMax ; i++, limitp++)
-      aceOutf (ao2, "\t%ld", both[i]) ;
-    /* 
-       any
-       Only read on single strand (0 or 100/any)
-       Reliably read on both strand (30% to 70% or at least 5 on each strand)
-    */
-    aceOutf (ao2, "\n\n") ;
-  }
-} /* wiggleCisTransShift */
-
-/************************************************************************************************************************/
-
 static void sxStrandShift (WIGGLE *sx)
 {
   AC_HANDLE h = ac_new_handle () ;
   WIGGLE sxf, sxr ; 
-  ACEOUT ao = 0, ao2 = 0 ;
-  int dxmax = 1+sx->strandShift_max/sx->out_step ;
-
 
   /* prepare 2 WIGGLE structures */
   memcpy (&sxf, sx, sizeof (WIGGLE)) ;
@@ -767,88 +659,48 @@ static void sxStrandShift (WIGGLE *sx)
   /* parse the 2 wiggles */
   if (sx->strandShift_f && sx->strandShift_r)
     {
-      if (1)
-	{
-	  AC_HANDLE h1 = ac_new_handle () ;
-	  char *cp = strnew (sx->strandShift_f, h1) ;
-	  while (cp)
-	    {
-	      AC_HANDLE h2 = ac_new_handle () ;
-	      char *cq = strchr (cp, ',') ;
-	      if (cq) *cq = 0 ;
-	      sxf.ai = aceInCreate (cp, sx->gzi, h2) ;
-	      if (! sxf.ai) messcrash ("Cannot file open %s, sorry", cp) ;
-	      sxWiggleParse (&sxf, 0, 0) ;
-	      cp = cq ? cq+1 : 0 ;
-	      ac_free (h2) ;
-	    }
-	  ac_free (h1) ;
-	}
-      if (1)
-	{
-	  AC_HANDLE h1 = ac_new_handle () ;
-	  char *cp = strnew (sx->strandShift_r, h1) ;
-	  while (cp)
-	    {
-	      AC_HANDLE h2 = ac_new_handle () ;
-	      char *cq = strchr (cp, ',') ;
-	      if (cq) *cq = 0 ;
-	      sxr.ai = aceInCreate (cp, sx->gzi, h2) ;
-	      if (! sxr.ai) messcrash ("Cannot file open %s, sorry", cp) ;
-	      sxWiggleParse (&sxr, 0, 0) ;
-	      cp = cq ? cq+1 : 0 ;
-	      ac_free (h2) ;
-	    }
-	  ac_free (h1) ;
-	}
+      WIG wigF = wigCreate (0, 0, 10, h) ;
+      WIG wigR = wigCreate (0, 0, 10, h) ;
+      wigParseAZ (wigF, sx->strandShift_f, 0) ;
+      wigParseAZ (wigR, sx->strandShift_r, 0) ;
+
+      CST cst = cisTransCreate (5010, h) ;
+      cisTransFeed (cst, wigF->step, wigF, wigR) ;
+      cisTransNormalize (cst) ;
+      ACEOUT ao = aceOutCreate (sx->outFileName, ".strand_shift", FALSE, h) ;
+      cisTransExport (cst, ao) ;
     }
   else if (sx->strandShift_F && sx->strandShift_R)
     {
-      if (1)
+      AC_HANDLE h1 = ac_new_handle () ;
+      ACEIN aiF = aceInCreate (sx->strandShift_F, 0, h1) ;
+      ACEIN aiR = aceInCreate (sx->strandShift_R, 0, h1) ;
+      CST cst = cisTransCreate (5010, h1) ;
+      while (aceInCard (aiF) && aceInCard(aiR))
 	{
-	  AC_HANDLE h1 = ac_new_handle () ;
-	  ACEIN ai = aceInCreate (sx->strandShift_F, 0, h1) ;
-	  if (ai)
-	    while (aceInCard (ai))
-	      {
-		char *cp = aceInWord (ai) ;
-		if (! cp || *cp == '#') continue ;
-		AC_HANDLE h2 = ac_new_handle () ;
-		sxf.ai = aceInCreate (cp, sx->gzi, h2) ;
-		if (! sxf.ai) messcrash ("Cannot file open %s, sorry", cp) ;
-		sxWiggleParse (&sxf, 0, 0) ;
-		ac_free (h2) ;
-	      }
-	  ac_free (h1) ;
+	  AC_HANDLE h2 = ac_new_handle () ;
+	  char *cpF = aceInWord (aiF) ;
+	  char *cpR = aceInWord (aiR) ;
+
+	  if (cpF && cpR)
+	    {
+	      WIG wigF = wigCreate (0, 0, 10, h2) ;
+	      WIG wigR = wigCreate (0, 0, 10, h2) ;
+	      if (wigF && wigR)
+		{
+		  wigParseAZ (wigF, cpF, 0) ;
+		  wigParseAZ (wigR, cpR, 0) ;
+		  cisTransFeed (cst, wigF->step, wigF, wigR) ;
+		}
+	    }
+	  ac_free (h2) ;
 	}
+      cisTransNormalize (cst) ;
+      ACEOUT ao = aceOutCreate (sx->outFileName, ".strand_shift", FALSE, h1) ;
+      cisTransExport (cst, ao) ;
+      ac_free (h1) ;
+    }
   
-      if (1)
-	{
-	  AC_HANDLE h1 = ac_new_handle () ;
-	  ACEIN ai = aceInCreate (sx->strandShift_R, 0, h1) ;
-	  if (ai)
-	    while (aceInCard (ai))
-	      {
-		char *cp = aceInWord (ai) ;
-		if (! cp || *cp == '#') continue ;
-		AC_HANDLE h2 = ac_new_handle () ;
-		sxr.ai = aceInCreate (cp, sx->gzi, h2) ;
-		if (! sxr.ai) messcrash ("Cannot file open %s, sorry", cp) ;
-		sxWiggleParse (&sxr, 0, 0) ;
-		ac_free (h2) ;
-	      }
-	  ac_free (h1) ;
-	}
-    }  
-  /* compare */
-  ao = aceOutCreate (sx->outFileName, ".strand_shift.txt", sx->gzo, h) ;
-  ao2 = aceOutCreate (sx->outFileName, ".strand_coverage_per_threshold.txt", sx->gzo, h) ;
-
-  const char *fNamf = sx->strandShift_f ? sx->strandShift_f : sx->strandShift_F ;
-  const char *fNamr = sx->strandShift_r ? sx->strandShift_r : sx->strandShift_R ;
-    
-  wiggleCisTransShift (ao, ao2, fNamf, fNamr, sx->out_step, dxmax, &sxf, &sxr) ;
-
   ac_free (h) ;
   return ;
 } /* sxStrandShift */

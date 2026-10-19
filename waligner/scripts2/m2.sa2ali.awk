@@ -164,6 +164,11 @@ BEGIN {
 	A = $4 ; T = $5 ; G = $6 ; C = $7 ; N= $8 ; t = A + T + G + C + N ;
 	if (t > 0) printf ("ATGC_kb %d %d %d %d %d    %d %d %d %d %d\n", 1000*A/t, 1000*T/t, 1000*G/t, 1000*C/t, 1000*N/t,A/1000, T/1000, G/1000, C/1000, N/1000) ;
     }
+    if (tag == "Strand_shift")
+    {
+	sShift = $4 + 0 ; uv = $5 ;
+	if (sShift > 0) printf ("Strand_shift %d %s\n", sShift, uv) ;
+    }
     if (tag == "Length_distribution_1_5_50_95_99_mode_av")
     {
 	printf ("%s %s %s %s %s %s %s %s \n", tag, $4,$5,$6,$7,$8,$9,$10) ;

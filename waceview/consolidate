@@ -59,7 +59,7 @@ end
 
 wc  LOGS.201*
 
-# \rm uu* vv*
+\rm uu* vv*
 
 
 exit 0

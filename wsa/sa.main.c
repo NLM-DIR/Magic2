@@ -2020,6 +2020,7 @@ int main (int argc, const char *argv[])
   p.align = getCmdLineBool (&argc, argv, "--align") ;          /* left for back compatibility, over-ridden by --do_not_align */
   p.align = ! getCmdLineBool (&argc, argv, "--do_not_align") ; /* default is to align */
   p.ignoreIntronSeeds = getCmdLineBool (&argc, argv, "--ignoreIntronSeeds") ;
+
   p.useScratch = getCmdLineBool (&argc, argv, "--useScratch") ;
   p.useScratch = TRUE ;
 
@@ -2048,7 +2049,8 @@ int main (int argc, const char *argv[])
     p.sam = p.bam = p.hitsFormat = p.exportSamQuality = p.exportSamSequence = p.tabular = p.introns = FALSE ;
   if (getCmdLineBool (&argc, argv, "--introns"))
     p.introns = TRUE ;  /* stay on previous value is not set */
-  
+  if (getCmdLineBool (&argc, argv, "--no_wiggle"))
+    p.noWig = TRUE ;  /* create the wiggle is needed, but do not export them */
   p.sraCaching = getCmdLineBool (&argc, argv, "--sraCaching");   /* cache the files downlaoded from NCBI/SRA */
   if (p.sraCaching)
     {
@@ -2060,14 +2062,31 @@ int main (int argc, const char *argv[])
 
 
   /* action options ***/
+  p.peaks = getCmdLineBool (&argc, argv, "--peaks") ;
   p.wiggle = getCmdLineBool (&argc, argv, "--wiggles") ;
   p.wiggleEnds = getCmdLineBool (&argc, argv, "--wiggleEnds") ;
   p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
   getCmdLineInt (&argc, argv, "--wiggle_step", &(p.wiggle_step)) ;
-  p.wigBMAX = 18 ;
-  getCmdLineInt (&argc, argv, "--wigBMAX", &(p.wigBMAX)) ;  /* technical tuning affects the speed of the graphic interface */
-  if (p.wiggle && ! p.bigWig && ! p.wigAZ) p.wigBF = TRUE ;
-  
+  getCmdLineInt (&argc, argv, "--min_peak_coverage", &(p.min_peak_coverage)) ;
+  if (p.wiggle)
+    {
+      if (p.bigWig)
+	{
+	  if (! isExecutableInPath ("wigToBigWig"))   /* see w1/utils.c */
+	    {
+	      fprintf (stderr, "FATAL ERROR: --bigWig needs wigToBigWig.\n"
+		       "Please install this code (from UCSC) on your path"
+		       "or remove the the option --bigWig"
+		       "The coverage plots will then be exported in the older UCSC BF format, which is recognized by wigToBigWig"
+		       ) ;
+	      exit (1) ;
+	    }
+	}
+      else if (! p.wigAZ)
+	p.wigBF = TRUE ;
+      else
+	p.wigBF = FALSE ;
+    }
   p.snps = getCmdLineBool (&argc, argv, "--snp") ;
   p.blink = getCmdLineBool (&argc, argv, "--blink") ;
   p.blinkLn = 8 ;
@@ -2452,7 +2471,7 @@ int main (int argc, const char *argv[])
   p.scratchesNU = 0 ;
   if (p.wiggle)
     {
-      if (p.useScratch)
+      if (p.useScratch) 
 	{
 	  p.scratches = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
 	  array (p.scratches, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
@@ -2547,7 +2566,9 @@ int main (int argc, const char *argv[])
 
       if (laneToDo == laneDone)
 	{
-	  fprintf (stderr, "run %s done\n", dictName (p.runDict, bb.run)) ;
+	  char tBuf[25] ;
+	  fprintf (stderr, "=== %s: run %s done\n",
+		   timeBufShowNow (tBuf), dictName (p.runDict, bb.run)) ;
 	}
 
       /* release block  memory */
