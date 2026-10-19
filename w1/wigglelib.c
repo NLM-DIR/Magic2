@@ -811,6 +811,7 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
       int ii, jj, jMax, *ip = arrayp (cc, iMax + 12, int) ;
 
       ip = arrayp (cc, 0, int) ;
+      ii = 0 ;
       if (0)
 	for (ii = 0 ; ii < iMax ; wp++, ii++)
 	  if (wp->y > 0) break ;
@@ -1089,7 +1090,7 @@ static void sxWiggleExportTranscriptsEnds (WIGGLE *sx, Array aa0, Array bb, int 
   int ii, jj, nn ;
   Array aa = bb ? bb : aa0 ;
   int iiMax = aa ? arrayMax (aa) : 0 ;
-  int x, y ;
+  int x = 0, y = 0 ;
   int minCover = sx->minCover ;
   int step = (sx->out_step  ? sx->out_step : 1) ;
   int level, imm = 0 ;
