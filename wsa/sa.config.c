@@ -157,7 +157,7 @@ BOOL saSanitizeRunName (const char *nam)
  * identify their absolute file names
  * associate each file to a run name and to its optional parameters
  */
-Array saConfigGetRuns (PP *pp, Array runStats)
+Array saConfigGetRuns (PP *pp, Array runStats, int *nRunsToDop) 
 {
   Array rcs = arrayHandleCreate (64, RC, pp->h) ;
   RC *rc = 0 ;
@@ -214,17 +214,10 @@ Array saConfigGetRuns (PP *pp, Array runStats)
       char *filName2 = 0 ;
       if (! pp->runName)
 	pp->runName = "runX" ;
-      dictAdd (pp->runDict, pp->runName, &run) ;
+      *nRunsToDop += dictAdd (pp->runDict, pp->runName, &run) ;
       cp = buf ; *(cp + strlen (cp)) = ',' ;
       while ((cq = strchr (cp, ',')))
 	{
-	  cs = strchr (cp, ':') ;
-	  if (cs)
-	    { /* switch runName */
-	      *cs = 0 ;
-	      dictAdd (pp->runDict, cp, &run) ;
-	      cp = cs + 1 ;
-	    }
 	  *cq = 0 ;
 	  if (! *cp)
 	    continue ;
@@ -355,7 +348,7 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 	  aceInStep (ai, '\t') ;
 	  cp = aceInWord (ai) ;
 	  if (cp && *cp && *cp != '#')
-	    dictAdd (pp->runDict, cp, &run) ;
+	    *nRunsToDop += dictAdd (pp->runDict, cp, &run) ;
 	  else
 	    {
 	      const char *cr = rc->fileName1 - 1 ;
@@ -374,9 +367,9 @@ Array saConfigGetRuns (PP *pp, Array runStats)
 		    ok = FALSE ;
 		}
 	      if (ok)
-		dictAdd (pp->runDict, rc->fileName1, &run) ;
+		*nRunsToDop += dictAdd (pp->runDict, rc->fileName1, &run) ;
 	      else
-		dictAdd (pp->runDict, hprintf (h, "r.%d", nRuns), &run) ;
+		*nRunsToDop += dictAdd (pp->runDict, hprintf (h, "r.%d", nRuns), &run) ;
 	    }
 	  rc->run = run ;
 	  if (! saSanitizeRunName (dictName (pp->runDict, run)))

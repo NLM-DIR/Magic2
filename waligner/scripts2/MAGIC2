@@ -9956,7 +9956,7 @@ echo >> $toto
 #### compute the fr non stranded peaks of each run by combining the shifted f and r stranded wiggles
 #### For the groups: do not shift: the group f and r are already cosntructed form the shifted runspeakMinCover
  phasePeaks:
-set minPeakCover=5
+set minPeakCover=4
 set Peaks=Peaks.$minPeakCover
 
 if (! -d tmp/$Peaks) mkdir tmp/$Peaks
@@ -9971,129 +9971,9 @@ end
 qusage 1
 
 ###############
-# Count per u/nu f/r types
-
-set toto=tmp/$Peaks/$MAGIC.peakCount.min$minPeakCover.txt
-echo -n "# $toto :" > $toto
-echo '#' > $toto.tsf
-date >> $toto
-echo '#' > $toto.1.tsf
-echo '#' > $toto.2.tsf
-echo "## Per run, what is the most frequent width of the peaks" >> $toto
-echo "## Width is the most frequently observed peak-width" >> $toto
-echo "## N is the number of peaks with this width"
-echo "## Total is the total number of peaks seen in this run" >> $toto
-echo '#Run\tWidth\tN\tTotal' > $toto.tsf
-foreach uu (u )
-  foreach fr (nsShifted)
-    foreach run (`cat MetaDB/$MAGIC/RunsList`)
-      if (-d tmp/$Peaks/$run) then
-        cat tmp/$Peaks/$run/$run.*.$uu.$fr.peaks | gawk -F '\t' '/^## Median/{nnn++; ; m+=$2;t+=$4; nn+=$6;}END{if(nnn==0)nnn=1;printf("%s\tMedian\tf\t%.1f\n",run,m/nnn);printf("%s\tThreshold\tf\t%.1f\n",run,t/nnn);printf("%s\tPeaks\ti\t%d\n",run,nn);}' run=$run uu=$uu fr=$fr >> $toto.1.tsf
-      endif
-    end
-    foreach run (`cat MetaDB/$MAGIC/GroupWiggleList`)
-      if (-d tmp/$Peaks/$run) then
-        cat tmp/$Peaks/$run/$run.*.$uu.$fr.peaks | gawk -F '\t' '/^## Median/{nnn++; ; m+=$2;t+=$4; nn+=$6;}END{if(nnn==0)nnn=1;printf("%s\tMedian\tf\t%.1f\n",run,m/nnn);printf("%s\tThreshold\tf\t%.1f\n",run,t/nnn);printf("%s\tPeaks\ti\t%d\n",run,nn);}' run=$run uu=$uu fr=$fr >> $toto.2.tsf
-      endif
-    end
-  end
-end
-bin/tsf -i $toto.1.tsf -O table -o $toto.1
-bin/tsf -i $toto.2.tsf -O table -o $toto.2
-cat $toto.1.txt >> $toto
-cat $toto.2.txt | gawk '/^#/{next;}{print}' >> $toto
-\cp $toto RESULTS
-
-###############
-
-set toto=tmp/$Peaks/$MAGIC.peak_width.min$minPeakCover.histo.txt
-echo -n "### $toto : " > $toto
-date >> $toto
-echo '#' > $toto.1.tsf
-echo '#' > $toto.2.tsf
-echo "## Per run, what is the most frequent width of the peaks" >> $toto
-echo "## Width is the most frequently observed peak-width" >> $toto
-echo "## N is the number of peaks with this width"
-echo "## Total is the total number of peaks seen in this run" >> $toto
-echo '#Run\tWidth\tN\tTotal' >> $toto
-foreach run (`cat MetaDB/$MAGIC/RunsList`)
-    echo $run
-    cat tmp/$Peaks/$run/$run.*.u.nsShifted.peaks | gawk -F '\t' '/^#/{next;}{x=$4;if(x>500)x=500;nn[x/10]++;}END{for(i=0;i<=50 ;i++)printf("%d\t%s\ti\t%d\n",10*i,run,nn[i]);}' run=$run >> $toto.1.tsf
-end
-foreach run (`cat MetaDB/$MAGIC/GroupWiggleList`)
-    echo $run
-    cat tmp/$Peaks/$run/$run.*.u.nsShifted.peaks | gawk -F '\t' '/^#/{next;}{x=$4;if(x>500)x=500;nn[x/10]++;}END{for(i=0;i<=50 ;i++)printf("%d\t%s\ti\t%d\n",10*i,run,nn[i]);}' run=$run >> $toto.2.tsf
-end
-bin/tsf -i $toto.1.tsf -O table -o $toto.1
-bin/tsf -i $toto.2.tsf -O table -o $toto.2
-cat $toto.1.txt | gawk '/^#/{next;}{print}' >> $toto
-cat $toto.2.txt | gawk '/^#/{next;}{print}' >> $toto
-\cp $toto RESULTS
-
-###############
-
-set toto=tmp/$Peaks/$MAGIC.peak_width.min$minPeakCover.histo
-echo -n "### $toto.max : " > $toto.max.txt
-date >> $toto.max.txt
-echo "## Per run, what is the most frequent width of the peaks" >> $toto.max.txt
-echo "## Width is the most frequently observed peak-width" >> $toto.max.txt
-echo "## N is the number of peaks with this width" >> $toto.max.txt
-echo "## Total is the total number of peaks seen in this run" >> $toto.max.txt
-echo "# Run\tWidth\tN\tTotal" >> $toto.max.txt
- cat $toto.1.tsf | gawk -F '\t' '/^#/{next;}{r=$2;w=$1;n=$4;if(w<1000 && n>nr[r]){nr[r]=n;ww[r]=w;}nnn[r]+=n;}END{for (r in nr)printf("%s\t%d\t%d\t%d\n",r,ww[r],nr[r],nnn[r]);}' | sort -V >> $toto.max.txt
- cat $toto.2.tsf | gawk -F '\t' '/^#/{next;}{r=$2;w=$1;n=$4;if(w<1000 && n>nr[r]){nr[r]=n;ww[r]=w;}nnn[r]+=n;}END{for (r in nr)printf("%s\t%d\t%d\t%d\n",r,ww[r],nr[r],nnn[r]);}' | sort -V >> $toto.max.txt
-\cp $toto.max.txt RESULTS
-
-###############
-
-set toto=tmp/$Peaks/$MAGIC.peak_area.min$minPeakCover.histo.txt
-echo -n "### $toto : " > $toto
-date >> $toto
-echo "## With one run per column, how many peaks in this run have a given area" > $toto
-echo "## The area of a peak is the raw number of bases aligned inside the width of the peak" >> $toto
-echo '#' > $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V `)
-   cat  tmp/$Peaks/$run/$run.*.u.nsShifted.peaks | gawk -F '\t' '/^#/{next;}{x= int(1000*$7) ;if(x>50000)x=50000;x=int(x/100);nn[x]++;}END{for(i=0;i<=500;i++)printf("%d\t%s\ti\t%d\n",100*i,run,nn[i]);}' run=$run >> $toto.tsf
-end
- bin/tsf -i $toto.tsf -O table -o $toto.1
- cat $toto.1.txt | gawk '/^###/{next;}{print}' >> $toto
-\cp $toto RESULTS
-
-
-###############
-
-set toto=tmp/$Peaks/$MAGIC.peak_area.min$minPeakCover.histo
-echo -n "### $toto.max : " > $toto.max.txt
-date >> $toto.max.txt
-echo "## Per run, what is the most frequent area of the peaks" >> $toto.max.txt
-echo "## The area of a peak is the raw number of bases aligned inside the width of the peak" >> $toto
-echo "## Area is the most frequently observed peak-area " >> $toto.max.txt
-echo "## N is the number of peaks with this area" >> $toto.max.txt
-echo "## Total is the total number of peaks seen in this run" >> $toto.max.txt
-echo "# Run\tArea\tN\tTotal" >> $toto.max.txt
- cat $toto.txt.tsf | gawk -F '\t' '/^#/{next;}{r=$2;w=$1;n=$4;if(n>nr[r]){nr[r]=n;ww[r]=w;}nnn[r]+=n;}END{for (r in nr)printf("%s\t%d\t%d\t%d\n",r,ww[r],nr[r],nnn[r]);}' | sort -V >> $toto.max.txt
-\cp $toto.max.txt RESULTS
-
-###############
-
-set toto=tmp/$Peaks/$MAGIC.peak_area.min$minPeakCover.log.histo.txt
-echo -n "### $toto : " > $toto
-date >> $toto
-echo "## With one run per column, how many peaks in this run have a given area" > $toto
-echo "## The area of a peak is the raw number of bases aligned inside the width of the peak" >> $toto
-echo "## But in this log plot, the vertical scale is only qualitative, the numbers nean nothing" >> $toto
-echo '#' > $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V `)
-   cat tmp/$Peaks/$run/$run.*.u.fr.peaks | gawk -F '\t' '/^#/{next;}{x= int(10000*$7) ;if(x>500000)x=500000;x=100*log(x+1)/log(2);x=int(x/10);nn[x]++;}END{for(i=100;i<=200;i++)printf("%d\t%s\ti\t%d\n",100*i,run,nn[i]);}' run=$run >> $toto.tsf
-end
- bin/tsf -i $toto.tsf -O table -o $toto.1
- cat $toto.1.txt | gawk '/^###/{next;}{print}' >> $toto
-# \cp $toto RESULTS
-
-###############
-# intersect
+# intersect and associated histograms
 bin/peaks --db MetaDB --intersects -p $MAGIC -o tmp/$Peaks/$MAGIC.min$minPeakCover --min_peak_cover $minPeakCover
-\cp tmp/$Peaks/$MAGIC.min$minPeakCover.peakIntersects.txt RESULTS
+\cp tmp/$Peaks/$MAGIC.min$minPeakCover.*  RESULTS
 
 goto phaseLoop
 

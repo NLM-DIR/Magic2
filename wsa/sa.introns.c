@@ -223,15 +223,15 @@ static int doubleIntronsCompress (Array aaa)
 
 /**************************************************************/
 
-void saPolyAsCumulate (PP *pp, BB *bb) 
+void saPolyAsCumulate (RunSTAT *rc, BB *bb) 
 {
-  Array aaa = pp->confirmedPolyAs, aa = bb->confirmedPolyAs ;
+  Array aaa = rc->confirmedPolyAs, aa = bb->confirmedPolyAs ;
   int iMax = aa ? arrayMax (aa) : 0 ;
 
   if (iMax)
     {
       if (! aaa)
-	aaa = pp->confirmedPolyAs = arrayHandleCopy (bb->confirmedPolyAs, pp->h) ;
+	aaa = rc->confirmedPolyAs = arrayHandleCopy (bb->confirmedPolyAs, rc->h) ;
       else
 	{
 	  int jj = arrayMax (aaa)  ;
@@ -245,15 +245,15 @@ void saPolyAsCumulate (PP *pp, BB *bb)
 
 /**************************************************************/
 
-void saSLsCumulate (PP *pp, BB *bb) 
+void saSLsCumulate (RunSTAT *rc, BB *bb) 
 {
-  Array aaa = pp->confirmedSLs, aa = bb->confirmedSLs ;
+  Array aaa = rc->confirmedSLs, aa = bb->confirmedSLs ;
   int iMax = aa ? arrayMax (aa) : 0 ;
 
   if (iMax)
     {
       if (! aaa)
-	aaa = pp->confirmedSLs = arrayHandleCopy (bb->confirmedSLs, pp->h) ;
+	aaa = rc->confirmedSLs = arrayHandleCopy (bb->confirmedSLs, rc->h) ;
       else
 	{
 	  int jj = arrayMax (aaa)  ;
@@ -267,16 +267,21 @@ void saSLsCumulate (PP *pp, BB *bb)
 
 /**************************************************************/
 
-void saIntronsCumulate (PP *pp, BB *bb) 
+void saIntronsCumulate (RunSTAT *rc, BB *bb) 
 {
-  Array aaa = pp->confirmedIntrons, aa = bb->confirmedIntrons ;
+  Array aaa = rc->confirmedIntrons, aa = bb->confirmedIntrons ;
   int iMax = arrayMax (aa) ;
   
   if (iMax)
     {
-      int jj = arrayMax (aaa) ;
-      arrayp (aaa, jj + iMax - 1, INTRON)->n = 0 ; /*  make room */
-      memcpy (arrp (aaa, jj, INTRON), arrp (aa, 0, INTRON), iMax * sizeof (INTRON)) ;
+      if (! aaa)
+	aaa = rc->confirmedIntrons = arrayHandleCopy (aa, rc->h) ;
+      else
+	{
+	  int jj = arrayMax (aaa) ;
+	  arrayp (aaa, jj + iMax - 1, INTRON)->n = 0 ; /*  make room */
+	  memcpy (arrp (aaa, jj, INTRON), arrp (aa, 0, INTRON), iMax * sizeof (INTRON)) ;
+	}
       confirmedIntronsCompress (aaa) ;
     }
   return ;
@@ -284,16 +289,21 @@ void saIntronsCumulate (PP *pp, BB *bb)
 
 /**************************************************************/
 
-void saDoubleIntronsCumulate (PP *pp, BB *bb) 
+void saDoubleIntronsCumulate (RunSTAT *rc, BB *bb) 
 {
-  Array aaa = pp->doubleIntrons, aa = bb->doubleIntrons ;
+  Array aaa = rc->doubleIntrons, aa = bb->doubleIntrons ;
   int iMax = arrayMax (aa) ;
   
   if (iMax)
     {
-      int jj = arrayMax (aaa) ;
-      arrayp (aaa, jj + iMax - 1, DOUBLEINTRON)->n = 0 ; /*  make room */
-      memcpy (arrp (aaa, jj, DOUBLEINTRON), arrp (aa, 0, DOUBLEINTRON), iMax * sizeof (DOUBLEINTRON)) ;
+      if (! aaa)
+	aaa = rc->doubleIntrons = arrayHandleCopy (aa, rc->h) ;
+      else
+	{
+	  int jj = arrayMax (aaa) ;
+	  arrayp (aaa, jj + iMax - 1, DOUBLEINTRON)->n = 0 ; /*  make room */
+	  memcpy (arrp (aaa, jj, DOUBLEINTRON), arrp (aa, 0, DOUBLEINTRON), iMax * sizeof (DOUBLEINTRON)) ;
+	}
       doubleIntronsCompress (aaa) ;
     }
   return ;
@@ -734,14 +744,22 @@ void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dna, Array dnaG)
 /**************************************************************/
 /**************************************************************/
 
-void saPolyAsExport (PP *pp, Array aaa)
+void saPolyAsExport (PP *pp, int run)
 {
+  RunSTAT *rc = arrp (pp->runStats, run, RunSTAT) ;
+  
+  Array aaa = rc->confirmedPolyAs ;
   int iMax = aaa ? confirmedPolyAsCompress (aaa) : 0 ;
   
   if (iMax)
     {
+      const char *rNam = dictName (pp->runDict, run) ;
       AC_HANDLE h = ac_new_handle () ;
-      ACEOUT ao = aceOutCreate (pp->outFileName, ".polyA.tsf", 0, h) ;
+      char *fNam = hprintf (h, "%s%s.polyA.tsf"
+			    , pp->outFileName
+			    , rNam
+			    ) ;
+      ACEOUT ao = aceOutCreate (fNam, 0, 0,  h) ;
       POLYA *up ;
       long int ii ;
       
@@ -770,14 +788,22 @@ void saPolyAsExport (PP *pp, Array aaa)
 /**************************************************************/
 /**************************************************************/
 
-void saSLsExport (PP *pp, Array aaa)
+void saSLsExport (PP *pp, int run)
 {
+  RunSTAT *rc = arrp (pp->runStats, run, RunSTAT) ;
+  
+  Array aaa = rc->confirmedSLs ;
   int iMax = aaa ? confirmedSLsCompress (aaa) : 0 ;
   
   if (iMax)
     {
+      const char *rNam = dictName (pp->runDict, run) ;
       AC_HANDLE h = ac_new_handle () ;
-      ACEOUT ao = aceOutCreate (pp->outFileName, ".SL.tsf", 0, h) ;
+      char *fNam = hprintf (h, "%s%s.SLs.tsf"
+			    , pp->outFileName
+			    , rNam
+			    ) ;
+      ACEOUT ao = aceOutCreate (fNam, 0, 0,  h) ;
       SLS *up ;
       long int ii ;
       
@@ -819,18 +845,17 @@ static char *flipFeet (char *feet)
   
 /**************************************************************/
 
-static void saIntronStranding (PP *pp, Array aa)
+static void saIntronStranding (PP *pp, int run, Array aa)
 {
   INTRON *zp ;
-  int runMax = dictMax (pp->runDict) + 1 ;
   float minS = 100 ;
-  int run, ii, iMax = arrayMax (aa) ;
+  int ii, iMax = arrayMax (aa) ;
   float *s0 = pp->runStranding ;
   long int np0 = 0, nm0 = 0 ;
   if (! iMax)
     return ;
 
-  for (run = 1 ; run < runMax ; run++)
+  if (run)
     {
       int np = array(pp->runStats, run, RunSTAT).gt_ag_Support ;
       int nm = array(pp->runStats, run, RunSTAT).ct_ac_Support ;
@@ -843,11 +868,13 @@ static void saIntronStranding (PP *pp, Array aa)
       array(pp->runStats, run, RunSTAT).intronStranding = s0[run] ;
       if (s0[run] < minS) minS = s0[run] ;
     }
+  /*
   s0[0] = 100.0 * (np0 + 0.01) / (np0 + nm0 + 0.0000001) ;
   if (pp->strand)
     s0[0] = 100 ;
   else if (pp->antiStrand)
     s0[0] = 0 ;
+  */
   
   for (ii = 0, zp = arrp (aa, ii, INTRON) ; ii < iMax ; ii++, zp++)
     {
@@ -862,24 +889,31 @@ static void saIntronStranding (PP *pp, Array aa)
 
 /**************************************************************/
 
-void saIntronsExport (PP *pp)
+void saIntronsExport (PP *pp, int run)
 {
+  RunSTAT *rc = arrp (pp->runStats, run, RunSTAT) ;
+	      
   float *s0 = pp->runStranding ;
-  Array aaa = pp->confirmedIntrons ;
+  Array aaa = rc->confirmedIntrons ;
   int iMax ;
   showIntrons (0) ; /* for compiler happiness */
 
   if (! aaa) return ;
 
   /* flip n/nR is antistrand on a per run basis */
-  saIntronStranding (pp, pp->confirmedIntrons) ;
+  saIntronStranding (pp, run, rc->confirmedIntrons) ;
   /* cumulate all runs */
   iMax = confirmedIntronsCompress (aaa) ;
   
   if (iMax)
     {
+      const char *rNam = dictName (pp->runDict, run) ;
       AC_HANDLE h = ac_new_handle () ;
-      ACEOUT ao = aceOutCreate (pp->outFileName, ".introns.tsf", 0, h) ;
+      char *fNam = hprintf (h, "%s%s.introns.tsf"
+			    , pp->outFileName
+			    , rNam
+			    ) ;
+      ACEOUT ao = aceOutCreate (fNam, 0, 0,  h) ;
       INTRON *up ;
       BigArray kI = pp->knownIntrons ;
       int ii ;
@@ -966,15 +1000,24 @@ void saIntronsExport (PP *pp)
 
 /**************************************************************/
 
-void saDoubleIntronsExport (PP *pp, Array aaa)
+void saDoubleIntronsExport (PP *pp, int run)
 {
+  RunSTAT *rc = arrp (pp->runStats, run, RunSTAT) ;
+	      
+  Array aaa = rc->doubleIntrons ;
   int iMax = aaa ? doubleIntronsCompress (aaa) : 0 ;
   float *s0 = pp->runStranding ;
   
   if (iMax)
     {
+      const char *rNam = dictName (pp->runDict, run) ;
       AC_HANDLE h = ac_new_handle () ;
-      ACEOUT ao = aceOutCreate (pp->outFileName, ".double_introns.tsf", 0, h) ;
+      char *fNam = hprintf (h, "%s%s.double_introns.tsf"
+			    , pp->outFileName
+			    , rNam
+			    ) ;
+      ACEOUT ao = aceOutCreate (fNam, 0, 0,  h) ;
+
       DOUBLEINTRON *up ;
       long int ii ;
       

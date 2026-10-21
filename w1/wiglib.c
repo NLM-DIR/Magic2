@@ -195,11 +195,11 @@ static void wigExportPeaksDo (ACEOUT ao, WIG wig, AC_HANDLE h)
   int shift = wig->shift ;
   
   aceOutDate (ao, "###", hprintf (h, "Found %d Peaks in  run %s, target %s, at min height %.2f"
-				  , n, wig->runName, wig->chromName, ((float)wig->minCover)/step)
+				  , n, wig->runName, wig->chromName, ((float)wig->minCover)/scale)
 	      ) ;
   aceOutf (ao, "## Median\t%.1f\tThreshold\t%.1f\tPeaks\t%d\n"
-	   , ((float)wig->medianNoZero)/step
-	   , ((float)wig->minCover)/step
+	   , ((float)wig->medianNoZero)/scale
+	   , ((float)wig->minCover)/scale
 	   , n
 	   ) ;
     
@@ -216,8 +216,8 @@ static void wigExportPeaksDo (ACEOUT ao, WIG wig, AC_HANDLE h)
 	       wig->chromName,
 	       c1, c2,
 	       step * ln, 
-	       (float)pk->yMax / (step * scale),  /* yMax = nb of bases in one bin */
-	       (float)pk->area / (ln * step * scale), (float) pk->area/(1000.0 * scale)
+	       (float)pk->yMax / (scale),  /* yMax = nb of bases in one bin */
+	       (float)pk->area / (ln * scale), (float) pk->area/(1000.0 * scale)
 	       ) ;
     }
 } /* wigExportPeaksDo */

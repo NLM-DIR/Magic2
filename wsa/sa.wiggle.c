@@ -746,7 +746,7 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
       bigArrayMax (allGeneC) = jgc ;
 
       
-      ACEOUT ao = aceOutCreate (pp->outFileName, ".geneCounts.tsf", pp->gzo, h) ;
+      ACEOUT ao = aceOutCreate (pp->outFileName, "geneCounts.tsf", pp->gzo, h) ;
       aceOutDate (ao, "##", "Gene counts") ;
       aceOutf (ao, "#Gene\tRun\tFormat\tGene_coverage\tExons_Xocoverage\n") ;
 
@@ -784,7 +784,7 @@ static void wiggleExportWiggleStats (PP *pp)
   int wMax =  pp->wiggles ? arrayMax (pp->wiggles) : arrayMax (pp->scratches) ;
   int chromMax = dictMax (pp->bbG.dict) + 1 ;
   long int nnn = 0 ;
-  ACEOUT ao = aceOutCreate (pp->outFileName, ".wiggleCumuls.tsf", pp->gzo, h) ;
+  ACEOUT ao = aceOutCreate (pp->outFileName, "wiggleCumuls.tsf", pp->gzo, h) ;
   aceOutDate (ao, "##", "wiggleCumuls in Million Bases") ;
   aceOutDate (ao, "#", "Target\tRun\tFormat\tCumul\tCDS\tUTR\tIntronic\tIntergenic in Bases") ;
   static int n720 = 720 ;
@@ -863,7 +863,7 @@ static void wiggleExportWiggleStats (PP *pp)
 	{
 	  AC_HANDLE h3 = ac_new_handle () ;
 	  cisTransNormalize (rc->cst) ;
-	  char *fNam3 = hprintf (h3, "%s/%s.strand_shift", pp->outFileName, runNam) ;
+	  char *fNam3 = hprintf (h3, "%s%s.strand_shift", pp->outFileName, runNam) ;
 	  ACEOUT ao3 = aceOutCreate (fNam3, 0, FALSE, h3) ;
 	  cisTransExport (rc->cst, ao3) ;
 	  ac_free (h3) ;

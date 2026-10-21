@@ -525,7 +525,7 @@ void saSequenceDeduplicate (const PP *pp, BB *bb)
  * so in this way, even when facing a single large fastq, the pipeline will no longer be hanged on the parser
  */
 
-static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
+static int fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 {
   AC_HANDLE h = ac_new_handle () ;
   BB b ;
@@ -539,11 +539,9 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
   BOOL pairedEnd = bb ? bb->rc.pairedEnd : FALSE ;
   CHAN *chan = pp->plChan ;
   gzFile file = 0 ;
-  BOOL debug = FALSE ;
   
   DnaFormat format = rc->format ;
   const char *fileName1 = rc ? rc->fileName1 : tc->fileName ;
-  char tBuf[25] ;
   clock_t t1, t2 ;
 
   t1 = clock () ;
@@ -605,11 +603,6 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
 
       bb->run = rc ? rc->run : 0 ;
       bb->start = timeNow () ;
-      /*
-	bb->lane = atomic_fetch_add (rc ? &(rc->lane) : &lane, 1) + 1 ;
-      */
-
-      bb->lane = atomic_fetch_add_explicit (arrp (pp->runLanes, bb->run, atomic_int), 1, memory_order_relaxed) + 1 ;
 
       bb->cpuStats = arrayHandleCreate (128, CpuSTAT, bb->h) ;
       bb->rc.fileName1 = fileName1 ;
@@ -632,21 +625,15 @@ static void fastaSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGen
       nPuts++ ;
       channelPut (chan, bb, BB) ;
     }
-  channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
+  // moved   channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
   
   gzclose (file) ;
   ac_free (h) ;
   
   t2 = clock () ;
   saCpuStatRegister ("2.FastaSequenceParser", pp->agent, bb->cpuStats, t1, t2, nBytes) ;
-
-  if (debug)
-    {
-     int lane = atomic_fetch_add (arrp (pp->runLanes, bb->run, atomic_int), 0) ;
-     printf ("--- %s: Stop FastaSequenceParser %d blocks %ld bytes file %s\n", timeBufShowNow (tBuf), lane, nBytes, fileName1) ;
-    }
   
-  return ;
+  return nPuts ;
 } /* fastaSequenceParser */
 
 /**************************************************************/
@@ -793,7 +780,7 @@ static void sraCacheDo (ACEOUT ao1, ACEOUT ao2,	const char *seq, const char *seq
  * so in this way, even facinga single large fastq, the pipeline will no longer be hanged on the parser
  */
 
-void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
+int sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 {
   AC_HANDLE h = ac_new_handle () ;
   ACEOUT ao1 = 0, ao2 = 0 ;
@@ -979,7 +966,7 @@ void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 	  break ;
 	}
     }
-  channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
+  // moved to sraParse channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
   
   ac_free (h) ;
   
@@ -992,12 +979,12 @@ void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
      printf ("--- %s: Stop sraSequenceParser %d blocks %ld bytes file %s\n", timeBufShowNow (tBuf), lane, size + size2, sraID) ;
     }
   
-  return ;
+  return nPuts ;
 } /* sraSequenceParser */
 
 /**************************************************************/
 
-void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
+int otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 {
   AC_HANDLE h = ac_new_handle () ;
   BB b ;
@@ -1325,18 +1312,18 @@ void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 	saCpuStatRegister (isGenome ? "1.GParser" : "2.ReadParser", pp->agent, bb->cpuStats, t1, t2, arrayMax (dnas) - 1) ;
       nPuts++  ;
       channelPut (chan, bb, BB) ;
-      channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
+      //    moved to sraParse  channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks accross all sequenceParser agents */
     }
   
   
   if (1 || pp->debug) printf ("--- %s: Stop sequence parser %d sequences, %d lines from file %s\n", timeBufShowNow (tBuf), nSeqs, line1, fileName1) ;
   
   ac_free (h) ;
-  return ;
+  return nPuts ;
 } /* otherSequenceParser */
 
 /**************************************************************/
-
+#ifdef JUNK
 void saSequenceParse (const PP *pp, RC *rc)
 {
   DnaFormat format = rc->format ;
@@ -1354,7 +1341,7 @@ void saSequenceParse (const PP *pp, RC *rc)
 
   return ;
 } /* saSequenceParse */
-
+#endif
 /**************************************************************/
 
 void saSequenceParseTarget (const PP *pp, TC *tc, BB *bb, int isLast)

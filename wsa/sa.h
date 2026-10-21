@@ -112,6 +112,7 @@ typedef struct PSDstruct {
 } PSD ;
 
 typedef struct runStatStruct {
+  AC_HANDLE h ;
   PSD p ;
   long int lowEntropy, tooShort ;
   long int lowEntropyBases, tooShortBases ;
@@ -159,6 +160,10 @@ typedef struct runStatStruct {
   long int RF[256], RR[256] ; /* number of reads aligned per target_class on Forward/Reverse strand */
   long int BF[256], BR[256] ; /* number of bases aligned per target_class on Forward/Reverse strand */
   Array errors ;  /* substitutions, insertions, deletions counts */
+  Array confirmedPolyAs ;
+  Array confirmedSLs ;
+  Array confirmedIntrons ;
+  Array doubleIntrons ;
   /* coverage of long transcripts ? */
   int bestShift ; double bestUv ;
 } RunSTAT ;
@@ -214,13 +219,14 @@ typedef struct bStruct {
   Array wigglesR ;
   Array wigglesP ;
   Array wigglesNU ;
+  BigArray intronHits ;
+  BOOL isGenome ;
+  int isRna ; /* 2: user defined RNA, -2: user defined DNA, 1: autodefined RNA, -1 autodefined DNA */
+
   Array confirmedPolyAs ;
   Array confirmedSLs ;
   Array confirmedIntrons ;
   Array doubleIntrons ;
-  BigArray intronHits ;
-  BOOL isGenome ;
-  int isRna ; /* 2: user defined RNA, -2: user defined DNA, 1: autodefined RNA, -1 autodefined DNA */
 
   int step, skips0, skips1, skips2, skips3, skips4, skipsFound, skipsNotFound ;
   long int genomeLength ;
@@ -296,7 +302,6 @@ typedef struct pStruct {
   Array tArray ;
   Array runStats ;
   Array runLanes ;
-  Array runLanesDone ;
   Array geneCoords ;  /* gene coordinates */
   Array geneBoxes ;  /* Array of Arrays of gene boxes per chrom */
   Array geneCounts ; /* expression counts per chromosomes */
@@ -573,7 +578,7 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0) ;
 void saConfigIsIndexAccessible (PP *pp) ;
 void saConfigIsOutDirWritable (PP *pp) ;
 int saConfigCheckTargetIndex (PP *pp) ; 
-Array saConfigGetRuns (PP *pp, Array runStats) ;
+Array saConfigGetRuns (PP *pp, Array runStats, int *nRunsToDop) ;
 BOOL saSanitizeRunName (const char *nam) ;
 
 /* saSetGetAdaptors:
@@ -599,14 +604,15 @@ ACEOUT saSamCreateFile (const PP *pp, BB *bb, BOOL isError, AC_HANDLE h) ;
 
 /* sa.introns.c */
 void saIntronsOptimize (BB *bb, ALIGN *vp, ALIGN *wp, Array dna, Array dnaG)  ; 
-void saPolyAsExport (PP *pp, Array aaa) ;
-void saPolyAsCumulate (PP *pp, BB *bb) ;
-void saSLsExport (PP *pp, Array aaa) ;
-void saSLsCumulate (PP *pp, BB *bb) ;
-void saIntronsExport (PP *pp) ;
-void saDoubleIntronsExport (PP *pp, Array aaa) ;
-void saIntronsCumulate (PP *pp, BB *bb) ;
-void saDoubleIntronsCumulate (PP *pp, BB *bb) ;
+void saPolyAsCumulate (RunSTAT *rc, BB *bb) ;
+void saPolyAsExport (PP *pp, int run) ;
+void saSLsCumulate (RunSTAT *rc, BB *bb) ;
+void saSLsExport (PP *pp, int run) ;
+void saIntronsCumulate (RunSTAT *rc, BB *bb) ;
+void saIntronsExport (PP *pp, int run) ;
+void saDoubleIntronsCumulate (RunSTAT *rc, BB *bb) ;
+void saDoubleIntronsExport (PP *pp, int run) ;
+
 int saSupportedIntrons (const PP *pp, int run) ;
 
 
@@ -628,8 +634,8 @@ int saSequenceParseSraDownload (PP *pp, const char *sraID) ;
 void saParseGzBuffer (const PP *pp, BB *bb) ;
 void saSequenceDeduplicate (const PP *pp, BB *bb) ;
 void globalDnaCreate (BB *bb) ;
-void otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
-void sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
+int otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
+int sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome) ;
 
 /* sa.parse.c */
 void saParse (const PP *pp, RC *rc) ;
@@ -647,8 +653,9 @@ GeneCounts saWiggleExport (PP *pp, int nAgents) ;
 void saExportTabular (const PP *pp, BB *bb) ;
 
 /* sa.stats */
-void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs) ;
+void saRunStatExport (const PP *pp, int run, GeneCounts gcs) ;
 void saCpuStatExport (const PP *pp, Array stats) ;
+void s2gSamStatsExports (const PP *pp, Array runStats) ;
 void saCpuStatCumulate (Array aa, Array a) ;
 void saRunStatsCumulate (int run, PP *pp, BB *bb) ;
 BOOL saReadAdaptors (ADAPTORS *adaptors, RunSTAT *up, BOOL coded) ;

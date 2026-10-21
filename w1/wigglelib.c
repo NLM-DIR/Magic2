@@ -812,12 +812,9 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
 
       ip = arrayp (cc, 0, int) ;
       ii = 0 ;
-      if (0)
-	for (ii = 0 ; ii < iMax ; wp++, ii++)
-	  if (wp->y > 0) break ;
       posMin = wp->x - step ;
       *ip++ = 0 ; /* always add a start zero */
-      for (jj = jMax = 1 ; ii < iMax ; ip++, wp++, ii++, jj++)
+      for (ii = 0, jj = jMax = 1 ; ii < iMax ; ip++, wp++, ii++, jj++)
 	{ *ip = wp->y ; if (wp->y) jMax = jj + 1 ; }
       *ip = 0 ; /* always add a terminal zero */
       arrayMax (cc) = jMax + 1 ;

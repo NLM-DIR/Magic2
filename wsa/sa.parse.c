@@ -469,7 +469,7 @@ void saScan (const PP *pp, BB *bb)
  * the pipeline will no longer be hanged on the parser
  */
 
-static void saParseFastac (const PP *pp, RC *rc)
+static int saParseFastac (const PP *pp, RC *rc)
 {
   AC_HANDLE h = ac_new_handle () ;
   BB b, *bb = 0 ;
@@ -650,7 +650,8 @@ static void saParseFastac (const PP *pp, RC *rc)
       nPuts++ ;
       channelPut (chan, bb, BB) ;
     }
-  channelPut (pp->npChan, &nPuts, int) ; /* global counting of BB blocks across all sequenceParser agents */
+
+
 
   gzclose (file) ;
   ac_free (h) ;
@@ -665,7 +666,7 @@ static void saParseFastac (const PP *pp, RC *rc)
               timeBufShowNow (tBuf), lane, nBytes, fileName1) ;
     }
 
-  return ;
+  return nPuts ;
 } /* saParseFastac */
 
 /********************************************************************************************************************/
@@ -910,13 +911,18 @@ int saParseSraDownload (PP *pp, const char *sraID)
 void saParse (const PP *pp, RC *rc) 
 {
   DnaFormat format = rc->format ;
-
+  int nPuts = 0 ;
+  
   if (format == SRA ||  pp->sraCaching)
-    sraSequenceParser (pp, rc, 0, 0, 0) ;
+    nPuts = sraSequenceParser (pp, rc, 0, 0, 0) ;
   else if (!rc->fileName2)
-    saParseFastac (pp, rc) ;
+    nPuts = saParseFastac (pp, rc) ;
   else
-    otherSequenceParser (pp, rc, 0, 0, 0) ;
+    nPuts = otherSequenceParser (pp, rc, 0, 0, 0) ;
+
+  SLS sls = {0} ;
+  sls.n = nPuts  ; sls.run = rc->run ;
+  channelPut (pp->npChan, &sls, SLS) ; /* how many blocks in that run */
   return ;
 } /* saSequenceParse */
 

@@ -183,13 +183,13 @@ static int confirmedPolyAsCountSites (const PP *pp, int run)
 /*************************************************************************************/
 /*************************************************************************************/
 
-static void s2gSamStatsExports (const PP *pp, Array runStats)
+void s2gSamStatsExports (const PP *pp, Array runStats)
 {
   AC_HANDLE h = ac_new_handle () ;
   const char *METHOD = pp->method ? pp->method : "01_SortAlign" ;
   Array aa = runStats ;
   RunSTAT *s0 = arrayp (aa, 0, RunSTAT) ;
-  ACEOUT ao = aceOutCreate (pp->outFileName, ".s2g.samStats", 0, h) ;	
+  ACEOUT ao = aceOutCreate (pp->outFileName, "s2g.samStats", 0, h) ;	
   const char *run = pp->runName ? pp->runName : (dictMax (pp->runDict) == 1 ? dictName (pp->runDict, 1) : "AllRuns") ;
   
   long int nRawReads = pp->nRawReads ? pp->nRawReads : s0->p.nReads ;
@@ -598,19 +598,24 @@ static void saOverhangExport (const PP *pp, int run, RunSTAT *up, BOOL isLeft)
   
 /**************************************************************/
   
-void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
+void saRunStatExport (const PP *pp, int run, GeneCounts gcs)
 {
+  const char *rNam = dictName (pp->runDict, run) ;
   AC_HANDLE h = ac_new_handle () ;
-  ACEOUT ao = aceOutCreate (pp->outFileName, ".runStats.tsf", 0, h) ;
-  int run, runMax = arrayMax (runStats) ;
+  char *fNam = hprintf (h, "%s%s.runStats.tsf"
+			, pp->outFileName
+			, rNam
+			) ;
+  ACEOUT ao = aceOutCreate (fNam, 0, 0,  h) ;
+      
   long int LD[7] ;
 
   memset (LD, 0, sizeof (LD)) ;
   
   aceOutDate (ao, "##", hprintf (h, "Run statistics on index %s, seed length %d, max repeats %d, error cost %d", pp->indexName, pp->seedLength, pp->maxTargetRepeats, pp->errCost)) ;
-  for (run = 1 ; run < runMax ; run++)
+  if (run)
     {
-      RunSTAT *up = arrp (runStats, run, RunSTAT) ;
+      RunSTAT *up = arrp (pp->runStats, run, RunSTAT) ;
       saLetterProfileExport (pp, run, up) ;
       saOverhangExport (pp, run, up, TRUE) ;
       saOverhangExport (pp, run, up, FALSE) ;      
@@ -982,8 +987,6 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 	}
     }
   ac_free (h) ;
-
-  s2gSamStatsExports (pp, runStats) ;
 
   return ;    
 } /* saRunStatExport */
