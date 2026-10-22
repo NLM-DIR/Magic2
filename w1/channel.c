@@ -239,7 +239,10 @@ CHAN *uChannelCreate (int cMax, int size, AC_HANDLE h0)
 
   pthread_condattr_t cattr;
   pthread_condattr_init(&cattr);
+#if defined(_POSIX_CLOCK_SELECTION) && (_POSIX_CLOCK_SELECTION > 0)
+  /* not available in Mac */
   pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+#endif
   pthread_cond_init(&(c->c.notFull),  &cattr);
   pthread_cond_init(&(c->c.notEmpty), &cattr);
   pthread_condattr_destroy(&cattr);

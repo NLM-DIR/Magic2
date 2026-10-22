@@ -90,7 +90,12 @@ SCR scratchCreate (const char *dirName, AC_HANDLE h)
   scr->blocks = arrayCreate (128, SCR_) ;
   if (! dirName || ! *dirName) dirName = "." ;
 
+#ifdef O_TMPFILE
   fd = open (dirName, O_TMPFILE | O_RDWR | O_CLOEXEC, 0600) ;  /* no O_CREAT, no name */
+#else
+  fd = -1;
+#endif
+
   if (fd < 0)            /* filesystem without O_TMPFILE: named file, then unlink */
     {
       char buf[4096] ;
