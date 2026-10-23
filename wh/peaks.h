@@ -7,9 +7,10 @@
 void peaksCreateExport (ACEOUT ao, ACEOUT aoLevels,
 			Array aa ,    // array of unsigned int
 			const char *target,
-			int posMin, int step, // x = i * step + posMin
-			int minCover,   // default 3 median (aa) no zero
-			int scale // divide aa values by scale
+			int posMin,   // x = i * step + posMin
+			int step,     // step used in findPeaks
+			int minCover,   // default 10 medianNoZero
+			int scale       // divide aa values by scale
 			) ;
 
 

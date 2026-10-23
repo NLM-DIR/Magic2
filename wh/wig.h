@@ -44,6 +44,8 @@ typedef struct wigStruct {
   Array aa ;   /* uint every step starting */
   long int nBp ;
   unsigned int median, medianNoZero, minCover ;   /*  set by wigFindPeaks */ 
+  double chromLength ;
+  double bases ;
   Array peaks ;
   const char *runName, *chromName ;
 } *WIG ;
@@ -83,6 +85,8 @@ typedef struct azStruct {
   int cNB ;       /* currently cached  file */
   long int c1, c2 ;    /* min max coordinates [c1,c2] in current cache */
   Array cache ;   /* values in current cache */
+  int chromLength ;
+  float bases ;   /* total number of bases in wig */
 } AZZ ;
 
 

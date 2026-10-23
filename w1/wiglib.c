@@ -132,10 +132,11 @@ int wigFindPeaks (WIG wig, int minCover)
   unsigned int medianNoZero ;  medianNoZero = wig->medianNoZero = arrayUintMedian (aa, TRUE) ;
   if (minCover <= 0)
     minCover = 10 ;
+  wig->minCover = minCover ;
   int mm = medianNoZero > scale ? medianNoZero : scale ;
   minCover = minCover * mm ;
 
-  wig->minCover = minCover ;
+
   
   if (scale < 1) scale = 1 ;
 
@@ -193,16 +194,18 @@ static void wigExportPeaksDo (ACEOUT ao, WIG wig, AC_HANDLE h)
   int step = wig->step ;
   int scale = wig->scale ? wig->scale : 1 ;
   int shift = wig->shift ;
+  double totalCoverInPeaks = 0 ;
+  double totalAreaInPeaks = 0 ;
   
   aceOutDate (ao, "###", hprintf (h, "Found %d Peaks in  run %s, target %s, at min height %.2f"
 				  , n, wig->runName, wig->chromName, ((float)wig->minCover)/scale)
 	      ) ;
-  aceOutf (ao, "## Median\t%.1f\tThreshold\t%.1f\tPeaks\t%d\n"
-	   , ((float)wig->medianNoZero)/scale
-	   , ((float)wig->minCover)/scale
+  aceOutf (ao, "## Median\t%d\tMinCover\t%d\tPeaks\t%d\n"
+	   , wig->medianNoZero/scale
+	   , wig->minCover
 	   , n
 	   ) ;
-    
+
   aceOutf (ao, "# target\tx1\tx2\twidth\theight\tavg\tarea kb\n") ;
   for (i = 0 ; i < n ; i++)
     {
@@ -219,7 +222,25 @@ static void wigExportPeaksDo (ACEOUT ao, WIG wig, AC_HANDLE h)
 	       (float)pk->yMax / (scale),  /* yMax = nb of bases in one bin */
 	       (float)pk->area / (ln * scale), (float) pk->area/(1000.0 * scale)
 	       ) ;
+      totalCoverInPeaks += step * ln ;
+      totalAreaInPeaks += pk->area/scale ;
     }
+
+  aceOutf (ao, "## totalCoverInPeaks\t%.3f\n"
+	   , totalCoverInPeaks/scale
+	   , ((float)wig->minCover)
+	   , n
+	   ) ;
+  aceOutf (ao, "## totalAreaInPeaks\t%.3f\n"
+	   , totalAreaInPeaks
+	   ) ;
+  aceOutf (ao, "## genomeLength\t%.3f\n"
+	   , wig->chromLength
+	   ) ;
+  aceOutf (ao, "## totalAlignedBases\t%.3f\n"
+	   , wig->bases
+	   ) ;
+
 } /* wigExportPeaksDo */
 
 /**************************************************************/
@@ -657,7 +678,7 @@ AZZ *wigAzWrite (const char *fName, WIG wig, AC_HANDLE h0)
   for (int iB = 0 ; iB < az->NB ; iB++)
     {
       unsigned int zMin = 0, zMax = 0 ;
-      int nBytes = 0, dummy = 0 ;
+      int nBytes = 0 ;
       unsigned int dz ;
       unsigned int  bMin = iB << WIGBMAX ;    /* offsets in this block */
       unsigned int  bMax = (iB + 1) << WIGBMAX ;
@@ -681,7 +702,7 @@ AZZ *wigAzWrite (const char *fName, WIG wig, AC_HANDLE h0)
       gzFile gzf = gzopen (azFileName, "wb"); 
       if (! gzf)
 	messcrash("wigAzWrite cannot open file %s",  azFileName) ;
-      gzprintf (gzf, "%u\t%u\t%d\t%d\n", zMin, zMax, nBytes, dummy) ;
+      gzprintf (gzf, "%u\t%u\t%d\t%d\t%d\t%.3f\n", zMin, zMax, nBytes, wig->chromLength, wig->bases) ;
 
       array (byte0, jMax -1, unsigned char) = 0 ;
       array (byte1, jMax -1, unsigned char) = 0 ;
@@ -796,7 +817,8 @@ static BOOL azParseOneBlock (AZZ *az, int nb)
     {
       int jMax = 0x1 << az->bMax ;
       unsigned int zMin, zMax ;
-      int nBytes, dummy ;
+      int nBytes, chromLength ;
+      float bases ;
       Array byte0 = arrayHandleCreate (jMax, unsigned char, h) ;
       Array byte1 = arrayHandleCreate (jMax, unsigned char, h) ;
       Array byte2 = arrayHandleCreate (jMax, unsigned char, h) ;
@@ -806,6 +828,9 @@ static BOOL azParseOneBlock (AZZ *az, int nb)
       az->cNB = nb ;
       az->c1 = ((long)nb) << az->bMax ;
       az->c2 = (nb+1L) << az->bMax ;
+      az->chromLength = chromLength ;
+      az->bases = bases ;
+
       array (byte0, jMax -1, unsigned char) = 0 ;
       array (byte1, jMax -1, unsigned char) = 0 ;
       array (byte2, jMax -1, unsigned char) = 0 ;
@@ -816,7 +841,7 @@ static BOOL azParseOneBlock (AZZ *az, int nb)
         char headerLine[256] ;
         if (! gzgets (gzf, headerLine, sizeof(headerLine)))
           messcrash ("wigAzRead cannot read header of %s", azFileName) ;
-        if (sscanf (headerLine, "%u\t%u\t%d\t%d", &zMin, &zMax, &nBytes, &dummy) != 4)
+        if (sscanf (headerLine, "%u\t%u\t%d\t%d\t%f", &zMin, &zMax, &nBytes, &chromLength, &bases) < 4)
           messcrash ("wigAzRead bad header in %s: %s", azFileName, headerLine) ;
       }
       
@@ -926,10 +951,15 @@ BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, WIG wig, Array wPoints, int 
 	  /* copy [dc1,dc2[ of the block to  [x, x + dc2 - dc1[ of the WIG */
 	  if (wig)
 	    {
+	      wig->chromLength = az->chromLength ;
 	      if (! cumul) /* just copy the blocks */
-		memcpy (arrp (aa, x, unsigned int), arrp (az->cache, dc1, unsigned int), (dc2 - dc1)*sizeof (unsigned int)) ;
+		{
+		  memcpy (arrp (aa, x, unsigned int), arrp (az->cache, dc1, unsigned int), (dc2 - dc1)*sizeof (unsigned int)) ;
+		  wig->bases = az->bases ;
+		}
 	      else
 		{
+		  wig->bases += az->bases ;
 		  for (int i = dc1 ; i < dc2 ; i++)
 		    {
 		      int xx = az->c1 + i - posMin + shift ;

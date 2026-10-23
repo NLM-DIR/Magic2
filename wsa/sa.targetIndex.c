@@ -845,7 +845,7 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
   /* initialise the bbG (genome) block */
   bbG->h = ac_new_handle () ;
   bbG->cpuStats = arrayHandleCreate (128, CpuSTAT, bbG->h) ;
-  bbG->dict = dict = dictHandleCreate (128, bbG->h) ;
+  bbG->dict = dict = dictHandleCreate (128, 0) ; // was bbG->h so it is not killed if we still export the wiggles late
   
   /* memory map the target DNA, seed Index, and Identifiers */
   BOOL READONLY = TRUE ;

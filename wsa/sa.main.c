@@ -2678,7 +2678,7 @@ int main (int argc, const char *argv[])
 	      if (p.align)
 		reportRunErrors (&p, bb.run, p.runStats, runErrors) ;
 	      GeneCounts gcs = {0} ;
-	      if (p.wiggle)
+	      if (0 && p.wiggle)
 		gcs = saWiggleExport (&p, nAgents) ;
 	      
 	      saRunStatExport (&p, bb.run, gcs) ; /* must come afer PolyAsExport and IntronsExport */
@@ -2695,9 +2695,9 @@ int main (int argc, const char *argv[])
 
 
 
-  //  GeneCounts gcs = {0} ;
-  // if (p.wiggle)
-  // gcs = saWiggleExport (&p, nAgents) ;
+  GeneCounts gcs = {0} ;
+  if (p.wiggle)
+    gcs = saWiggleExport (&p, nAgents) ;
   // if (p.debug) saCpuStatExport (&p, cpuStats) ;
 
   //  saSLsExport (&p, p.confirmedSLs) ;
