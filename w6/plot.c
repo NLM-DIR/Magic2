@@ -1021,7 +1021,7 @@ static Graph plotDisplay(void)
 	}
     }
 
-  xofmax = utArrondi(fmax) ;/* in large histos with negative values, sometimes this xofmax seems shited to a negative value */
+  xofmax = utArrondi(fmax) ;/* in large histos with negative values, sometimes this xofmax seems shifted to a negative value */
   if (isFac < 0)
     graphText (messprintf ("scale x 1*%d", fac), nx - look->leftMargin - 20, YY (firstY) + 2.2 ) ; 
   else if (isFac > 0)

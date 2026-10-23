@@ -514,7 +514,7 @@ cat <<EOF > _x.awk
 
   verbose = index(z, "Verbose") ;
   ph = " " ;
-  if (a2 > 0)  ph = ph " wait sortali wait sortali2 wait g4sp wait c7 wait wgr wait wg5 wait wg6 wait c7" ;
+  if (a2 > 0)  ph = ph " wait sortali wait sortali2 wait g4sp wait c7 wait wsrx wait wgr wait wg5 wait wait c7" ;
 
   printf ("#!bin/tcsh -f\n") ;
   printf ("# command line was %s\n", z) ;
@@ -1024,9 +1024,11 @@ if ($phase == sortali) goto phaseSortali
 if ($phase == sortali2) goto phaseSortali2
 if ($phase == wg4sp) goto phasewg4sp
 
+if ($phase == wsrx) goto phasewsrx
 if ($phase == wgr) goto phasewgr 
 if ($phase == wg5) goto phasewg5
 if ($phase == wg6) goto phasewg6
+if ($phase == peaks) goto phasePeaks
 
 
 if ($phase == g0) goto phaseg0
@@ -1414,7 +1416,7 @@ echo '   wg4: report the coverome coverage'
 echo '   wg4b: compute the ETargets projected wiggle (no)capture genebox coverage'
 echo '   wg4c: cumulate the ETargets capture genebox coverage'
 echo '   wg4d: parse the ETargets capture genebox coverage'
-echo '   wg5: Convert the group wiggles to TABIX format'  
+echo '   wg5: Load the wiggles in tmp/GeneDB'
 echo '   wg6: Compute the wiggle peaks'
 echo '   wg7: Create a wiggle on the UCSC browser'
 echo '   cnv: Differential CNV analysis, using class compare: tag CNV'
@@ -9753,26 +9755,38 @@ scripts2/wg4b.gene_sponge.tcsh Parse
 goto phaseLoop
 
 ###################################################################################
-## wgr : construct the library wiggles
+## wsrx : construct the library wiggles
+
+phasewsrx:
+echo -n "phasewsrx: construct the srx wiggles : "
+date
+
+foreach run (`cat MetaDB/$MAGIC/r2sublib | cut -f 1 | sort -u`)
+  if (! -d tmp/WIGGLEGROUP) mkdir tmp/WIGGLEGROUP
+  if (! -d tmp/WIGGLEGROUP/$run) mkdir tmp/WIGGLEGROUP/$run
+    scripts/submit tmp/WIGGLEGROUP/$run   "bin/peaks --db MetaDB -p $MAGIC --makeGroupWiggles --group $run"
+end
+
+goto phaseLoop
+
+###################################################################################
+## wgr : construct the group wiggles
 
 phasewgr:
 echo -n "phaseSortali3: construct the group wiggles : "
 date
 
-if (! -d tmp/TABIX) mkdir tmp/TABIX
-
-foreach run (`cat MetaDB/$MAGIC/r2sublib | cut -f 1 | sort -u`)
-  if (! -d tmp/WIGGLERUN) mkdir tmp/WIGGLERUN
-  if (! -d tmp/WIGGLERUN/$run) mkdir tmp/WIGGLERUN/$run
-  foreach chrom ($chromSetAll)
-    scripts/submit tmp/WIGGLERUN/$run/$chrom   "scripts2/m2.wg.tcsh WIGGLERUN $run $chrom"
-  end
+foreach run (`cat MetaDB/$MAGIC/GroupWiggleList | cut -f 1 | sort -u`)
+  if (-d tmp/WIGGLEGROUP/$run) continue
+  if (! -d tmp/WIGGLEGROUP) mkdir tmp/WIGGLEGROUP
+  if (! -d tmp/WIGGLEGROUP/$run) mkdir tmp/WIGGLEGROUP/$run
+    scripts/submit tmp/WIGGLEGROUP/$run   "bin/peaks --db MetaDB -p $MAGIC --makeGroupWiggles --group $run"
 end
 
 goto phaseLoop
 
 ###############################################################
-## phase wg5: TABIX the runs and groups with tag wiggle
+## phase wg5: Load the wiggles in tmp/GeneDB
 
 phasewg5:
 
@@ -9837,226 +9851,139 @@ if (! -d tmp/Peaks) mkdir tmp/Peaks
 set toto=tmp/Peaks/$MAGIC.peaks2genes.ace
 echo '#' > $toto 
 
-# we need this to compute the strand shift, if the stand shift is non zero we should not add f and r without shifting
-set nonS=0
-if ($nonS == 0) then
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList`)
-  foreach chrom ($chromSetAll)
-  foreach uu (u nu)
-  foreach fr (f r)
-    if (! -d tmp/Peaks/$run) mkdir tmp/Peaks/$run
-    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.peaks && -e tmp/SA/$run/wiggles/$run.$chrom.$uu.$fr.az) then
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/SA/$run/wiggles/$run.$chrom.$uu.$fr.az -I AZ -multiPeaks 2 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
-    endif
-    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.peaks && -e tmp/WIGGLERUN/$run/$run.$chrom.$uu.$fr.az) then
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -i tmp/WIGGLERUN/$run/$run.$chrom.$uu.$fr.az -I AZ -multiPeaks 2 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
-    endif
-  end
-  end
-  end
-end
-endif
+##################################################################
+## CisTrans autocorrelation of the runs
 
-qusage 1
-############### CisTrans autocorrelation
-
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V `)
-  foreach uu (u nu)
-  foreach fr (fr)
-    if (! -d tmp/Peaks/$run) mkdir tmp/Peaks/$run
-    if (! -e tmp/Peaks/$run/$run.$uu.strand_shift.strand_shift.txt &&  -d tmp/SA/$run/wiggles) then
-        set ssF=tmp/Peaks/$run/$run.$uu.ssF
-	ls tmp/SA/$run/wiggles/$run.*.$uu.f.az > $ssF
-        set ssR=tmp/Peaks/$run/$run.$uu.ssR
-	ls tmp/SA/$run/wiggles/$run.*.$uu.r.az > $ssR
-        scripts/submit tmp/Peaks/$run/strand_shift "bin/wiggle -strand_shift 5000 -ssF $ssF -ssR $ssR -I AZ -O COUNT -o tmp/Peaks/$run/$run.$uu.strand_shift"
-    endif
-    if (! -e tmp/Peaks/$run/$run.$uu.strand_shift.strand_shift.txt && -d tmp/WIGGLERUN/$run) then
-	set ssF=tmp/Peaks/$run/$run.$uu.ssF
-	ls tmp/WIGGLERUN/$run/$run.*.$uu.f.az > $ssF
-	set ssR=tmp/Peaks/$run/$run.$uu.ssR
-	ls tmp/WIGGLERUN/$run/$run.*.$uu.r.az > $ssR
-        scripts/submit tmp/Peaks/$run/strand_shift "bin/wiggle -strand_shift 5000 -ssF $ssF -ssR $ssR -I AZ -O COUNT -o tmp/Peaks/$run/$run.$uu.strand_shift"
-    endif
-  end
-  end
+if (! -d tmp/Peaks) mkdir tmp/Peaks
+## Construct the group wiggles by adding the shifted run wiggles
+foreach run (`cat MetaDB/$MAGIC/RunsList`)
+  scripts/submit tmp/SA/$run/getStrandShifts   "bin/peaks --db MetaDB -p $MAGIC --getStrandShifts --group $run"
 end
 
+######################################
+## Shifted Group wiggles
+
+## Construct the group wiggles by adding the shifted run wiggles and their peaks
+foreach run (`cat MetaDB/$MAGIC/GroupWiggleList MetaDB/$MAGIC/r2sublib | gawk '{print $1}' | sort -u`)
+  if (! -d tmp/WIGGLEGROUP) mkdir tmp/WIGGLEGROUP
+  if (! -d tmp/WIGGLEGROUP/$run) mkdir tmp/WIGGLEGROUP/$run
+  if (-e tmp/WIGGLEGROUP/$run/wg.done) continue
+  scripts/submit tmp/WIGGLEGROUP/$run   "bin/peaks --db MetaDB -p $MAGIC --makeGroupWiggles --group $run"
+  touch  tmp/WIGGLEGROUP/$run/wg.done
+end
 qusage 1
 
+## verify that the f/r group wiggles are no longer strand-shifted, this is the expected consequence of shifting their runs before adding
+foreach run (`cat MetaDB/$MAGIC/GroupWiggleList MetaDB/$MAGIC/r2sublib | gawk '{print $1}' | sort -u`)
+  if (-e tmp/WIGGLEGROUP/$run/strand_shift.ace) continue
+  scripts/submit tmp/WIGGLEGROUP/$run/getStrandShifts   "bin/peaks --db MetaDB -p $MAGIC --getStrandShifts --group $run"
+end
+qusage 1
 
-set totoX=tmp/Peaks/$MAGIC.strand_shifts.max.txt
-set toto=tmp/Peaks/$MAGIC.strand_shifts.txt
-echo -n "### $toto : " > $totoX
-date >> $totoX
-echo "## Strand shift fo all runs in project $MAGIC" >> $totoX
-echo "# Run\tShift\tCorrel" >> $totoX
-echo -n "### $toto.tsf : " > $toto
-echo -n "### $toto.tsf : " > $toto.tsf
-date >> $toto
-echo "## Strand shift fo all runs in project $MAGIC" >> $toto.tsf
-echo "# Run\tShift\tCorrel" >> $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList | sort -u | sort -V `)
-  set toto1=tmp/Peaks/$run/$run.u.strand_shift.strand_shift.txt
-  if (-e $toto1) then
-    echo -n "$run\t" >> $totoX
-    cat $toto1 | gawk '/^#/{next;}{if($3+0>y){x=$1+0;y=$3+0;}}END{printf("%d\t%.6f\n",x,y);}' >> $totoX
-    cat $toto1 | gawk '/^#/{next;}{if($1+0>=0)printf("%d\t%s\tf\t%.6f\n",$1,run,$3);}' run=$run >> $toto.tsf
+set toto=tmp/WIGGLEGROUP/$MAGIC.strand_shift.ace
+foreach run (`cat MetaDB/$MAGIC/GroupWiggleList MetaDB/$MAGIC/r2sublib | gawk '{print $1}' | sort -u`)
+  if (! -e tmp/WIGGLEGROUP/$run/strand_shift.ace) continue
+  cat tmp/WIGGLEGROUP/$run/strand_shift.ace >> $toto
+end
+echo "pparse $toto" |  bin/tacembly MetaDB -noprompt
+
+######################################
+## Export the shift-plots and the best shifts
+
+set toto=tmp/WIGGLEGROUP/$MAGIC.cis_correlations
+echo "###" > $toto.1.tsf
+echo -n "### Cis/Trans correlation of the 2 reads aligning on the two strands :" > $toto.1
+date >> $toto.1
+echo "## Cis: autocorrelation of the wiggle on the top strand used as a control" >> $toto.1
+echo "## Trans: correlation of the two strands showing the average lag of the minus strand wiggle " >> $toto.1
+echo "## For example in CHiP-seq protocols, one can optimize detection of peaks by shifting the forward and reverse wiggles" >> $toto.1
+echo "## by half the position of the max of the  trans-corellation, because the targeted glue poimt is more probably there" >> $toto.1
+foreach run (`cat  MetaDB/$MAGIC/RunsList MetaDB/$MAGIC/GroupWiggleList`)
+  if (-e tmp/SA/$run/strand_shift) then
+    cat tmp/SA/$run/strand_shift  | gawk -F '\t' '/^#/{next;}{if($1=="0" || $1+0>0)printf("%s\t%s\tf\t%s\n", $1,run,$2);}' run=$run >> $toto.1.tsf
+  endif
+  if (-e tmp/WIGGLEGROUP/$run/strand_shift) then
+    cat tmp/WIGGLEGROUP/$run/strand_shift  | gawk -F '\t' '/^#/{next;}{if($1=="0" || $1+0>0)printf("%s\t%s\tf\t%s\n", $1,run,$2);}' run=$run >> $toto.1.tsf
   endif
 end
-bin/tsf -i $toto.tsf -O table -o $toto.2
-cat $toto.2.txt >> $toto
-\rm $toto.2.txt
-\cp $toto $totoX RESULTS
+bin/tsf -i $toto.1.tsf  -I tsf -O table -o $toto.2 --title Strand_shifts
+cat $toto.1 $toto.2.txt > $toto.txt
+\cp $toto.txt  RESULTS
+\rm $toto.1 $toto.2.txt $toto.1.tsf
 
-# Construct the group wiggle f and r from the SHIFTED sum of the runs
-set totoSS=tmp/Peaks/$MAGIC.strand_shifts.max.txt
-foreach gg (`cat MetaDB/$MAGIC/GroupWiggleList`)
-  if (! -d tmp/WIGGLEGROUP) mkdir tmp/WIGGLEGROUP
-  if (! -d  tmp/WIGGLEGROUP/$group) mkdir tmp/WIGGLEGROUP/$group
-  foreach chrom ($chromSetAll)
-    scripts/submit tmp/WIGGLEGROUP/$gg/$chrom  "scripts2/m2.wg.tcsh WIGGLEGROUP $gg $chrom"
-  end
+set toto=tmp/WIGGLEGROUP/$MAGIC.trans_correlations
+echo "###" > $toto.1.tsf
+echo -n "### Cis/Trans correlation of the 2 reads aligning on the two strands :" > $toto.1
+date >> $toto.1
+echo "## Cis: autocorrelation of the wiggle on the top strand used as a control" >> $toto.1
+echo "## Trans: correlation of the two strands showing the average lag of the minus strad wiggle " >> $toto.1
+echo "## For example in CHiP-seq protocols, one can optimize detection of peaks by shifting the forward and reverse wiggles" >> $toto.1
+echo "## by half the position of the max of the  trans-corellation, because the targeted glue poimt is more probably there" >> $toto.1
+
+foreach run (`cat  MetaDB/$MAGIC/RunsList MetaDB/$MAGIC/GroupWiggleList`)
+  if (-e tmp/SA/$run/strand_shift) then
+    cat tmp/SA/$run/strand_shift  | gawk -F '\t' '/^#/{next;}{if($1=="0" || $1+0>0)printf("%s\t%s\tf\t%s\n", $1,run,$3);}' run=$run >> $toto.1.tsf
+  endif
+  if (-e tmp/WIGGLEGROUP/$run/strand_shift) then
+    cat tmp/WIGGLEGROUP/$run/strand_shift  | gawk -F '\t' '/^#/{next;}{if($1=="0" || $1+0>0)printf("%s\t%s\tf\t%s\n", $1,run,$3);}' run=$run >> $toto.1.tsf
+  endif
 end
+bin/tsf -i $toto.1.tsf  -I tsf -O table -o $toto.2 --title Strand_shifts
+cat $toto.1 $toto.2.txt > $toto.txt
+\cp $toto.txt  RESULTS
+\rm $toto.1 $toto.2.txt $toto.1.tsf
 
-qusage 1
-#### compute the fr non stranded peaks of each run by combining the shifted f and r stranded wiggles
-#### For the groups: do not shift: the group f and r are already cosntructed form the shifted runs
-if (! -d tmp/Peaks) mkdir tmp/Peaks
-set totoSS=tmp/Peaks/$MAGIC.strand_shifts.max.txt
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V `)
-  if (! -d tmp/Peaks/$run) mkdir tmp/Peaks/$run
-  set dx=0
-  set dx=`cat $totoSS | gawk '{if($1==run)dx=$2;}END{print 0+dx/2;}' run=$run`
-  foreach uu (u nu)
-  foreach fr (fr)
-  foreach chrom ($chromSetAll)
-    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.peaks && -e tmp/SA/$run/wiggles/$run.$chrom.$uu.f.az) then
-      echo "tmp/SA/$run/wiggles/$run.$chrom.$uu.f.az\t$dx" > tmp/SA/$run/wiggles/$run.$chrom.$uu.fr
-      echo "tmp/SA/$run/wiggles/$run.$chrom.$uu.r.az\t-$dx" >> tmp/SA/$run/wiggles/$run.$chrom.$uu.fr
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -f tmp/SA/$run/wiggles/$run.$chrom.$uu.fr  -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
-    endif
-    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.peaks && -e tmp/WIGGLERUN/$run/$run.$chrom.$uu.f.az) then
-      echo "tmp/WIGGLERUN/$run/$run.$chrom.$uu.f.az\t$dx" > tmp/WIGGLERUN/$run/$run.$chrom.$uu.fr
-      echo "tmp/WIGGLERUN/$run/$run.$chrom.$uu.r.az\t-$dx" >> tmp/WIGGLERUN/$run/$run.$chrom.$uu.fr
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -f tmp/WIGGLERUN/$run/$run.$chrom.$uu.fr  -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
-    endif
-    if (! -e tmp/Peaks/$run/$run.$chrom.$uu.$fr.peaks && -e tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.f.az) then
-      echo "tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.f.az" > tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.fr
-      echo "tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.r.az" >> tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.fr
-      scripts/submit tmp/Peaks/$run.$chrom "bin/wiggle -f tmp/WIGGLEGROUP/$run/$run.$chrom.$uu.fr -I AZ -multiPeaks 2 -minCover 30 -O COUNT -o tmp/Peaks/$run/$run.$chrom.$uu.$fr"
-    endif
-  end
-  end
-  end
-end
-
-qusage 1
-
-###############
-# Count per u/nu f/r types
-set toto=tmp/Peaks/$MAGIC.count
-echo -n "# $toto :" > $toto.tsf
-echo "## Per run, what is the most frequent width of the peaks" >> $toto
-echo "## Width is the most frequently observed peak-width" >> $toto
-echo "## N is the number of peaks with this width"
-echo "## Total is the total number of peaks seen in this run" >> $toto
-echo '#Run\tWidth\tN\tTotal' > $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V`)
-  foreach uu (u nu)
-    foreach fr (f r fr)
-      if (-d tmp/Peaks/$run) then
-        cat tmp/Peaks/$run/$run.*.$uu.$fr.peaksCounts | gawk -F '\t' '/^#/{next;}{nnn+=$3;}END{printf("%s\t%s.%s\ti\t%d\n",run,uu,fr,nnn);}' run=$run uu=$uu fr=$fr >> $toto.tsf
-    end
-  end
-end
-cat $toto.tsf | sort -k 2,2n -k 1,1  | bin/tsf -i $toto.tsf -O table -o $toto.1
-cat $toto.1.txt >> $toto.txt
-\cp $toto.txt RESULTS
-
-###############
-
-set toto=tmp/Peaks/$MAGIC.peak_width.histo
-echo -n "### $toto : " > $toto
+set toto=tmp/WIGGLEGROUP/$MAGIC.shits_at_max_trans_correl.txt
+bin/tace MetaDB <<EOF
+  query find project $MAGIC ; >run ; CLASS Runs ; >ali 
+  select -o $toto.1 r,dx,uv from r in @, dx in r->Strand_shift, uv in dx[1]
+  query find project $MAGIC ; >run ; Sublibrary_of ; >ali 
+  select -o $toto.2 r,dx,uv from r in @, dx in r->Strand_shift, uv in dx[1]
+  query find project $MAGIC ; >run ; Union_of ; >ali 
+  select -o $toto.3 r,dx,uv from r in @, dx in r->Strand_shift, uv in dx[1]
+  quit
+EOF
+echo -n "### Strand shifts : " > $toto
+echo "## Shifting the reverse read by this distance optimizes the cross correlation of the forward and reverse unique wiggles" >> $toto
 date >> $toto
-echo "## Per run, what is the most frequent width of the peaks" >> $toto
-echo "## Width is the most frequently observed peak-width" >> $toto
-echo "## N is the number of peaks with this width"
-echo "## Total is the total number of peaks seen in this run" >> $toto
-echo '#Run\tWidth\tN\tTotal' > $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V `)
-    cat tmp/Peaks/$run/$run.*.u.fr.peaks | gawk -F '\t' '/^#/{next;}{x=$4;if(x>500)x=500;nn[x/10]++;}END{for(i=0;i<=50 ;i++)printf("%d\t%s\ti\t%d\n",10*i,run,nn[i]);}' run=$run >> $toto.tsf
-end
- bin/tsf -i $toto.tsf -O table -o $toto.1
-\cp $toto.txt RESULTS
-
-###############
-
-set toto=tmp/Peaks/$MAGIC.peak_width.histo
-echo -n "### $toto.max : " > $toto.max.txt
-date >> $toto.max.txt
-echo "## Per run, what is the most frequent width of the peaks" >> $toto.max.txt
-echo "## Width is the most frequently observed peak-width" >> $toto.max.txt
-echo "## N is the number of peaks with this width" >> $toto.max.txt
-echo "## Total is the total number of peaks seen in this run" >> $toto.max.txt
-echo "# Run\tWidth\tN\tTotal" >> $toto.max.txt
- cat $toto.tsf | gawk -F '\t' '/^#/{next;}{r=$2;w=$1;n=$4;if(w<1000 && n>nr[r]){nr[r]=n;ww[r]=w;}nnn[r]+=n;}END{for (r in nr)printf("%s\t%d\t%d\t%d\n",r,ww[r],nr[r],nnn[r]);}' | sort -V >> $toto.max.txt
-\cp $toto.max.txt RESULTS
-
-###############
-
-set toto=tmp/Peaks/$MAGIC.peak_area.histo.txt
-echo -n "### $toto : " > $toto
-date >> $toto
-echo "## With one run per column, how many peaks in this run have a given area" > $toto
-echo "## The area of a peak is the raw number of bases aligned inside the width of the peak" >> $toto
-echo '#' > $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V `)
-   cat  tmp/Peaks/$run/$run.*.u.fr.peaks | gawk -F '\t' '/^#/{next;}{x= int(1000*$7) ;if(x>50000)x=50000;x=int(x/100);nn[x]++;}END{for(i=0;i<=500;i++)printf("%d\t%s\ti\t%d\n",100*i,run,nn[i]);}' run=$run >> $toto.tsf
-end
- bin/tsf -i $toto.tsf -O table -o $toto.1
- cat $toto.1.txt | gawk '/^###/{next;}{print}' >> $toto
+echo "# Run\tShift\tCross correlation" >> $toto
+cat $toto.1 $toto.2 $toto.3 >> $toto
+echo >> $toto
 \cp $toto RESULTS
+\rm $toto.1 $toto.2 $toto.3
 
+########################################
+#### compute the fr non stranded peaks of each run by combining the shifted f and r stranded wiggles
+#### For the groups: do not shift: the group f and r are already cosntructed form the shifted runspeakMinCover
+ phasePeaks:
+set minPeakCover=3
+set Peaks=Peaks.$minPeakCover
 
-###############
-
-set toto=tmp/Peaks/$MAGIC.peak_area.histo
-echo -n "### $toto.max : " > $toto.max.txt
-date >> $toto.max.txt
-echo "## Per run, what is the most frequent area of the peaks" >> $toto.max.txt
-echo "## The area of a peak is the raw number of bases aligned inside the width of the peak" >> $toto
-echo "## Area is the most frequently observed peak-area " >> $toto.max.txt
-echo "## N is the number of peaks with this area" >> $toto.max.txt
-echo "## Total is the total number of peaks seen in this run" >> $toto.max.txt
-echo "# Run\tArea\tN\tTotal" >> $toto.max.txt
- cat $toto.txt.tsf | gawk -F '\t' '/^#/{next;}{r=$2;w=$1;n=$4;if(n>nr[r]){nr[r]=n;ww[r]=w;}nnn[r]+=n;}END{for (r in nr)printf("%s\t%d\t%d\t%d\n",r,ww[r],nr[r],nnn[r]);}' | sort -V >> $toto.max.txt
-\cp $toto.max.txt RESULTS
-
-###############
-
-set toto=tmp/Peaks/$MAGIC.peak_area.log.histo.txt
-echo -n "### $toto : " > $toto
-date >> $toto
-echo "## With one run per column, how many peaks in this run have a given area" > $toto
-echo "## The area of a peak is the raw number of bases aligned inside the width of the peak" >> $toto
-echo "## But in this log plot, the vertical scale is only qualitative, the numbers nean nothing" >> $toto
-echo '#' > $toto.tsf
-foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V `)
-   cat tmp/Peaks/$run/$run.*.u.fr.peaks | gawk -F '\t' '/^#/{next;}{x= int(10000*$7) ;if(x>500000)x=500000;x=100*log(x+1)/log(2);x=int(x/10);nn[x]++;}END{for(i=100;i<=200;i++)printf("%d\t%s\ti\t%d\n",100*i,run,nn[i]);}' run=$run >> $toto.tsf
+if (! -d tmp/$Peaks) mkdir tmp/$Peaks
+## Construct the group peaks by adding the shifted run wiggles
+foreach run (`cat MetaDB/$MAGIC/RunsList MetaDB/$MAGIC/GroupWiggleList`)
+  if (! -d tmp/$Peaks/$run) mkdir tmp/$Peaks/$run
+  if (-e tmp/$Peaks/$run/nsShiftedPeaks.done) continue
+  scripts/submit tmp/WIGGLEGROUP/$run   "bin/peaks --db MetaDB -p $MAGIC --makeShiftedNonStrandedPeaks --group $run --min_peak_cover $minPeakCover -o tmp/$Peaks/$run"
+  touch tmp/$Peaks/$run/nsShiftedPeaks.done
 end
- bin/tsf -i $toto.tsf -O table -o $toto.1
- cat $toto.1.txt | gawk '/^###/{next;}{print}' >> $toto
-# \cp $toto RESULTS
+
+qusage 1
 
 ###############
-#for all groups, extract all peaks, then sort and merge them by continuity, construct a shadow file, extract the counts, run a profile
+# intersect and associated histograms
+bin/peaks --db MetaDB --intersects -p $MAGIC -o tmp/$Peaks/$MAGIC.min$minPeakCover --min_peak_cover $minPeakCover
+\cp tmp/$Peaks/$MAGIC.min$minPeakCover.*  RESULTS
+
+goto phaseLoop
+
+ #for all groups, extract all peaks, then sort and merge them by continuity, construct a shadow file, extract the counts, run a profile
 
 # extract the peaks
-set toto=tmp/Peaks/$MAGIC.peaks
+set toto=tmp/$Peaks/$MAGIC.peaks
 echo # > $toto.all
 foreach run (`cat MetaDB/$MAGIC/GroupWiggleList | grep AA`)
-  cat tmp/Peaks/$run/$run.*.u.fr.peaks | gawk -F '\t' '/^#/{next;}{printf("%s\t%d\t%d\n",$1,$2,$3);}' | sort -u >> $toto.all
+  cat tmp/$Peaks/$run/$run.*.u.fr.peaks | gawk -F '\t' '/^#/{next;}{printf("%s\t%d\t%d\n",$1,$2,$3);}' | sort -u >> $toto.all
 end
 cat $toto.all | sort -k 1,1 -k 2,2n -k 3,3n > $toto.sorted
 echo >> $toto.sorted
@@ -10064,21 +9991,21 @@ cat $toto.sorted | gawk -F '\t' '/^#/{next;}{if($1!=chrom||$2>a2+10){if (a1>0)pr
 wc $toto.sponge
 
 #sensitivity specificity
-set toto2=tmp/Peaks/$MAGIC.Findex
+set toto2=tmp/$Peaks/$MAGIC.Findex
 echo ZZZZZ > ZZZZZ
 echo '#' > $toto.countIntersect
 
-  set toto=tmp/Peaks/$MAGIC.peaks
+  set toto=tmp/$Peaks/$MAGIC.peaks
   foreach chrom ($chromSetAll)
     cat $toto.sponge | gawk '{if($3==chrom)print;}' chrom=$chrom > $toto.known
     foreach run (`cat MetaDB/$MAGIC/RunWiggleList MetaDB/$MAGIC/GroupWiggleList | sort -u | sort -V`)
-      cat  tmp/Peaks/$run/$run.$chrom.u.fr.peaks | gawk -F '\t' '/^#/{next;}{printf("%s\t%d\t%d\n",$1,$2,$3);}'  > $toto.run
+      cat  tmp/$Peaks/$run/$run.$chrom.u.fr.peaks | gawk -F '\t' '/^#/{next;}{printf("%s\t%d\t%d\n",$1,$2,$3);}'  > $toto.run
       cat $toto.known ZZZZZ $toto.run | gawk -F '\t' '/^ZZZZZ/{zz=1;iMax=ii;ii=0;next;}{if(zz+0<1){ii=0+ii;pp[ii]=$1;a1[ii]=$4;a2[ii]=$5;ii++;next;}}{jMax++;b1=$2;b2=$3;x=0;while(ii<iMax && b1>a2[ii])ii++;if(a2[ii]>b1&&a1[ii]<b2){xx[ii]++;if(xx[ii]==1)niX++;ii++;x++;}ii--;if(x>0)njX++;}END{printf("%s\t%s\t%d\t%d\t%d\t%d\n",run,chrom,iMax,jMax,niX,njX);}' run=$run chrom=$chrom  >> $toto.countIntersect
     end
   end
 
 
-set toto2=tmp/Peaks/$MAGIC.Findex
+set toto2=tmp/$Peaks/$MAGIC.Findex
 echo -n "# $toto2 : " > $toto2.txt
 date >> $toto2.txt
 echo "## Per run, estimate the sensitivity and specitivity relative to a reference set of peaks" >> $toto2.txt
@@ -10091,7 +10018,7 @@ echo "## Specitivity is the fraction of run peaks touching the reference peaks: 
 echo "## F1 is the standard F1 coefficient (the inverse of the average of the inverses) : 1/F1 = 1/2 (1/Se + 1/Sp)" >>$toto2.txt
 echo "# Run\tIn_Ref\tIn_Run\tTouched_in_ref\tKnown_in_run\tNew_in_run\tSensitivity\tSpecitivity\tF1" >> $toto2.txt
 echo 
-  set toto=tmp/Peaks/$MAGIC.peaks
+  set toto=tmp/$Peaks/$MAGIC.peaks
   cat $toto.countIntersect | gawk -F '\t' '/^#/{next;}{r=$1;iMax[r]+=$3;jMax[r]+=$4;niX[r]+=$5;njX[r]+=$6;}END{for(r in iMax){pp=100.0*niX[r]/(.000001+iMax[r]);rr=100.0*njX[r]/(.00001+jMax[r]);printf("%s\t%d\t%d\t%d\t%d\t%d\t%.2f\t%.2f\t%.2f\n",r,iMax[r],jMax[r],niX[r],njX[r],jMax[r]-njX[r],pp,rr,2*pp*rr/(0.00000001+pp+rr));}}'  | sort -V >> $toto2.txt
   
 \cp $toto2.txt RESULTS  

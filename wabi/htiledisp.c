@@ -1292,7 +1292,18 @@ static BOOL  htileCosmidConvert (Htile look, KEY cosmid, KEYSET knownProbes)
       ac_free (h1) ;
     }
   ok = TRUE ;
+  arraySort (look->map->segs,  htileSegOrder) ;
+  arrayCompress (look->map->segs) ;
 
+  int iMax = arrayMax (look->map->segs) ;
+  look->a2 = look->map->a2 ;
+  for (int i = 0 ; i < iMax ; i += iMax/100)
+    {
+      seg = arrp (look->map->segs, i, SEG) ;
+      if (seg->x1 > look->a2)
+	iMax = arrayMax (look->map->segs) = i ;
+    }
+    
   ac_free (h) ;
   return ok ;
 } /* htileCosmidConvert */
@@ -2189,8 +2200,17 @@ static BOOL htileConvert (Htile look, BOOL force, ACEOUT ao)
     }
 
   if (a1 > a2) { int a0 = a1 ; a1 = a2 ; a2 = a0 ; }
-  look->map->a1 = a1 ;
-  look->map->a2 = a2 ; /* backwards on purpose */
+  if (a2 > a1 + 100000)
+    {
+      a1 = look->from - 50000 ;
+      if (a1 < 1) a1 = 1 ;
+      a2 = a1 + 100000 ;
+    }
+  
+  look->a1 = look->map->a1 = a1 ;
+  look->a2 = look->map->a2 = a2 ; /* backwards on purpose */
+
+    
   ac_free (Cosmid) ;
   
   /* segFormat */
@@ -2230,8 +2250,6 @@ static BOOL htileConvert (Htile look, BOOL force, ACEOUT ao)
       look->map->segs = arrayHandleCreate (10000, SEG, look->h) ;
       for (ii = 0 ; ii < keySetMax (ks1) ; ii++)
 	htileCosmidConvert (look, keySet (ks1, ii), knownProbes) ;
-      arraySort (look->map->segs,  htileSegOrder) ;
-      arrayCompress (look->map->segs) ;
       keySetDestroy (knownProbes) ;
 
       gMapCacheStore(look->locus, suffix, look->map->segs, hSegFormat) ;

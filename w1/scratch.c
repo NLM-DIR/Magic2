@@ -22,6 +22,11 @@
  *    if (aa != 0) Get checks aa->size, reuses aa and adjust aa->max
 
 */
+/*
+  #define ARRAY_CHECK
+  #define MALLOC_CHECK
+*/
+
 #define _GNU_SOURCE        /* O_TMPFILE, mkostemp: before ALL #include */
 #include <unistd.h>
 #include <fcntl.h>
@@ -83,9 +88,11 @@ static void scratchFinalize (void *vp)
 
 SCR scratchCreate (const char *dirName, AC_HANDLE h)
 {
-  SCR scr = (SCR ) handleAlloc (scratchFinalize, h, sizeof (struct scrStruct)) ;
-  int fd ;
-
+  int nn = sizeof (struct scrStruct) ;
+SCR scr = (SCR ) handleAlloc (scratchFinalize, h, nn) ;
+  int fd = -1 ;
+  
+  memset (scr, 0, nn) ;
   scr->magic = SCRATCHMAGIC ; scr->fd = -1 ; scr->end = 0 ;
   scr->blocks = arrayCreate (128, SCR_) ;
   if (! dirName || ! *dirName) dirName = "." ;

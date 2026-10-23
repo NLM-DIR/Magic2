@@ -183,13 +183,13 @@ static int confirmedPolyAsCountSites (const PP *pp, int run)
 /*************************************************************************************/
 /*************************************************************************************/
 
-static void s2gSamStatsExports (const PP *pp, Array runStats)
+void s2gSamStatsExports (const PP *pp, Array runStats)
 {
   AC_HANDLE h = ac_new_handle () ;
   const char *METHOD = pp->method ? pp->method : "01_SortAlign" ;
   Array aa = runStats ;
   RunSTAT *s0 = arrayp (aa, 0, RunSTAT) ;
-  ACEOUT ao = aceOutCreate (pp->outFileName, ".s2g.samStats", 0, h) ;	
+  ACEOUT ao = aceOutCreate (pp->outFileName, "s2g.samStats", 0, h) ;	
   const char *run = pp->runName ? pp->runName : (dictMax (pp->runDict) == 1 ? dictName (pp->runDict, 1) : "AllRuns") ;
   
   long int nRawReads = pp->nRawReads ? pp->nRawReads : s0->p.nReads ;
@@ -312,10 +312,16 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   
   for (int i = 0 ; i < 5 ; i++)
     up->p.NATGC[i] += vp->p.NATGC[i] ;
+  for (int i = 0 ; i < 5 ; i++)
+    up->p.aligned_NATGC[i] += vp->p.aligned_NATGC[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile1[i] += vp->p.letterProfile1[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile2[i] += vp->p.letterProfile2[i] ;
+  for (int i = 0 ; i < 5 * LETTERMAX; i++)
+    up->p.aligned_letterProfile1[i] += vp->p.aligned_letterProfile1[i] ;
+  for (int i = 0 ; i < 5 * LETTERMAX; i++)
+    up->p.aligned_letterProfile2[i] += vp->p.aligned_letterProfile2[i] ;
   for (int i = 0 ; i < 11 ; i++)
     up->nMultiAligned[i] += vp->nMultiAligned[i] ;
   for (int i = 0 ; i < 256 ; i++)
@@ -592,19 +598,24 @@ static void saOverhangExport (const PP *pp, int run, RunSTAT *up, BOOL isLeft)
   
 /**************************************************************/
   
-void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
+void saRunStatExport (const PP *pp, int run, GeneCounts gcs)
 {
+  const char *rNam = dictName (pp->runDict, run) ;
   AC_HANDLE h = ac_new_handle () ;
-  ACEOUT ao = aceOutCreate (pp->outFileName, ".runStats.tsf", 0, h) ;
-  int run, runMax = arrayMax (runStats) ;
+  char *fNam = hprintf (h, "%s%s.runStats.tsf"
+			, pp->outFileName
+			, rNam
+			) ;
+  ACEOUT ao = aceOutCreate (fNam, 0, 0,  h) ;
+      
   long int LD[7] ;
 
   memset (LD, 0, sizeof (LD)) ;
   
   aceOutDate (ao, "##", hprintf (h, "Run statistics on index %s, seed length %d, max repeats %d, error cost %d", pp->indexName, pp->seedLength, pp->maxTargetRepeats, pp->errCost)) ;
-  for (run = 1 ; run < runMax ; run++)
+  if (run)
     {
-      RunSTAT *up = arrp (runStats, run, RunSTAT) ;
+      RunSTAT *up = arrp (pp->runStats, run, RunSTAT) ;
       saLetterProfileExport (pp, run, up) ;
       saOverhangExport (pp, run, up, TRUE) ;
       saOverhangExport (pp, run, up, FALSE) ;      
@@ -711,6 +722,14 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		   , up->p.NATGC[0]
 		   ) ;
 
+	  aceOutf (ao, "%s\tAligned_ATGCN\tiiiii\t%ld\t%ld\t%ld\t%ld\t%ld\n"
+		   , runNam
+		   , up->p.aligned_NATGC[1]
+		   , up->p.aligned_NATGC[2]
+		   , up->p.aligned_NATGC[3]
+		   , up->p.aligned_NATGC[4]
+		   , up->p.aligned_NATGC[0]
+		   ) ;
 
 	  if (1)
 	    {
@@ -784,6 +803,7 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		   ) ;
 	  
 	  aceOutf (ao, "%s\tWiggleCumul\ti\t%ld\n", runNam, up->wiggleCumul) ;
+	  aceOutf (ao, "%s\tStrand_shift\ti\t%d\t%.2f\n", runNam, up->bestShift, up->bestUv) ;
 	  aceOutf (ao, "%s\tErrors\tift\t%ld\t"
 		   , runNam
 		   , up->nErr
@@ -803,6 +823,7 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 		     , runNam
 		     , isRna
 		     ) ;
+
 
 	  if (isRna > 0)
 	    {
@@ -833,31 +854,34 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 	      long int j = 0 ;
 	      int mode = 0 ;
 	      int i, iMax = arrayMax (up->p.lengthDistribution) ;
-	      long int *xp = arrp (up->p.lengthDistribution, 0, long int) ;
-	      for (i = 0 ; i < iMax ; i++, xp++)
+	      if (iMax)
 		{
-		  j += *xp ;
-		  LD[6] += i * (*xp) ;
-		  if (*xp > LD[5])
-		    { LD[5] = *xp ; mode = i ; }
+		  long int *xp = arrp (up->p.lengthDistribution, 0, long int) ;
+		  for (i = 0 ; i < iMax ; i++, xp++)
+		    {
+		      j += *xp ;
+		      LD[6] += i * (*xp) ;
+		      if (*xp > LD[5])
+			{ LD[5] = *xp ; mode = i ; }
+		    }
+		  LD[5] = mode ;
+		  LD[6] = j ? LD[6]/j : 0 ; /* average */
+		  /* construct the cumulated distrib */  
+		  xp = arrp (up->p.lengthDistribution, 0, long int) ;
+		  for (xp++, i = 1 ; i < iMax ; i++, xp++)
+		    {
+		      xp[0] += xp[-1] ;
+		      if (! LD[0] && *xp >= j/100) LD[0] = i ;
+		      if (! LD[1] && *xp >= 5*j/100) LD[1] = i ;
+		      if (! LD[2] && *xp >= 50*j/100) LD[2] = i ;
+		      if (! LD[3] && *xp >= 95*j/100) LD[3] = i ;
+		      if (! LD[4] && *xp >= 99*j/100) LD[4] = i ;
+		    }
+		  aceOutf (ao, "%s\tLength_distribution_1_5_50_95_99_mode_av\tiiiiiii", runNam) ;
+		  for (i=0;i<7;i++)
+		    aceOutf (ao, "\t%ld", LD[i]) ;
+		  aceOutf (ao, "\n") ;
 		}
-	      LD[5] = mode ;
-	      LD[6] = j ? LD[6]/j : 0 ; /* average */
-	      /* construct the cumulated distrib */  
-	      xp = arrp (up->p.lengthDistribution, 0, long int) ;
-	      for (xp++, i = 1 ; i < iMax ; i++, xp++)
-		{
-		  xp[0] += xp[-1] ;
-		  if (! LD[0] && *xp >= j/100) LD[0] = i ;
-		  if (! LD[1] && *xp >= 5*j/100) LD[1] = i ;
-		  if (! LD[2] && *xp >= 50*j/100) LD[2] = i ;
-		  if (! LD[3] && *xp >= 95*j/100) LD[3] = i ;
-		  if (! LD[4] && *xp >= 99*j/100) LD[4] = i ;
-		}
-	      aceOutf (ao, "%s\tLength_distribution_1_5_50_95_99_mode_av\tiiiiiii", runNam) ;
-	      for (i=0;i<7;i++)
-		aceOutf (ao, "\t%ld", LD[i]) ;
-	      aceOutf (ao, "\n") ;
 	    }
 
 	  if (up->insertLengthDistribution && arrayMax (up->insertLengthDistribution))
@@ -923,6 +947,7 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 			 , 100.0 * up->nBasesAlignedPerTargetClass[ii]/(.000001 + up->nBasesAlignedPerTargetClass[0]) 
 			 ) ;
 	    }
+
 	  long int f0 = up->RF[0] ;
 	  long int r0 = up->RR[0] ;
 	  long int t0 = f0 + r0 ;
@@ -933,13 +958,15 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 	      long int t = f + r ;
 	      if (t)
 		{	
-		  aceOutf (ao, "%s\tReads_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand,\t%ld\tnegative_strand,\t", runNam, ii, t, f, r) ;
+		  aceOutf (ao, "%s\tReads_aligned_in_class_%c\titititftft\t%ld\tany\t%ld\tpositive_strand,\t%ld\tnegative_strand,\t",
+			   runNam, ii, t, f, r) ;
 		  aceOutPercent (ao, (100.0*f) / t) ;
 		  aceOut (ao, "%\tpositive_strand_alignments,\t") ;
 		  aceOutPercent (ao, (100.0*t) / t0) ;
-		  aceOutf (ao, "%\tof_all_classes.\n") ;
+		  aceOut (ao, "%\tof_all_classes.\n") ;
 		}
 	    }
+
 	  f0 = up->BF[0] ;
 	  r0 = up->BR[0] ;
 	  t0 = f0 + r0 ;
@@ -960,8 +987,6 @@ void saRunStatExport (const PP *pp, Array runStats, GeneCounts gcs)
 	}
     }
   ac_free (h) ;
-
-  s2gSamStatsExports (pp, runStats) ;
 
   return ;    
 } /* saRunStatExport */

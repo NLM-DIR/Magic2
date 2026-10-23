@@ -13,7 +13,7 @@
  * to the creation, writing and reading of the target index
 */
 
-#define ARRAY_CHECK
+/* #define ARRAY_CHECK */
 #include "sa.h"
 
 
@@ -485,8 +485,9 @@ static void saParseTarget (const PP *pp, TC *tc, BB *bbG)
   const char *fileName = tc->fileName ;
   ACEIN ai = 0 ;
   vTXT txt = vtxtHandleCreate (h) ;
-  int n = 0, nn, line = 0 ;
-
+  int n = 0, nn = 0, line = 0 ;
+  Array dnaBuf = arrayHandleCreate ((0x1 << 28), unsigned char, h) ;
+    
   if (format != FASTA)
     messcrash ("Target sequence files must be provided in fasta format\n", fileName) ;
   
@@ -506,13 +507,23 @@ static void saParseTarget (const PP *pp, TC *tc, BB *bbG)
 	  char *cq = strchr (cp, ' ') ; if (cq) *cq = 0 ;
 	  vtxtClear (txt) ;
 	  vtxtPrintf (txt, "%c.%s", tc->targetClass, cp + 1) ;
+
+	  if (nn) /* register previous dna */
+	    {
+	      Array dna ;
+	      int iMax = arrayMax (dnaBuf) ;
+	      dna = array (bbG->dnas, nn, Array) = arrayHandleCreate ((iMax + 1), unsigned char, bbG->h) ;
+	      arrayMax (dna) = iMax ;
+	      fprintf (stderr, "\t%d bases\n", iMax) ;
+	      memcpy (arrp (dna, 0, unsigned char), arrp (dnaBuf, 0, unsigned char), iMax) ;
+	      arrayMax (dnaBuf) = 0 ;
+	    }
 	  /* clip chromosome names on first space */
 	  dictAdd (bbG->dict, vtxtPtr (txt), &nn) ;
 	  if (dna) fprintf (stderr, "\t%d bases\n", arrayMax (dna)) ;
 	  fprintf (stderr, ".... found target ###%s###", dictName (bbG->dict, nn)) ;
 	  vtxtClear (txt) ;
 	  n = 0 ;
-	  dna = array (bbG->dnas, nn, Array) = arrayHandleCreate ((0x1 << 28), unsigned char, bbG->h) ;
 	  continue ;
 	}
       /* parse the dna */
@@ -521,12 +532,21 @@ static void saParseTarget (const PP *pp, TC *tc, BB *bbG)
 	{
 	  unsigned char cc = dnaEncodeChar[(int)(*cp)] ;
 	  if (cc || *cp == '-')  /* we must accept - which encodes as zero since it is a spacer */
-	    array (dna, n++, unsigned char) = cc ;
+	    array (dnaBuf, n++, unsigned char) = cc ;
 	  else
 	    messcrash ("Bad character %c line %d of target fasta file %s\n", *cp, line, fileName) ;
 	}
     }
-  if (dna) fprintf (stderr, "\t%d bases\n", arrayMax (dna)) ;
+  if (nn) /* register previous dna */
+    {
+      Array dna ;
+      int iMax = arrayMax (dnaBuf) ;
+      dna = array (bbG->dnas, nn, Array) = arrayHandleCreate ((iMax + 1), unsigned char, bbG->h) ;
+      arrayMax (dna) = iMax ;
+      memcpy (arrp (dna, 0, unsigned char), arrp (dnaBuf, 0, unsigned char), iMax) ;
+    }
+  if (dna) fprintf (stderr, "\t%d bases\n", arrayMax (dnaBuf)) ;
+  
 
   ac_free (h) ;
 } /* saParseTarget */
@@ -825,7 +845,7 @@ static long int genomeParseBinary (const PP *pp, BB *bbG)
   /* initialise the bbG (genome) block */
   bbG->h = ac_new_handle () ;
   bbG->cpuStats = arrayHandleCreate (128, CpuSTAT, bbG->h) ;
-  bbG->dict = dict = dictHandleCreate (128, bbG->h) ;
+  bbG->dict = dict = dictHandleCreate (128, 0) ; // was bbG->h so it is not killed if we still export the wiggles late
   
   /* memory map the target DNA, seed Index, and Identifiers */
   BOOL READONLY = TRUE ;

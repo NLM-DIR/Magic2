@@ -9,7 +9,7 @@ echo "-D stranding Introns" >> $toto
 echo "-D Candidate_introns" >> $toto
 echo "Counts\nStrandedness\nAli\nUnicity\nGene_expression\nSponge\nAlignments\nLetter_profile\nATGC_kb\nPair_fate\nErrors\nComputer_ressource" >> $toto
 #RawCounts
-set ff=$dd/runStats.tsf
+set ff=$dd/$run.runStats.tsf
 cat $ff | gawk -F '\t' "/^$run/{print;}" > $ff.1
 cat $ff.1 | gawk -F '\t'  '{if($2=="Reads"){nr=$4;next;}}{if($2=="Bases"){nb=$4;printf("Raw_data %s Id %s Accepted %g kb %.2f bp_per_tag\n", nr,nr, nb/1000,nb/nr);}}'  >> $toto
 cat $ff.1 | gawk -F '\t'  '{if($2=="Reads"){nr=$4;next;}}{if($2=="Bases"){nb=$4;printf("Accepted %s Seq %s Tags %g kb %.2f bp_per_tag\n", nr,nr, nb/1000,nb/nr);}}'  >> $toto
@@ -19,7 +19,7 @@ set ff=$dd/$run.overhang.5prime.tsf
 set ff=$dd/$run.overhang.3prime.tsf
 #Exit_adaptor_clipping
 
-set ff=$dd/runStats.tsf
+set ff=$dd/$run.runStats.tsf
 cat $ff | gawk -F '\t' '/Length_distribution_1_5_50_95_99_mode_av/{printf("Length_distribution_1_5_50_95_99_mode_av %s %s %s %s %s %s %s\n", $4,$5,$6,$7,$8,$9,$10);}' >> $toto
 cat $ff | gawk -F '\t'  '/Reads_aligned_in_class/{s=$10;gsub(/%/,"",s);p=$6;m=$8;cl=substr($2,24);if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
 cat $ff | gawk -F '\t'  '/Intron_supports/{s=$10;gsub(/%/,"",s);p=$6;m=$8;cl="I";if(p+m >100) printf("Stranding %s %s %s plus %s minus\n", cl,s,p,m);}' >> $toto
@@ -33,6 +33,7 @@ cat $ff | gawk -F '\t'  '/Intron_supports/{iTP=$12+$14;iFP=$16+$18;}/Supported_i
 
 cat $ff | gawk -F '\t'  '/CDS_utr_intronic_intergenic_Bases/{s=$4/1000000.0; printf("S_1_CDS %.2f \"Mb aligned\"\n",s);s=$6/1000000.0; printf("S_1_UTR %.2f \"Mb aligned\"\n",s);s=$8/1000000.0; printf("S_1_intronic %.2f \"Mb aligned\"\n",s);s=$10/1000000.0; printf("S_1_intergenic %.2f \"Mb aligned\"\n",s);}' >> $toto
 cat $ff | gawk -F '\t'  '/ATGCN/{k=1000;A=$4;T=$5;G=$6;C=$7;N=$8;Z=A+T+G+C+N;Z/=1000;printf("ATGC_kb %d %d %d %d %d %d %d %d %d %d\n", A/Z,T/Z,G/Z,C/Z,N/Z,A/k,T/k,G/k,C/k,N/k);}' >> $toto
+cat $ff | gawk -F '\t' '/Strand_shift/{ss=$4;uv=$5;printf("Strand_shift %d %s\n", ss, uv) ;}' >> $toto
 
 set gg=$dd/geneCounts.tsf
 
@@ -82,7 +83,7 @@ endif
 echo >> $toto
 
 if (0) then
-  set ff=$dd/runStats.tsf 
+  set ff=$dd/$run.runStats.tsf 
   cat $ff | gawk -F '\t'  'BEGIN{s2=100;n=0;}/Reads_aligned_in_class/{r=run;s=$10;p=$6;m=$8;cl=substr($2,24);if(p+m >100) printf("Run %s\nObserved_strandedness_in_ns_mapping %s %s %d plus %d minus\n\n", run,cl,s,p,m);}' run=$run > $toto.1
   cat $toto.1 >> $toto
 endif

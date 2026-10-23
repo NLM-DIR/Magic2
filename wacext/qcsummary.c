@@ -2600,6 +2600,7 @@ static void qcMainResults2 (QC *qc, RC *rc)
     { "Compute", "% Mb aligned on any target", 54, 0, 0} , 
     { "Compute", "% length aligned after clipping adaptors and barcodes", 55, 0, 0 } ,
     { "Compute", "% Reads aligned on any target", 56, 0, 0 } ,
+    { "Strand_shift", "Strand_shift", 0, 0, 0 } ,
 
      {  0, 0, 0, 0, 0}
   } ; 

@@ -1,9 +1,11 @@
-/*  File: peaks.c
+
+/*  File: peakslib.c
  *  Implementation of peaks.h, see that file for the method.
  */
 
 #include "ac.h"
 #include "peaks.h"
+#include "wiggle.h"
 
 typedef struct peakStruct {
   int x1, x2 ;   /* array coordinates */
@@ -11,7 +13,6 @@ typedef struct peakStruct {
   long int area, level ;
 } PEAK ;
 
-/***********************************************************************/
 /*
   bin/wiggle -f tmp/SA/SRR3740166/wiggles/SRR3740166.NC_050103.1.u.fr -I AZ -multiPeaks 2 -O COUNT -o tmp/Peaks/SRR3740166/SRR3740166.NC_050103.1.u.fr
 */
@@ -115,7 +116,7 @@ void peaksExport (ACEOUT ao, ACEOUT aoLevels,
 
   if (aoLevels)
     {
-      aceOutf (aoLevels, "# target\tminCover\tnPeaks\t median=%u medianNoZero=%u\n", median, medianNoZero) ;
+      aceOutf (aoLevels, "# target\tminCover\tnPeaks\t median=%u medianNoZero=%u\n", median/(step * scale), medianNoZero/(step * scale)) ;
       int k1 = 1, dk = 0 ;
       for (i = 0 ; i < keySetMax (histo) ; i++, dk = (dk + 1) % 3)
 	{
@@ -156,14 +157,15 @@ void peaksCreateExport (ACEOUT ao, ACEOUT aoLevels,
   unsigned int medianNoZero = arrayUintMedian (aa, TRUE) ;
   if (minCover <= 0)
     {
-      minCover = 5 * medianNoZero ; // was 3
-      if (minCover < 5) minCover = 5 ;
+      minCover = 10 * medianNoZero ; // was 3
+      if (minCover < 10 * scale) minCover = 10 * scale ;
     }
   if (scale < 1) scale = 1 ;
-  peakFind (aa, peaks, scale * minCover) ;
-  
+  peakFind (aa, peaks, minCover) ;
+
+  /* show the true coverage units */
   fprintf (stderr, "// %s : found %d peaks at minCover %d  medianNoZero %.2f\n",
-	   target, arrayMax (peaks), minCover, (float)medianNoZero/scale) ;
+	   target, arrayMax (peaks), minCover/step, (float)medianNoZero/(step*scale)) ;
 
   peaksExport (ao, aoLevels, peaks, minCover, target, posMin, step, median, medianNoZero, scale) ;
 

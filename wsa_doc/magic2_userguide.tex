@@ -241,7 +241,7 @@ Two steps:
 magic2 --createIndex IDX.genome -t genome.fasta.gz
 
 # Step 2: Align the reads
-magic2 -x IDX.genome -i reads.fasta.gz -o results/
+magic2 -x IDX.genome -i reads.fasta.gz -o results
 \end{lstlisting}
 
 \code{genome.fasta.gz} must contain all chromosomes in a single FASTA
@@ -267,14 +267,14 @@ EOF
 magic2 --createIndex IDX.T2T -T human.tConfig
 
 # Step 3: Align and produce the full output suite
-magic2 -x IDX.T2T -i reads.fastq.gz -o results/ --full
+magic2 -x IDX.T2T -i reads.fastq.gz -o results --full
 \end{lstlisting}
 
 \subsection{Example 3: Stream and align SRA data}
 
 \begin{lstlisting}
 # Align three SRA runs on the fly, no local download required
-magic2 -x IDX.T2T --srr SRR1234,SRR1235,SRR1236 -o results/ --full
+magic2 -x IDX.T2T --srr SRR1234,SRR1235,SRR1236 -o results --full
 \end{lstlisting}
 
 % ===============================================================
@@ -291,17 +291,17 @@ The file format is detected automatically from the extension
 
 \textbf{Single-end reads:}
 \begin{lstlisting}
-magic2 -x IDX -i reads.fastq.gz -o out/
+magic2 -x IDX -i reads.fastq.gz -o out
 \end{lstlisting}
 
 \textbf{Paired-end reads in two separate files} (joined with \code{+}):
 \begin{lstlisting}
-magic2 -x IDX -i reads_R1.fastq.gz+reads_R2.fastq.gz -o out/
+magic2 -x IDX -i reads_R1.fastq.gz+reads_R2.fastq.gz -o out
 \end{lstlisting}
 
 \textbf{Paired-end reads in interleaved format:}
 \begin{lstlisting}
-magic2 -x IDX -i sample.sample_12.fastq.gz -o out/
+magic2 -x IDX -i sample.sample_12.fastq.gz -o out
 \end{lstlisting}
 
 In interleaved format, each pair occupies consecutive records with
@@ -316,7 +316,7 @@ of the read manifest.
 
 \textbf{Reading from a pipe:}
 \begin{lstlisting}
-zcat *.fastq.gz | magic2 -x IDX -i - --fastq --run runName -o out/
+zcat *.fastq.gz | magic2 -x IDX -i - --fastq --run runName -o out
 \end{lstlisting}
 
 
@@ -466,7 +466,7 @@ regulating the rate at which new data blocks enter the pipeline.
 If you have a fast connection to NCBI, you can align without storing the
 raw reads locally.  Use \code{--srr} instead of \code{-i}:
 \begin{lstlisting}
-magic2 -x IDX --srr SRR1,SRR2,SRR3 -o out/
+magic2 -x IDX --srr SRR1,SRR2,SRR3 -o out
 \end{lstlisting}
 
 Streaming from SRA distinguishes single-end from paired-end automatically and begins
@@ -482,7 +482,7 @@ instead of re-downloading.
 To evaluate quality-control metrics across several SRA runs quickly,
 without storing the reads or alignment files:
 \begin{lstlisting}
-magic2 -x IDX --srr SRR1,SRR2,SRR3 --no_ali --maxGB 1 -o out/
+magic2 -x IDX --srr SRR1,SRR2,SRR3 --no_ali --maxGB 1 -o out
 \end{lstlisting}
 The option '\code{--maxGB 1}' restricts the analysis to the first gigabase of each run,
 this is usually sufficient to assess the QC.
@@ -535,7 +535,7 @@ command is not limited.
 
 You can align on the fly and cache the reads in one command:
 \begin{lstlisting}
-magic2 -x IDX.T2T --srr SRR24511885 --fastq --sraCaching -o out/ --full
+magic2 -x IDX.T2T --srr SRR24511885 --fastq --sraCaching -o out --full
 # Produces: SRA/SRR24511885.sample_12.fastq.gz  (cached copy)
 #           Full analysis output in out/
 \end{lstlisting}
@@ -722,17 +722,17 @@ Step is the maximal distance between seeds; the average distance is step/2.
 \subsection{Basic usage}
 
 \begin{lstlisting}
-magic2 -x IDX -i reads.fasta.gz -o out/
-magic2 -x IDX -i R1.fastq.gz+R2.fastq.gz -o out/
-magic2 -x IDX --srr SRR1234,SRR5678 -o out/
+magic2 -x IDX -i reads.fasta.gz -o out
+magic2 -x IDX -i R1.fastq.gz+R2.fastq.gz -o out
+magic2 -x IDX --srr SRR1234,SRR5678 -o out
 \end{lstlisting}
 
 \subsection{Output format options}
 
 By default, alignments are written in the custom \code{.hits} format.
-You can request other formats with:
+You can request one or several other formats with:
 \begin{lstlisting}
-magic2 -x IDX -i reads.fasta.gz -o out/ --hits --tabular --bam
+magic2 -x IDX -i reads.fasta.gz -o out --hits --tabular --bam
 \end{lstlisting}
 
 \begin{center}
@@ -760,9 +760,9 @@ written to the output directory. By default, Magic2 exports in the
 
 Adding \code{--full} produces every available output in a single pass:
 \begin{lstlisting}
-magic2 -x IDX.T2T --srr SRR1234 -o out/ --full
+magic2 -x IDX.T2T --srr SRR1234 -o out --full
 \end{lstlisting}
-This is equivalent to passing \code{--genes --wiggles --wiggle\_ends}
+This is equivalent to passing \code{--genes --wiggles --wiggle\_ends --peaks}
 together.  See Sections~\ref{sec:genecounts}--\ref{sec:tss} for
 descriptions of each output type.
 
@@ -895,8 +895,8 @@ if the UCSC executable code wigToBigWig is available on
 your machine (on your PATH), otherwise magic2 falls back onto BF.gz
 
 \begin{lstlisting}
-magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles
-magic2 -x IDX -i reads.fasta.gz -o out/ --wiggles --wiggle_step 20 --bigWig
+magic2 -x IDX -i reads.fasta.gz -o out --wiggles
+magic2 -x IDX -i reads.fasta.gz -o out --wiggles --wiggle_step 20 --bigWig
 \end{lstlisting}
 
 \begin{center}
@@ -934,7 +934,28 @@ Magic2 also exports a track of non-unique alignments, showing the
 expressed repetitive regions, and a track of incomplete alignments indicating
 the candidate break-points.
 
+\subsection{Peak detection in the coverage plots}
+\label{sec:peaks}
+
+Activated by \code{--wiggles --peaks [--minCover <int>] } or \code{--full}.
+
+Magic2 detects the high peaks in the coverage plots and reports
+their position, height, average cover and are (total numbe rof bases aligned in the peak).
+The median of the coverage plot, excluding zeroes is calculated. By construction the
+median is close to the average value outside the strongly covered islands. It gives an
+evaluation of the 'noise'. A threshold \code{(minCover * median)} is chosen, the default
+is \code{minCover=10} which works rather well for CHiP-seq experiments. Then the program
+reports each peak crossing the threshold with a total area larger than \code{(1.5 * width *threshold)},
+this condition avoid reporting peaks when the coverage plot oscilates clode to the
+theshold value. Magic2 also exports the cross-correlation function of the gorward and reverse reads.
+If the 2 orientations match the same positions, the function start at 1 and decreases continuously.
+If it starts lower say at .6 and then has a maximum say at .9 at coordinate 290. it means that the
+reverse reads lag the forward reads by 290 bases and the true center of the peak is probably
+in the middle. This is an artefact of the sequencing protocol, for example if one pulls down
+long fragments and only sequences the 2 ends inward. 
+
 \subsection{Quality-control metrics}
+\label{sec:qcmetrics}
 
 Magic2 measures and reports the following metrics for each run:
 
@@ -1094,7 +1115,7 @@ which to analyse further, without consuming disk space.
 magic2 -x IDX.T2T \
        --srr SRR24511880,SRR24511881,SRR24511882,\
              SRR24511883,SRR24511884,SRR24511885 \
-       --no_ali --maxGB 2 -o qc_survey/
+       --no_ali --maxGB 2 -o qc_survey
 \end{lstlisting}
 
 This streams each run from NCBI, produces quality-control metrics
@@ -1111,7 +1132,7 @@ magic2 --createIndex IDX.hg38 -T hg38.tConfig
 # Analyse a local paired-end dataset
 magic2 -x IDX.hg38 \
        -i sample_R1.fastq.gz+sample_R2.fastq.gz \
-       -o sample_out/ \
+       -o sample_out \
        --bam --full
 
 # Output directory will contain:
@@ -1221,8 +1242,7 @@ and polished using Claude AI.
 % ===============================================================
 
 We thank David Landsman and Tom Madden for their support.
-This work was supported by the Intramural Research Program of the
-National Library of Medicine, National Institutes of Health.
+This research was supported by the Intramural Research Program of the National Institutes of Health (NIH). The contributions of the NIH authors are considered Works of the United States Government. The findings and conclusions presented in this paper are those of the author and do not necessarily reflect the views of the NIH or the U.S. Department of Health and Human Services.
 
 % ===============================================================
 \begin{thebibliography}{9}

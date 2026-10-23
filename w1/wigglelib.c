@@ -8,38 +8,10 @@
  */
 
 #include "wiggle.h"
+#include "wig.h"
 #include "peaks.h"
 #include "fastItoA.h"
 #include <zlib.h>
-static AZZ *wigAzOpen (const char *fName, AC_HANDLE h) ;    /* Open an AZZ file, return NULL on error. */
-static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *nPosp, long int *nBpp, BOOL cumul) ;
-
-/*************************************************************************************/
-
-static inline int fast_itoa_nl(char *buf, int val)
-{
-    char *p = buf;
-
-    if (val < 0) {
-        *p++ = '-';
-        val = -val;
-    }
-
-    if (val == 0) {
-        *p++ = '0';
-    } else {
-        char tmp[10];
-        int i = 0;
-        while (val > 0) {
-            tmp[i++] = '0' + val % 10;
-            val /= 10;
-        }
-        while (i--) *p++ = tmp[i];
-    }
-
-    *p++ = '\n';
-    return p - buf;           // bytes written
-}
 
 /*************************************************************************************/
 /************************** Wiggles **************************************************/
@@ -337,7 +309,7 @@ void sxWiggleParse (WIGGLE *sx, int z1, int z2)
 	  aa = arrayHandleCreate (100000, WIGGLEPOINT, sx->h) ;
 	array (sx->aaa, 0, Array) = aa ;
 	array (sx->aaa, remap, Array) = aa ;
-	wigAzZone (az, z1, z2 ? z2 : az->posMax, sx->pair_shift, aa, &nn, &nBp, sx->inFileOfFileList ? TRUE : FALSE) ;
+	wigAzZone (az, z1, z2 ? z2 : az->posMax, sx->pair_shift, 0, aa, &nn, &nBp, sx->inFileOfFileList ? TRUE : FALSE) ;
 	ac_free (h) ;
       }
       break ;
@@ -829,7 +801,7 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
   aoLevels = aceOutCreate (sx->outFileName, ".peaksCounts", sx->gzo, h) ;
   int posMin = 0 ;
   Array cc = arrayHandleCreate (arrayMax (aa) + posMin, int, h) ;
-  int minCover = sx->minCover > 0 ? sx->minCover : 30 ;
+  int minCover = sx->minCover > 0 ? sx->minCover : 0 ;
  
   if (arrayMax (aa))
     {
@@ -839,12 +811,10 @@ static void sxWiggleExportMultiPeaks (WIGGLE *sx, Array aa, Array bb, int remap)
       int ii, jj, jMax, *ip = arrayp (cc, iMax + 12, int) ;
 
       ip = arrayp (cc, 0, int) ;
-      if (0)
-	for (ii = 0 ; ii < iMax ; wp++, ii++)
-	  if (wp->y > 0) break ;
+      ii = 0 ;
       posMin = wp->x - step ;
       *ip++ = 0 ; /* always add a start zero */
-      for (jj = jMax = 1 ; ii < iMax ; ip++, wp++, ii++, jj++)
+      for (ii = 0, jj = jMax = 1 ; ii < iMax ; ip++, wp++, ii++, jj++)
 	{ *ip = wp->y ; if (wp->y) jMax = jj + 1 ; }
       *ip = 0 ; /* always add a terminal zero */
       arrayMax (cc) = jMax + 1 ;
@@ -1117,7 +1087,7 @@ static void sxWiggleExportTranscriptsEnds (WIGGLE *sx, Array aa0, Array bb, int 
   int ii, jj, nn ;
   Array aa = bb ? bb : aa0 ;
   int iiMax = aa ? arrayMax (aa) : 0 ;
-  int x, y ;
+  int x = 0, y = 0 ;
   int minCover = sx->minCover ;
   int step = (sx->out_step  ? sx->out_step : 1) ;
   int level, imm = 0 ;
@@ -1457,20 +1427,25 @@ static void sxWiggleExportOne (WIGGLE *sx, int remap, Array aa, int *limits, lon
     {
       AC_HANDLE h = ac_new_handle () ;
       const char *target = remap ? dictName (sx->remapDict, remap) : 0 ;
-      wigAzWrite (aceOutFileName (sx->ao), target, 0, aa, stepOut, 0, 0, 0, h) ;
+      WIG wig = wigCreate (0, target, stepOut, h) ;
+      Array bb = wig->aa ;
+      wig->aa = aa ;
+      wig->aa = bb ;
+      wigAzWrite (aceOutFileName (sx->ao), wig, h) ;
       ac_free (h) ;
       return ;
     }
-  
-  for (ii = 0, wp = arrp (aa, ii, WIGGLEPOINT) ; ii < arrayMax (aa) ; ii++, wp++) 
-    {
-      for (i = 0, limitp = limits ; *limitp > -1 ; i++, limitp++)
-	if (wp->y >= *limitp)
-	  {
-	    pos_covered[i] += stepOut ;
-	    cumul[i] += wp->y ;
-	  }
-    }
+
+  if (pos_covered)
+    for (ii = 0, wp = arrp (aa, ii, WIGGLEPOINT) ; ii < arrayMax (aa) ; ii++, wp++) 
+      {
+	for (i = 0, limitp = limits ; *limitp > -1 ; i++, limitp++)
+	  if (wp->y >= *limitp)
+	    {
+	      pos_covered[i] += stepOut ;
+	      cumul[i] += wp->y ;
+	    }
+      }
 
   for (ii = 0, wp = arrp (aa, ii, WIGGLEPOINT) ; wp->y == 0 && ii < iiMax  ; ii++, wp++) ;
   x1 = (wp)->x ;
@@ -2035,442 +2010,6 @@ Array sxGetWiggleZone (Array aa, const char *fNam, char *type, int *stepp, const
   return aa ;
 }
 
-/*************************************************************************************/
-/*************************************************************************************/
-#define AZMAGIC 55182836
-/* 256k positions == 2560 kb is step = 10 */
-
-/**************************************************************/
-
-static void azFinalize (void *vp)
-{
-  AZZ *az = vp ;
-  if (!az) return ;
-  if (az->magic != AZMAGIC)
-    messcrash ("azFinalize received corrupt array->magic");
-  az->magic = 0 ;
-  if (az->h) ac_free (az->h) ;
-  az->h = 0 ;
-} /* azFinalize */
-
-/**************************************************************/
-
-static Array wigAzRegularTiling (AZZ *az, Array wPoints, AC_HANDLE h)
-{
-  Array aa = arrayHandleCreate (az->xMax, unsigned int, h) ;
-  int iw, iwMax = arrayMax (wPoints) ;
-  int step = az->step ;
-  WIGGLEPOINT *wp = iwMax ? arrp (wPoints, 0, WIGGLEPOINT) : 0 ;
-  for (iw = 0 ; iw < iwMax ; iw++, wp++)
-    if (wp->x + step -1 >= 0)
-      array (aa, (wp->x + step - 1)/step, int) = wp->y > 0 ? wp->y : 0 ;
-  return aa ;
-} /* wigAzRegularTiling */
-
-/**************************************************************/
-
-AZZ *wigAzWrite (const char *fName, const char *target, Array aa, Array wPoints, int step, int posMin, int posMax, int bMax, AC_HANDLE h0)
-{
-  AC_HANDLE h = ac_new_handle () ;
-  int BMAX = bMax ? bMax : 18 ;
-  int jMax = 0x1 << BMAX ;
-  Array byte0 = arrayHandleCreate (jMax, unsigned char, h) ;
-  Array byte1 = arrayHandleCreate (jMax, unsigned char, h) ;
-  Array byte2 = arrayHandleCreate (jMax, unsigned char, h) ;
-  Array byte3 = arrayHandleCreate (jMax, unsigned char, h) ;
-
-  AZZ *az = handleAlloc (azFinalize, h0, sizeof(AZZ)) ;
-  az->magic = AZMAGIC ;
-  az->h = ac_new_handle () ;
-  az->fName = strnew (fName, az->h) ;
-  filremove (fName, 0) ;
-  if (az->fName)
-    { /* remove .az suffix */
-      char *cp = az->fName ;
-      while (*cp) cp++ ;
-      cp -= 3 ;
-      if (! strcasecmp (cp, ".az")) *cp = 0 ;
-    }
-
-  az->target = target ? strnew (target, az->h) : 0 ;
-  az->step = step ;
-  if (! aa) aa = wigAzRegularTiling (az, wPoints, h) ;
-
-  if (wPoints)
-    {
-      int wMax = arrayMax(aa) ;
-      WIGGLEPOINT *wp = wMax ? arrp (wPoints, 0, WIGGLEPOINT) : 0 ;
-      az->xMin = posMin = wp ? wp->x : 0 ;
-      wp = wMax ? arrp (wPoints, wMax - 1, WIGGLEPOINT) : 0 ;
-      posMax = posMin + (wMax - 1) * step ;
-    }
-  az->bMax = BMAX ;
-  int xMax = (posMax - posMin) / step + 1 ;
-  if (xMax > arrayMax (aa)) xMax = arrayMax (aa) ;
-  az->NB = xMax ? ((xMax - 1) >> BMAX) + 1 : 0 ;
-  az->xMax = xMax ;
-
-  if (! filCreateDir (az->fName))
-    messcrash ("wigAzWrite cannot create the %s directory", az->fName) ;
-
-  ACEOUT ao = aceOutCreate (az->fName, ".az", FALSE, h) ;
-  if (! ao) messcrash ("wigAzWrite cannot create %s/header", az->fName) ;
-  
-  aceOutf (ao, "Step\t%d\n", az->step) ;
-  aceOutf (ao, "Span\t%d\n", 1) ;
-  aceOutf (ao, "PosMin\t%d\n", 0) ; // always zero
-  aceOutf (ao, "PosMax\t%d\n", posMax) ;
-  aceOutf (ao, "xMax\t%d\n", xMax) ;
-  aceOutf (ao, "NB\t%d\n", az->NB) ;
-  aceOutf (ao, "BMAX\t%d\n", az->bMax) ;
-  if (az->target) aceOutf (ao, "Target\t%s\n", az->target) ;
-	  
-  aceOutDestroy (ao) ;
-
-  BOOL preferAZ = TRUE ;
-  if (preferAZ)
-    {
-      int xx = 0 ;
-      for (int ii = 0 ; ii < az->NB ; ii++)
-	{
-	  unsigned int zMin = 0, zMax = 0 ;
-	  int nBytes = 0, dummy = 0 ;
-	  unsigned int dz ;
-	  
-	  zMin = zMax = xx < az->xMax ? array (aa, xx, unsigned int) : 0 ;
-	  
-	  for (int jj = 1 ; jj < jMax && xx + jj < xMax ; jj++)
-	    {
-	      unsigned int z = array (aa, xx + jj, unsigned int) ;
-	      if (z < zMin) zMin = z ;
-	      if (z > zMax) zMax = z ;
-	    }
-	  dz = zMax - zMin ;
-	  
-	  nBytes = 0 ;
-	  if (dz) { nBytes++ ; dz >>= 8 ; }
-	  if (dz) { nBytes++ ; dz >>= 8 ; }
-	  if (dz) { nBytes++ ; dz >>= 8 ; }
-	  if (dz) { nBytes++ ; dz >>= 8 ; }
-	  
-	  char *azFileName = hprintf (h, "%s/wig.%d.az.gz",  az->fName, ii) ;
-	  gzFile gzf = gzopen (azFileName, "wb"); 
-	  if (! gzf)
-	    messcrash("wigAzWrite cannot open file %s",  azFileName) ;
-	  gzprintf (gzf, "%u\t%u\t%d\t%d\n", zMin, zMax, nBytes, dummy) ;
-	  
-	  
-	  for (int jj = 0 ; jj < jMax ; jj++)
-	    {
-	      unsigned int z = xx < az->xMax ? array (aa, xx++, unsigned int) : 0 ;
-	      dz = z - zMin;
-	      
-	      if (nBytes >= 1) { array (byte0, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
-	      if (nBytes >= 2) { array (byte1, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
-	      if (nBytes >= 3) { array (byte2, jj, unsigned char) = dz & 0xff ; dz >>= 8 ; }
-	      if (nBytes >= 4) { array (byte3, jj, unsigned char) = dz & 0xff ; }
-	    }
-	  
-	  unsigned int k = 0 ;
-	  if (nBytes >= 1)  k += gzwrite(gzf, arrp (byte0, 0, unsigned char), jMax) ;
-	  if (nBytes >= 2)  k += gzwrite(gzf, arrp (byte1, 0, unsigned char), jMax) ;
-	  if (nBytes >= 3)  k += gzwrite(gzf, arrp (byte2, 0, unsigned char), jMax) ;
-	  if (nBytes >= 4)  k += gzwrite(gzf, arrp (byte3, 0, unsigned char), jMax) ;
-	  
-	  if (k != (unsigned)(nBytes * jMax))
-	    messcrash("gzwrite k=%u != nBytes*jMax=%u", k, (unsigned) (nBytes  * jMax)) ;  
-	  if (gzclose(gzf) != Z_OK)
-	    messcrash("gzclose failed");   /* important: the trailer/flush happens here */
-	}
-    }
-  else
-    {
-      #define BUFFER_SIZE (2 * 1024 * 1024)  // 2MB
-      char *writeBuffer = malloc(BUFFER_SIZE) ;
-      unsigned int bufPos = 0 ;
-      
-      int xx = 0 ;
-      for (int ii = 0 ; ii < az->NB ; ii++)
-	{
-	  unsigned int zMin = 0, zMax = 0 ;
-	  int nBytes = 0, dummy = 0 ;
-	  
-	  if (0)
-	    {
-	      zMin = zMax = xx < az->xMax ? array (aa, xx, unsigned int) : 0 ;
-	      for (int jj = 1 ; jj < jMax && xx + jj < xMax ; jj++)
-		{
-		  unsigned int z = array (aa, xx + jj, unsigned int) ;
-		  if (z < zMin) zMin = z ;
-		  if (z > zMax) zMax = z ;
-		}
-	    }
-	  
-	  
-	  char *azFileName = hprintf (h, "%s/wig.%d.BF.gz",  az->fName, ii) ;
-	  gzFile gzf = gzopen (azFileName, "wb"); 
-	  if (! gzf)
-	    messcrash("wigAzWrite cannot open file %s",  azFileName) ;
-	  gzprintf (gzf, "%u\t%u\t%d\t%d\n", zMin, zMax, nBytes, dummy) ;
-	  
-	  
-	  for (int jj = 0 ; jj < jMax ; jj++)
-	    {
-	      unsigned int z = xx < az->xMax ? array (aa, xx++, unsigned int) : 0 ;
-	      char buf[32] ;
-	      int k = fast_itoa_nl(buf, z) ;
-	      
-	      // Flush if buffer full
-	      if (bufPos + k + 1 >= BUFFER_SIZE)
-		{
-		  unsigned int kk = gzwrite (gzf, writeBuffer, bufPos) ;
-		  if (kk != bufPos)
-		    messcrash("gzwrite kk=%u != bufPos=%u", kk, bufPos) ;
-		  bufPos = 0 ;
-		}
-	      // Copy to buffer
-	      memcpy(writeBuffer + bufPos, buf, k) ;
-	      bufPos += k ;
-	    }
-	  // Final flush
-	  if (bufPos > 0)
-	    {
-	      unsigned int kk = gzwrite (gzf, writeBuffer, bufPos) ;
-	      if (kk != bufPos)
-		messcrash("gzwrite kk=%u != bufPos=%u", kk, bufPos) ;
-	    }
-	  
-	  free(writeBuffer) ;
-	  if (gzclose(gzf) != Z_OK)
-	    messcrash("gzclose failed");   /* important: the trailer/flush happens here */
-	}
-    }
-      
-
-  ac_free (h) ;
-  return az ;
-} /* wigAzWrite */
-
-/**************************************************************/
-
-static AZZ *wigAzOpen (const char *fName, AC_HANDLE h0)
-{
-  AC_HANDLE h = ac_new_handle () ;
-  
-  AZZ *az = handleAlloc (azFinalize, h0, sizeof(AZZ)) ;
-  az->magic = AZMAGIC ;
-  az->h = ac_new_handle () ;
-  az->step = 0 ;
-  az->fName = strnew (fName, az->h) ;
-  az->xMax  = 0 ;
-  az->NB = 0 ;
-  az->cNB = -1 ;
-
-  if (az->fName)
-    { /* remove .az suffix */
-      char *cp = az->fName ;
-      while (*cp) cp++ ;
-      cp -= 3 ;
-      if (! strcasecmp (cp, ".az")) *cp = 0 ;
-    }
-
-  ACEIN ai = aceInCreate  (hprintf (az->h, "%s.az", az->fName), FALSE, h) ;
-  if (ai)
-    {
-      aceInSpecial (ai, "\n") ;
-      while (aceInCard (ai))
-	{
-	  char *cp = aceInWord (ai) ;
-	  if (! cp || *cp == '#')
-	    continue ;
-	  if (! strcmp (cp, "Step"))
-	    { aceInStep (ai, '\t') ; aceInInt (ai, &az->step) ; }
-	  else if (! strcmp (cp, "PosMin"))
-	    { aceInStep (ai, '\t') ; aceInInt (ai, &az->posMin) ; }
-	  else if (! strcmp (cp, "PosMax"))
-	    { aceInStep (ai, '\t') ; aceInInt (ai, &az->posMax) ; }
-	  else if (! strcmp (cp, "xMax"))
-	    { aceInStep (ai, '\t') ; aceInInt (ai, &az->xMax) ; }
-	  else if (! strcmp (cp, "NB"))
-	    { aceInStep (ai, '\t') ; aceInInt (ai, &az->NB) ; }
-	  else if (! strcmp (cp, "BMAX"))
-	    { aceInStep (ai, '\t') ; aceInInt (ai, &az->bMax) ; }
-	  else if (! strcmp (cp, "Target"))
-	    { aceInStep (ai, '\t') ; cp = aceInWord (ai) ; if (cp) az->target = strnew (cp, az->h) ; }
-	}
-    }
-  else
-    { ac_free (az) ; az = 0 ; }
-  ac_free (h) ;
-  
-  return az ;
-} /* azOpen */
-
-/**************************************************************/
-
-static BOOL azParseOneBlock (AZZ *az, int nb)
-{
-  if (az->cNB == nb)
-    return TRUE ;
-  AC_HANDLE h = ac_new_handle () ;
-  char *azFileName = hprintf (h, "%s/wig.%d.az.gz", az->fName, nb) ;
-  gzFile gzf = gzopen (azFileName, "rb") ;
-  if (gzf)
-    {
-      int jMax = 0x1 << az->bMax ;
-      unsigned int zMin, zMax ;
-      int nBytes, dummy ;
-      Array byte0 = arrayHandleCreate (jMax, unsigned char, h) ;
-      Array byte1 = arrayHandleCreate (jMax, unsigned char, h) ;
-      Array byte2 = arrayHandleCreate (jMax, unsigned char, h) ;
-      Array byte3 = arrayHandleCreate (jMax, unsigned char, h) ;
-      if (! az->cache) az->cache = arrayHandleCreate (jMax, int, az->h) ;
-      array (az->cache, jMax - 1, int) = 0 ;  /* make room */
-      az->cNB = nb ;
-      az->c1 = ((long)nb) << az->bMax ;
-      az->c2 = (nb+1L) << az->bMax ;
-      array (byte0, jMax -1, unsigned char) = 0 ;
-      array (byte1, jMax -1, unsigned char) = 0 ;
-      array (byte2, jMax -1, unsigned char) = 0 ;
-      array (byte3, jMax -1, unsigned char) = 0 ;
-
-      /* header line: must match writer's gzprintf("%u\t%u\t%d\t%d\n", ...) */
-      {
-        char headerLine[256] ;
-        if (! gzgets (gzf, headerLine, sizeof(headerLine)))
-          messcrash ("wigAzRead cannot read header of %s", azFileName) ;
-        if (sscanf (headerLine, "%u\t%u\t%d\t%d", &zMin, &zMax, &nBytes, &dummy) != 4)
-          messcrash ("wigAzRead bad header in %s: %s", azFileName, headerLine) ;
-      }
-      
-      unsigned int k = 0 ;
-      if (nBytes >= 1)  k += gzread (gzf, arrp (byte0, 0, unsigned char), jMax) ;
-      if (nBytes >= 2)  k += gzread (gzf, arrp (byte1, 0, unsigned char), jMax) ;
-      if (nBytes >= 3)  k += gzread (gzf, arrp (byte2, 0, unsigned char), jMax) ;
-      if (nBytes >= 4)  k += gzread (gzf, arrp (byte3, 0, unsigned char), jMax) ;
-      if (k != (unsigned)(nBytes * jMax))
-        messcrash ("gzread k=%u != nBytes*jMax=%u in %s",
-                   k, (unsigned)(nBytes * jMax), azFileName) ;
-
-      if (gzclose (gzf) != Z_OK)
-        messcrash ("gzclose failed on %s", azFileName) ;
-      
-      for (int jj = 0 ; jj < jMax ; jj++)
-        {
-          unsigned int z = 0 ;
-          unsigned int dz = 0 ;
-          if (nBytes >= 4) { dz += array (byte3, jj, unsigned char) ; dz <<= 8 ; }
-          if (nBytes >= 3) { dz += array (byte2, jj, unsigned char) ; dz <<= 8 ; }
-          if (nBytes >= 2) { dz += array (byte1, jj, unsigned char) ; dz <<= 8 ; }
-          if (nBytes >= 1) { dz += array (byte0, jj, unsigned char) ; }
-          z  = dz + zMin ;
-          array (az->cache, jj , unsigned int) = z ;
-        }
-    }
-  ac_free (h) ;
-  return gzf ? TRUE : FALSE ;
-} /* azParseOneBlock */
-
-/**************************************************************/
-/* x is given as entries in the table (not multiplied by step) */
-#ifdef JUNK
-static BOOL wigAzAt (AZZ *az, int x, unsigned int *value) ; /* Value at position x, FALSE if out of range */
-static BOOL wigAzAt (AZZ *az, int x, unsigned int *value)
-{
-  if (! az)
-    messcrash ("wigAzGet called on null az") ;
-  if (az->magic != AZMAGIC)
-    messcrash ("wigAzGet called on corrupted az") ;
-  if (! value)
-    messcrash ("wigAzGet called on null value pointer") ;
-  *value = 0 ;
-  if (x < 0 || x >= az->xMax)
-    return FALSE ;
-  int step = az->step ;
-  x = x + step - 1 - az->posMin ; x /= step ; // transform true position in array offsets
-  int nb = x >> az->bMax ;
-  if (nb >= az->NB)
-    return FALSE ;
-  if (azParseOneBlock (az, nb))
-    {
-      *value = array (az->cache, x - az->c1, unsigned int) ;
-      return TRUE ;
-    }
-  
-  return FALSE ;
-} /* wigAzAt */
-#endif     
-/**************************************************************/
-/* x1, x2 are given as entries in the table (not multiplied by step) */
-static BOOL wigAzZone (AZZ *az, int x1, int x2, int shift, Array wPoints, int *nPosp, long int *nBpp, BOOL cumul)
-{
-  WIGGLEPOINT *wp ;
-
-  if (! az)
-    messcrash ("wigAzZone called on null az") ;
-  if (az->magic != AZMAGIC)
-    messcrash ("wigAzZone called on corrupted az") ;
-  if (! arrayExists (wPoints))
-    messcrash ("wigAzZone called on null wPointsd Array") ;
-  if (x2 <= x1)
-    messcrash ("wigAzZone called x1>=x2: x1=%d x2=%d", x1, x2) ;
-  if (x1 < 0)
-    messcrash ("wigAzZone called x1 < 0: x1 = %d, xMin = %d", x1) ;
-  int step = az->step ;
-  x1 = x1 + step - 1 - 0*az->posMin ; x1 /= step ; // transform true position in array offsets
-  x2 = x2 + step - 1 - 0*az->posMin ; x2 /= step ; x2++ ; // transform true position in array offsets
-  if (! cumul)
-    {
-      if (x2 > x1)
-	{
-	  array (wPoints, x2 - x1 -1 + az->posMin/step, WIGGLEPOINT).x = 0 ;
-	  memset (arrp (wPoints, 0, int), 0, (x2 - x1 + az->posMin/step) * sizeof(WIGGLEPOINT)) ;
-	}
-      arrayMax (wPoints ) = x2 - x1 ;
-    }
-  else
-    array (wPoints, x2 - x1 -1 + az->posMin/step, WIGGLEPOINT).x += 0 ;
-  
-  if (x1 < 0)
-    x1 = 0 ;  
-  if (x2 > az->xMax)
-    x2 = az->xMax ;
-
-  if (shift > 0) shift += step - 1 ;   /* we prefer to over-reach a little when we divide by step */
-  if (shift < 0) shift -= (step - 1) ;
-  shift = shift/step ; 
-  shift = shift * step ;
-  for (int jj = 0, x = x1 ; x < x2 ; )
-    {
-      int nb = x >> az->bMax ;
-      if (azParseOneBlock (az, nb))
-	{
-	  while (x < x2 && x < az->c2)
-	    {
-	      if ( x - x1 + az->posMin/step >= 0)
-		{
-		  wp = arrayp (wPoints, x - x1 + az->posMin/step, WIGGLEPOINT) ;
-		  wp->x = x * step + az->posMin + shift ;
-		  if (x >= az->c1)
-		    {
-		      if (cumul)
-			wp->y += array (az->cache, x - az->c1, unsigned int) ;
-		      else
-			wp->y = array (az->cache, x - az->c1, unsigned int) ;
-		    }
-		  *nBpp += wp->y * step ;
-		}
-	      jj++ ; x++ ; (*nPosp)++ ;
-	    }
-	}
-      else
-	return FALSE ;
-    }
-  return TRUE ;
-} /* azZone */
-     
 /**************************************************************/
 /**************************************************************/
 /**************************************************************/
-
-

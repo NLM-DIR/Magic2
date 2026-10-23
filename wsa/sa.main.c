@@ -158,30 +158,6 @@ static void showBigAli (BigArray aligns)
 
 /**************************************************************/
 /**************************************************************/
-/* cumulate the number of BB to be analyzed */
-static int NTODO = 0 ; 
-static void npCounter (const void *vp)
-{
-  const PP *pp = vp ;
-  int nPuts = 0, nn = 0, n = 0 ;
-  char tBuf[25] ;
-
-  int nf = pp->nFiles ;
-  
-  while (n < nf)
-    {
-      channelGet (pp->npChan, &nPuts, int) ;
-      nn += nPuts ;
-      fprintf (stderr, "--- %s: npCounter Parsed %d/%d files\t%d blocs\tcumul %d blocks to be analysed\n",
-	      timeBufShowNow (tBuf), ++n, nf, nPuts, nn) ;
-    }
-  fprintf (stderr, "--- %s: npCounter Processed %d files, plChan should process %d blocks\n", timeBufShowNow (tBuf), nf, nn) ;
-  NTODO = nn ; /* this is global but there is no other place where we wrtie this variable */
-  return ;
-} /* npCounter */
-
-/**************************************************************/
-/**************************************************************/
 
 static void loadRegulator (const void *vp)
 {
@@ -218,9 +194,11 @@ static void readParser (const void *vp)
   
   while (channelGet (pp->fpChan, &rc, RC))
     {
+#ifdef JUNK
       if (0)
 	saSequenceParse (pp, &rc) ;
       else
+#endif
 	saParse (pp, &rc) ;
     }
   channelCloseSource  (pp->plChan) ;
@@ -689,13 +667,18 @@ static void runErrorsCumulate (int run, Array runErrors, Array bb)
 
 /**************************************************************/
 
-static void reportRunErrors (const PP *pp, Array runStats, Array runErrors)
+static void reportRunErrors (const PP *pp, int run, Array runStats, Array runErrors)
 {
+  const char *rNam = dictName (pp->runDict, run) ;
   AC_HANDLE h = ac_new_handle () ;
-  ACEOUT ao = aceOutCreate (pp->outFileName, "errorProfile.tsf", 0, h) ;
-  int type, run, runMax = arrayMax (runErrors) ;
+  char *fNam = hprintf (h, "%s%s.errorProfile.tsf"
+			, pp->outFileName
+			, rNam
+			) ;
+  ACEOUT ao = aceOutCreate (fNam, 0, 0,  h) ;
+  int type ;
 
-  for (run = 1 ; run < runMax ; run++)
+  if (run)
     {
       char buf[8] ;
       const char *AGCT = "AGCT" ;
@@ -708,7 +691,6 @@ static void reportRunErrors (const PP *pp, Array runStats, Array runErrors)
 	       , rNam, rs->nErr
 	       ) ;
 
-      if (! errors) continue ;
       /* substitutions */
       for (int longBase = 0 ; longBase < 4 ; longBase++)
 	{
@@ -887,7 +869,7 @@ static void exportDoGz (const PP *pp, BB *bb)
   char *runNam = hprintf (h, "hits/%s.%d.hits", run, bb->lane) ;
   int size = 1 << 23 ; /* 8 mega */
   Stack s = stackHandleCreate (1 << 23, h) ;
-  char *fNam = hprintf (h, "%s/%s.gz", pp->outFileName, runNam) ;
+  char *fNam = hprintf (h, "%s%s.gz", pp->outFileName, runNam) ;
   gzFile gzf = gzf = gzopen (fNam, "wb") ;
   ACEOUT ao = aceOutCreateToStack (s,h) ; 
 
@@ -1403,6 +1385,52 @@ static void reportRunStats (PP *pp, Array runStats)
   ac_free (h) ;
 } /* reportRunStats */
 
+static void releaseGenomeIndex (PP *pp)
+{
+#ifdef USE_GPU
+  GPUIndexFree (pp->bbG.gpu_idx); /* release the genome index on the GPU */
+#endif
+#ifdef USE_TORCH
+  /* release the genome index on the GPU */
+  {
+    int g ;
+    for (g = 0 ; g < pp->nGpu ; g++)
+      saTorchFree (pp->torchDev[g]) ;
+    pp->torch = NULL ;
+  }
+#endif
+  /* all runs are processed free the genome index */
+  for (int k = 0 ; k < NN ; k++)
+    {
+      if (pp->bbG.cwsN && pp->bbG.cwsN[k]) ac_free (pp->bbG.cwsN[k]) ; 
+      if (pp->bbG.cwsU && pp->bbG.cwsU[k]) ac_free (pp->bbG.cwsU[k]) ; 
+      if (pp->bbG.cwsP && pp->bbG.cwsP[k]) ac_free (pp->bbG.cwsP[k]) ; 
+    }
+  ac_free (pp->bbG.cwsN) ; 
+  ac_free (pp->bbG.cwsU) ;
+  ac_free (pp->bbG.cwsP) ; 
+
+  if (pp->bbG.dnas)
+    {
+      Array dna = 0 ;
+      int iMax = arrayMax (pp->bbG.dnas) ;
+      for (int i = 1 ; i < iMax ; i++)
+	{  /* the dna array points into the memory mapped globalTargetDna array */
+	  dna = arr (pp->bbG.dnas, i, Array) ;
+	  if (dna->lock)
+	    {
+	      dna->base = 0 ;
+	      arrayUnlock (dna) ;
+	    }
+	} 
+      if (1) /* use valgrind if double freed errors occur */
+	ac_free (pp->bbG.h) ;
+    }
+
+
+
+} /* releaseGenomeIndex */
+
 /*************************************************************************************/
 /*************************************************************************************/
 /***************************** Public interface **************************************/
@@ -1624,6 +1652,9 @@ int main (int argc, const char *argv[])
   BB bb ;
   Array cpuStats = 0 ;
   Array runErrors = 0 ;
+  Array runFilesI = 0 ;
+  Array runLanesI = 0 ;
+  Array runLanesDoneI = 0 ;
   Array inArray = 0 ;
   long unsigned int nHits = 0, nSeqs = 0, nBaseAligned = 0 ;
   long unsigned int nerr = 0 ;   /* cumulated number of errors */
@@ -1633,6 +1664,7 @@ int main (int argc, const char *argv[])
   long unsigned int nAli = 0 ;
   BOOL debug = FALSE ;
   int n = 0 ;
+  int nRunsDone = 0, nRunsToDo = 0 ;
   long int skips0 = 0, skips1 = 0, skips2 = 0, skips3 = 0, skips4 = 0, skipsFound = 0, skipsNotFound = 0 ;
   char tBuf[25] ;
   char tBuf0[25] ;
@@ -2020,6 +2052,7 @@ int main (int argc, const char *argv[])
   p.align = getCmdLineBool (&argc, argv, "--align") ;          /* left for back compatibility, over-ridden by --do_not_align */
   p.align = ! getCmdLineBool (&argc, argv, "--do_not_align") ; /* default is to align */
   p.ignoreIntronSeeds = getCmdLineBool (&argc, argv, "--ignoreIntronSeeds") ;
+
   p.useScratch = getCmdLineBool (&argc, argv, "--useScratch") ;
   p.useScratch = TRUE ;
 
@@ -2048,7 +2081,8 @@ int main (int argc, const char *argv[])
     p.sam = p.bam = p.hitsFormat = p.exportSamQuality = p.exportSamSequence = p.tabular = p.introns = FALSE ;
   if (getCmdLineBool (&argc, argv, "--introns"))
     p.introns = TRUE ;  /* stay on previous value is not set */
-  
+  if (getCmdLineBool (&argc, argv, "--no_wiggle"))
+    p.noWig = TRUE ;  /* create the wiggle is needed, but do not export them */
   p.sraCaching = getCmdLineBool (&argc, argv, "--sraCaching");   /* cache the files downlaoded from NCBI/SRA */
   if (p.sraCaching)
     {
@@ -2060,14 +2094,31 @@ int main (int argc, const char *argv[])
 
 
   /* action options ***/
+  p.peaks = getCmdLineBool (&argc, argv, "--peaks") ;
   p.wiggle = getCmdLineBool (&argc, argv, "--wiggles") ;
   p.wiggleEnds = getCmdLineBool (&argc, argv, "--wiggleEnds") ;
   p.wiggle_step = 0 ;  /* examples s=10, 5, 1, if not set by user the default is set in saConfigCheckTargetIndex  */
   getCmdLineInt (&argc, argv, "--wiggle_step", &(p.wiggle_step)) ;
-  p.wigBMAX = 18 ;
-  getCmdLineInt (&argc, argv, "--wigBMAX", &(p.wigBMAX)) ;  /* technical tuning affects the speed of the graphic interface */
-  if (p.wiggle && ! p.bigWig && ! p.wigAZ) p.wigBF = TRUE ;
-  
+  getCmdLineInt (&argc, argv, "--min_peak_coverage", &(p.min_peak_coverage)) ;
+  if (p.wiggle)
+    {
+      if (p.bigWig)
+	{
+	  if (! isExecutableInPath ("wigToBigWig"))   /* see w1/utils.c */
+	    {
+	      fprintf (stderr, "FATAL ERROR: --bigWig needs wigToBigWig.\n"
+		       "Please install this code (from UCSC) on your path"
+		       "or remove the the option --bigWig"
+		       "The coverage plots will then be exported in the older UCSC BF format, which is recognized by wigToBigWig"
+		       ) ;
+	      exit (1) ;
+	    }
+	}
+      else if (! p.wigAZ)
+	p.wigBF = TRUE ;
+      else
+	p.wigBF = FALSE ;
+    }
   p.snps = getCmdLineBool (&argc, argv, "--snp") ;
   p.blink = getCmdLineBool (&argc, argv, "--blink") ;
   p.blinkLn = 8 ;
@@ -2255,7 +2306,13 @@ int main (int argc, const char *argv[])
   cpuStats = arrayHandleCreate (1024, CpuSTAT, h) ;
   p.runStats = arrayHandleCreate (1024, RunSTAT, h) ;
   runErrors = arrayHandleCreate (1024, Array, h) ;
-  
+
+  /* each run own n files, n lanes (cumulated) and lanesDone */
+  runFilesI = arrayHandleCreate (8, int, h) ;
+  runLanesI = arrayHandleCreate (8, int, h) ;
+  runLanesDoneI = arrayHandleCreate (8, int, h) ;
+
+  p.runLanes = arrayHandleCreate (8, atomic_int, h) ;
   p.runDict = dictHandleCreate (16, p.h) ;
   p.targetClassDict = dictHandleCreate (16, p.h) ;
 
@@ -2299,12 +2356,8 @@ int main (int argc, const char *argv[])
 
 
   /* check the existence of the input sequence files */
-  inArray = saConfigGetRuns (&p, p.runStats) ;
+  inArray = saConfigGetRuns (&p, p.runStats, &nRunsToDo) ;
   n = dictMax (p.runDict) + 1 ;
-  p.runLanes = arrayHandleCreate (n, atomic_int, p.h) ;
-  p.runLanesDone = arrayHandleCreate (n, atomic_int, p.h) ;
-  array (p.runLanes, n - 1, atomic_int) = 0 ;
-  array (p.runLanesDone, n - 1, atomic_int) = 0 ;
   
   /* Set bonus for over represented sequences
    * For all classes with positive bonus
@@ -2329,9 +2382,9 @@ int main (int argc, const char *argv[])
   if (1)
     {
       /* Create the communication channels */
-      p.fpChan = channelCreate (4096, RC, p.h) ; /* this chan nust be deep enough to accept all file names at once */
+      p.fpChan = channelCreate (4096, RC, p.h) ; /* this chan must be deep enough to accept all file names at once */
       channelDebug (p.fpChan, debug, "fpChan") ;
-      p.npChan = channelCreate (4, int, p.h) ; /* count BB per inFile */
+      p.npChan = channelCreate (4096, SLS, p.h) ; /* this chan nust be deep enough to accept all file names at once */
       channelDebug (p.npChan, debug, "npChan") ;
       p.gmChan = channelCreate (1, BB, p.h) ;
       channelDebug (p.gmChan, debug, "gmChan") ;
@@ -2366,14 +2419,8 @@ int main (int argc, const char *argv[])
       p.nFiles = arrayMax (inArray) ; /* number of files to be processed */
       /* n Files must be processed
        * The readParsers will emit for each file, in parallel, n BB blocks
-       * The number is passed to the npChan which feeds the npCounter
-       * When n numbers have been received, the npCounter
-       * knows the cumulated number N of BB blocks to be analyzed
-       * and tells the plChan, hence the load regulator,
-       * and recurssibvely all program layers
-       * to close after having processed N BB blocks
+       * The number is passed to the npChan
        */
-      wego_go (npCounter, &p, PP) ; 
       /* Read preprocessing agents, they do not require the genome */
       nSources = 0 ;
       for (int i = 0 ; i < p.nFiles && i < nAgents && i < 10 ; i++)
@@ -2389,6 +2436,12 @@ int main (int argc, const char *argv[])
       /* Load the fpChan, triggering the readParsers
        * and recursively the whole pipeline
        */
+      for (int k = 0 ; k < p.nFiles ; k++)
+	{  /* a single run may own several files */
+	  RC *rc = arrayp (inArray, k, RC) ;
+	  array (runFilesI, rc->run, int)++ ;
+	  array (p.runLanes, rc->run, atomic_int) ;  /* resize */
+	}
       for (int k = 0 ; k < p.nFiles ; k++)
 	{
 	  RC *rc = arrayp (inArray, k, RC) ;
@@ -2434,6 +2487,11 @@ int main (int argc, const char *argv[])
 	}
     }
 
+  {{
+      int n = sizeof(float) * (1+dictMax (p.runDict)) ;
+      p.runStranding = halloc (n, p.h) ;
+      memset (p.runStranding, 0, n) ;
+    }}
   p.confirmedSLs  = arrayHandleCreate (1000, SLS, p.h) ;
   p.confirmedPolyAs  = arrayHandleCreate (1000, POLYA, p.h) ;
   p.confirmedIntrons  = arrayHandleCreate (1000, INTRON, p.h) ;
@@ -2452,7 +2510,7 @@ int main (int argc, const char *argv[])
   p.scratchesNU = 0 ;
   if (p.wiggle)
     {
-      if (p.useScratch)
+      if (p.useScratch) 
 	{
 	  p.scratches = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
 	  array (p.scratches, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
@@ -2494,8 +2552,6 @@ int main (int argc, const char *argv[])
   while (channelGet (p.doneChan, &bb, BB))
     {
       long int n = (bb.hits ? bigArrayMax (bb.hits) : 0) ;
-      int laneToDo ;
-      int laneDone ;
       if (bb.isGenome && p.bbG.cwsN)
 	{
 	  saCpuStatCumulate (cpuStats, p.bbG.cpuStats) ;
@@ -2529,10 +2585,15 @@ int main (int argc, const char *argv[])
 	
       if (bb.run)
 	{
-	  saPolyAsCumulate (&p, &bb) ;
-	  saSLsCumulate (&p, &bb) ;
-	  saIntronsCumulate (&p, &bb) ;
-	  saDoubleIntronsCumulate (&p, &bb) ;
+	  RunSTAT *rc = arrp (p.runStats, bb.run, RunSTAT) ;
+
+	  if (! rc->h)
+	    rc->h = ac_new_handle () ;
+	  saPolyAsCumulate (rc, &bb) ;
+	  saSLsCumulate (rc, &bb) ;
+	  saIntronsCumulate (rc, &bb) ;
+	  saDoubleIntronsCumulate (rc, &bb) ;
+	  
 	  saRunStatsCumulate (0, &p, &bb) ;
 	  saRunStatsCumulate (bb.run, &p, &bb) ;
 
@@ -2542,13 +2603,7 @@ int main (int argc, const char *argv[])
 	  if (p.wiggle) saWiggleCumulate (&p, &bb) ;
 	}
 
-      laneToDo = atomic_fetch_add_explicit (arrp (p.runLanes, bb.run, atomic_int), 0, memory_order_relaxed) + 0 ;
-      laneDone = atomic_fetch_add_explicit (arrp (p.runLanesDone, bb.run, atomic_int), 1, memory_order_relaxed) + 1 ;
-
-      if (laneToDo == laneDone)
-	{
-	  fprintf (stderr, "run %s done\n", dictName (p.runDict, bb.run)) ;
-	}
+      SLS sls ;
 
       /* release block  memory */
       if (bb.dnas)
@@ -2586,53 +2641,69 @@ int main (int argc, const char *argv[])
 	  timeDiffSecs (bb.start, bb.stop, &ns) ;
 	  if (0)
 	    fprintf (stderr, "%s: agent %d run %d / slice %d done (%d/%d)  start %s elapsed %d s, nSeqs %ld nBases %.3g errCost %d strategy %d\n"
-		     ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, NTODO, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.errCost, bb.isRna) ; 
+		     ,  timeBufShowNow (tBuf), bb.readerAgent, bb.run, bb.lane, ++nDone, -1, timeShow (bb.start, tBuf2, 25), ns, bb.nSeqs, (double)bb.length, bb.errCost, bb.isRna) ; 
+
+	  while (channelTryGet (p.npChan, &sls, SLS) > 0)
+	    {
+	      array (runFilesI, sls.run, int)-- ;
+	      array (runLanesI, sls.run, int) += sls.n ;
+	    }
+	  
+	  array (runLanesDoneI, bb.run, int)++ ;
+	  if (array (runFilesI, bb.run, int) == 0 &&
+	      array (runLanesI, bb.run, int) == array (runLanesDoneI, bb.run, int)
+	      )
+	    {
+	      char tBuf[25] ;
+	      fprintf (stderr, "=== %s: run %s done\n",
+		       timeBufShowNow (tBuf), dictName (p.runDict, bb.run)) ;
+
+	      nRunsDone++ ;
+	      if (nRunsDone == nRunsToDo)
+		releaseGenomeIndex (&p) ;
+
+	      /* here we should export the wiggles of this run
+	       * and all large tables
+	       * and append to runStats.tsf
+	       * and free all run memory
+	       */
+	      saSLsExport (&p, bb.run) ;
+	      saPolyAsExport (&p, bb.run) ;
+	      if (p.introns)
+		{
+		  saIntronsExport (&p, bb.run) ; /* before wiggleExport to restrand the gene expression */ 
+		  saDoubleIntronsExport (&p, bb.run) ;
+		}
+
+	      if (p.align)
+		reportRunErrors (&p, bb.run, p.runStats, runErrors) ;
+	      GeneCounts gcs = {0} ;
+	      if (0 && p.wiggle)
+		gcs = saWiggleExport (&p, nAgents) ;
+	      
+	      saRunStatExport (&p, bb.run, gcs) ; /* must come afer PolyAsExport and IntronsExport */
+ 
+	      RunSTAT *rc = arrp (p.runStats, bb.run, RunSTAT) ;
+	      
+  
+	      ac_free (rc->h) ;
+	    }
 	}
       ac_free (bb.h) ;
     }
 
-#ifdef USE_GPU
-  GPUIndexFree (p.bbG.gpu_idx); /* release the genome index on the GPU */
-#endif
-#ifdef USE_TORCH
-  /* release the genome index on the GPU */
-  {
-    int g ;
-    for (g = 0 ; g < p.nGpu ; g++)
-      saTorchFree (p.torchDev[g]) ;
-    p.torch = NULL ;
-  }
-#endif
 
-  for (int k = 0 ; k < NN ; k++)
-    {
-      if (p.bbG.cwsN && p.bbG.cwsN[k]) ac_free (p.bbG.cwsN[k]) ; 
-      if (p.bbG.cwsU && p.bbG.cwsU[k]) ac_free (p.bbG.cwsU[k]) ; 
-      if (p.bbG.cwsP && p.bbG.cwsP[k]) ac_free (p.bbG.cwsP[k]) ; 
-    }
-  ac_free (p.bbG.cwsN) ; 
-  ac_free (p.bbG.cwsU) ;
-  ac_free (p.bbG.cwsP) ; 
 
-  {{
-      int n = sizeof(float) * (1+dictMax (p.runDict)) ;
-      p.runStranding = halloc (n, p.h) ;
-      memset (p.runStranding, 0, n) ;
-    }}
-
-  if (p.introns)
-    {
-      saIntronsExport (&p) ; /* before wiggleExport to restrand the gene expression */ 
-      saDoubleIntronsExport (&p, p.doubleIntrons) ;
-    }
 
   GeneCounts gcs = {0} ;
   if (p.wiggle)
     gcs = saWiggleExport (&p, nAgents) ;
+  // if (p.debug) saCpuStatExport (&p, cpuStats) ;
+
+  //  saSLsExport (&p, p.confirmedSLs) ;
+  //  saRunStatExport (&p, p.runStats, gcs) ; /* must come afer PolyAsExport and IntronsExport */
   if (p.debug) saCpuStatExport (&p, cpuStats) ;
-  saPolyAsExport (&p, p.confirmedPolyAs) ;
-  saSLsExport (&p, p.confirmedSLs) ;
-  saRunStatExport (&p, p.runStats, gcs) ; /* must come afer PolyAsExport and IntronsExport */
+  s2gSamStatsExports (&p, p.runStats) ;
   
   wego_log ("Done") ;
   wego_flush () ; /* flush the wego logs to stderr */
@@ -2660,12 +2731,10 @@ int main (int argc, const char *argv[])
   if (p.gpu) printf ("GPU called %d times\n", p.gpu) ;
   if (arrayMax (p.runStats))
     reportRunStats (&p, p.runStats) ;
-  if (p.align)
-    reportRunErrors (&p, p.runStats, runErrors) ;
 
   if (p.bam) ac_free (p.bamHandle) ;
   /* release memory */
-  if (p.bbG.dnas)
+  if (0 && p.bbG.dnas) /* now done earlier in releaseMemory () */
     {
       Array dna = 0 ;
       int iMax = arrayMax (p.bbG.dnas) ;
@@ -2682,11 +2751,7 @@ int main (int argc, const char *argv[])
 	ac_free (p.bbG.h) ;
     }
   /* wego_log is the thread-safe way to pass messages to stderr */
-  if (p.justStats && p.outFileName)
-    {
-      if (system (hprintf (h, "touch %s/toto.BF.gz ; \\rm %s/*.BF.gz %s/*.hits &", p.outFileName  , p.outFileName)))
-	;
-    }
+
   saSetGetAdaptors (-999999, 0, 0, 0, 0) ;
   oligoEntropy (0, -999999, 0) ;
 
