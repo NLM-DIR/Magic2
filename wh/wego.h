@@ -11,14 +11,16 @@
 * $Header: /home/mieg/aa/CVS_ACEVIEW/ace/wh/wego.h,v 1.16 2020/05/31 03:29:13 mieg Exp $
 */
 #include <errno.h>
+#include <stddef.h>
 
 void wego_init (void) ;
 /*
-* You must call wego_init() (or wego_max_threads which calls wego_init)
-* before you use any of the other functions.
+* You should call wego_init() (or wego_max_threads which calls wego_init)
+* before you use any of the other functions.  If you forget, the first
+* wego_go / wego_run call initialises the library with 8 threads.
 * Nothing bad happens if you call it more than once.  For example, if
 * your program uses two libraries that depend on wego, each library
-* can call wego_init().
+* can call wego_init().  It is safe to call it concurrently.
 */
 void wego_max_threads (int max_threads) ;
 
@@ -47,15 +49,16 @@ void wego_flush (void) ;              /* blocking: flushes the wego_log channel 
  * vp is a pointer to a structure of type TYPE
  * the content of vp is passed by value
  * so it must be initialsed before the call to wego_go
+ * The task is fire-and-forget: its memory is released when it ends.
  */
-void wego_go_ (void(*f)(const void *vp), const void *vp, int size) ;
+void wego_go_ (void(*f)(const void *vp), const void *vp, size_t size) ;
 #define  wego_go(_f,_vp,_TYPE) wego_go_(_f,_vp,sizeof(_TYPE))
 
 /* example, launching a parallel thread executing the function f
  * look at wchannel/ in *.h to learn how to synchronize f using channels
  *
    typedef struct tStruct { int x, y, z ;} T ;
-   void f (const void *)
+   void f (const void *vp)
     {
       const T *t = (const T*) vp ;
 
@@ -86,4 +89,3 @@ void wego_go_ (void(*f)(const void *vp), const void *vp, int size) ;
 */
 
 #endif
-

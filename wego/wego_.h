@@ -9,6 +9,7 @@
 ************************************************************************
 * $Header: /home/mieg/aa/CVS_ACEVIEW/ace/wh/wego_.h,v 1.1 2017/01/23 21:46:58 mieg Exp $
 */
+#include <stddef.h>
 #include <wego.h>
 
 /*
@@ -32,7 +33,7 @@ typedef struct wego_group WEGO_GROUP ;
 /*
 * wego_new_group() creates a group with no tasks in it.
 */
-extern WEGO_GROUP * wego_new_group();
+extern WEGO_GROUP * wego_new_group (void) ;
 
 /*
 * wego_run() creates a new task. Parameters are:
@@ -64,7 +65,7 @@ extern WEGO_TASK *wego_run (WEGO_GROUP *group,
 	);
 
 /* we copy the structure to respect the paradigm: aliased or mutable */
-WEGO_TASK *wego_go_size (void(*f)(const void *vp), const void *vp, int size, WEGO_GROUP *group) ;
+WEGO_TASK *wego_go_size (void(*f)(const void *vp), const void *vp, size_t size, WEGO_GROUP *group) ;
 
 #define wego_group_go(_group,_f,_vp,type) wego_go_size((_f),(_vp),sizeof(type),(_group))
 
@@ -80,7 +81,8 @@ extern void * wego_result(WEGO_TASK *t);
 *	- has not been returned by wego_fin() before
 *	- has not been examined by wego_result()
 * The idea is that you call wego_fin() several times to collect all
-* the results.
+* the results.  Tasks are returned in order of completion.
+* It returns NULL when every task of the group has been reported.
 */
 extern WEGO_TASK *wego_fin (WEGO_GROUP *group);
 
@@ -101,6 +103,10 @@ extern WEGO_TASK *wego_fin (WEGO_GROUP *group);
 extern void wego_task_destroy (WEGO_TASK *task);
 extern void wego_group_destroy (WEGO_GROUP *task);
 
+/*
+* wego_exit() ends the current task early.  Inside a wego thread the
+* task is marked finished and the thread is reused.
+*/
 void wego_exit (int err) ;
 
 /*

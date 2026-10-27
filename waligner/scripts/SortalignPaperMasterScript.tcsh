@@ -208,6 +208,8 @@ setenv SV     v124.81.18M.wig.oct3     # errcost 4, no new index masking, wig
 setenv SVlast v124.81.18M.wig.oct3    # 
 setenv SV     v125.81.18M.wig.oct15     # idem, added wigPeak and strand_shift, is it slower ?
 setenv SVlast v125.81.18M.wig.oct15    # 
+setenv SV     v126.81.18M.wig.oct27     # idem, libwego modified
+setenv SVlast v126.81.18M.wig.oct27    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
