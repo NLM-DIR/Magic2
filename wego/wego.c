@@ -404,7 +404,8 @@ void wego_log (const char *text)
       return ;
     }
   cp = strnew (text, 0) ;
-  channelPut (wego_log_channel, &cp, const char**) ;
+  if (! channelPut (wego_log_channel, &cp, const char**))
+    ac_free (cp) ;   /* channel closed by wego_flush: drop the message, do not leak it */
 } /* wego_log  */
 
 /************************************************************************/

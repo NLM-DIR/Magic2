@@ -6,7 +6,7 @@
 *** wego - an easy library for simple SMP/multithreading in C
 *** header restricted to the few functions needed to run
 *** a multi htreaded code synchronized by channels
-*** see wh/channel.h and wh/remote_channel.h for details
+*** see wh/channel.h for details
 ************************************************************************
 * $Header: /home/mieg/aa/CVS_ACEVIEW/ace/wh/wego.h,v 1.16 2020/05/31 03:29:13 mieg Exp $
 */
