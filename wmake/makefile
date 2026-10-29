@@ -23,7 +23,7 @@ all: libs ace aceview acembly acext acenn other tools misc
 
 # Sub categories of code, please add new stuff to one of these groups if possible
 
-LIBS= libfree.a libtsfree.a libgraph.a libgif.a libace.a libacedna.a libstaden.a  libmd5.a libvsim.a libaccl.a  libacs.a libtcpfn.a libace5.a libwego.a libchannels.a libxace.a
+LIBS= libfree.a libtsfree.a libgraph.a libgif.a libace.a libacedna.a libstaden.a  libmd5.a libvsim.a libaccl.a  libacs.a libtcpfn.a libace5.a libwego.a libxace.a
 
 
 

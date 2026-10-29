@@ -777,6 +777,7 @@ static GeneCounts wiggleExportGeneCounts (const PP *pp)
 } /* wiggleExportGeneCounts */
 
 /**************************************************************/
+/**************************************************************/
 
 static void wiggleExportWiggleStats (PP *pp)
 {
@@ -880,13 +881,11 @@ static void wiggleExportWiggleStats (PP *pp)
 /**************************************************************/
 /**************************************************************/
 
-GeneCounts saWiggleExport (PP *pp, int nAgents)
+void saWiggleInit (PP *pp, int nAgents)
 {
-  AC_HANDLE h = ac_new_handle () ;
+  AC_HANDLE h = pp->h ;
   int wMax = pp->wiggles ? arrayMax (pp->wiggles) : arrayMax (pp->scratches) ;
   BOOL debug = FALSE ;
-  char tBuf[25] ;
-  GeneCounts gcs = {0} ;
 
   nAgents = nAgents > 32 ? 32 : nAgents ;
   
@@ -908,9 +907,35 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
   if (pp->geneBoxes)
     pp->geneCounts = arrayHandleCreate (wMax, Array, h) ;
 
-  int k = 0, n = 0 ;
-  for (k = 0 ; k < wMax ; k++)
+  for (int k = 0 ; k < wMax ; k++)
     array (pp->csts, k, CST) = cisTransCreate (5010, 0) ;
+
+  /* parallelize: create the synchronization channels */
+  pp->wwChan = channelCreate (wMax + 1, int, h) ;
+  channelDebug (pp->wwChan, debug, "wwChan") ;
+  pp->wwDoneChan = channelCreate (wMax+1, int, h) ;
+  channelDebug (pp->wwDoneChan, debug, "wwChan") ;
+
+  channelAddSources (pp->wwDoneChan, nAgents) ;
+
+  for (int ii = 0 ; ii < nAgents ; ii++)
+    {
+      pp->agent = ii ;
+      wego_go (wiggleExportAgent, pp, PP) ; 
+    }
+
+  return ;
+}
+
+/**************************************************************/
+
+GeneCounts saWiggleExport (PP *pp)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  GeneCounts gcs = {0} ;
+  char tBuf[25] ;
+  
+  int k = 0, n = 0, wMax = pp->wiggles ? arrayMax (pp->wiggles) : arrayMax (pp->scratches) ;
 
   if (pp->wiggles)
     {
@@ -931,20 +956,6 @@ GeneCounts saWiggleExport (PP *pp, int nAgents)
 	}
     }
   fprintf (stderr, "%s: start exportation of  %d wiggles\n", timeBufShowNow (tBuf), n) ;
-  /* parallelize: open a channel and start agents */
-  pp->wwChan = channelCreate (wMax + 1, int, h) ;
-  channelDebug (pp->wwChan, debug, "wwChan") ;
-  pp->wwDoneChan = channelCreate (wMax+1, int, h) ;
-  channelDebug (pp->wwDoneChan, debug, "wwChan") ;
-
-  channelSources (pp->wwDoneChan, nAgents) ;
-
-  for (int ii = 0 ; ii < nAgents ; ii++)
-    {
-      pp->agent = ii ;
-      wego_go (wiggleExportAgent, pp, PP) ; 
-    }
-  
   /* load the channel to start execution */ 
 
   k = n = 0 ;

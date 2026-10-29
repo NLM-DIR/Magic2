@@ -240,7 +240,8 @@ typedef struct bStruct {
 typedef struct pStruct {
   AC_HANDLE h ;
   AC_HANDLE bamHandle ;
-  BOOL debug, gzi, gzo ;
+  BOOL debug, debugP ;
+  BOOL gzi, gzo ;
   BOOL createIndex ;
   BOOL noJump ;
   BOOL full ;
@@ -646,8 +647,9 @@ int saParseSraDownload (PP *pp, const char *sraID) ;
 void saCompressedSequenceParser (const PP *pp, RC *rc) ;
   
 /* sa.wiggle */
+void saWiggleInit (PP *pp, int nAgents) ;
 void saWiggleCumulate (const PP *pp, BB *bb) ;
-GeneCounts saWiggleExport (PP *pp, int nAgents) ;
+GeneCounts saWiggleExport (PP *pp) ;
 
 /* sa.tabular */
 void saExportTabular (const PP *pp, BB *bb) ;

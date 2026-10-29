@@ -32,11 +32,11 @@
 # LINK_ACC is the set of object files needed if you use
 # the client version of the new Ace C library
 LINK_ACC= libacedna.a libtcpfn.a $(LINK_ACC_RPC) libaccl.a  libfree.a  libtsfree.a
-LINK_LIGHT=libacedna.a  libchannels.a libwego.a libfree.a  libtsfree.a 
+LINK_LIGHT=libacedna.a libwego.a libfree.a  libtsfree.a 
 
 # LINK_ACS is the set of object files needed if you use
 # the standalone acinside version of the new Ace C library
-LINK_ACS=libace.a libfree.a libtsfree.a libchannels.a libwego.a
+LINK_ACS=libace.a libfree.a libtsfree.a libwego.a
 
 .KEEP_STATE: 
 

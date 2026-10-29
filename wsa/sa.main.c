@@ -58,6 +58,7 @@ int  cudaHostUnregister   (void *ptr);
   
 
 static int NN = 1 ;
+static  BOOL samStats = FALSE ;
 
 static void showHitsDo (HIT *hit, long int iMax) ;
 
@@ -1723,6 +1724,7 @@ int main (int argc, const char *argv[])
     }     
 
   p.debug  = getCmdLineBool (&argc, argv, "--debug") ;
+  p.debugP  = getCmdLineBool (&argc, argv, "--debugP") ;
   BOOL request_GPU = getCmdLineBool (&argc, argv, "--gpu") ;
   
   /**************************  SRA downloader *********************************/
@@ -1805,7 +1807,7 @@ int main (int argc, const char *argv[])
    *
    * This system could be useful in other C programs using multithreading and large memory.
    */
-  if (! p.debug &&
+  if (! p.debug && ! p.debugP &&
       ! getCmdLineBool (&argc, argv, "--numactl")  &&
       !  (getenv("INVOCATION_NOTIFICATIONS") &&
 	  strstr(getenv("INVOCATION_NOTIFICATIONS"), "numactl")) &&
@@ -2061,6 +2063,7 @@ int main (int argc, const char *argv[])
   p.full = getCmdLineBool (&argc, argv, "--full") ;
   p.sam = getCmdLineBool (&argc, argv, "--sam") ;
   p.bam = getCmdLineBool (&argc, argv, "--bam") ;
+  samStats = getCmdLineBool (&argc, argv, "--samStats") ;
   p.bigWig = getCmdLineBool (&argc, argv, "--bigWig") ;
   if (getCmdLineBool (&argc, argv, "--BF")) { p.bigWig = FALSE ; p.wigBF = TRUE ; }
   if (getCmdLineBool (&argc, argv, "--AZ")) { p.bigWig = FALSE ; p.wigAZ = TRUE ; }
@@ -2168,6 +2171,7 @@ int main (int argc, const char *argv[])
       p.align = TRUE ;
       p.wiggle = TRUE ;  // implies geneCounts
       p.wiggleEnds = TRUE ;
+      p.peaks = TRUE ;
       // p.bam = TRUE ;
     }
   
@@ -2326,7 +2330,7 @@ int main (int argc, const char *argv[])
   dictAdd (p.targetClassDict, "Virus", 0) ;
 
   if (p.sam || p.bam) p.bamHandle  = ac_new_handle () ;
-  
+
   /*******************  create the index ********************************************/
 
   p.tArray = saTargetParseConfig (&p) ;
@@ -2425,7 +2429,7 @@ int main (int argc, const char *argv[])
       nSources = 0 ;
       for (int i = 0 ; i < p.nFiles && i < nAgents && i < 10 ; i++)
 	nSources++ ;
-      channelSources (p.plChan, nSources) ;
+      channelAddSources (p.plChan, nSources) ;
       for (int i = 0 ; i < nSources ; i++)
 	{
 	  fprintf (stderr, "Launch readParser %d\n", i) ;
@@ -2486,7 +2490,9 @@ int main (int argc, const char *argv[])
 	    }
 	}
     }
-
+  
+  if (0 && p.wiggle)
+    saWiggleInit (&p, nAgents) ;
   {{
       int n = sizeof(float) * (1+dictMax (p.runDict)) ;
       p.runStranding = halloc (n, p.h) ;
@@ -2662,48 +2668,63 @@ int main (int argc, const char *argv[])
 	      if (nRunsDone == nRunsToDo)
 		releaseGenomeIndex (&p) ;
 
+	      if (p.align)
+		reportRunErrors (&p, bb.run, p.runStats, runErrors) ;
+
 	      /* here we should export the wiggles of this run
 	       * and all large tables
 	       * and append to runStats.tsf
 	       * and free all run memory
 	       */
-	      saSLsExport (&p, bb.run) ;
-	      saPolyAsExport (&p, bb.run) ;
-	      if (p.introns)
+	      if (0)
 		{
-		  saIntronsExport (&p, bb.run) ; /* before wiggleExport to restrand the gene expression */ 
-		  saDoubleIntronsExport (&p, bb.run) ;
+		  saSLsExport (&p, bb.run) ;
+		  saPolyAsExport (&p, bb.run) ;
+		  if (p.introns)
+		    {
+		      saIntronsExport (&p, bb.run) ; /* before wiggleExport to restrand the gene expression */ 
+		      saDoubleIntronsExport (&p, bb.run) ;
+		    }
+		  
+		  GeneCounts gcs = {0} ;
+		  if (p.wiggle)
+		    gcs = saWiggleExport (&p) ;
+		  
+		  saRunStatExport (&p, bb.run, gcs) ; /* must come afer PolyAsExport and IntronsExport */
+		  
+		  RunSTAT *rc = arrp (p.runStats, bb.run, RunSTAT) ;
+		  ac_free (rc->h) ;
 		}
-
-	      if (p.align)
-		reportRunErrors (&p, bb.run, p.runStats, runErrors) ;
-	      GeneCounts gcs = {0} ;
-	      if (0 && p.wiggle)
-		gcs = saWiggleExport (&p, nAgents) ;
-	      
-	      saRunStatExport (&p, bb.run, gcs) ; /* must come afer PolyAsExport and IntronsExport */
- 
-	      RunSTAT *rc = arrp (p.runStats, bb.run, RunSTAT) ;
-	      
-  
-	      ac_free (rc->h) ;
 	    }
 	}
       ac_free (bb.h) ;
     }
-
-
-
-
-  GeneCounts gcs = {0} ;
+  
   if (p.wiggle)
-    gcs = saWiggleExport (&p, nAgents) ;
-  // if (p.debug) saCpuStatExport (&p, cpuStats) ;
-
-  //  saSLsExport (&p, p.confirmedSLs) ;
-  //  saRunStatExport (&p, p.runStats, gcs) ; /* must come afer PolyAsExport and IntronsExport */
+    saWiggleInit (&p, nAgents) ;
+  if (1)
+    {
+      GeneCounts gcs = {0} ;
+      if (p.wiggle)
+	gcs = saWiggleExport (&p) ;
+      for (int run = 1 ; run < arrayMax (p.runStats) ; run++)
+	{
+	  RunSTAT *rc = arrp (p.runStats, run, RunSTAT) ;
+	  saSLsExport (&p, run) ;
+	  saPolyAsExport (&p, run) ;
+	  if (p.introns)
+	    {
+	      saIntronsExport (&p, run) ; /* before wiggleExport to restrand the gene expression */ 
+	      saDoubleIntronsExport (&p, run) ;
+	    }	  
+	  saRunStatExport (&p, run, gcs) ; /* must come afer PolyAsExport and IntronsExport */
+	  if (samStats && run == 1)
+	    s2gSamStatsExports (&p, p.runStats) ;
+	  ac_free (rc->h) ;
+	}
+    }
+  
   if (p.debug) saCpuStatExport (&p, cpuStats) ;
-  s2gSamStatsExports (&p, p.runStats) ;
   
   wego_log ("Done") ;
   wego_flush () ; /* flush the wego logs to stderr */

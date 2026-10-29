@@ -38,7 +38,6 @@
 #include "ac.h"
 #include "bitset.h"
 #include "channel.h"
-#include "remote_channel.h"
 
 typedef struct svStruct {
   AC_HANDLE h ;
@@ -66,8 +65,6 @@ typedef struct svStruct {
   
   BOOL serverSide, submit ;
   int clientId ;
-  TASK *serverTask ;
-  TASK *clientTask ;
 } SV ;
 
 typedef struct runStruct {
@@ -2344,60 +2341,9 @@ static int svDeAnyLoop (SV *sv)
 
 static void svDeAny (SV *sv)
 {
-  BOOL debug = FALSE ;
+  //  BOOL debug = FALSE ;
 
-  if (sv->serverSide)
-    { 
-      AC_HANDLE h = ac_new_handle () ;
-      int ii, nn = sv->nRuns ;  
-      int  max_tasks = nn < sv->max_tasks ? nn : sv->max_tasks ;
-
-      sv->todo = taskCreateWriterChannel (sv->serverTask, "de_any_request", nn, SDU) ;
-      sv->done = taskCreateReaderChannel (sv->serverTask, "de_any_reply", nn, SDU) ;
-      if (debug)
-	{
-	  channelDebug ( sv->todo, TRUE, "todo") ;     
-	  channelDebug ( sv->done, TRUE, "done") ;     
-	}
-      if (! sv->inFileName) sv->inFileName = "." ;
-      if (! sv->outFileName) sv->outFileName = "." ;
-      for (ii = 0 ; ii < max_tasks ; ii++)
-	taskDispatch (0, hprintf (h, "%s %s %s %s %s --clientId %d --min_support %d --overhangLength %d -i %s -o %s"
-				, sv->de_uno ? "--de_uno" : ""
-				, sv->de_duo ? "--de_duo" : ""
-				, sv->de_paribus ? "--de_paribus" : ""
-				, sv->de_av ? "--de_av" : ""
-				, sv->de_wiggle ? "--de_wiggle" : ""
-				, ii + 1
-				, sv->min_support
-				, sv->overhangLength
-				, sv->inFileName, sv->outFileName
-				)
-		    , h) ;
-      
-      svDeAnyLoop (sv) ;
-      
-      /* all done */
-      ac_free (h) ;
-    }
-  else if (sv->clientId)
-    {
-      int nn = 1 ;
-      wego_log (hprintf (0, "client %d want to crate channel nn=%d", sv->clientId, nn)) ;
-      sv->todo = taskCreateReaderChannel (sv->clientTask, "de_any_request", nn, SDU) ;
-      sv->done = taskCreateWriterChannel (sv->clientTask, "de_any_reply", nn, SDU) ;
-      if (sv->todo && sv->done)
-	{
-	  if (debug)
-	    {
-	      channelDebug ( sv->todo, TRUE, "todo") ;     
-	      channelDebug ( sv->done, TRUE, "done") ;     
-	    }
-	  svClientLoop (sv) ;
-	  channelClose (sv->done) ;
-	}
-    }
-  else
+  if (1)
     {
       int ii, nn = sv->nRuns ;  
       int  max_threads = nn < sv->max_threads ? nn : sv->max_threads ;
@@ -2450,14 +2396,8 @@ static void usage (const char commandBuf [], int argc, const char **argv)
 	   "//          number of concurent threads running on the server side\n"
 	   "//          this number should be at least 3, because the server manages the\n"
 	   "//           communication layers as parallel threads\n"
-	   "//  Multi_tasking:\n"
-	   "//      By default, the program runs as a single process, however\n"
-	   "//      the present program may also spawns copies of itself as parallel tasks\n"
-	   "//      synchronized via the acedb remote-channels library\n"
-	   "//      --multi_tasking <int> : allows the program to spawn client subtasks\n" 
-	   "//            specifing the max number of tasks submitted in parallel\n"
-	   "//      [+rChan_Id <int> +rChan_h my_host +rChan_p 123452 +rChan_s 65432 _tChan_c 0] : do not use\n"
-	   "//            reserved parameters used in multi-tasking interprocess communications\n"  
+	   "//  Multi_threading:\n"
+	   "//      By default, the program runs as a single process\n"
 	   "//      --local: [default]  the subtasks run on the local computer, using a system() call\n"
 	   "//      --submit : the subtasksrun on the compute farm, provided scripts/submit is properly configured\n"
 
@@ -2531,7 +2471,6 @@ int main (int argc, const char **argv)
 
   sv.max_threads = 1 ;
   getCmdLineInt (&argc, argv, "--max_threads", &(sv.max_threads)) ;
-  getCmdLineInt (&argc, argv, "--multi_tasking", &(sv.max_tasks)) ;
   getCmdLineOption (&argc, argv, "--local", 0) ; /* consume default -- local arg */
   sv.submit = getCmdLineBool (&argc, argv, "--submit") ;
   getCmdLineInt (&argc, argv, "--clientId", &(sv.clientId)) ;
@@ -2554,10 +2493,6 @@ int main (int argc, const char **argv)
   dictAdd (sv.classeDict, "INVERSION", &sv.inversion) ;
 
   dictAdd (sv.classeDict, "TRANSLOCATION", &sv.translocation) ;
-  if (sv.clientId)
-    { /* consume the communication layer arguments */
-      sv.clientTask = taskClientInit (&argc, argv, h) ;
-    }
   
   if (argc > 1) 
     usage ("Unknown argument", argc, argv) ;
@@ -2578,17 +2513,6 @@ int main (int argc, const char **argv)
       arrayReport (-2) ;
       wego_max_threads (max_threads + 8) ;
       wego_log ("// start wego_logs") ;
-    }
-  
-  if (sv.max_tasks > 0)
-    { 
-      TASK_CONFIG config = TASK_LOCAL ; /* TASK_SUBMIT */;
-
-      sv.serverSide = TRUE ;
-      if (sv.submit)  config = TASK_SUBMIT ;
-      sv.serverTask = taskServerInit (argv[0], config, h) ;
-      if (sv.max_tasks < 1)
-	sv.max_tasks = 1 ;
     }
   
   if (sv.de_uno || sv.de_duo || sv.de_paribus || sv.de_av)

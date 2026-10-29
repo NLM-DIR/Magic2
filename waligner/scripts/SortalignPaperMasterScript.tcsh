@@ -196,20 +196,22 @@ setenv SV     v117.82.18M.wig.jun1     # new index masking in the genome the see
 setenv SVlast v117.82.18M.wig.jun1    # 
 #setenv SV     v118.81.18M.wig.jun1     # old genome not masked + wiggles
 #setenv SVlast v118.81.18M.wig.jun1    # 
-setenv SV     v120.82.18M.wig.jul10     # same code wig
+setenv SV     v120.82.18M.wig.jul10     # same code wig masked
 setenv SVlast v120.82.18M.wig.jul10    # 
-setenv SV     v121.82.18M.jul10     # exact same code nowig
+setenv SV     v121.82.18M.jul10     # exact same code nowig masked
 setenv SVlast v121.82.18M.jul10    # 
-setenv SV     v122.81.18M.jul19     # errcost 4, no new index masking, no wig
+setenv SV     v122.81.18M.jul19     # errcost 4, masked, no wig
 setenv SVlast v122.81.18M.jul19    # 
-setenv SV     v123.81.18M.aug25     # errcost 4, no new index masking, no wig
+setenv SV     v123.81.18M.aug25     # errcost 4, masked, no wig
 setenv SVlast v123.81.18M.aug25    # 
-setenv SV     v124.81.18M.wig.oct3     # errcost 4, no new index masking, wig
+setenv SV     v124.81.18M.wig.oct3     # errcost 4, masked, wig
 setenv SVlast v124.81.18M.wig.oct3    # 
 setenv SV     v125.81.18M.wig.oct15     # idem, added wigPeak and strand_shift, is it slower ?
 setenv SVlast v125.81.18M.wig.oct15    # 
 setenv SV     v126.81.18M.wig.oct27     # idem, libwego modified
 setenv SVlast v126.81.18M.wig.oct27    # 
+setenv SV     v127.82.18M.wig.oct27     # unset errCost NO MASK (due to a switch 81 is mask, 82 is no mask)
+setenv SVlast v127.82.18M.wig.oct27    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -226,10 +228,11 @@ setenv EXPORTSAM 0
 setenv EXPORTWIGGLES 1
 setenv EXPORTWIGGLEENDS 0
 setenv SETERRCOST 4
+unsetenv SETERRCOST 
 setenv seedLength 16
 setenv seedLength 18
 setenv maxTargetRepeats 31
-setenv maxTargetRepeats 81
+setenv maxTargetRepeats 82   # 82 = index of May, 81 = index of july with masking
 
 
 ##       SortalignPaperMasterScript.tcsh

@@ -128,7 +128,6 @@ WACE = wace  # Parsers
 WBQL = wbql  # Bql reimplementation of table-maker + AQL query language
 WAC = wac  # Mark's C-interface to acedb
 WEGO = wego # Mark's multi-threading interface
-WCHANNELS = wchannels  # remote channels : a way to synchronize multitasking
 
 #LINK_ACC_RPC=$(RPC_CLIENT_OBJS)
 LINK_ACC_RPC=
@@ -493,8 +492,6 @@ GIF_SOURCES = $(GIF_OBJS:.o=.c)
 # WJAVA_SOURCES = $(WJAVA_OBJS:.o=.c)
 WJO_SOURCES = $(JO_OBJS:.o=.c)
 
-CHANNEL_OBJS =  remote_channel.o
-WCHANNELS_SOURCES = $(CHANNEL_OBJS:.o=.c) 
 
 WAC_SOURCES = acclient.c actable.c acinside.c
 WACEC_SOURCES = gmleditor.c 
@@ -551,7 +548,7 @@ other : blixem dotter efetch \
 	pmapace tagcount diskdump diskfix \
 	xtest coltest
 
-libs : libfree.a libtsfree.a libgraph.a libace.a libace5.a libwego.a libxace.a libstaden.a libvsim.a libaccl.a libtcpfn.a libchannels.a
+libs : libfree.a libtsfree.a libgraph.a libace.a libace5.a libwego.a libxace.a libstaden.a libvsim.a libaccl.a libtcpfn.a
 
 TPLIBS= libace.a libfree.a libtsfree.a
 testprog: testprog.c $(TPLIBS)
@@ -597,8 +594,6 @@ $(WACE_SOURCES):
 	$(TEST) -L $@ || ln -s ../wace/$@ .
 $(WEGO_SOURCES):
 	$(TEST) -L $@ || ln -s ../wego/$@ .
-$(WCHANNELS_SOURCES):
-	$(TEST) -L $@ || ln -s ../wchannels/$@ .
 $(ACESOCK_SOURCES): 
 	$(TEST) -L $@ || ln -s ../$(ACESOCK)/$@ .
 $(LIBMD5_SOURCES): 
@@ -680,10 +675,6 @@ libvsim.a : $(WVSIM_OBJS)
 	$(AR) $(AR_OPTIONS) libvsim.a $?
 	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libvsim.a; fi
 
-libchannels.a :  $(CHANNEL_OBJS)
-	$(AR) $(AR_OPTIONS) libchannels.a $?
-	if ( $(RANLIB_NEEDED) ) then $(RANLIB) libchannels.a; fi
-		
 ########### MD5 encryption libraries ################
 
 # MD5 library

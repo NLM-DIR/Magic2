@@ -96,13 +96,14 @@ void saCpuStatExport (const PP *pp, Array stats)
 
 /*************************************************************************************/
 
-static int confirmedIntronsCountSites (const PP *pp, int run, RunSTAT *up)
+static int confirmedIntronsCountSites (const PP *pp, int run)
 {
-  int nn = 0, ii, iMax = arrayMax (pp->confirmedIntrons) ;
-  INTRON *zp = iMax ? arrp (pp->confirmedIntrons, 0, INTRON) : 0 ;
+  RunSTAT *rc = arrp (pp->runStats, run, RunSTAT) ;
+  int nn = 0, ii, iMax = rc->confirmedIntrons ? arrayMax (rc->confirmedIntrons) : 0 ;
+  INTRON *zp = iMax ? arrp (rc->confirmedIntrons, 0, INTRON) : 0 ;
   const char *feet = "GT_AG" ;
   const char *feet2 = "GC_AG" ;
-    
+
   if (run)
     {
       for (ii = 0 ; ii < iMax ; ii++, zp++)
@@ -131,9 +132,9 @@ static int confirmedIntronsCountSites (const PP *pp, int run, RunSTAT *up)
 	      if (n >= min)
 		nn++ ;
 	      min = 3 ;
-	      if (!strcmp (zp->feet, "gt_ag"))
+	      if (!strcasecmp (zp->feet, "gt_ag"))
 		min = 1 ;
-	      else if (!strcmp (zp->feet, "gc_ag"))
+	      else if (!strcasecmp (zp->feet, "gc_ag"))
 		min = 2 ;
 	      chrom = zp->chrom ; a1 = zp->a1 ; a2 = zp->a2 ;
 	      n = 0 ;
@@ -151,8 +152,9 @@ static int confirmedIntronsCountSites (const PP *pp, int run, RunSTAT *up)
 
 static int confirmedPolyAsCountSites (const PP *pp, int run)
 {
-  int nn = 0, ii, iMax = arrayMax (pp->confirmedPolyAs) ;
-  POLYA *zp = iMax ? arrp (pp->confirmedPolyAs, 0, POLYA) : 0 ;
+  RunSTAT *rc = arrp (pp->runStats, run, RunSTAT) ;
+  int nn = 0, ii, iMax = rc->confirmedPolyAs ? arrayMax (rc->confirmedPolyAs) : 0 ;
+  POLYA *zp = iMax ? arrp (rc->confirmedPolyAs, 0, POLYA) : 0 ;
 
   if (run)
     {
@@ -189,12 +191,14 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
   const char *METHOD = pp->method ? pp->method : "01_SortAlign" ;
   Array aa = runStats ;
   RunSTAT *s0 = arrayp (aa, 0, RunSTAT) ;
+  RunSTAT *s1 = arrayp (aa, 1, RunSTAT) ;
   ACEOUT ao = aceOutCreate (pp->outFileName, "s2g.samStats", 0, h) ;	
   const char *run = pp->runName ? pp->runName : (dictMax (pp->runDict) == 1 ? dictName (pp->runDict, 1) : "AllRuns") ;
   
   long int nRawReads = pp->nRawReads ? pp->nRawReads : s0->p.nReads ;
   long int nRawBases = pp->nRawBases ? pp->nRawBases : s0->p.nBase1 + s0->p.nBase2 ;
-  
+
+  aceOutDate (ao, "###", "This file is for debugging, see $run.runStats.tsf for more detailled results\n") ;
   aceOutf (ao, "%s\t%s\tPairs\t%ld\n", run, METHOD, s0->p.nPairs) ;
   aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\tof_raw_pairs\n", run, METHOD, s0->nPairsAligned, (100.0 * s0->nPairsAligned)/(nRawReads/2 + .000001)) ;
   
@@ -228,20 +232,22 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
   aceOutPercent (ao, 100.0 * s0->nMID /(.0001 + s0->nBaseAligned1 + s0->nBaseAligned2)) ;
   aceOut (ao, "%\tof_aligned_bases\n") ;
 
-  aceOutf (ao, "\n%s\t%s\tnPolyA_sites\t%ld\n", run, METHOD, confirmedPolyAsCountSites (pp, 0)) ;
+  aceOutf (ao, "\n%s\t%s\tnPolyA_sites\t%ld\n", run, METHOD, confirmedPolyAsCountSites (pp, 1)) ;
 
   int isRna = 0 ;
   saSetGetAdaptors (0, &isRna, 0, 1, 0) ;
   if (1 || isRna > 0)
     {
-      aceOutf (ao, "\n%s\t%s\tSupported_introns\t%ld\tgt_ag seen once or other seen 3\n", run, METHOD, confirmedIntronsCountSites (pp, 0, 0)) ;
-      aceOutf (ao, "\n%s\t%s\tnDoubleIntrons\t%ld\n", run, METHOD, arrayMax (pp->doubleIntrons)) ;
+      aceOutf (ao, "\n%s\t%s\tSupported_introns\t%ld\tgt_ag seen once or other seen 3\n"
+	       , run, METHOD, confirmedIntronsCountSites (pp, 1)
+	       ) ;
+      aceOutf (ao, "\n%s\t%s\tnDoubleIntrons\t%ld\n", run, METHOD, s1->doubleIntrons ? arrayMax (s1->doubleIntrons) : 0) ;
       aceOutf (ao, "%s\t%s\tIntron_supports\t%ld\t%ld\t%ld\t%.3f%%\tpositive_strand_supports\n"
 	       , run, METHOD
 	       , s0->gt_ag_Support + s0->ct_ac_Support 
 	       , s0->gt_ag_Support
 	       , s0->ct_ac_Support
-	       , pp->runStranding[0]
+	       , pp->runStranding[1]
 	       ) ;
     }
   

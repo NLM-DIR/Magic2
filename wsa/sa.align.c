@@ -2343,7 +2343,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
   int minAli = pp->minAli ;
   Array aaNew = 0 ;
   int errCost = bb->errCost ;
-  int bigErrCost = 8 ; /* errCost ; */
+  int bigErrCost = 4 ; /* errCost ; */
   int myRead = arrp (aa, 0, ALIGN)->read ;
   unsigned int mask = (1 << nMask) - 1 ;
   iMax = arrayMax (aa) ;

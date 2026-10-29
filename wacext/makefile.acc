@@ -108,7 +108,7 @@ ALL_ACC_OBJS = go2gene.o bly2hosac.o kscount.o akg.o gene_nm_remap.o \
 	split.o wiggle_smoother.o samclustering.o dna2dna.o  wiggle.o histo.o snp.o tsnp.o tricoteur.o \
 	mega3psort2ace.o calireport.o googletable.o  geneindex.o pg2pg.o seqc.o \
 	dnastitch.o kmercount.o g2x.o qcsummary.o snpsummary.o dnabloom.o snpbloom.o \
-	cnv.o sv.o chanserver.o chanclient.o chanscript.o chantest.o sra_metadata.o \
+	cnv.o sv.o chantest.o sra_metadata.o \
 	demazure.o dnawalk.o pi_channel_test.o introns.o table_histo.o tsf.o sam2gold.o \
 	tfali.o postMagicBlast.o altintrons.o mir.o dirsync_nfs.o  peaks.o
 	
@@ -140,7 +140,7 @@ all: go2gene bly2hosac kscount akg sakg gene_nm_remap sgene_nm_remap gene2gene g
 	david taxtree jumpalign dnamotif mute\
 	wiggle_smoother  dna2dna dnastitch kmercount  wiggle histo snp tsnp tricoteur peaks \
 	mega3psort2ace  geneindex pg2pg seqc g2x qcsummary snpsummary dnabloom snpbloom \
-	chanserver chanclient mir cnv sv chantest dnawalk pi_channel_test \
+	mir cnv sv  dnawalk pi_channel_test \
 	sra_metadata introns table_histo tsf sam2gold tfali postMagicBlast altintrons \
 	dirsync_nfs 
 
@@ -151,7 +151,7 @@ e8: e8.o $(LINK_ACC)
 	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS)
 
 demazure: demazure.o  $(LINK_ACS) $(LIBS) 
-	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)  libchannels.a  libwego.a -lpthread 
+	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)   libwego.a -lpthread 
 
 su21: su21.o $(LINK_ACC)
 	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS)
@@ -166,10 +166,10 @@ irrep: irrep.o $(LINK_ACC)
 	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS)
 
 jumpalign: jumpalign.o $(LINK_ACC) 
-	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS) libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o  $(LINK_ACC) $(LIBS) libwego.a -lpthread
 
 cnv: cnv.o $(LINK_ACS)
-	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS) libchannels.a  libwego.a -lpthread 
+	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)  libwego.a -lpthread 
 
 dna2dna: dna2dna.o $(LINK_LIGHT) 
 	$(LINKER) -o $@  $@.o  $(LINK_LIGHT) $(LIBS)
@@ -226,13 +226,13 @@ snp: snp.o $(LINK_ACS)
 	$(LINKER) -o $@  $@.o  $(LINK_ACS) $(LIBS) 
 
 tricoteur: tricoteur.o $(LINK_ACS) 
-	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 tsnp: tsnp.o $(LINK_ACS) 
-	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
-sv: sv.o $(LINK_ACS)  libchannels.a
-	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a libchannels.a  libwego.a listen_socket.o libfree.a libtsfree.a  -lpthread -lz
+sv: sv.o $(LINK_ACS) 
+	$(LINKER) -o $@  $@.o   $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a  libwego.a listen_socket.o libfree.a libtsfree.a  -lpthread -lz
 
 wiggle_smoother: wiggle_smoother.o
 	$(LINKER) -o $@  $@.o 
@@ -301,45 +301,36 @@ clipalign: clipalign.o
 	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS) 
 
 clipalign_chan: clipalign_chan.o  
-	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a libchannels.a   libwego.a listen_socket.o libfree.a libtsfree.a -lpthread -lz
+	$(LINKER) -o $@  $@.o $(LINK_ACS) $(LIBS)   connect_socket.o libtcpfn.a   libwego.a listen_socket.o libfree.a libtsfree.a -lpthread -lz
 
 
 
 UMI: UMI.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 variant_caller: variant_caller.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 magicx: magicx.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 paraclipalign: paraclipalign.o  
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 dnabloom: dnabloom.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 dnawalk: dnawalk.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 pi_channel_test: pi_channel_test.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 snpbloom: snpbloom.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 chantest: chantest.o
-	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libchannels.a libwego.a -lpthread
-
-chanclient: chanclient.o libtcpfn.a libchannels.a
-	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o  libfree.a libtsfree.a  libwego.a -lpthread -lz
-
-chanserver: chanserver.o libtcpfn.a libchannels.a
-	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o libfree.a libtsfree.a  libwego.a -lpthread -lz
-
-chanscript: chanscript.o libtcpfn.a libchannels.a
-	$(LINKER)  -o $@  $@.o  connect_socket.o libtcpfn.a libchannels.a listen_socket.o libfree.a libtsfree.a  libwego.a -lpthread   $(LINK_ACC) -lz
+	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS)  libwego.a -lpthread
 
 googletable: googletable.o
 	$(LINKER)  -o $@  $@.o $(LINK_ACS) $(LIBS) 
