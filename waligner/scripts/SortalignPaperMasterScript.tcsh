@@ -212,6 +212,8 @@ setenv SV     v126.81.18M.wig.oct27     # idem, libwego modified
 setenv SVlast v126.81.18M.wig.oct27    # 
 setenv SV     v127.82.18M.wig.oct27     # unset errCost NO MASK (due to a switch 81 is mask, 82 is no mask)
 setenv SVlast v127.82.18M.wig.oct27    # 
+setenv SV     v128.82.18M.wig.oct29     # fix the nemerator in ErrorRate
+setenv SVlast v128.82.18M.wig.oct29    # 
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -1222,7 +1224,7 @@ cat RESULTS/*/*/s2g.samStats | sed -e 's/nMultiAligned 0 times/nUnaligned/g' -e 
 
 
 \mv RESULTS/allSamStats RESULTS/allSamStats.old
-cat RESULTS/allSamStats.old | sed -e 's/nAlignedReads/AlignedReads/' -e 's/nPerfectReads/Perfect_reads/' -e 's/nRawBases/RawBases/' -e 's/nRawReads/RawReads/' -e 's/nReads/Reads/' -e 's/nErrors/nMismatches_and_InDels/' -e 's/nMismaches_and_InDels/nMismatches_and_InDels/' > RESULTS/allSamStats
+cat RESULTS/allSamStats.old | sed -e 's/nAlignedReads/AlignedReads/' -e 's/nPerfectReads/Perfect_reads/' -e 's/nRawBases/RawBases/' -e 's/nRawReads/RawReads/' -e 's/nReads/Reads/'  -e 's/nMismatches_and_InDels/trueMismatches_and_InDels/' -e 's/nErrorEvents/nMismatches_and_InDels/'  -e 's/nMismaches_and_InDels/nMismatches_and_InDels/' > RESULTS/allSamStats
 
 mv RESULTS/allSamStats RESULTS/allSamStats.1
 foreach run ($runs)
@@ -1248,7 +1250,7 @@ foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads nUn
   echo "\n" >> COMPARE/samStats.$SV.txt
 end
 
-foreach tag (AlignedReads nAlignedBases nMismatches_and_InDels Perfect_reads RawBases RawReads nUnaligned nAlignedOnce nAlignedSeveralTimes)
+foreach tag (AlignedReads nAlignedBases  nMismatches_and_InDels Perfect_reads RawBases RawReads nUnaligned nAlignedOnce nAlignedSeveralTimes)
   echo $tag
   if (-e  toto.tag) \rm toto.tag
   echo "\n$tag\t$SV" >> COMPARE/samStats.$SV.txt

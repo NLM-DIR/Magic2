@@ -226,7 +226,7 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
 	   ) ;
   aceOutf (ao, "%s\t%s\tWiggleCumul\t%ld\n", run, METHOD, pp->wiggleCumul) ;
   aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t", run, METHOD, s0->nErr) ;
-  aceOutPercent (ao, 100.0 * s0->nMID /(.0001 + s0->nBaseAligned1 + s0->nBaseAligned2)) ;
+  aceOutPercent (ao, 100.0 * s0->nErr /(.0001 + s0->nBaseAligned1 + s0->nBaseAligned2)) ;
   aceOut (ao, "%\tof_aligned_bases\n") ;
   aceOutf (ao, "%s\t%s\tnMismatches_and_InDels\t%ld\t", run, METHOD, s0->nMID) ;
   aceOutPercent (ao, 100.0 * s0->nMID /(.0001 + s0->nBaseAligned1 + s0->nBaseAligned2)) ;
