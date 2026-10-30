@@ -9956,7 +9956,7 @@ echo >> $toto
 #### compute the fr non stranded peaks of each run by combining the shifted f and r stranded wiggles
 #### For the groups: do not shift: the group f and r are already cosntructed form the shifted runspeakMinCover
  phasePeaks:
-set minPeakCover=3
+set minPeakCover=4
 set Peaks=Peaks.$minPeakCover
 
 if (! -d tmp/$Peaks) mkdir tmp/$Peaks
