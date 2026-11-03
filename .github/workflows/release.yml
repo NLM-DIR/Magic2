@@ -17,7 +17,7 @@ jobs:
       matrix:
         include:
           - name: linux-x86_64
-            os: ubuntu-22.04
+            os: ubuntu-20.04
             machine: LINUX_4_OPT
 #          - name: linux-arm64
 #            os: ubuntu-24.04-arm
@@ -37,7 +37,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+          sudo apt-get install -y gcc-8 g++-8
           sudo apt-get install -y build-essential zlib1g-dev libbz2-dev liblzma-dev libxmu-dev
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 --slave /usr/bin/g++ g++ /usr/bin/g++-8 --slave /usr/bin/gcov gcov /usr/bin/gcov-8
+          gcc --version
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'

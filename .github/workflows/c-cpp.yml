@@ -12,14 +12,18 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.4
 
     steps:
     - uses: actions/checkout@v4
     - name: Install build dependencies
       run: |
           sudo apt-get update
+          sudo apt-get inatall -y gcc-8 g++-8
           sudo apt-get install -y libbz2-dev liblzma-dev zlib1g-dev
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 --slave /usr/bin/g++ g++ /usr/bin/g++-8 --slave /usr/bin/gcov gcov /usr/bin/gcov-8
+          gcc --version
+
     - name: make libs
       run: make libs
     - name: make sra
