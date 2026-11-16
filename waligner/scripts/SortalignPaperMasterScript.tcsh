@@ -214,6 +214,12 @@ setenv SV     v127.82.18M.wig.oct27     # unset errCost NO MASK (due to a switch
 setenv SVlast v127.82.18M.wig.oct27    # 
 setenv SV     v128.82.18M.wig.oct29     # fix the nemerator in ErrorRate
 setenv SVlast v128.82.18M.wig.oct29    # 
+setenv SV     v129.82.18M.wig.nov13     # same but added the short runs that we will try to improve
+setenv SVlast v129.82.18M.wig.nov13
+setenv SV     v130.82.18M.wig.nov15     # same but added the short runs now auto clipping and auto fastc
+setenv SVlast v130.82.18M.wig.nov15
+setenv SV     v131.82.16M.wig.nov16     # same seed 16 ATTENTION reset seedLength to 18 below to change back
+setenv SVlast v131.82.16M.wig.nov16
 
 if ($SV == $SVlast) then
   \cp  /home/mieg/ace/bin.$ACEDB_MACHINE/sortalign bin/sortalign.$SV
@@ -231,8 +237,8 @@ setenv EXPORTWIGGLES 1
 setenv EXPORTWIGGLEENDS 0
 setenv SETERRCOST 4
 unsetenv SETERRCOST 
-setenv seedLength 16
 setenv seedLength 18
+setenv seedLength 16
 setenv maxTargetRepeats 31
 setenv maxTargetRepeats 82   # 82 = index of May, 81 = index of july with masking
 
@@ -284,6 +290,7 @@ set createIndex=0
 if ($createIndex == 1)  setenv methods "011_SortAlignG6R3 012_SortAlignG3R3"
 if ($createIndex == 11)  setenv methods "011_SortAlignG6R3"
 if ($createIndex == 12)  setenv methods "012_SortAlignG3R3"
+# setenv methods "011_SortAlignG6R3"
 
 #############################################################################
 ## Datasets
@@ -304,6 +311,31 @@ setenv PFAL_r2_runs "PFALt1r2 PFALt2r2 PFALt3r2"
 setenv PFAL_r3_runs "PFALt1r3 PFALt2r3 PFALt3r3"
 setenv PFAL_runs "$PFAL_r1_runs $PFAL_r2_runs $PFAL_r3_runs"
 
+# Human short reads
+# ~/AW/Human_DATA/miRNA_reference_data_forMagic2paper/PRJNA257358_mirna_2016_SraRunInfo.txt 
+# bin/sortalign --sraDownload SRR1535280,SRR1535283,SRR1535293,SRR1535276 --maxGB 2 
+if (0) then
+  pushd Fasta
+  mkdir S_1 S_2 S_3 S_4
+  echo  SRR1535280 > S_1/SRR
+  echo  SRR1535283 > S_2/SRR
+  echo  SRR1535293 > S_3/SRR
+  echo  SRR1535276 > S_4/SRR
+  pushd S_1 ; ln -s ../../SRA/SRR1535280.fasta.gz S_1.fasta.gz ; popd
+  pushd S_2 ; ln -s ../../SRA/SRR1535283.fasta.gz S_2.fasta.gz ; popd
+  pushd S_3 ; ln -s ../../SRA/SRR1535293.fasta.gz S_3.fasta.gz ; popd
+  pushd S_4 ; ln -s ../../SRA/SRR1535276.fasta.gz S_4.fasta.gz ; popd
+  pushd S_1 ; ln -s ../../SRA/SRR1535280.fastq.gz S_1.fastq.gz ; popd
+  pushd S_2 ; ln -s ../../SRA/SRR1535283.fastq.gz S_2.fastq.gz ; popd
+  pushd S_3 ; ln -s ../../SRA/SRR1535293.fastq.gz S_3.fastq.gz ; popd
+  pushd S_4 ; ln -s ../../SRA/SRR1535276.fastq.gz S_4.fastq.gz ; popd
+  echo GRCh38 > S_1/target
+  echo GRCh38 > S_2/target
+  echo GRCh38 > S_3/target
+  echo GRCh38 > S_4/target
+endif
+
+setenv SHORT_runs "S_1 S_2 S_3 S_4"
 
 
 setenv bigIlluminaRuns "RNA_PolyA_A_1_50Gb RNA_PolyA_B_1_47Gb "
@@ -316,8 +348,8 @@ setenv wormRuns "  Worm_RNA_150PE "
 setenv monkeyRuns "Chimpanzee_0.92pc Macaque_2.69pc PTMacaque_2.71pc Baboon_2.92pc Marmoset_3.14 SquirrelMonkey_3.08pc MouseLemur_2.64pc"
 setenv baruzzoRuns "HG19t1_0.543pc HG19t2_1.186pc HG19t3_6.024pc"
 
-setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns "
-setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns   "
+setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $SHORT_runs "
+setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $SHORT_runs  "
 
 
 # setenv runs "RNA_PolyA_AB_1_97G"

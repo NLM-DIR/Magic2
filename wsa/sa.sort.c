@@ -95,8 +95,8 @@ static inline int hitPairOrder (const void *va, const void *vb)
    */
   n = ((up->read >> 1) > (vp->read >> 1)) -  ((up->read >> 1) < (vp->read >> 1)) ; if (n) return n ; 
   n = ((up->chrom > vp->chrom) - (up->chrom < vp->chrom)) ; if (n) return n ; 
-  long unsigned int n1 = (long unsigned int) up->a1 + (up->x1 >> NSHIFTEDTARGETREPEATBITS) ;
-  long unsigned int n2 = (long unsigned int) vp->a1 + (vp->x1 >> NSHIFTEDTARGETREPEATBITS) ;
+  long unsigned int n1 = (long unsigned int) up->a1 + ((long unsigned int) up->x1 >> NSHIFTEDTARGETREPEATBITS) ;
+  long unsigned int n2 = (long unsigned int) vp->a1 + ((long unsigned int) vp->x1 >> NSHIFTEDTARGETREPEATBITS) ;
   n = (n1 > n2) - (n1 < n2) ; if (n) return n ;
   n = ((up->x1 > vp->x1) - (up->x1 < vp->x1)) ; 
 
@@ -363,7 +363,7 @@ int saSort (BigArray aa, int type)
 	return FALSE ;  /* i did not use the GPU */
       cmp = hitPairOrder ;
       break ;
-    case 4:
+    case 4:  /* here we sort of field 1 (not zero) of the struct, be very careful */
       if (s != 32)
 	messcrash ("Wrong call to saSort type 4") ;
       if (checkClean4 (cp, N))
@@ -371,8 +371,15 @@ int saSort (BigArray aa, int type)
       cmp = seedMatchOrder ;
       break ;
     case 5:
+      if (s != 16) messcrash ("Wrong call to saSort type 1") ;
+      if (checkClean1 (cp, N))
+	return FALSE ;  /* i did not use the GPU */
+      cmp = cwOrder ;
+      break ;
+    case 6:
       if (s != 32)
-	messcrash ("Wrong call to saSort type 5") ;
+	messcrash ("Wrong call to saSort type 6") ;
+      messcrash ("Wrong call  saSort type 6 not implemented") ;
       break ;
     default:
       messcrash ("Wrong call to saSort type = %d > 4", type) ;
@@ -414,6 +421,13 @@ int saSort (BigArray aa, int type)
 	  bigArraySwitchBase (aa, bigArrayMax (aa), dst) ;
 	  done = TRUE ;
 	  break ;
+	  /*
+	    case 5:
+	  dst = saRadixSort3Signed (bigArrp (aa, 0, CW), bigArrayMax (aa), sizeof (CW), 0) ;
+	  bigArraySwitchBase (aa, bigArrayMax (aa), dst) ;
+	  done = TRUE ;
+	  break ;
+	  */
 	}
     }
 

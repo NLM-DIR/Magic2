@@ -1,5 +1,5 @@
-#ifndef SEED_ENCODE_H
-#define SEED_ENCODE_H
+#ifndef SA_SEED_ENCODE_H
+#define SA_SEED_ENCODE_H
 
 /* ============================================================= */
 /*  Fast 4-bit DNA encoding tables for nShift = 62               */
@@ -27,7 +27,7 @@ static const unsigned long long wr_table[16] = {
 };
 
 /* w_table: contribution to the forward word (w) */
-static const unsigned long w_table[16] = {
+static const unsigned long long w_table[16] = {
     0x0UL,   /* 0x0  invalid */
     0x0UL,   /* 0x1  A */
     0x3UL,   /* 0x2  T */

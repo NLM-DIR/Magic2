@@ -748,7 +748,13 @@ static long int saTargetIndexCreateDo (PP *pp)
 
   printf ("%s : sort the target seeds\n" , timeBufShowNow (tBuf)) ;
   for (int k = 0 ; k < NN ; k++)
-    bbG->gpu += saSort (cwsN[k], 1) ; /* cwOrder */
+    {
+#ifdef USE_TORCHzzzz
+      bbG->gpu += saSort (cwsN[k], 5) ;   /* signed seed sort for torch bucketize */
+#else
+      bbG->gpu += saSort (cwsN[k], 1) ;   /* unsigned cwOrder */
+#endif
+    }
 
   t2 = clock () ;
   saCpuStatRegister ("3.Sort seeds" , pp->agent, bbG->cpuStats, t1, t2, nn) ;

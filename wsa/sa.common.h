@@ -6,8 +6,6 @@
 #ifndef SA_COMMON_H
 #define SA_COMMON_H
 
-#define NSHIFTEDTARGETREPEATBITS 8
-
 typedef struct codeWordsStruct {
   unsigned int seed ; /* 32 bits = 16 bases, 2 bits per base */
   unsigned int nam ; /* index in readDict or chromDict << 1 | (0x1 for minus words) */

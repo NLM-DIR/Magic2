@@ -198,9 +198,9 @@ Array saConfigGetRuns (PP *pp, Array runStats, int *nRunsToDop)
       for (i = 0 ; i < iMax && i < 30; i++)
 	pp->adaptors.a2R[i] = dnaEncodeChar[(int)pp->rawAdaptor2R[i]] ;
     }
-  
+
   if (isSet)
-    saSetGetAdaptors (2, 0, &(pp->adaptors), 0, 0) ;  /* run=0: valid for all runs */
+    saSetGetAdaptors (2, 0, &(pp->adaptors), 0, 0, 0) ;  /* run=0: valid for all runs */
   
   if (pp->inFileName)
     {   /* Split the individual file names, they are coma separated 
@@ -267,12 +267,12 @@ Array saConfigGetRuns (PP *pp, Array runStats, int *nRunsToDop)
 	  if (pp->isRna) /* user imposed */
 	    {
 	      int isRna = 1 ;
-	      saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
+	      saSetGetAdaptors (2, &isRna, 0, rc->run, 0, 0) ;
 	    }
 	  if (pp->isDna) /* user imposed */
 	    {
 	      int isRna = -1 ;
-	      saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
+	      saSetGetAdaptors (2, &isRna, 0, rc->run, 0, 0) ;
 	    }
 
 	  if (pp->sraCaching || rc->format == SRA)  /* check in the cache */
@@ -410,13 +410,13 @@ Array saConfigGetRuns (PP *pp, Array runStats, int *nRunsToDop)
 	      else if (! strcasecmp (cp, "rna")) /* user imposed */
 		{
 		  int isRna = 1 ;
-		  saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
+		  saSetGetAdaptors (2, &isRna, 0, rc->run, 0, 0) ;
 		}
 
 	      else if (! strcasecmp (cp, "dna")) /* user imposed */
 		{
 		  int isRna = -1 ;
-		  saSetGetAdaptors (2, &isRna, 0, rc->run, 0) ;
+		  saSetGetAdaptors (2, &isRna, 0, rc->run, 0, 0) ;
 		}
 
 	      else if (sscanf (cp, "jump1=%d", &k) && k >0)
@@ -495,16 +495,22 @@ Array saConfigGetRuns (PP *pp, Array runStats, int *nRunsToDop)
 
 static pthread_mutex_t adaptor_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCostp)
+BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCostp, int *minAlip)
 {
   static AC_HANDLE h = 0 ;
   static Array aaa = 0 ;
   static Array isSets = 0 ;
   static Array isRnas = 0 ;
   int isSet = TRUE ;
-  static int errCost = 4 ;  
+  static int errCost = 4 ;
+  static int minAli = -1 ;
   pthread_mutex_lock(&adaptor_mutex);
 
+
+  if (set == 3)
+    { minAli = *minAlip ; goto done ; }
+  if (minAlip)
+    *minAlip = minAli ;
   if (aaa == 0)
     {
       h = ac_new_handle () ;
@@ -592,7 +598,7 @@ BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCost
   else
     messcrash ("Bad call set=%d to saSetGetAdaptors", set) ;
 
-
+ done:
   pthread_mutex_unlock (&adaptor_mutex) ;
   return isSet ;
 } /* saSetGetAdaptors */

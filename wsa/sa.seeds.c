@@ -21,7 +21,7 @@ static void showCws (const PP *pp, BB *bb, BigArray cws)
 {
   long int ii, iMax = bigArrayMax (cws), jj ;
   char buf[17], bufR[17] ;
-  const long unsigned int mask26 = (1L << 26) - 1 ;
+  const unsigned long long mask26 = (1ULL << 26) - 1 ;
   
   for (ii = jj = 0 ; ii < iMax && jj < 50 ; ii++)
     {
@@ -85,6 +85,36 @@ static void showCws (const PP *pp, BB *bb, BigArray cws)
 
 /**************************************************************/
 
+static int dnaOrder (const void *va, const void *vb)
+{
+  const Array *up = va ;
+  const Array *vp = vb ;
+  int n ;
+
+  if (! up)
+    return vp ? -1 : 0 ;
+  if (! vp)
+    return 1 ;
+  if (! *up)
+    return *vp ? -1 : 0 ;
+  if (! *vp)
+    return 1 ;
+  int iMax = arrayMax (*up) ;
+  int jMax = arrayMax (*vp) ;
+  n = iMax - jMax ; if (n) return -n ;  // short first
+
+  unsigned const char *restrict cp = arrp (*up, 0, unsigned char) ;
+  unsigned const char *restrict cq = arrp (*vp, 0, unsigned char) ;
+  for (int i = 0 ; i < iMax ; i++, cp++, cq++)
+    {
+      n = *cp < *cq ? -1 : (*cp > *cq ? 1 : 0) ;
+      if (n) return n ;
+    }
+  return 0 ;
+} /* knownIntronOrder */
+
+/**************************************************************/
+
 static int knownIntronOrder (const void *va, const void *vb)
 {
   const GBX *up = va ;
@@ -95,7 +125,7 @@ static int knownIntronOrder (const void *va, const void *vb)
   n = (up->chrom > vp->chrom) - (up->chrom < vp->chrom) ; if (n) return n ; 
   /* strand order is implied by the parity of up->chrom */
   /* a1 order */
-  n = (up->a1 > vp->a1) - (vp->a1 > vp->a1) ; if (n) return n ; 
+  n = (up->a1 > vp->a1) - (up->a1 < vp->a1) ; if (n) return n ; 
 
   return 0 ;
 } /* knownIntronOrder */
@@ -114,10 +144,10 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
   const int nHidden = wLen > 16 ? wLen - 16 : 0 ;
   const int nHidden2 = nHidden << 1 ;
   int NN = pp->nIndex ;
-  const long unsigned int maskN = NN - 1 ;
-  const long unsigned int mask32 = 0xffffffff ; /* 4 bytes integer */
-  const long unsigned int maskSeedLn = (1L << 2*wLen) - 1 ;
-  const unsigned int mask26 = (1L << 26) - 1 ;
+  const unsigned long long maskN = (unsigned long long)NN - 1 ;
+  const unsigned long long mask32 = 0xffffffff ; /* 4 bytes integer */
+  const unsigned long long maskSeedLn = (1ULL << 2*wLen) - 1 ;
+  const unsigned int mask26 = (1ULL << 26) - 1 ;
   BigArray aa = pp->knownIntrons ;
   long int ii, iMax = bigArrayMax (aa) ;
   GBX *restrict upx = 0 ;
@@ -130,7 +160,7 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
   upx = iMax ? bigArrp (aa, 0, GBX) : 0 ;
   for (ii = 0 ; ii < iMax ; ii++, upx++)
     {
-      long unsigned int w, wr ;
+      unsigned long long  w, wr ;
       
       if (upx->chrom != chrom)
 	{
@@ -176,7 +206,7 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
 	    }
 	}
       
-      /* Construct a 32 bases, 64 bits long unsigned integer representing wLen bases (A_, T_, G_, C_) using 2 bits per base 
+      /* Construct a 32 bases, 64 bits unsigned long long representing wLen bases (A_, T_, G_, C_) using 2 bits per base 
        * first 15 bases belong to the left exon, upstream of Gt_ag
        * It does not matter if the annotated left or rigth exon is shorter than 15 bases
        */
@@ -265,11 +295,11 @@ int saCodeIntronSeeds (PP *pp, BB *bbG)
 	    for (int i1 = 4 - (wLen - 16)  ; i1 < 13 ; i1++) /* search every word with at least 4 bases on each side */
 	      {
 		if (i1 < 0) continue ;
-		long unsigned int x =   (w >> (2 * (32 - wLen - i1))) & maskSeedLn ;
-		long unsigned int xr =  (wr >> 2 * (i1)) & maskSeedLn ;
+		unsigned long long x =   (w >> (2 * (32 - wLen - i1))) & maskSeedLn ;
+		unsigned long long xr =  (wr >> 2 * (i1)) & maskSeedLn ;
 		int dx1 = 16 - i1 ;     /* number of letters in first exon */
 		BOOL  minus  = (x > xr) ; /* word is antistrand to the exon-exon junction */
-		long unsigned int word = ( minus ? xr : x ) ;
+		unsigned long long word = ( minus ? xr : x ) ;
 		k = word & maskN ;   /* right bits are used to select the relevant table */
 		word >>= nHidden2 ;  /* remove excessive bits, by construction of NN, they are stored in k */
 		word &= mask32 ;     /* masked down to 32 bits integer */
@@ -324,25 +354,15 @@ static void saCodeSequenceSeedsStep1 (const PP *pp, BB *bb)
   const int nHidden = wLen > 16 ? wLen - 16 : 0 ;
   const int nHidden2 = nHidden << 1 ;
   const int shiftB = 64 - 2 * wLen ;
-  const long unsigned int maskN = NN - 1 ;
-  const long unsigned int mask32 = 0xffffffff ;
-  const long unsigned int maskSeedLn = (1L << 2*wLen) - 1 ;
+  const unsigned long long maskN = (unsigned long long)NN - 1 ;
+  const unsigned long long mask32 = 0xffffffff ;
+  const unsigned long long maskSeedLn = (1ULL << 2*wLen) - 1 ;
+  long int nReads1 = 0 ;
   int minEntropy = pp->minEntropy ;
-  int minLength = pp->minLength ;
+  int minLength = pp->minLength ? pp->minLength : pp->seedLength ;
+  int minAli = pp->minAli ;
 
   memset (cwsN, 0, sizeof (cwsN)) ;
-  if (minEntropy < 0)
-    {
-      minEntropy = -minEntropy ;
-      if (minEntropy > bb->runStat.p.maxReadLength / 2)
-        minEntropy = bb->runStat.p.maxReadLength / 2 ;
-    }
-  if (minLength < 0)
-    {
-      minLength = -minLength ;
-      if (minLength > bb->runStat.p.maxReadLength / 2)
-        minLength = bb->runStat.p.maxReadLength / 2 ;
-    }
   if (dMax >> 31)
     messcrash ("saCodeSequenceSeedsStep1 ln=%ld > 2G", dMax) ;
 
@@ -358,20 +378,24 @@ static void saCodeSequenceSeedsStep1 (const PP *pp, BB *bb)
         continue ;
       int ii, jj, p = 0 ;
       int iMax = arrayMax (dna) ;
-      long unsigned int w = 0, wr = 0 ;
+      unsigned long long w = 0, wr = 0 ;
 
       if (iMax < minLength)
         {
-          bb->runStat.tooShort++ ;
-          bb->runStat.tooShortBases += iMax ;
+          bb->runStat.p.tooShort++ ;
+          bb->runStat.p.tooShortBases += iMax ;
           continue ;
         }
-      if (minEntropy > 0 && oligoEntropy (arrp (dna, 0, unsigned char), iMax, minEntropy) < minEntropy)
-        {
-          bb->runStat.lowEntropy++ ;
-          bb->runStat.lowEntropyBases += iMax ;
-          continue ;
-        }
+      if (minEntropy > 0)
+	{
+	  int entropy = oligoEntropy (arrp (dna, 0, unsigned char), iMax, minEntropy) ;
+	  if (entropy < minEntropy && entropy < iMax/2)
+	    {
+	      bb->runStat.p.lowEntropy++ ;
+	      bb->runStat.p.lowEntropyBases += iMax ;
+	      continue ;
+	    }
+	}
 
       cp = arrp (dna, 0, unsigned char) ;
 
@@ -390,10 +414,10 @@ static void saCodeSequenceSeedsStep1 (const PP *pp, BB *bb)
           if (p < wLen)
             continue ;
 
-          long unsigned int x  =  w & maskSeedLn ;
-          long unsigned int xr = (wr >> shiftB) & maskSeedLn ;
+          unsigned long long x  =  w & maskSeedLn ;
+          unsigned long long xr = (wr >> shiftB) & maskSeedLn ;
           BOOL minus = (x > xr) ;
-          long unsigned int z  = minus ? xr : x ;
+          unsigned long long z  = minus ? xr : x ;
 
           /* skip homopolymers and homodimers */
           if (
@@ -417,6 +441,14 @@ static void saCodeSequenceSeedsStep1 (const PP *pp, BB *bb)
 
   bb->cwsN = halloc (NN * sizeof(BigArray), bb->h) ;
 
+  long int avDna = bb->runStat.p.nBase1 /(nReads1 + 0.0001) ;
+  if (minAli <= 0)
+    {
+      minAli = avDna / 2 ;
+      if (minAli > 30) minAli = 30 ;
+    }
+  bb->runStat.p.minAli = minAli ;
+
   if (pp->debug)
     fprintf (stderr, "Agent %d lane %d allocated %d seeds\n", bb->readerAgent, bb->lane, nSeeds) ;
   for (k = 0 ; k < NN ; k++)
@@ -424,6 +456,126 @@ static void saCodeSequenceSeedsStep1 (const PP *pp, BB *bb)
 
   return ;
 }  /* saCodeSequenceSeedsStep1 */
+
+/**************************************************************/
+
+static BOOL saReadClipRight (BB *bb, int read, Array dna, unsigned char adaptor[32], int mult)
+{
+  int xv, xv2 ;
+  unsigned char *dna3 = (unsigned char *)strnew (arrp (dna, 0, char), 0) ;
+  BOOL clipped = FALSE ;
+  
+  int n = arrayMax (dna) ;
+  int n0 = ustrlen (adaptor) ;
+  int n1 = n0 ;
+  xv = 0 ;
+  if (n1 > 12)
+    {
+      while ((xv2 = dnaPickMatch (dna3 + xv, n - xv, adaptor, 2, 2)))
+	xv += xv2 ;
+      while (!xv && n1 > 12) /* try to shorten the adaptor and reextend the hit */
+	{
+	  int n2 = n1 / 2, n3 ; 
+	  int e1 = 2, e2 = 2 ;
+	  char cc = adaptor[n2] ;
+	  adaptor[n2] = 0 ;
+	  while ((xv2 = dnaPickMatch (dna3 + xv, n - xv, adaptor, 2, 2)))
+	    xv += xv2 ;
+	  adaptor[n2] = cc ;
+	  if (xv) /* verify that the end of the read matches the vector */
+	    {
+	      n3 = n - xv + 1;
+	      cc = adaptor[n3] ;
+	      adaptor[n3] = 0 ;
+	      if (n - xv < 12) e1 = e2 = 0 ;
+	      xv2 = dnaPickMatch (dna3 + xv - 1, n - xv + 1, adaptor, e1, e2) ;
+	      adaptor[n3] = cc ;
+	      if (! xv2)
+		{ xv = 0 ; n1 = 0 ; } /* reject */
+	    }
+	  n1 /= 2 ;
+	}
+    }
+  else
+    {
+      while ((xv2 = dnaPickMatch (dna3 + xv, n - xv, adaptor, 0, 0)))
+	xv += xv2 ;
+    }
+  if (xv && n - xv >= 8)
+    {
+      /*
+	sx->exitAdaptorSeqFound++ ;
+	sx->exitAdaptorTagFound += sx->count ;
+	sx->exitAdaptorBpFound += sx->count * (n - xv + 1) ;
+	sx->exitAdaptorBpClipped += (n - xv + 1) ;
+      */
+      clipped = TRUE ;
+      unsigned char *cp = arrp (dna, xv-1, unsigned char) ; /* first unaligned base */
+      long int *overH = (read & 0x1 ? bb->runStat.overhangR2 : bb->runStat.overhangR1) ;
+
+      int first = -1 ;
+      int cc = *cp ;
+      switch (cc)
+	{
+	case A_:
+	  first = 0 ;
+	  break ;
+	case T_:
+	  first = 1 ;
+	  break ;
+	case G_:
+	  first = 2 ;
+	  break ;
+	case C_:
+	  first = 3 ;
+	  break ;
+	default:
+	  first = -1 ;
+	}
+
+      if (first >= 0)
+	for (int i = 0 ; i < 30 && *cp ; i++, cp++)
+	  {
+	    cc = *cp ;
+	    int ii = 150 * first + 5 * i ;
+	    switch (cc)
+	      {
+	      case A_:
+		overH[ii + 0]+= mult ;
+		break ;
+		case T_:
+		  overH[ii + 1]+= mult ;
+		  break ;
+	      case G_:
+		overH[ii + 2]+= mult ;
+		break ;
+	      case C_:
+		overH[ii + 3]+= mult ;
+		break ;
+		default:
+		  overH[ii + 4]+= mult ;
+		  break ;
+	      }
+	  }
+
+      cp = arrp (dna, xv-1, unsigned char) ;
+      *cp = 0 ; arrayMax (dna) = xv-1 ;
+    }
+
+  ac_free (dna3) ;
+  return clipped ;
+} /* saReadClipRight */
+
+/**************************************************************/
+
+  static BOOL saReadClip (BB *bb, int read, Array dna, unsigned char adaptor[32], BOOL rightClip, int mult)
+{
+  if (rightClip)
+    return saReadClipRight (bb, read, dna, adaptor, mult) ;
+  else
+    ;
+  return FALSE ;
+} /* saReadClip */
 
 /**************************************************************/
 
@@ -442,61 +594,255 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
   const int nHidden = wLen > 16 ? wLen - 16 : 0 ;
   const int nHidden2 = nHidden << 1 ;
   const int shiftB = 64 - 2 * wLen ;
-  const long unsigned int maskN = NN - 1 ;
-  const long unsigned int mask32 = 0xffffffff ; /* 4 bytes integer */
-  const long unsigned int maskSeedLn = (1L << 2*wLen) - 1 ;
+  const  unsigned long long maskN = (unsigned long long)NN - 1 ;
+  const unsigned long long mask32 = 0xffffffffULL ; /* 4 bytes integer */
+  const unsigned long long maskSeedLn = (1ULL << 2*wLen) - 1 ;
+  int iMaxMax = 0 ;
+  long int nReads1 = 0 ;
+  long int nReads2 = 0 ;
   int minEntropy = pp->minEntropy ;
   int minLength = pp->minLength ;
+  ADAPTORS adaptors = {{0}} ;
+  BOOL newMultiplicity = FALSE ;
   
+  if (pp->fastc)
+    bb->multiplicity = arrayHandleCreate (iaMax, int, bb->h) ;
   memset (cwsN, 0, sizeof (cwsN)) ;
-  if (minEntropy < 0) /* default value */
-    {
-      minEntropy = -minEntropy ;
-      if (minEntropy > bb->runStat.p.maxReadLength / 2)
-	minEntropy = bb->runStat.p.maxReadLength / 2 ;
-    }
-  if (minLength < 0) /* default value */
-    {
-      minLength = -minLength ;
-      if (minLength > bb->runStat.p.maxReadLength / 2)
-	minLength = bb->runStat.p.maxReadLength / 2 ;
-    }
   if (step < 1)
     messcrash ("codeWordsDo received step = %d < 1", step) ;
   if (dMax >> 31)
-    messcrash ("codeWordsDo received ln=%ls, step=%d, ln/step=%ld > 2G", bb->length, step, dMax) ;
+    messcrash ("codeWordsDo received ln=%lu, step=%d, ln/step=%ld > 2G", bb->length, step, dMax) ;
 
   if (NN > 1)  /* Avoid reallocation of marginal size fluctuations */
     dMax *= 1.2 ;
   for (k = 0 ; k < NN ; k++)
     cwsN[k] = bigArrayHandleCreate (dMax, CW, bb->h) ;
+
+  if (1)
+    while (! saSetGetAdaptors (0, &(bb->isRna), &adaptors, bb->run, &(bb->errCost), &(bb->runStat.p.minAli)))
+      {
+	if (bb->lane <= 1)
+	{
+	  bb->runStat.p.minAli = pp->seedLength ;
+	  break ; /* pilot block proceeds */
+	}
+	sleep (1) ;                /* all other blocks wait */
+      }
   
   bb->step = step ;
+  bb->runStat.p.nBase1 = 0 ;
+  bb->runStat.p.nBase2 = 0 ;
+  bb->runStat.p.nClippedBase1 = 0 ;
+  bb->runStat.p.nClippedBase2 = 0 ;
+  bb->runStat.p.nReads = 0 ;
+  bb->runStat.p.nPairs = 0 ;
+  
   for (ia = 1 ; ia < iaMax ; ia++)
     {
       Array dna = arr (dnas, ia, Array) ;
       if (! dna)
 	continue ;
-      int ii, jj, p = 0, cStep, robin ;
+
+      int mult = 1 ;
+      if (bb->multiplicity)
+	{
+	  const char *cm0, *cm ;
+	  cm0 = cm = dictName (bb->dict, ia>>1) ;
+	  while (*cm) cm++ ;
+	  while (cm > cm0 && *cm != '#') cm-- ;
+	  if (cm > cm0 && *cm == '#')
+	    mult = atoi (cm + 1) ;
+	  if (mult <= 0) mult = 1 ;
+	  array (bb->multiplicity, ia, int) = mult ;
+	}
+
       int iMax = arrayMax (dna) ;
-      long unsigned int w, wr ;
-      if (1) step = iMax < 60 ? 1 : bb->step ;
+      bb->runStat.p.nBase1 += (ia & 0x1) ? 0 : iMax * mult ;
+      bb->runStat.p.nBase2 += (ia & 0x1) ? iMax * mult : 0 ;
+      if (ia & 0x1)
+	{
+	  unsigned char *cp = arrp (dna, 0, unsigned char) ;
+	  for (int i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
+	    bb->runStat.p.letterProfile2[5*i + natgc[(int)*cp]]+= mult ;
+	}
+      else
+	{
+	  unsigned char *cp = arrp (dna, 0, unsigned char) ;
+	  for (int i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
+	    bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]+= mult ;
+	}
+
+      if (iMax >= minLength)
+	{
+	  if (ia & 0x1)
+	    {
+	      if (adaptors.a2R[0])
+		bb->runStat.p.nClippedAdaptor2R += saReadClip (bb, ia, dna, adaptors.a2R, TRUE, mult) ? mult : 0 ;
+	      if (adaptors.a2L[0])
+		bb->runStat.p.nClippedAdaptor2L += saReadClip (bb, ia, dna, adaptors.a2L, FALSE, mult) ? mult : 0 ;
+	    }
+	  else
+	    {
+	      if (adaptors.a1R[0])
+		bb->runStat.p.nClippedAdaptor1R += saReadClip (bb, ia, dna, adaptors.a1R, TRUE, mult) ? mult : 0 ;
+	      if (adaptors.a1L[0])
+		bb->runStat.p.nClippedAdaptor1L += saReadClip (bb, ia, dna, adaptors.a1L, FALSE, mult) ? mult : 0 ;
+	    }
+	}
+
+      iMax = arrayMax (dna) ;
+      iMaxMax = iMaxMax > iMax ? iMaxMax : iMax ;
+      nReads1 += (ia & 0x1) ? 0 : mult ;
+      nReads2 += (ia & 0x1) ? mult : 0 ;
+      if (1)
+	{
+	  unsigned char *cp = arrp (dna, 0, unsigned char) ;
+	  for (int i = 0 ; i < iMax ; i++, cp++)
+	    bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
+	}
+      
       if (iMax < minLength) 
 	{
-	  bb->runStat.tooShort++ ;
-	  bb->runStat.tooShortBases += iMax ;
+	  bb->runStat.p.tooShort += mult ;
+	  bb->runStat.p.tooShortBases += iMax * mult ;
+	  arrayMax (dna) = 0 ;
 	  continue ;
 	}
-      if (minEntropy > 0 && oligoEntropy (arrp (dna, 0, unsigned char), iMax, minEntropy) < minEntropy)
+      if (minEntropy > 0)
 	{
-	  bb->runStat.lowEntropy++ ;
-	  bb->runStat.lowEntropyBases += iMax ;
-	  continue ;
+	  int entropy = oligoEntropy (arrp (dna, 0, unsigned char), iMax, minEntropy) ;
+	  if (entropy < minEntropy && entropy < iMax/2)
+	    {
+	      bb->runStat.p.lowEntropy += mult ;
+	      bb->runStat.p.lowEntropyBases += iMax * mult ;
+	      arrayMax (dna) = 0 ;
+	      continue ;
+	    }
+	}
+
+    }
+
+  if (0)
+    {
+      RunSTAT up = bb->runStat ;
+      fprintf (stderr, "lane=%d clipped=%ld adap=%d\n", bb->lane, up.p.nClippedAdaptor1R, adaptors.a1R[0]) ;
+    }
+
+  if (1 && ! bb->multiplicity && nReads2 == 0 && iMaxMax <= 200 && ! pp->keepReadNames)
+    {
+      DICT *newDict = dictHandleCreate (nReads1, bb->h) ;
+      /* remove dnas of read2 and empty dnas */
+      int ii, jj ;
+      char buf[64] ;
+      bb->multiplicity = arrayHandleCreate (nReads1, int, bb->h) ;
+      newMultiplicity = TRUE ;
+      for (ii = jj = 0 ; ii < iaMax ; ii += 2)
+	{
+	  Array d = array (dnas, ii, Array) ;
+	  if (!ii || (d && arrayMax (d)))
+	    array (dnas, jj++, Array) = d ;
+	}
+      iaMax = arrayMax (dnas) = jj ;
+      arraySort (dnas, dnaOrder) ;
+      for (ii = jj = 0 ; ii < iaMax ; ii++)
+	{
+	  Array di = array (dnas, ii, Array) ;
+	  int k = 1 ;
+	  for (int jk = ii+1 ; jk < iaMax ; jk++)
+	    {
+	      Array dj = array (dnas, jk, Array) ;
+	      if (0 || dnaOrder (&di, &dj))
+		break ;
+	      k++ ;
+	    }
+	  array (dnas, jj, Array) = di ;
+	  sprintf (buf, "s.%d#%d", jj, k) ;
+	  dictAdd (newDict, buf, 0) ;
+	  array (bb->multiplicity, 2*jj, int) = k ;
+	  array (bb->multiplicity, 2*jj+1, int) = k ;
+	  jj++ ;
+	  ii += k - 1 ;
+	}
+      bb->dict = newDict ;
+      iaMax = jj ;
+      for (ii = iaMax - 1 ; ii >= 0 ; ii--)
+	{
+	  Array d = array (dnas, ii, Array) ;
+	  array (dnas, 2*ii + 0, Array) = d ;
+	  array (dnas, 2*ii + 1, Array) = 0 ;
+	}
+      iaMax = arrayMax (dnas) = 2 * iaMax ;
+    }
+
+  bb->runStat.p.nReads = nReads1 + nReads2 ;
+  bb->runStat.p.nPairs += nReads2 ;
+  
+
+  iaMax = arrayMax (dnas) ;
+  for (ia = 1 ; ia < iaMax ; ia++)
+    {
+      Array dna = arr (dnas, ia, Array) ;
+      if (! dna)
+	continue ;
+
+      int mult = 1 ;
+      if (newMultiplicity)
+	mult = array (bb->multiplicity, ia, int) ;
+      else if (bb->multiplicity)
+	{
+	  const char *cm0, *cm ;
+	  cm0 = cm = dictName (bb->dict, ia>>1) ;
+	  while (*cm) cm++ ;
+	  while (cm > cm0 && *cm != '#') cm-- ;
+	  if (cm > cm0 && *cm == '#')
+	    mult = atoi (cm + 1) ;
+	  if (mult <= 0) mult = 1 ;
+	  array (bb->multiplicity, ia, int) = mult ;
+	}
+
+      int ii, jj, p = 0, cStep, robin ;
+      int iMax = arrayMax (dna) ;
+      unsigned long long  w, wr ;
+      if (1) step = iMax < 60 ? 1 : bb->step ;
+
+      bb->runStat.p.nClippedBase1 += (ia & 0x1) ? 0 : iMax * mult ;
+      bb->runStat.p.nClippedBase2 += (ia & 0x1) ? iMax * mult : 0 ;
+      if (ia & 0x1)
+	{
+	  unsigned char *cp = arrp (dna, 0, unsigned char) ;
+	  for (int i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
+	    bb->runStat.p.clippedLetterProfile2[5*i + natgc[(int)*cp]]+= mult ;
+	}
+      else
+	{
+	  unsigned char *cp = arrp (dna, 0, unsigned char) ;
+	  for (int i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
+	    bb->runStat.p.clippedLetterProfile1[5*i + natgc[(int)*cp]]+= mult ;
+	}
+      
+      if (0)
+	{
+	  if (iMax < minLength) 
+	    {
+	      bb->runStat.p.tooShort += mult ;
+	      bb->runStat.p.tooShortBases += iMax * mult ;
+	      continue ;
+	    }
+	  if (minEntropy > 0)
+	    {
+	      int entropy = oligoEntropy (arrp (dna, 0, unsigned char), iMax, minEntropy) ;
+	      if (entropy < minEntropy && entropy < iMax/2)
+		{
+		  bb->runStat.p.lowEntropy += mult ;
+		  bb->runStat.p.lowEntropyBases += iMax * mult ;
+		  continue ;
+		}
+	    }
 	}
       w = wr = 0 ;
       /* each q vector is used round-robin style, so no copying is needed */
       BOOL qminus[step] ;
-      long unsigned int qw[step], qwr[step], qx[step], qxr[step], qz[step], qhz[step] ;
+      unsigned long long qw[step], qwr[step], qx[step], qxr[step], qz[step], qhz[step] ;
       memset (qminus, 0, sizeof (qminus)) ;
       memset (qw, 0, sizeof (qw)) ;
       memset (qwr, 0, sizeof (qwr)) ;
@@ -528,7 +874,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
 	  qz[robin] = qminus[robin] ? qxr[robin] : qx[robin] ;
 	  qhz[robin] = (qz[robin] ^ (qz[robin] << 14)) ^ (qz[robin] << 23) ;
 	  /*  possibly better but incompatible: try
-	    long unsigned int h = qz[robin] ;
+	    unsigned long long h = qz[robin] ;
 	    h ^= h << 14 ; h ^= h >> 7 ; h ^= h << 23 ;
 	    qhz[robin] = h ;
 	  */
@@ -543,7 +889,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
 	  if (cStep == step) cStep = 0 ;
 	  if (!cStep)
 	    {
-	      long int word = 0 ;
+	      unsigned long long word = 0 ;
 	      int dx = 0 ;
 	      BOOL minus, qok = FALSE ;
 	      
@@ -551,7 +897,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
 		qok = (qz[i] != 0) ;
 	      if (! qok)
 		{ cStep = -1 ; continue ; } /* we hope to export the next word */
-	      long int besthz = qhz[robin] ;
+	      unsigned long long besthz = qhz[robin] ;
 	      int bestk = robin ; dx = 0 ;
 	      int myMax = (step > jj ? jj : step) ;
 	      for (int i = 1 ; i < myMax ; i++)
@@ -562,10 +908,10 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
 		}
 	      word = qz[bestk] ;
 	      minus = qminus[bestk] ;
-
 	      k = word & maskN ;   /* right bits are used to select the relevant table */
 	      word >>= nHidden2 ;  /* remove excessive bits, by construction of NN, they are stored in k */
 	      word &= mask32 ;     /* masked down to 32 bits integer */
+
 	      cw = bigArrayp (cwsN[k], bigArrayMax(cwsN[k]), CW) ;
 	      /* store the sign in the name, semantically implying that we treat the 2 strands as independent chromosomes */
 	      cw->nam = (ia << 1) | (minus ? 0x1 : 0) ;
@@ -575,11 +921,23 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
 	      nSeeds++ ;
 	      cStep = dx ;
 	      if (0)
-		fprintf (stderr, "codeWordsDo p=%d k=%d pos=%d seed=%d\n", p, k, cw->pos,cw->seed) ;
+		fprintf (stderr, "codeWordsDo p=%d k=%d pos=%u seed=%u wLen=%d\n", p, k, cw->pos,cw->seed, wLen) ;
 	    }
 	}
     }
   bb->cwsN = halloc (NN * sizeof(BigArray), bb->h) ;
+
+
+#ifdef JUNK
+  long int avDna = bb->runStat.p.nBase1 /(nReads1 + 0.0001) ;
+  if (minAli <= 0)
+    {
+      minAli = avDna / 2 ;
+      if (minAli > 30) minAli = 30 ;
+    }
+  bb->runStat.p.minAli = minAli ;
+#endif
+  // fprintf (stderr, "minEntropy=%d minAli=%d avDna=%ld\n", minEntropy, minAli, avDna) ;
 
   if (pp->debug)
     fprintf (stderr, "Agent %d lane %d allocated %d seeds\n", bb->readerAgent, bb->lane, nSeeds) ;

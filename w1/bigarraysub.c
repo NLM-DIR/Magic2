@@ -101,7 +101,7 @@ BigArray   uBigArrayCreate_dbg (long int n, int size, AC_HANDLE handle,
 }
 
 /**************/
-/* force feed a new base in a big array, vpmust be 64-bytes aligned, used for example in sa.sort.c */
+/* force feed a new base in a big array, vp must be 64-bytes aligned, used for example in sa.sort.c */
  void bigArraySwitchBase (BigArray aa, long int N, void *vp)
  {
    uintptr_t a = (uintptr_t)vp;
@@ -109,12 +109,16 @@ BigArray   uBigArrayCreate_dbg (long int n, int size, AC_HANDLE handle,
    
    int shift = (int)(aligned - a);          // 0..63
    if (shift) messcrash ("bigArraySwitchBase must be provided a pointer 64bytes aligned, not %d bytes off", shift) ; 
+   if (aa->lock) messcrash ("bigArraySwitchBase on locked bigArray") ;
+   if (aa->map)  messcrash ("bigArraySwitchBase on memory-mapped bigArray") ;
    free (aa->base) ;
    aa->base = vp ;
-   aa->max = N ;   
+   aa->max  = N ;
+   aa->dim  = N ;            /* <-- the new buffer holds exactly N records */
+  /* accounting left approximate; document it */
  } /* bigArraySwitchBase */
-
- /**************/
+ 
+/**************/
 
 mysize_t bigArrayReportMark (void)
 {
@@ -294,7 +298,7 @@ void bigArrayExtend (BigArray a, long int n)
     return ;
   if (a->lock)
      messcrash ("bigArrayExtend called on locked bigArray") ;
-  if (n > 0x8000000000000000)
+  if (n > 0x7f00000000000000)
     messcrash ("BigArray in acedb cannot exceed max-long-int (2^63) bytes, sorry, n=%ld max=%ld cell size = %d\n"
 	       , (long)n, a->max, a->size) ;
 
@@ -1882,7 +1886,7 @@ static unsigned char *mmapCreate (const char *fName, long int *size, int *fdp, u
   struct stat st;
   if (fstat(fd, &st) == -1)
     {
-      messerror ("Failed to stat for reading a memory map file of size %ld : %s", size, fName) ;
+      messerror ("Failed to stat for reading a memory map file of size %ld : %s", size ? *size : 0, fName) ;
       close(fd);
       return NULL ;
     }

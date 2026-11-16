@@ -61,7 +61,7 @@ static int NN = 1 ;
 static  BOOL samStats = FALSE ;
 
 static void showHitsDo (HIT *hit, long int iMax) ;
-
+static BOOL saIsRunRepeated (const PP *pp, BB *bb) ;
 
 /**************************************************************/
 /************** utilities *************************************/
@@ -165,6 +165,7 @@ static void loadRegulator (const void *vp)
   BB bb = {0} ;
   const PP *pp = vp ;
   int nn = 0, nMax = pp->nBlocks ;
+  KEYSET isRunRepeated = keySetCreate () ;
   
   while (channelGet (pp->plChan, &bb, BB))
     {
@@ -176,11 +177,17 @@ static void loadRegulator (const void *vp)
 	  nMax = pp->nBlocks - nd ;
 	  if (nn <= nMax)
 	    break ;
-	  sleep (1) ;
+	  usleep (1000000) ;  /* 1s, unit is microsecond */
 	}
+      if (bb.lane == -1)
+	{ /* check if we want to sort/merge the reads */
+	  keySet (isRunRepeated, bb.run) = saIsRunRepeated (pp, &bb) ;
+	}
+      bb.isRunRepeated = keySet (isRunRepeated, bb.run) ;
       channelPut (pp->lcChan, &bb, BB) ;
     }
   channelClose (pp->lcChan) ; /* there is a single instance of the load regulator */
+  keySetDestroy (isRunRepeated) ;
   return ;
 } /* load regulator */
 
@@ -394,6 +401,8 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
   const long unsigned int mask26 = (1L << 26) - 1 ;
   const int seedLength = pp->seedLength ;
   const int intronBonus = 1 ;
+  int nTooManyRepeats = 0 ;
+  int nBadTarget = 0 ;
   int absoluteMax = 0x1 << NTARGETREPEATBITS ;
   int absoluteX1Max = 0x1 << ( 31 - 3 - NTARGETREPEATBITS) ;
   int maxTargetRepeats = pp->maxTargetRepeats  ;
@@ -415,7 +424,7 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
       HIT *hit = 0 ;
 
       if (!smp->target || smp->target > targetMax)
-	continue ;
+	{ nBadTarget++ ; continue ; }
       /* success, non intron case */
       if (((smp->targetFlags >> 31) & 0x1) == 0x0)
 	{
@@ -424,8 +433,8 @@ long int saGetPairHits (const PP *pp, BB *bb, long int kk0)
 	  int nTargetRepeats = smp->targetFlags ;
 	  
 	  if (1 && nTargetRepeats > maxTargetRepeats)
-	    continue ;
-	  /* report at most absoluteMax (i.e. 31) */
+	    {  nTooManyRepeats++ ; continue ; }
+	  /* report at mostOA absoluteMax (i.e. 31) */
 	  if (nTargetRepeats >= absoluteMax)
 	    nTargetRepeats = absoluteMax - 1 ; 
 	  if (0 && useIntronSeeds) continue ;
@@ -1289,6 +1298,65 @@ static void saSortJoinSort (const PP *pp, BB *bb)
 
 /**************************************************************/
 
+typedef struct rpairStruct { Array dna1, dna2 ; int id, mult ;} RPAIR ;
+
+static int rPairOrder (const void *a, const void *b)
+{
+
+  return 0 ;
+}
+
+static BOOL dnaDiffer (Array dna1, Array dna2)
+{
+  if (dna1 == dna2)
+    return FALSE ;
+  return FALSE ;  
+}
+
+static BOOL saIsRunRepeated (const PP *pp, BB *bb)
+{
+  BOOL isRepeated = FALSE ;
+  AC_HANDLE h = ac_new_handle () ;
+  
+  if (bb->gzBuffer) /* fasta buffer method 2025 */
+    saParseGzBuffer (pp, bb) ;
+  else if (bb->r1Buffer) /* fasta buffer method 2026 */
+    saScan (pp, bb) ;
+  int id, idMax = bigArrayMax (bb->dnas) / 2 - 1 ;  /* dnas contains dna and dnaR */
+  Array rps = arrayHandleCreate (idMax/2 + 1, RPAIR, h) ;
+  RPAIR *rp, *rp2 ;
+  int irp = 0, ii, jj ;
+  
+  for (id = 1 ; id < idMax ; id+=2)
+    {
+      rp = arrayp (rps, irp++, RPAIR) ;
+      rp->id = id ;
+      rp->dna1 = bigArr (bb->dnas, id, Array) ;
+      rp->dna2 = bigArr (bb->dnas, id + 1, Array) ;
+      rp->mult = 1 ;
+    }
+  arraySort (rps, rPairOrder) ;
+  rp = rp2 = arrayp (rps, 0, RPAIR) ;
+  for (ii = jj = 0 ; ii < irp ; ii++, rp++)
+    {
+      if (dnaDiffer (rp->dna1, rp2->dna1) ||
+	  dnaDiffer (rp->dna2, rp2->dna2)
+	  )
+	{
+	  rp2++ ; jj++ ;
+	  if (rp2 < rp) { *rp2 = *rp ; }
+	}
+      else
+	rp2->mult++ ;
+    }
+
+  ac_free (h) ;
+
+  return isRepeated ;  
+} /* saIsRunRepeated */
+
+/**************************************************************/
+
 static void wholeWork (const void *vp)
 {
   BB bb = {0} ;
@@ -1309,11 +1377,14 @@ static void wholeWork (const void *vp)
 
       bb.readerAgent = pp->agent ;
       /* code words */
-      if (bb.gzBuffer) /* fasta buffer method 2025 */
-	saParseGzBuffer (pp, &bb) ;
-      else if (bb.r1Buffer) /* fasta buffer method 2026 */
-	saScan (pp, &bb) ;
-
+      if (! bb.dnas) /* precomputed if bb.lane==1 */
+	{
+	  if (bb.gzBuffer) /* fasta buffer method 2025 */
+	    saParseGzBuffer (pp, &bb) ;
+	  else if (bb.r1Buffer) /* fasta buffer method 2026 */
+	    saScan (pp, &bb) ;
+	}
+      
       if (pp->debug)
 	{
 	  nReads = bigArrayMax (bb.dnas) / 2 - 1 ;  /* dnas contains dna and dnaR */
@@ -1359,6 +1430,8 @@ static void reportRunStats (PP *pp, Array runStats)
   if (pp->nRawReads) printf ("\n#:RawReads\t%ld", pp->nRawReads) ;
   printf ("\n#:Reads_aligned\t%ld\t%.3f%%", s0->nMultiAligned[0], 100.0 * s0->nMultiAligned[0]/ (0.0000001 + s0->p.nReads)) ;
   printf ("\n#:PerfectReads\t%ld\t%.2f%%", s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(s0->p.nReads + .000001)) ;
+  printf ("\n#:LowEntropyReads\t%ld\t%.2f%%", s0->p.lowEntropy, (100.0 * s0->p.lowEntropy)/(s0->p.nReads + .000001)) ;
+  printf ("\n#:TooShortReads\t%ld\t%.2f%%", s0->p.tooShort, (100.0 * s0->p.tooShort)/(s0->p.nReads + .000001)) ;
 
   printf ("\n#:Introns_supports %ld, gt_ag %ld, ct_ac %ld, stranding %.2f%%\n"
 	  , s0->gt_ag_Support + s0->ct_ac_Support 
@@ -1424,6 +1497,7 @@ static void releaseGenomeIndex (PP *pp)
 	      arrayUnlock (dna) ;
 	    }
 	} 
+      pp->bbG.dnas = 0 ;
       if (1) /* use valgrind if double freed errors occur */
 	ac_free (pp->bbG.h) ;
     }
@@ -2270,12 +2344,12 @@ int main (int argc, const char *argv[])
   getCmdLineInt (&argc, argv, "--maxTargetRepeats", &p.maxTargetRepeats) ;
   getCmdLineInt (&argc, argv, "--jump5read1", &(p.jump5read1)) ;
   getCmdLineInt (&argc, argv, "--jump5read2", &(p.jump5read2)) ;
+  //  getCmdLineInt (&argc, argv, "--makeFastc", &(p.makeFastc)) ;
   p.maxIntron = 1000000 ;
   getCmdLineInt (&argc, argv, "--maxIntron", &(p.maxIntron)) ;
 
   if (p.userErrCost) p.errCost = p.userErrCost ;
   if (p.minScore < 0) p.minScore = 0 ;
-  if (p.minAli < 0) p.minAli = 30 ;
   if (p.minAliPerCent < 0) p.minAliPerCent = 0 ;
   if (p.minAli < p.minScore) p.minAli = p.minScore ;
   if (p.errMax == 0)
@@ -2331,6 +2405,14 @@ int main (int argc, const char *argv[])
 
   if (p.sam || p.bam) p.bamHandle  = ac_new_handle () ;
 
+  /*******************  makeFastc ********************************************/
+
+  if (1) // p.makeFastc
+    {
+
+
+    }
+
   /*******************  create the index ********************************************/
 
   p.tArray = saTargetParseConfig (&p) ;
@@ -2346,6 +2428,10 @@ int main (int argc, const char *argv[])
   /*******************  otherwise verify the existence of the indexes ********************/
   
   p.nIndex = NN = saConfigCheckTargetIndex (&p) ;
+  if (p.minLength < p.seedLength) p.minLength = p.seedLength ;
+
+  saSetGetAdaptors (3, 0, 0, 0, 0, &(p.minAli)) ;  /* set=3: just set minAli */
+
 #ifdef USE_TORCH
   bestGpu = 0 ;
   p.torch = saTorchNew(bestGpu, p.seedLength, p.nIndex) ;
@@ -2539,6 +2625,7 @@ int main (int argc, const char *argv[])
     {
       if (p.useScratch)
 	{
+
 	  p.scratchesL = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
 	  p.scratchesR = arrayHandleCreate (2 * chromMax * runMax, Array, h) ;
 	  array (p.scratchesR, 2 * chromMax * runMax - 1, SCR) = 0 ; /* initialize */
@@ -2664,6 +2751,8 @@ int main (int argc, const char *argv[])
 	      fprintf (stderr, "=== %s: run %s done\n",
 		       timeBufShowNow (tBuf), dictName (p.runDict, bb.run)) ;
 
+	      if (! p.minAli)
+		p.minAli = bb.runStat.p.minAli ;
 	      nRunsDone++ ;
 	      if (nRunsDone == nRunsToDo)
 		releaseGenomeIndex (&p) ;
@@ -2773,9 +2862,10 @@ int main (int argc, const char *argv[])
     }
   /* wego_log is the thread-safe way to pass messages to stderr */
 
-  saSetGetAdaptors (-999999, 0, 0, 0, 0) ;
+  saSetGetAdaptors (-999999, 0, 0, 0, 0, 0) ;
   oligoEntropy (0, -999999, 0) ;
-
+  fflush (stdout)  ;
+  fflush (stderr)  ;
   if (p.debug)   ac_free (h) ; /* blocks on channel cond destroy */
   return 0 ;
 }

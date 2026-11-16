@@ -220,7 +220,7 @@ static void wigExportPeaksDo (ACEOUT ao, WIG wig, AC_HANDLE h)
 	       c1, c2,
 	       step * ln, 
 	       (float)pk->yMax / (scale),  /* yMax = nb of bases in one bin */
-	       (float)pk->area / (ln * scale), (float) pk->area/(1000.0 * scale)
+	       (float)pk->area * step / (ln * scale), (float) pk->area * step /(1000.0 * scale)
 	       ) ;
       totalCoverInPeaks += step * ln ;
       totalAreaInPeaks += pk->area/scale ;
