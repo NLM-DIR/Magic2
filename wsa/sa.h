@@ -77,10 +77,10 @@ typedef struct runClassStruct {
 } RC ;
 
 typedef struct aStruct {
-  char a1L[32];
-  char a1R[32];
-  char a2L[32];
-  char a2R[32];
+  unsigned char a1L[32];
+  unsigned char a1R[32];
+  unsigned char a2L[32];
+  unsigned char a2R[32];
 } ADAPTORS ;
 
 
@@ -100,24 +100,33 @@ typedef struct PSDstruct {
   int run ;   /* index in p.runDict */
   int nFiles ;
   long int nBase1, nBase2 ;
+  long int nClippedBase1, nClippedBase2 ;
   long int nPairs, nReads ;
   Array lengthDistribution ;
   int minReadLength, maxReadLength ;
+  int minAli ;
+  long int lowEntropy, tooShort ;
+  long int lowEntropyBases, tooShortBases ;
   long int letterProfile1[5 * LETTERMAX] ;
   long int letterProfile2[5 * LETTERMAX] ;
+  long int clippedLetterProfile1[5 * LETTERMAX] ;
+  long int clippedLetterProfile2[5 * LETTERMAX] ;
   long int aligned_letterProfile1[5 * LETTERMAX] ;
   long int aligned_letterProfile2[5 * LETTERMAX] ;
   long int NATGC[5] ;
   long int aligned_NATGC[5] ;
+  long int nClippedAdaptor1L ;
+  long int nClippedAdaptor2L ;
+  long int nClippedAdaptor1R ;
+  long int nClippedAdaptor2R ;
 } PSD ;
 
 typedef struct runStatStruct {
   AC_HANDLE h ;
   PSD p ;
-  long int lowEntropy, tooShort ;
-  long int lowEntropyBases, tooShortBases ;
   long int nCompatiblePairs, nIncompatiblePairs, n2ChromsPairs, nOrphans, nCirclePairs ;
   long int nPairsAligned, nBaseAligned1, nBaseAligned2 ;
+  long int nPairsAlignedM, nBaseAligned1M, nBaseAligned2M ;
   long int cds, utr, intronic, intergenic ;
   long int nComplexReads ;
   long int nPartialReads ;
@@ -125,14 +134,11 @@ typedef struct runStatStruct {
   long int nReadsAlignedPerTargetClass[256] ;
   long int nBasesAlignedPerTargetClass[256] ;
   long int nPerfectReads ;
+  long int nPerfectReadsM ;
   long int nAlignments ;
   long int nClippedPolyA ;
   long int nClippedPolyT ;
   long int nClippedSL ;
-  long int nClippedAdaptor1L ;
-  long int nClippedAdaptor2L ;
-  long int nClippedAdaptor1R ;
-  long int nClippedAdaptor2R ;
   long int nTello[12] ;
   long int nTelloRead ;
   long int SlRead ;
@@ -221,12 +227,14 @@ typedef struct bStruct {
   Array wigglesNU ;
   BigArray intronHits ;
   BOOL isGenome ;
+  BOOL isRunRepeated ;
   int isRna ; /* 2: user defined RNA, -2: user defined DNA, 1: autodefined RNA, -1 autodefined DNA */
 
   Array confirmedPolyAs ;
   Array confirmedSLs ;
   Array confirmedIntrons ;
   Array doubleIntrons ;
+  Array multiplicity ;
 
   int step, skips0, skips1, skips2, skips3, skips4, skipsFound, skipsNotFound ;
   long int genomeLength ;
@@ -381,6 +389,7 @@ typedef struct pStruct {
   long int wiggleCumul ; /* in million bases */
   long int cds, utr, intronic, intergenic ;
   BOOL splice ;
+  BOOL keepReadNames ;
   long int nRawReads, nRawBases, genomeLength ;
   int min_peak_coverage ;
   int wiggle_step ;
@@ -388,38 +397,6 @@ typedef struct pStruct {
   float *runStranding ;
 } PP ;
 
-#ifdef JUNKINCOMMON
-
-#define NSHIFTEDTARGETREPEATBITS 8
-
-typedef struct codeWordsStruct {
-  unsigned int seed ; /* 32 bits = 16 bases, 2 bits per base */
-  unsigned int nam ; /* index in readDict or chromDict << 1 | (0x1 for minus words) */
-  unsigned int pos ;  /* bio coordinate of first letter of seed */
-  unsigned int intron ;
-} __attribute__((aligned(16))) CW ;
-
-typedef struct hitStruct {
-  unsigned int read ;  /* index in readDict << 2 | (0x2 if read is read2 of a pair) | (0x1 if read is complemented) */
-  unsigned int chrom ; /* index in chromDict << 1 | (0x1 if minus strand) */
-  unsigned int a1 ;  /* bio coordinates on chrom (base 1) */
-  unsigned int x1 ;  /* bio coordinate on read */
-} __attribute__((aligned(16))) HIT ;
-
-
-typedef struct seedMatchStruct {
-  unsigned int readSeed ;    /* place holder, set to zero */
-  unsigned int read ;        /* index in bb->dict << 1 | (0x1 for minus words) */
-  unsigned int x1 ;          /* bio coordinate of first letter of seed in read */
-  unsigned int readFlags ;   /* copied from read index */
-  
-  unsigned int targetSeed ;  /* place holder, set to zero */
-  unsigned int target ;      /* index in pp->bbG.dict << 1 | (0x1 for minus chromosome strand) */
-  unsigned int a1 ;          /* bio coordinate of first letter of seed in target */
-  unsigned int targetFlags ; /* copied from target index */
-} __attribute__((aligned(32))) SEEDMATCH ;
-
-#endif
 /* patch2: add after the SEEDMATCH struct in sa.h */
 /* place this block just before the #endif of JUNKINCOMMON, or after */
 /* the closing brace of seedMatchStruct                              */
@@ -555,7 +532,7 @@ typedef struct geneCountsStruct {
 /* was 256 1024 4096 16384 */
 
 #define NTARGETREPEATBITS 5
-
+#define NSHIFTEDTARGETREPEATBITS 8
 
 #define mstep1 255
 #define mstep2 510
@@ -583,11 +560,11 @@ Array saConfigGetRuns (PP *pp, Array runStats, int *nRunsToDop) ;
 BOOL saSanitizeRunName (const char *nam) ;
 
 /* saSetGetAdaptors:
- * set=0: get, 1: set, 2: hard set non rewritable
+ * set=0: get, 1: set, 2: hard set non rewritable, 3: set minAli, 4: get minAli
  * isRna: >=0: favor introns, search polyAs, export gene expression
  *        <0: none of the above, disfavor deletions.
  */
-BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCostp) ;
+BOOL saSetGetAdaptors (int set, int *isRnap, ADAPTORS *aa, int run, int *errCostp, int *minAlip) ;
 
 /* sa.gff.c */
 long int saGffParser (PP *pp, TC *tc) ;

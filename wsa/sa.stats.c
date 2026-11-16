@@ -197,10 +197,11 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
   
   long int nRawReads = pp->nRawReads ? pp->nRawReads : s0->p.nReads ;
   long int nRawBases = pp->nRawBases ? pp->nRawBases : s0->p.nBase1 + s0->p.nBase2 ;
+  // long int nClippedRawBases = s0->p.nClippedBase1 + s0->p.nClippedBase2 ;
 
   aceOutDate (ao, "###", "This file is for debugging, see $run.runStats.tsf for more detailled results\n") ;
   aceOutf (ao, "%s\t%s\tPairs\t%ld\n", run, METHOD, s0->p.nPairs) ;
-  aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\tof_raw_pairs\n", run, METHOD, s0->nPairsAligned, (100.0 * s0->nPairsAligned)/(nRawReads/2 + .000001)) ;
+  aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\tof_raw_pairs\n", run, METHOD, s0->nPairsAlignedM, (100.0 * s0->nPairsAlignedM)/(nRawReads/2 + .000001)) ;
   
   aceOutf (ao, "%s\t%s\tnCompatible_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCompatiblePairs, (100.0 * s0->nCompatiblePairs)/(s0->nPairsAligned + .000001)) ;
   aceOutf (ao, "%s\t%s\tnCircle_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCirclePairs, (100.0 * s0->nCirclePairs)/(s0->nPairsAligned + .000001)) ;
@@ -212,7 +213,7 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
   if (s0->nClippedPolyA) aceOutf (ao, "\n%s\t%s\tClipped_PolyA\t%ld\n", run, METHOD, s0->nClippedPolyA) ;
   if (s0->nClippedPolyT) aceOutf (ao, "\n%s\t%s\tClipped_PolyT\t%ld\n", run, METHOD, s0->nClippedPolyT) ;
   if (s0->nClippedSL) aceOutf (ao, "\n%s\t%s\tClipped_SL\t%ld\n", run, METHOD, s0->nClippedSL) ;
-  int nClipped = s0->nClippedAdaptor1L + s0->nClippedAdaptor2L + s0->nClippedAdaptor1R + s0->nClippedAdaptor2R ;
+  int nClipped = s0->p.nClippedAdaptor1L + s0->p.nClippedAdaptor2L + s0->p.nClippedAdaptor1R + s0->p.nClippedAdaptor2R ;
   if (nClipped) aceOutf (ao, "\n%s\t%s\tClipped_Adaptors\t%ld\n", run, METHOD, nClipped) ;
   aceOutf (ao, "%s\t%s\tPerfect_reads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nPerfectReads, (100.0 * s0->nPerfectReads)/(s0->p.nReads + .000001)) ;
   aceOutf (ao, "%s\t%s\tAlignedReads\t%ld\t%.2f%%\tof_raw_reads\n", run, METHOD, s0->nMultiAligned[0], (100.0 * s0->nMultiAligned[0])/(nRawReads + .000001)) ;
@@ -221,8 +222,8 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
   aceOutf (ao, "%s\t%s\tRawBases\t%ld\n", run, METHOD, nRawBases) ;
   aceOutf (ao, "%s\t%s\tnAlignedBases\t%ld\t%.2f%%\tof_raw_bases\n"
 	   , run, METHOD
-	   , s0->nBaseAligned1 + s0->nBaseAligned2
-	   , 100.0 * (s0->nBaseAligned1 + s0->nBaseAligned2) / (nRawBases + .000001)
+	   , s0->nBaseAligned1M + s0->nBaseAligned2M
+	   , 100.0 * (s0->nBaseAligned1M + s0->nBaseAligned2M) / (nRawBases + .000001)
 	   ) ;
   aceOutf (ao, "%s\t%s\tWiggleCumul\t%ld\n", run, METHOD, pp->wiggleCumul) ;
   aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t", run, METHOD, s0->nErr) ;
@@ -235,7 +236,7 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
   aceOutf (ao, "\n%s\t%s\tnPolyA_sites\t%ld\n", run, METHOD, confirmedPolyAsCountSites (pp, 1)) ;
 
   int isRna = 0 ;
-  saSetGetAdaptors (0, &isRna, 0, 1, 0) ;
+  saSetGetAdaptors (0, &isRna, 0, 1, 0, 0) ;
   if (1 || isRna > 0)
     {
       aceOutf (ao, "\n%s\t%s\tSupported_introns\t%ld\tgt_ag seen once or other seen 3\n"
@@ -300,19 +301,25 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
 			    
   up->p.run = run ;
   up->p.nPairs += vp->p.nPairs ;
+
   up->nCompatiblePairs += vp->nCompatiblePairs ;
   up->nIncompatiblePairs += vp->nIncompatiblePairs ;
   up->nCirclePairs += vp->nCirclePairs ;
   up->nOrphans += vp->nOrphans ;
   up->n2ChromsPairs += vp->n2ChromsPairs ;
   up->nPairsAligned += vp->nPairsAligned ;
+
   up->p.nReads += vp->p.nReads ;
   up->p.nBase1 += vp->p.nBase1 ;
   up->p.nBase2 += vp->p.nBase2 ;
-  up->lowEntropy += vp->lowEntropy ;
-  up->tooShort += vp->tooShort ;
-  up->lowEntropyBases += vp->lowEntropyBases ;
-  up->tooShortBases += vp->tooShortBases ;
+  up->p.nClippedBase1 += vp->p.nClippedBase1 ;
+  up->p.nClippedBase2 += vp->p.nClippedBase2 ;
+
+  up->p.lowEntropy += vp->p.lowEntropy ;
+  up->p.tooShort += vp->p.tooShort ;
+  up->p.lowEntropyBases += vp->p.lowEntropyBases ;
+  up->p.tooShortBases += vp->p.tooShortBases ;
+
   up->gt_ag_Support += vp->gt_ag_Support ;
   up->ct_ac_Support += vp->ct_ac_Support ;
   
@@ -324,6 +331,10 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
     up->p.letterProfile1[i] += vp->p.letterProfile1[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.letterProfile2[i] += vp->p.letterProfile2[i] ;
+  for (int i = 0 ; i < 5 * LETTERMAX; i++)
+    up->p.clippedLetterProfile1[i] += vp->p.clippedLetterProfile1[i] ;
+  for (int i = 0 ; i < 5 * LETTERMAX; i++)
+    up->p.clippedLetterProfile2[i] += vp->p.clippedLetterProfile2[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
     up->p.aligned_letterProfile1[i] += vp->p.aligned_letterProfile1[i] ;
   for (int i = 0 ; i < 5 * LETTERMAX; i++)
@@ -361,10 +372,10 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
   for (int i = 0 ; i < SLMAX ; i++)
     up->nClippedSls[i] += vp->nClippedSls[i] ;
 
-  up->nClippedAdaptor1L += vp->nClippedAdaptor1L ;
-  up->nClippedAdaptor1R += vp->nClippedAdaptor1R ;
-  up->nClippedAdaptor2L += vp->nClippedAdaptor2L ;
-  up->nClippedAdaptor2R += vp->nClippedAdaptor2R ;
+  up->p.nClippedAdaptor1L += vp->p.nClippedAdaptor1L ;
+  up->p.nClippedAdaptor1R += vp->p.nClippedAdaptor1R ;
+  up->p.nClippedAdaptor2L += vp->p.nClippedAdaptor2L ;
+  up->p.nClippedAdaptor2R += vp->p.nClippedAdaptor2R ;
   
   if (vp->errors)
     for (int i = 0 ; i < arrayMax (vp->errors) ; i++)
@@ -399,22 +410,22 @@ void saRunStatsCumulate (int run, PP *pp, BB *bb)
  
 /**************************************************************/
 
-static void saLetterProfileExport (const PP *pp, int run, RunSTAT *up)
+static void saLetterProfileExport (const PP *pp, int run, RunSTAT *up, BOOL clipped)
 {
   AC_HANDLE h = ac_new_handle () ;
   const char *runName = dictName (pp->runDict, run) ;
-  char *title = hprintf (h, "%s.letterProfile.tsf", runName) ;
+  char *title = hprintf (h, "%s.%setterProfile.tsf", runName, clipped ? "clippedL" : "l") ;
   ACEOUT ao = aceOutCreate (pp->outFileName, title, 0, h) ;
-  aceOutDate (ao, "##", hprintf (h, "Run %s Raw Letter Profile (before alignment) limited to %d letters", runName, LETTERMAX)) ;
+  aceOutDate (ao, "##", hprintf (h, "Run %s Letter Profile (before alignment) limited to %d letters", runName, clipped ? "Clipped" : "Raw", LETTERMAX)) ;
   long int nn ;
-  long int *aa = up->p.letterProfile1 ;
+  long int *aa = clipped ? up->p.clippedLetterProfile1 : up->p.letterProfile1 ;
   int i, j ;
 
   for (j = 0, nn = 0 ; j < 5 ; j++)
     nn += aa[j] ;
   if (nn)
     {
-      aceOutf (ao, "# Run.f\tPosition\tiiiiiifffff\tAny\tA\tT\tG\tC\tN\t%%A\t%%T\t%%G\t%%C\t%%N\n") ;
+      aceOutf (ao, "# Run.f\tPosition\tiiiiiifffff\tAny\tN\tA\tT\tG\tC\t%%N\t%%A\t%%T\t%%G\t%%C\n") ;
       for (i = 0 ; i < LETTERMAX ; i++)
 	{
 	  int i5 = 5 * i ;
@@ -430,12 +441,12 @@ static void saLetterProfileExport (const PP *pp, int run, RunSTAT *up)
 	}
     }
 
-  aa = up->p.letterProfile2 ;
+  aa = clipped ? up->p.clippedLetterProfile2 : up->p.letterProfile2 ;
   for (j = 0, nn = 0 ; j < 5 ; j++)
     nn += aa[j] ;
   if (nn)
     {
-      aceOutf (ao, "# Run.r\tPosition\tiiiiiifffff\tAny\tA\tT\tG\tC\tN\t%%A\t%%T\t%%G\t%%C\t%%N\n") ;
+      aceOutf (ao, "# Run.r\tPosition\tiiiiiifffff\tAny\tN\tA\tT\tG\tC\t%%N\t%%A\t%%T\t%%G\t%%C\n") ;
       for (i = 0 ; i < LETTERMAX ; i++)
 	{
 	  int i5 = 5 * i ;
@@ -458,7 +469,7 @@ static void saLetterProfileExport (const PP *pp, int run, RunSTAT *up)
  
 /**************************************************************/
 
-static BOOL readOneAdaptor (char adaptor[32], RunSTAT *up, BOOL isLeft, int pass, int *bestp, BOOL coded)
+static BOOL readOneAdaptor (unsigned char adaptor[32], RunSTAT *up, BOOL isLeft, int pass, int *bestp, BOOL coded)
 {
   int best = 0, best2, i, j, di, nn, nL = 0, good = 0 ;
   
@@ -563,7 +574,7 @@ static void saOverhangExport (const PP *pp, int run, RunSTAT *up, BOOL isLeft)
   int best = 0 ;
   int pass, passMax = up->p.nPairs ? 2 : 1 ; 
   char *suffix ;
-  char adaptor[32] = {0} ;
+  unsigned char adaptor[32] = {0} ;
   
   for (pass = 0 ; pass < passMax ; pass++)
     {
@@ -622,7 +633,8 @@ void saRunStatExport (const PP *pp, int run, GeneCounts gcs)
   if (run)
     {
       RunSTAT *up = arrp (pp->runStats, run, RunSTAT) ;
-      saLetterProfileExport (pp, run, up) ;
+      saLetterProfileExport (pp, run, up, TRUE) ;
+      saLetterProfileExport (pp, run, up, FALSE) ;
       saOverhangExport (pp, run, up, TRUE) ;
       saOverhangExport (pp, run, up, FALSE) ;      
       if (up->p.nReads)
@@ -651,14 +663,16 @@ void saRunStatExport (const PP *pp, int run, GeneCounts gcs)
 		   , 100.0 * up->nIncompatiblePairs / (.000001 + up->nPairsAligned)
 		   ) ;
 	  aceOutf (ao, "%s\tReads\ti\t%ld\n", runNam, up->p.nReads) ;
-	  if (up->tooShort) aceOutf (ao, "%s\tToo_short_reads\ti\t%ld\n", runNam, up->tooShort) ;
-	  if (up->lowEntropy)  aceOutf (ao, "%s\tLow_entropy_reads\ti\t%ld\n", runNam, up->lowEntropy) ;
-	  if (up->tooShortBases) aceOutf (ao, "%s\tToo_short_bases\ti\t%ld\n", runNam, up->tooShortBases) ;
-	  if (up->lowEntropyBases)  aceOutf (ao, "%s\tLow_entropy_bases\ti\t%ld\n", runNam, up->lowEntropyBases) ;
-	  aceOutf (ao, "%s\tAligned_reads\tift\t%ld\t%.3f\tof_raw_reads\n"
+
+	  if (up->p.tooShort) aceOutf (ao, "%s\tToo_short_reads\ti\t%ld\n", runNam, up->p.tooShort) ;
+	  if (up->p.lowEntropy)  aceOutf (ao, "%s\tLow_entropy_reads\ti\t%ld\n", runNam, up->p.lowEntropy) ;
+	  if (up->p.tooShortBases) aceOutf (ao, "%s\tToo_short_bases\ti\t%ld\n", runNam, up->p.tooShortBases) ;
+	  if (up->p.lowEntropyBases)  aceOutf (ao, "%s\tLow_entropy_bases\ti\t%ld\n", runNam, up->p.lowEntropyBases) ;
+	  aceOutf (ao, "%s\tAligned_reads\tift\t%ld\t%.3f\tof_raw_reads\t%.3f\tof_good_reads\n"
 		   , runNam
 		   , up->nMultiAligned[0]
 		   , 100.0 * up->nMultiAligned[0] / (.000001 + up->p.nReads)
+		   , 100.0 * up->nMultiAligned[0] / (.000001 + up->p.nReads - up->p.tooShort - up->p.lowEntropy)
 		   ) ;
 	  aceOutf (ao, "%s\tUnligned_reads\tift\t%ld\t%.3f\tof_raw_reads\n"
 		   , runNam
@@ -689,19 +703,30 @@ void saRunStatExport (const PP *pp, int run, GeneCounts gcs)
 		   , up->p.nBase1
 		   , up->p.nBase2
 		   ) ;
-	  aceOutf (ao, "%s\tAligned_bases\tififift\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\tof_raw_bases\n"
+	  aceOutf (ao, "%s\tClipped_bases\tiii\t%ld\t%ld\t%ld\n"
+		   , runNam
+		   , up->p.nClippedBase1 + up->p.nClippedBase2
+		   , up->p.nClippedBase1
+		   , up->p.nClippedBase2
+		   ) ;
+	  aceOutf (ao, "%s\tAligned_bases\tififift\t%ld\t%.3f\t%ld\t%.3f\t%ld\t%.3f\tof_raw_clipped_bases\n"
 		   , runNam
 		   , up->nBaseAligned1 + up->nBaseAligned2
-		   , 100.0*(up->nBaseAligned1 + up->nBaseAligned2)/(.0001 + up->p.nBase1 + up->p.nBase2)
+		   , 100.0*(up->nBaseAligned1 + up->nBaseAligned2)/(.0001 + up->p.nClippedBase1 + up->p.nClippedBase2)
 		   , up->nBaseAligned1
-		   , 100.0 * up->nBaseAligned1/(.000001 + up->p.nBase1)
+		   , 100.0 * up->nBaseAligned1/(.000001 + up->p.nClippedBase1)
 		   , up->nBaseAligned2
-		   , 100.0 * up->nBaseAligned2/(.000001 + up->p.nBase2)
+		   , 100.0 * up->nBaseAligned2/(.000001 + up->p.nClippedBase2)
 		   ) ;
 
 	  aceOutf (ao, "%s\tUnaligned_bases\ti\t%ld\n"
 		   , runNam
 		   , up->p.nBase1 + up->p.nBase2 - up->nBaseAligned1 - up->nBaseAligned2
+		   ) ;
+
+	  aceOutf (ao, "%s\tUnaligned_clipped_bases\ti\t%ld\n"
+		   , runNam
+		   , up->p.nClippedBase1 + up->p.nClippedBase2 - up->nBaseAligned1 - up->nBaseAligned2
 		   ) ;
 
 	  up->intergenic = up->wiggleCumul - up->cds - up->utr - up->intronic ;
@@ -740,47 +765,47 @@ void saRunStatExport (const PP *pp, int run, GeneCounts gcs)
 	  if (1)
 	    {
 	      ADAPTORS adaptors = {{0}} ;
-	      saSetGetAdaptors (0, 0, &adaptors, run, 0) ;
+	      saSetGetAdaptors (0, 0, &adaptors, run, 0, 0) ;
 	      saReadAdaptors (&adaptors, up, FALSE) ;
 	      if (1)
 		{
-		  if (up->nClippedAdaptor1L)
+		  if (up->p.nClippedAdaptor1L)
 		    {
-		      char *cp = adaptors.a1L ;
+		      unsigned char *cp = adaptors.a1L ;
 		      aceOutf (ao, "%s\tClipped_5prime_Adaptor_read1\tit\t%ld\t%s\n"
 			       , runNam
-			       , up->nClippedAdaptor1L
-			       , cp ? cp : ""
+			       , up->p.nClippedAdaptor1L
+			       , cp ? cp : (unsigned char *)""
 			       ) ;
 		    }
 		  
-		  if (up->nClippedAdaptor1R)
+		  if (up->p.nClippedAdaptor1R)
 		    {
-		      char *cp = adaptors.a1R  ;
+		      unsigned char *cp = adaptors.a1R  ;
 		      aceOutf (ao, "%s\tClipped_3prime_Adaptor_read1\tit\t%ld\t%s\n"
 			       , runNam
-			       , up->nClippedAdaptor1R
-			       , cp ? cp : ""
+			       , up->p.nClippedAdaptor1R
+			       , cp ? cp : (unsigned char *)""
 			       ) ;
 		    }
 		  
-		  if (up->nClippedAdaptor2L)
+		  if (up->p.nClippedAdaptor2L)
 		    {
-		      char *cp = adaptors.a2L ;
+		      unsigned char *cp = adaptors.a2L ;
 		      aceOutf (ao, "%s\tClipped_5prime_Adaptor_read1\tit\t%ld\t%s\n"
 			       , runNam
-			       , up->nClippedAdaptor2L
-			       , cp ? cp : ""
+			       , up->p.nClippedAdaptor2L
+			       , cp ? cp : (unsigned char *)""
 			       ) ;
 		    }
 		  
-		  if (up->nClippedAdaptor2R)
+		  if (up->p.nClippedAdaptor2R)
 		    {
-		      char *cp = adaptors.a2R ;
+		      unsigned char *cp = adaptors.a2R ;
 		      aceOutf (ao, "%s\tClipped_3prime_Adaptor_read2\tit\t%ld\t%s\n"
 			       , runNam
-			       , up->nClippedAdaptor2R
-			       , cp ? cp : ""
+			       , up->p.nClippedAdaptor2R
+			       , cp ? cp : (unsigned char *)""
 			       ) ;
 		    }
 		}
@@ -824,13 +849,30 @@ void saRunStatExport (const PP *pp, int run, GeneCounts gcs)
 	  aceOut (ao, "%\tof_aligned_bases.\n") ;
 	  
 	  int isRna = 0 ;
-	  if (saSetGetAdaptors (0, &isRna, 0, run, 0))
+	  if (saSetGetAdaptors (0, &isRna, 0, run, 0, 0))
 	    aceOutf (ao, "%s\tStrategy\ti\t%d\n"
 		     , runNam
 		     , isRna
 		     ) ;
-
-
+	  int nLanes = atomic_fetch_add_explicit (arrp (pp->runLanes, run, atomic_int), 0, memory_order_relaxed) ;
+	  aceOutf (ao, "%s\tnLanes\ti\t%d\n"
+		   , runNam
+		   , nLanes
+		   ) ;
+	  aceOutf (ao, "%s\tminAli\ti\t%d\n"
+		   , runNam
+		   , pp->minAli
+		   ) ;
+	  
+	  aceOutf (ao, "%s\tminReadLength\ti\t%d\n"
+		   , runNam
+		   , pp->minLength
+		   ) ;
+	  aceOutf (ao, "%s\tseedLength\ti\t%d\n"
+		   , runNam
+		   , pp->seedLength
+		   ) ;
+	  
 	  if (isRna > 0)
 	    {
 	      aceOutf (ao, "%s\tIntron_supports\titititftitititit\t%ld\tany\t%ld\tgt_ag\t%ld\tct_ac\t%.3f%%\tpositive_strand_supports\t%ld\tKnown_gt_ag\t%ld\tKnown_other\t%ld\tNovel_gt_ag\t%ld\tNovel_other.\n"

@@ -436,22 +436,6 @@ static int readScanDna (BB *bb, unsigned char *buf, int *start, int *stop)
     {
       int i, iMax = *stop - *start ;
 
-      for (cp  = buf + *start, i = 0; i < iMax ; cp++, i++)
-	bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
-
-      
-      if (buf == bb->r2Buffer)
-	{
-	  for (cp  = buf + *start, i = 0; i < LETTERMAX && i < iMax ; cp++, i++)	    
-	    bb->runStat.p.letterProfile2[5*i + natgc[(int)*cp]]++ ;
-	  }
-      else
-	{
-	  for (cp  = buf + *start, i = 0; i < LETTERMAX && i < iMax ; cp++, i++)	    
-	    bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]++ ;
-	  }
-    
-      
       if (iMax > bb->runStat.p.maxReadLength)
 	bb->runStat.p.maxReadLength = iMax ;
       if (! bb->runStat.p.minReadLength || iMax < bb->runStat.p.minReadLength)

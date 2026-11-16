@@ -53,18 +53,6 @@ static int saScanDnaEncode (BB *bb)
       minDnaLn = (n < minDnaLn ? n : minDnaLn) ;
       maxDnaLn = (n > maxDnaLn ? n : maxDnaLn) ;
       nn += n ;
-
-      unsigned char *cq, *cp = arrp (*dnap, 0, unsigned char) ;
-      cq = cp ;
-      if (ii & 0x1)
-	for (int i = 0 ; i < n && i < LETTERMAX ; i++, cq++)
-	  bb->runStat.p.letterProfile2[5*i + natgc[(int)*cq]]++ ;
-      else
-	for (int i = 0 ; i < n && i < LETTERMAX ; i++, cq++)
-	  bb->runStat.p.letterProfile1[5*i + natgc[(int)*cq]]++ ;
-      cq = cp ;
-      for (int i = 0 ; i < n ; i++, cq++)
-	bb->runStat.p.NATGC[natgc[(int)*cq]]++ ;
     }
 
   bb->runStat.p.minReadLength = minDnaLn ;
@@ -673,7 +661,7 @@ static int saParseFastac (const PP *pp, RC *rc)
 /******************************** sra streaming and caching  ********************************************************/
 /********************************************************************************************************************/
 
-static void sraCachingOut (ACEOUT *ao1p, ACEOUT *ao2p, const char *seq, const char *seq2, const char *sraID
+static void sraCachingOut (ACEOUT *ao1p, ACEOUT *ao2p, const char *sraID
 			   , BOOL fastq, BOOL isPaired, BOOL split_pairs, AC_HANDLE h0)
 {
   AC_HANDLE h = ac_new_handle () ;
@@ -755,13 +743,17 @@ static void sraCachingOut (ACEOUT *ao1p, ACEOUT *ao2p, const char *seq, const ch
 
 /**************************************************************/
 
-static void sraCacheDo (ACEOUT ao1, ACEOUT ao2,	const char *seq, const char *seq2)
+static void sraCacheDo (ACEOUT ao1, ACEOUT ao2,	const char *seq, const char *seq2, BOOL fastq)
 {
   if (seq && ao1) /* all data goes in same file */
     {
-      aceOut (ao1, seq) ;
+      aceOut (ao1, fastq ? "@" : ">") ;
+      aceOut (ao1, seq+1) ;
       if (seq2 && ao2) /* all data goes in same file */
-	aceOut (ao2, seq2) ;
+	{
+	  aceOut (ao2, fastq ? "@" : ">") ;
+	  aceOut (ao2, seq2+1) ;
+	}
     }
 } /* sraCacheDo */
 
@@ -882,14 +874,14 @@ int saParseSraDownload (PP *pp, const char *sraID)
 	  if (Gb > 0) bMax -= sra->num_bases ;
 	  nn++ ;
 	  if (firstPass)
-	    sraCachingOut (&ao1, &ao2, sra->seq, sra->seq2, sraID, fastq, sra->is_paired, split_pairs, h) ;
+	    sraCachingOut (&ao1, &ao2, sraID, fastq, sra->is_paired, split_pairs, h) ;
 	  firstPass = FALSE ;
 	  fprintf (stderr, ".") ;
 
 	  if (!ao1 && ! ao2)
 	    break ;
 	  if (ao1 || ao2)
-	    sraCacheDo (ao1, ao2, sra->seq, sra->seq2) ;
+	    sraCacheDo (ao1, ao2, sra->seq, sra->seq2, fastq) ;
 	}
       else
 	break ;

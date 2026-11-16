@@ -2389,7 +2389,7 @@ set sortalign=bin/sortalign
 
 echo > tmp/SA/$MAGIC.ali2.ace
 foreach run (`cat MetaDB/$MAGIC/RunList`)
-  if (-e tmp/SA/$run/runStats.tsf) then
+  if (-e tmp/SA/$run/$run.runStats.tsf) then
     if (-e tmp/SA/$run/aliIsRunning) \rm tmp/SA/$run/aliIsRunning
     scripts2/m2.sa2ali.tcsh $run 
   endif
@@ -9892,7 +9892,7 @@ echo "pparse $toto" |  bin/tacembly MetaDB -noprompt
 
 set toto=tmp/WIGGLEGROUP/$MAGIC.cis_correlations
 echo "###" > $toto.1.tsf
-echo -n "### Cis/Trans correlation of the 2 reads aligning on the two strands :" > $toto.1
+echo -n "### Cis correlation of the 2 reads aligning on the two strands :" > $toto.1
 date >> $toto.1
 echo "## Cis: autocorrelation of the wiggle on the top strand used as a control" >> $toto.1
 echo "## Trans: correlation of the two strands showing the average lag of the minus strand wiggle " >> $toto.1
@@ -9913,7 +9913,7 @@ cat $toto.1 $toto.2.txt > $toto.txt
 
 set toto=tmp/WIGGLEGROUP/$MAGIC.trans_correlations
 echo "###" > $toto.1.tsf
-echo -n "### Cis/Trans correlation of the 2 reads aligning on the two strands :" > $toto.1
+echo -n "### Trans correlation of the 2 reads aligning on the two strands :" > $toto.1
 date >> $toto.1
 echo "## Cis: autocorrelation of the wiggle on the top strand used as a control" >> $toto.1
 echo "## Trans: correlation of the two strands showing the average lag of the minus strad wiggle " >> $toto.1
@@ -9933,7 +9933,7 @@ cat $toto.1 $toto.2.txt > $toto.txt
 \cp $toto.txt  RESULTS
 \rm $toto.1 $toto.2.txt $toto.1.tsf
 
-set toto=tmp/WIGGLEGROUP/$MAGIC.shits_at_max_trans_correl.txt
+set toto=tmp/WIGGLEGROUP/$MAGIC.strand_shifts.txt
 bin/tace MetaDB <<EOF
   query find project $MAGIC ; >run ; CLASS Runs ; >ali 
   select -o $toto.1 r,dx,uv from r in @, dx in r->Strand_shift, uv in dx[1]
@@ -9956,27 +9956,29 @@ echo >> $toto
 #### compute the fr non stranded peaks of each run by combining the shifted f and r stranded wiggles
 #### For the groups: do not shift: the group f and r are already cosntructed form the shifted runspeakMinCover
  phasePeaks:
-set minPeakCover=4
-set Peaks=Peaks.$minPeakCover
+foreach minPeakCover (3 4 5 10)
+  set Peaks=Peaks.$minPeakCover
 
-if (! -d tmp/$Peaks) mkdir tmp/$Peaks
+  if (! -d tmp/$Peaks) mkdir tmp/$Peaks
 ## Construct the group peaks by adding the shifted run wiggles
-foreach run (`cat MetaDB/$MAGIC/RunsList MetaDB/$MAGIC/GroupWiggleList`)
-  if (! -d tmp/$Peaks/$run) mkdir tmp/$Peaks/$run
-  if (-e tmp/$Peaks/$run/nsShiftedPeaks.done) continue
-  scripts/submit tmp/WIGGLEGROUP/$run   "bin/peaks --db MetaDB -p $MAGIC --makeShiftedNonStrandedPeaks --group $run --min_peak_cover $minPeakCover -o tmp/$Peaks/$run"
-  touch tmp/$Peaks/$run/nsShiftedPeaks.done
-end
+  foreach run (`cat MetaDB/$MAGIC/RunsList MetaDB/$MAGIC/GroupWiggleList`)
+    if (! -d tmp/$Peaks/$run) mkdir tmp/$Peaks/$run
+    if (-e tmp/$Peaks/$run/nsShiftedPeaks.done) continue
+    scripts/submit tmp/WIGGLEGROUP/$run   "bin/peaks --db MetaDB -p $MAGIC --makeShiftedNonStrandedPeaks --group $run --min_peak_cover $minPeakCover -o tmp/$Peaks/$run"
+    touch tmp/$Peaks/$run/nsShiftedPeaks.done 
+  end
 
-qusage 1
+  qusage 1
 
 ###############
 # intersect and associated histograms
-bin/peaks --db MetaDB --intersects -p $MAGIC -o tmp/$Peaks/$MAGIC.min$minPeakCover --min_peak_cover $minPeakCover
-\cp tmp/$Peaks/$MAGIC.min$minPeakCover.*  RESULTS
+  bin/peaks --db MetaDB --intersects -p $MAGIC -o tmp/$Peaks/$MAGIC.min$minPeakCover --min_peak_cover $minPeakCover
+  \cp tmp/$Peaks/$MAGIC.min$minPeakCover.*  RESULTS
+end
 
 goto phaseLoop
 
+#####################
  #for all groups, extract all peaks, then sort and merge them by continuity, construct a shadow file, extract the counts, run a profile
 
 # extract the peaks

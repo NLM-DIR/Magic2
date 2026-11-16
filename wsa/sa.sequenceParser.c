@@ -421,23 +421,13 @@ void saParseGzBuffer (const PP *pp, BB *bb)
 	  
 	  if (arrayMax (dna1))
 	    {
-	      int i, iMax = arrayMax (dna1) ;
-	      unsigned char *cp = arrp (dna1, 0, unsigned char) ;
-	      for (i = 0 ; i < iMax ; i++, cp++)
-		bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
-	      
+	      int iMax = arrayMax (dna1) ;
+
 	      if (iMax > bb->runStat.p.maxReadLength)
 		bb->runStat.p.maxReadLength = iMax ;
 	      if (! bb->runStat.p.minReadLength || iMax < bb->runStat.p.minReadLength)
 		bb->runStat.p.minReadLength = iMax ;
 	      array (bb->runStat.p.lengthDistribution, iMax, long int)++ ;
-	    }
-	  if (arrayMax (dna1))
-	    {
-	      int i, iMax = arrayMax (dna1) ;
-	      unsigned char *cp = arrp (dna1, 0, unsigned char) ;
-	      for (i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
-		bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]++ ;
 	    }
 
 	  dna1 = arrayHandleCreate (256, unsigned char, bb->h) ;
@@ -1125,24 +1115,7 @@ int otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 
 	      if (arrayMax (dna1))
 		{
-		  int i, iMax = arrayMax (dna1) ;
-		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
-		  for (i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
-		    bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]++ ;
-		}
-	      if (arrayMax (dna2))
-		{
-		  int i, iMax = arrayMax (dna2) ;
-		  unsigned char *cp = arrp (dna2, 0, unsigned char) ;
-		  for (i = 0 ; i < iMax && i < LETTERMAX ; i++, cp++)
-		    bb->runStat.p.letterProfile2[5*i + natgc[(int)*cp]]++ ;
-		}
-	      if (arrayMax (dna1))
-		{
-		  int i, iMax = arrayMax (dna1) ;
-		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
-		  for (i = 0 ; i < iMax ; i++, cp++)
-		    bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
+		  int iMax = arrayMax (dna1) ;
 
 		  if (iMax > bb->runStat.p.maxReadLength)
 		    bb->runStat.p.maxReadLength = iMax ;
@@ -1152,10 +1125,7 @@ int otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 		}
 	      if (arrayMax (dna2))
 		{
-		  int i, iMax = arrayMax (dna1) ;
-		  unsigned char *cp = arrp (dna2, 0, unsigned char) ;
-		  for (i = 0 ; i < iMax ; i++, cp++)
-		    bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
+		  int iMax = arrayMax (dna1) ;
 
 		  if (iMax > bb->runStat.p.maxReadLength)
 		    bb->runStat.p.maxReadLength = iMax ;
@@ -1222,23 +1192,13 @@ int otherSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
 	      array (bb->dnas, nn1, Array) = dna1 ;
 	      if (arrayMax (dna1))
 		{
-		  int i, iMax = arrayMax (dna1) ;
-		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
-		  for (i = 0 ; i < iMax ; i++, cp++)
-		    bb->runStat.p.NATGC[natgc[(int)*cp]]++ ;
+		  int iMax = arrayMax (dna1) ;
 
 		  if (iMax > bb->runStat.p.maxReadLength)
 		    bb->runStat.p.maxReadLength = iMax ;
 		  if (! bb->runStat.p.minReadLength || iMax < bb->runStat.p.minReadLength)
 		    bb->runStat.p.minReadLength = iMax ;
 		  array (bb->runStat.p.lengthDistribution, iMax, long int)++ ;
-		}
-	      if (arrayMax (dna1))
-		{
-		  int i, iMax = arrayMax (dna1) ;
-		  unsigned char *cp = arrp (dna1, 0, unsigned char) ;
-		  for (i = 0 ; i < iMax && i < LETTERMAX ; i++)
-		    bb->runStat.p.letterProfile1[5*i + natgc[(int)*cp]]++ ;
 		}
 
 	      if (bb->quals && qual1)

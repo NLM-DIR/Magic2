@@ -462,8 +462,8 @@ static BOOL alignExtendHit (Array dna, Array dnaG, Array dnaGR, Array err
   *x1p = x1 ; *x2p = x2 ;
   *a1p = a1 ; *a2p = a2 ;
   dx = x2 - x1 + 1 ;
-
-  minAli = DA ? 8 : 22 ;
+  int dnaLn = arrayMax (dna) ;
+  minAli = DA ? 8 : (dnaLn < minAli ? dnaLn : minAli) ;
   if (dx < minAli)
     return FALSE ;
   if (errMax >= 0 &&  nerr > errMax)
@@ -477,7 +477,7 @@ static BOOL alignExtendHit (Array dna, Array dnaG, Array dnaGR, Array err
 /**************************************************************/
 /**************************************************************/
 
-static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, ADAPTORS *adaptors, int ii0)
+static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, ADAPTORS *adaptors, int ii0, int mult)
 {
   int x1 = up->x1 ;
   int slBonus = 4 ;
@@ -562,19 +562,19 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 	      switch (cc)
 		{
 		case A_:
-		  overH[ii + 0]++ ;
+		  overH[ii + 0] += mult ;
 		  break ;
 		case T_:
-		  overH[ii + 1]++ ;
+		  overH[ii + 1] += mult ;
 		  break ;
 		case G_:
-		  overH[ii + 2]++ ;
+		  overH[ii + 2] += mult ;
 		  break ;
 		case C_:
-		  overH[ii + 3]++ ;
+		  overH[ii + 3] += mult ;
 		  break ;
 		default:
-		  overH[ii + 4]++ ;
+		  overH[ii + 4] += mult ;
 		  break ;
 		}
 	    }
@@ -625,7 +625,7 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 			  zp->chrom = up->chrom ;
 			  zp->a1 = up->a1 ;
 			  zp->run = (bb->run << 4) | (iSl & 0xf) ;
-			  zp->n = 1 ;
+			  zp->n = mult ;
 			  goto done ;
 			}
 		    }	
@@ -633,13 +633,13 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 	    }
 	  
 	  /* try to recognize the known adaptor */
-	  const char *adaptor = (up->read & 0x1 ? adaptors->a2L : adaptors->a1L) ;
+	  const unsigned char *adaptor = (up->read & 0x1 ? adaptors->a2L : adaptors->a1L) ;
 	  if (adaptor[0])
 	    {
 	      int jj, iAmax = 1 ; /* arrayMax (aa) ; */
 	      for (int iA = 0 ; iA < iAmax ; iA++)
 		{	      
-		  int iMax = strlen (adaptor) ;
+		  int iMax = ustrlen (adaptor) ;
 		  for (int di = 0 ; di < 6 ; di++)
 		    {
 		      int i, n = 0 ;
@@ -654,9 +654,9 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 			  
 			  doUpper = TRUE ;
 			  if (up->read & 0x1) 
-			    bb->runStat.nClippedAdaptor2L++ ;
+			    bb->runStat.p.nClippedAdaptor2L += mult ;
 			  else
-			    bb->runStat.nClippedAdaptor1L++ ;
+			    bb->runStat.p.nClippedAdaptor1L += mult ;
 			  leftClip = x1 - 1 + di ;
 			  up->x1 += di ;
 			  up->ali -= di ;
@@ -696,11 +696,11 @@ static int alignFormatLeftOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, 
 
   up->leftClip = leftClip ;
   return leftClip ;
-} /* alignFormatLeftOverhang */
+} /* alignFormtLeftOverhang */
 
 /**************************************************************/
 
-static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, ADAPTORS *adaptors, int ii0, int iiMax)
+static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, ADAPTORS *adaptors, int ii0, int iiMax, int mult)
 {
   int x2 = up->x2 ;
   int ln = arrayMax (dna) ; /* length to align */
@@ -744,6 +744,7 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 	  goto done ;  
 	}
 
+      cp = arrp (dna, x2, char) ; /* first unaligned base */
       if (1)
 	{
 	  int first = -1 ;
@@ -793,19 +794,19 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 	      switch (cc)
 		{
 		case A_:
-		  overH[ii + 0]++ ;
+		  overH[ii + 0]+= mult ;
 		  break ;
 		case T_:
-		  overH[ii + 1]++ ;
+		  overH[ii + 1]+= mult ;
 		  break ;
 		case G_:
-		  overH[ii + 2]++ ;
+		  overH[ii + 2]+= mult ;
 		  break ;
 		case C_:
-		  overH[ii + 3]++ ;
+		  overH[ii + 3]+= mult ;
 		  break ;
 		default:
-		  overH[ii + 4]++ ;
+		  overH[ii + 4]+= mult ;
 		  break ;
 		}
 	    }
@@ -833,7 +834,7 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 			  /* check that the prefix including an extra donor 'gt' 
 			   * is not present in the genome
 			   */
-			  int kkk = ccp ? strlen ((const char*)ccp) : 0 ;
+			  int kkk = ccp ? ustrlen (ccp) : 0 ;
 			  BOOL inGenome = FALSE ;
 			  if (kkk < OVLN)
 			    {
@@ -858,7 +859,7 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 			  zp->chrom = up->chrom ;
 			  zp->a1 = up->a2 ;
 			  zp->run = (bb->run << 4) | (iSl & 0xf) ;
-			  zp->n = 1 ;
+			  zp->n = mult ;
 			  
 			  goto done ;
 			}
@@ -868,13 +869,13 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 	}
 	      
       /* try to recognize the known adaptor */
-      const char *adaptor = (up->read & 0x1 ? adaptors->a2R : adaptors->a1R) ;
+      const unsigned char *adaptor = (up->read & 0x1 ? adaptors->a2R : adaptors->a1R) ;
       if (adaptor[0])
 	{
 	  int iAmax = 1 ;
 	  for (int iA = 0 ; iA < iAmax ; iA++)
 	    {	      
-	      int iMax = strlen (adaptor) ;
+	      int iMax = ustrlen (adaptor) ;
 	      for (int di = 0 ; di < 6 ; di++)
 		{
 		  int jj, i, n = 0 ;
@@ -888,9 +889,9 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 		      ALIGN *vp ;
 		      doUpper = TRUE ;
 		      if (up->read & 0x1) 
-			bb->runStat.nClippedAdaptor2R++ ;
+			bb->runStat.p.nClippedAdaptor2R += mult ;
 		      else
-			bb->runStat.nClippedAdaptor1R++ ;
+			bb->runStat.p.nClippedAdaptor1R += mult ;
 		      rightClip = x2 - di ;
 		      up->x2 -= di ;
 		      up->ali -= di ;
@@ -933,7 +934,7 @@ static int alignFormatRightOverhang (const PP *pp, BB *bb, ALIGN *up, Array dna,
 
 /**************************************************************/
 
-static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, int read)
+static void alignFormatErrors (const PP *pp, BB *bb, ALIGN *up, Array dna, Array dnaG, Array dnaGR, int read, int  mult)
 {
  A_ERR *ep = arrp (up->errors, 0, A_ERR) ;
   int ii, nerr = arrayMax (up->errors) ;
@@ -2340,7 +2341,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
   int bestI1 = 0 ;
   int chain = 0 ;
   int maxIntron = pp->maxIntron ;
-  int minAli = pp->minAli ;
+  int minAli = bb->runStat.p.minAli ;
   Array aaNew = 0 ;
   int errCost = bb->errCost ;
   int bigErrCost = 4 ; /* errCost ; */
@@ -2515,7 +2516,9 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 	}
       /* filter on chainX1/chainX2 */
       BOOL ok = TRUE ;
-      if (wp->chainX2 - wp->chainX1 + 1 < minAli)
+      int chainDx = wp->chainX2 - wp->chainX1 + 1 ;
+      int readLn = arrayMax (arr(bb->dnas, wp->read, Array)) ;
+      if (chainDx < readLn && chainDx < minAli)
 	ok = FALSE ;
       for (int ic = 1 ; ok && ic < chain ; ic++)
 	{
@@ -2663,7 +2666,7 @@ static void alignSelectBestDynamicPath (const PP *pp, BB *bb, Array aaa, Array a
 
 	  /* filter */
 	  if (chainScore < pp->minScore ||
-	      chainAli < pp->minAli ||
+	      (chainAli < dnaLn && chainAli < bb->runStat.p.minAli) ||
 	      chainErr > pp->errMax ||
 	      100 * chainAli < pp->minAliPerCent * dnaLn ||
 	      100 * chainErr > pp->errRateMax * chainAli ||
@@ -2824,6 +2827,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  if (ap->leftClip > arrayMax (dna))
 	    ap->leftClip = 0 ;
 	  ap->rightClip = arrayMax (dna) ;
+	  int mult = bb->multiplicity ? arr (bb->multiplicity, read1, int) : 1 ;
 	  if (ap->x1 > 1 && ap->x1 == ap->chainX1)
 	    {
 	      if (ap->chrom != chromA)
@@ -2833,7 +2837,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
 		  dnaLength = arrayMax (dnaG) ;
 		}
-	      ap->leftClip = alignFormatLeftOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii) ;
+	      ap->leftClip = alignFormatLeftOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii, mult) ;
 	      
 	    }
 	  if (ap->x2 == ap->chainX2 && ap->x2 < arrayMax (dna))	
@@ -2845,7 +2849,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  dnaGR = arr (pp->bbG.dnasR, chromA >> 1, Array) ;
 		  dnaLength = arrayMax (dnaG) ;
 		}
-	      ap->rightClip = alignFormatRightOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii, iMax) ;
+	      ap->rightClip = alignFormatRightOverhang (pp, bb, ap, dna, dnaG, dnaGR, adaptors, ii, iMax, mult) ;
 	    }
 	}
 
@@ -2991,6 +2995,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
   /* global statistics */
   /* stranding : once per target class */
   /* increase the block stats */
+  int mult = bb->multiplicity ? arr (bb->multiplicity, read, int) : 1 ;
   nChains = 0 ;
   if (arrayMax (bestAp))
     {
@@ -3012,13 +3017,13 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (! ap)
 		{
 		  ap = vp ;
-		  bb->nAli++ ;
-		  bb->runStat.nAlignments++ ;
-		  bb->runStat.nMultiAligned[0]++ ;
+		  bb->nAli+= mult ;
+		  bb->runStat.nAlignments += mult ;
+		  bb->runStat.nMultiAligned[0] += mult ;
 		  nChains = 1 ;
 		  if (ap->chainErr == 0 && ap->leftClip + ap->chainAli >= ap->rightClip)
 		    {
-		      bb->runStat.nPerfectReads++ ;
+		      bb->runStat.nPerfectReads += mult ;
 		      if (0) printf("ISPERFECT chainErr %d chainAli %d left %d right %d %s\n"
 			     , ap->chainErr, ap->chainAli, ap->leftClip, ap->rightClip
 			     , dictName (bb->dict, ap->read >> 1)
@@ -3031,26 +3036,30 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 			   ) ;
 		}
 	      else if (vp->next)
-		{ nChains++ ; bb->runStat.nAlignments++ ; continue ; }
+		{ nChains++ ; bb->runStat.nAlignments += mult ; continue ; }
 	      else
 		isComplex = TRUE ;
 
-	      bb->runStat.nBasesAlignedPerTargetClass[0] += vp->chainAli ;
-	      bb->runStat.nErr += vp->chainErr ;
-	      bb->runStat.nMID += vp->chainMID ;
-	      bb->aliDx += vp->chainAli ;
-	      bb->aliDa += vp->chainAli ;
+	      bb->runStat.nBasesAlignedPerTargetClass[0] += mult * vp->chainAli ;
+	      bb->runStat.nErr += vp->chainErr * mult ;
+	      bb->runStat.nMID += vp->chainMID * mult ;
+	      bb->aliDx += vp->chainAli * mult ;
+	      bb->aliDa += vp->chainAli * mult ;
 	      if (vp->read & 0x1)
-		bb->runStat.nBaseAligned2 += vp->chainAli ;
+		{
+		  bb->runStat.nBaseAligned2 += vp->chainAli * mult ;
+		}
 	      else
-		bb->runStat.nBaseAligned1 += vp->chainAli ;
+		{
+		  bb->runStat.nBaseAligned1 += vp->chainAli * mult ;
+		}
 
 	      if (read == vp->read && nChains == 1)
 		{
 		  Array dna = (vp->read & 0x1) ? dna2 : dna1 ;
 		  unsigned char *cq = arrp (dna, 0, unsigned char) ;
 		  for (int i = vp->x1 - 1 ; i < vp->x2 ; i++)
-		    bb->runStat.p.aligned_NATGC[natgc[(int)cq[i]]]++ ;
+		    bb->runStat.p.aligned_NATGC[natgc[(int)cq[i]]] += mult ;
 		}
 	      
 	      if (! allTc[tc])
@@ -3058,26 +3067,26 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		  allTc[tc] = 1 ;
 		  if ( (ap->chrom & 0x1) ^ (ap->read & 0x1))
 		    {
-		      bb->runStat.RR[0] += (allTc[0] == 0 ? 1 : 0) ;
-		      bb->runStat.RR[tc]++ ;
-		      bb->runStat.BR[0] += (allTc[0] == 0 ? vp->chainAli : 0) ;
-		      bb->runStat.BR[tc] += vp->chainAli ;
+		      bb->runStat.RR[0] += (allTc[0] == 0 ? mult : 0) ;
+		      bb->runStat.RR[tc] += mult ;
+		      bb->runStat.BR[0] += (allTc[0] == 0 ? vp->chainAli * mult : 0) ;
+		      bb->runStat.BR[tc] += vp->chainAli * mult ;
 		    }
 		  else
 		    {
-		      bb->runStat.RF[0] += (allTc[0] == 0 ? 1 : 0) ;
-		      bb->runStat.RF[tc]++ ;
-		      bb->runStat.BF[0] += (allTc[0] == 0 ? vp->chainAli : 0) ;
-		      bb->runStat.BF[tc] += vp->chainAli ;
+		      bb->runStat.RF[0] += (allTc[0] == 0 ? mult : 0) ;
+		      bb->runStat.RF[tc] += mult ;
+		      bb->runStat.BF[0] += (allTc[0] == 0 ? mult * vp->chainAli : 0) ;
+		      bb->runStat.BF[tc] += vp->chainAli * mult ;
 		    }
 		  allTc[0]= 1 ;
 		}
 	    }
 	}
       if (nChains)
-	bb->runStat.nMultiAligned[nChains > 10 ? 10 : nChains]++ ;
+	bb->runStat.nMultiAligned[nChains > 10 ? 10 : nChains] += mult ;
       if (isComplex)
-	bb->runStat.nComplexReads++ ;
+	bb->runStat.nComplexReads += mult ;
     }
   
   
@@ -3148,8 +3157,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		myDnaG = chrom & 0x1 ? dnaGR : dnaG ;
 		zp->a1 = a2 + 1 ;
 		zp->a2 = b1 - 1 ;
-		zp->n += (read & 0x1 ? 0 : 1 ) ;
-		zp->nR += (read & 0x1 ? 1 : 0 ) ;
+		zp->n += (read & 0x1 ? 0 : mult ) ;
+		zp->nR += (read & 0x1 ? mult : 0 ) ;
 		const char *cp = arrp (myDnaG, zp->a1 - 1, char) ;
 		zp->feet[0] = dnaDecodeChar[(int)cp[0]] ;
 		zp->feet[1] = dnaDecodeChar[(int)cp[1]] ;
@@ -3162,13 +3171,13 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 
 		if (! strcmp (zp->feet, (read & 0x1) ? "ct_ac" : "gt_ag"))
 		  {
-		    bb->runStat.gt_ag_Support++ ;
+		    bb->runStat.gt_ag_Support += mult ;
 		    if (bb->isRna >= 0 && bb->runStat.gt_ag_Support > bb->runStat.ct_ac_Support)
 		      intronBonus++ ;
 		  }
 		if (! strcmp (zp->feet, (read & 0x1) ? "gt_ag" : "ct_ac"))
 		  {
-		    bb->runStat.ct_ac_Support++ ;
+		    bb->runStat.ct_ac_Support += mult ;
 		    if (bb->isRna >= 0 && bb->runStat.gt_ag_Support < bb->runStat.ct_ac_Support)
 		      intronBonus++ ;
 		  }
@@ -3241,7 +3250,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 
 	      if (zp1->chrom & 0x1)
 		{
-		  zzp->nR = 1 ;
+		  zzp->nR = mult ;
 		  zzp->chrom = zp1->chrom & (~0x1) ;
 		  zzp->a1 = dnaLength - zp2->a2 + 1 ; zzp->a2 = dnaLength - zp2->a1 + 1 ;
 		  zzp->b1 = dnaLength - zp1->a2 + 1 ; zzp->b2 = dnaLength - zp1->a1 + 1 ;
@@ -3250,7 +3259,7 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 		}
 	      else
 		{
-		  zzp->n = 1 ;
+		  zzp->n = mult ;
 		  zzp->chrom = zp1->chrom ;
 		  zzp->a1 = zp1->a1 ; zzp->a2 = zp1->a2 ;
 		  zzp->b1 = zp2->a1 ; zzp->b2 = zp2->a2 ;
@@ -3267,8 +3276,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	  /* flip and reset the count which was overloaded with chain */
 	  INTRON *zp = arrayp (bb->confirmedIntrons, ii, INTRON) ;
 	  
-	  if (read & 0x1)   { zp->n = 0 ; zp->nR = 1 ; }
-	  else { zp->n = 1 ; zp->nR = 0 ; } 
+	  if (read & 0x1)   { zp->n = 0 ; zp->nR = mult ; }
+	  else { zp->n = mult ; zp->nR = 0 ; } 
 
 	  if (zp->chrom & 0x1)
 	    {
@@ -3292,9 +3301,9 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
       if (read == ap->read)
 	{
 	  if (nChains == 1 && ap->chain == 1 && ap->x1 == ap->chainX1 && ap->x1 > ap->leftClip + 15)
-	    bb->runStat.nPartialReads++ ;
+	    bb->runStat.nPartialReads += mult ;
 	  if (nChains == 1 && ap->chain == 1 && ap->x2 == ap->chainX2 && ap->x2 < ap->rightClip - 15)
-	    bb->runStat.nPartialReads++ ;
+	    bb->runStat.nPartialReads += mult ;
 	  if (ap->chrom != chromA)
 	    {
 	      chromA = ap->chrom ;
@@ -3316,8 +3325,8 @@ static void  alignDoRegisterOnePair (const PP *pp, BB *bb, BigArray aaa, Array a
 	      if (arrayMax (ap->errors))
 		mergeErrors (bb->errors, ap->errors, flip) ;
 	      if (arrayMax (ap->errors))
-		alignFormatErrors (pp, bb, ap, dna, dnaG, dnaGR, read) ;	  
-	      if (! pp->sam && ! pp->bam)
+		alignFormatErrors (pp, bb, ap, dna, dnaG, dnaGR, read, mult) ;	  
+	      if (0 && ! pp->sam && ! pp->bam)
 		{ arrayDestroy (ap->errors) ; ap->errors = 0 ; }
 	    }
 	  if (ap->chrom & 0x1)
@@ -3837,9 +3846,13 @@ void saAlignDo (const PP *pp, BB *bb)
   bb->errCost = pp->errCost ;
   bb->isRna = 0 ;
   if (1) 
-    while (! saSetGetAdaptors (0, &(bb->isRna), &adaptors, bb->run, &(bb->errCost)))
+    while (! saSetGetAdaptors (0, &(bb->isRna), &adaptors, bb->run, &(bb->errCost), &(bb->runStat.p.minAli)))
       {
-	if (bb->lane <= 1) break ; /* pilot block proceeds */
+	if (bb->lane <= 1)
+	  {
+	    bb->runStat.p.minAli = pp->seedLength ;
+	    break ; /* pilot block proceeds */
+	  }
 	sleep (1) ;                /* all other blocks wait */
       }
 
@@ -4050,10 +4063,27 @@ void saAlignDo (const PP *pp, BB *bb)
       else
 	if (bb->errCost == 4 && 100 * nErr < 1 * baseAligned)
 	  { bb->errCost = 8 ; redo = TRUE ; }
+
       if (saReadAdaptors (&adaptors, &(bb->runStat), TRUE))
-	saSetGetAdaptors (1, &isRna, &adaptors, bb->run, &(bb->errCost)) ;
+	saSetGetAdaptors (1, &isRna, &adaptors, bb->run, &(bb->errCost), 0) ;
       else
-	saSetGetAdaptors (1, &isRna, 0, bb->run, &(bb->errCost)) ;
+	saSetGetAdaptors (1, &isRna, 0, bb->run, &(bb->errCost), 0) ;
+
+      if (! redo && bb->lane <= 1)
+	{
+	  int minAli = bb->nAli ? (bb->runStat.nBaseAligned1 + bb->runStat.nBaseAligned2) / (bb->nAli) : 0 ;
+	  minAli /= 2 ;
+	  if (minAli < pp->seedLength)
+	    minAli = pp->seedLength ;
+	  if (minAli > 30)
+	    minAli = 30 ;
+	  if (pp->minAli > 0)
+	    minAli = pp->minAli ;
+	  saSetGetAdaptors (3, 0, 0, 0, 0, &minAli) ;
+	  if  (minAli != bb->runStat.p.minAli)
+	    redo = TRUE ;
+	}
+      
       if (1)
 	{
 	  if (! redo && ((isRna < 0 && bb->isRna >= 0) || (isRna > 0 && bb->isRna < 0)))
@@ -4062,13 +4092,14 @@ void saAlignDo (const PP *pp, BB *bb)
       if (0 && redo == 0) redo = 1 ;
       bb->isRna = isRna ;
       char tBuf[25] ;
-      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld   baseAli = %ld err = %ld errCost = %d %s. %s\n"
+      fprintf (stderr, "SETGET lane %d isRna=%d isupport= %ld   baseAli = %ld err = %ld errCost = %d minAli = %d pp->minAli = %d   %s. %s\n"
 	       , bb->lane, isRna
 	       , bb->runStat.gt_ag_Support + bb->runStat.ct_ac_Support
 	       , baseAligned
 	       , nErr 
 	       , bb->errCost
-	       , redo ? "REDO" : ""
+	       , bb->runStat.p.minAli, pp->minAli
+	       , redo ? "REDO " : ""
 	       , timeBufShowNow (tBuf)
 	       ) ;
     }

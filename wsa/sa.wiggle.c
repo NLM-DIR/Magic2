@@ -405,12 +405,14 @@ static void wiggleExportOne (const PP *pp, int nw, int type, WIG *wigp, AC_HANDL
       typeNam = (strand == 'f' ? "pp.f" : "pp.r") ;		 
       wiggles = pp->wigglesP ;
       scratches = pp->scratchesP ;
+      wantPeaks = TRUE ;
       break ;
       
     case 4:
       typeNam = (strand == 'f' ? "nu.f" : "nu.r") ;		 
       wiggles = pp->wigglesNU ;
       scratches = pp->scratchesNU ;
+      wantPeaks = TRUE ;
       break ;
     }
   if (pp->useScratch)
