@@ -2261,7 +2261,7 @@ int main (int argc, const char *argv[])
   if (NN != 1 && NN != 2 && NN != 4 && NN != 8 && NN != 16 && NN != 32 && NN != 64)
     messcrash ("The number of indexes NN=%d must be  a power of 2, say 1 2 4 8 ...", NN) ;
 #ifdef USE_TORCH
-  /* do not edit sedlength or NN if using magic2_torch */
+  /* do not edit seedlength or NN if using magic2_torch */
   NN = 16 ; p.seedLength = 18 ;
 #endif
   p.nIndex = NN ;
@@ -2447,6 +2447,8 @@ int main (int argc, const char *argv[])
 
   /* check the existence of the input sequence files */
   inArray = saConfigGetRuns (&p, p.runStats, &nRunsToDo) ;
+  if (! arrayMax (inArray))
+    messcrash ("\nFATAL ERROR Sorry, on the command line {-i] [-I] there was no file to be analyzed") ;
   n = dictMax (p.runDict) + 1 ;
   
   /* Set bonus for over represented sequences

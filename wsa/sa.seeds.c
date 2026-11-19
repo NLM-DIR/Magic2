@@ -728,7 +728,7 @@ void saCodeSequenceSeeds (const PP *pp, BB *bb, int step)
       fprintf (stderr, "lane=%d clipped=%ld adap=%d\n", bb->lane, up.p.nClippedAdaptor1R, adaptors.a1R[0]) ;
     }
 
-  if (1 && ! bb->multiplicity && nReads2 == 0 && iMaxMax <= 200 && ! pp->keepReadNames)
+  if (1 && ! bb->multiplicity && nReads2 == 0 && iMaxMax < 130 && ! pp->keepReadNames)
     {
       DICT *newDict = dictHandleCreate (nReads1, bb->h) ;
       /* remove dnas of read2 and empty dnas */

@@ -767,7 +767,7 @@ int saParseSraDownload (PP *pp, const char *sraID)
   ACEOUT ao1 = 0, ao2 = 0 ; 
   char tBuf[25] ;
   BOOL fastq = pp->fastq ;
-  int split_pairs = pp->split_pairs ;
+  BOOL split_pairs = pp->split_pairs ;
 
   if (!filCreateDir("./SRA"))
     messcrash ("\nCannot create or cannot write in the SRA cache directory ./SRA") ;
@@ -852,21 +852,21 @@ int saParseSraDownload (PP *pp, const char *sraID)
     }}
   /* download */
   
-  SRAReadBatch* sra = SRAReadBatchNew (sraID);
-  int nn = 0 ;
+  SRAReadBatch* sra = SRAReadBatchNew(sraID);
   BOOL firstPass = TRUE ;
   float Gb = pp->maxSraGb ;
   long int bMax = Gb * (1000000000L) ;  /* to be in decimal Gigabases */
+
+  int nn = 0 ;
   int BMAX = 1 << 23 ; /* 8 Mb */
     
   fprintf (stderr, "%s : SRA download %s ", timeBufShowNow(tBuf), sraID) ;
   if (Gb) fprintf (stderr, "(top %.3f GigaBases) ", Gb) ;
-  
+
   while (Gb == 0 || bMax > 0)
     {
       int num_bases = BMAX ;
-      if (! Gb && num_bases > bMax) num_bases = bMax ;
-      
+      if (Gb && num_bases > bMax) num_bases = bMax ;
 
       SraGetReadBatch (sra, num_bases, fastq, split_pairs) ;
       if (sra->seq)

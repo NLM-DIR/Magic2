@@ -212,7 +212,7 @@ setenv SV     v126.81.18M.wig.oct27     # idem, libwego modified
 setenv SVlast v126.81.18M.wig.oct27    # 
 setenv SV     v127.82.18M.wig.oct27     # unset errCost NO MASK (due to a switch 81 is mask, 82 is no mask)
 setenv SVlast v127.82.18M.wig.oct27    # 
-setenv SV     v128.82.18M.wig.oct29     # fix the nemerator in ErrorRate
+setenv SV     v128.82.18M.wig.oct29     # fix the numerator in ErrorRate
 setenv SVlast v128.82.18M.wig.oct29    # 
 setenv SV     v129.82.18M.wig.nov13     # same but added the short runs that we will try to improve
 setenv SVlast v129.82.18M.wig.nov13
@@ -284,10 +284,10 @@ setenv methods "50_Minimap2"
 setenv allMethods "011_SortAlignG6R3 012_SortAlignG3R3 013_SortAlignG3R1 014_SortAlignG3R3.g 015_SortAlignG3R1.g 11_MagicBLAST_2018 12_MagicBLAST_2022 13_MagicBLAST_2024 21_HISAT2_4threads 22_HISAT2_8threads 23_HISAT2_16threads 31_STARlong 50_Minimap2 51_Minimap2_4threads 52_Minimap2_8threads 53_Minimap2_16threads 54_Minimap2_32threads"
 
 setenv methods "$allMethods"
-#setenv methods "012_SortAlignG3R3"
+# setenv methods "012_SortAlignG3R3"
 
 set createIndex=0
-if ($createIndex == 1)  setenv methods "011_SortAlignG6R3 012_SortAlignG3R3"
+if ($createIndex == 1)  setenv methods "011_SortAlignG6R3 012_SortAlignG3R3 21_HISAT2_4threads"
 if ($createIndex == 11)  setenv methods "011_SortAlignG6R3"
 if ($createIndex == 12)  setenv methods "012_SortAlignG3R3"
 # setenv methods "011_SortAlignG6R3"
@@ -347,9 +347,10 @@ setenv dnaRuns "DNA_ChipSeq1_SE35 DNA_ChipSeq2_SE35 DNA_B_151PE"
 setenv wormRuns "  Worm_RNA_150PE "
 setenv monkeyRuns "Chimpanzee_0.92pc Macaque_2.69pc PTMacaque_2.71pc Baboon_2.92pc Marmoset_3.14 SquirrelMonkey_3.08pc MouseLemur_2.64pc"
 setenv baruzzoRuns "HG19t1_0.543pc HG19t2_1.186pc HG19t3_6.024pc"
+setenv PFAL_runs "PFALt1r1 PFALt2r1 PFALt3r1" 
 
-setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $SHORT_runs "
-setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $SHORT_runs  "
+setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $PFAL_runs $SHORT_runs "
+setenv runs    "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $PFAL_runs $SHORT_runs  "
 
 
 # setenv runs "RNA_PolyA_AB_1_97G"
@@ -357,7 +358,7 @@ setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoR
 # setenv runs "iRefSeq38"
 
 # to create all IDX use these runs
-if ($createIndex > 0)  setenv runs "iRefSeqT2T iRefSeq38 HG19t1_0.543pc  Worm_RNA_150PE"
+if ($createIndex > 0)  setenv runs "iRefSeqT2T iRefSeq38 HG19t1_0.543pc PFALt1r1  Worm_RNA_150PE"
 
 echo "### S.tcsh SV=$SV"
 echo "$methods"
@@ -402,6 +403,7 @@ setenv HG19_genome HG19.Baruzzo.genome.fasta.gz
 setenv PFAL_genome PFAL.Baruzzo.genome.fasta.gz
 
 ## Automatic download of the BenchMark fastq files from NCBI
+#  ls /am/ftp-blast/demo/magicblast_article/"
 set FTP="ftp://ftp.ncbi.nlm.nih.gov/blast/demo/magicblast_article/"
 if (! -d Reference_genome) mkdir Reference_genome
 pushd Reference_genome

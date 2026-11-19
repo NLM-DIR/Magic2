@@ -126,7 +126,6 @@ typedef struct runStatStruct {
   PSD p ;
   long int nCompatiblePairs, nIncompatiblePairs, n2ChromsPairs, nOrphans, nCirclePairs ;
   long int nPairsAligned, nBaseAligned1, nBaseAligned2 ;
-  long int nPairsAlignedM, nBaseAligned1M, nBaseAligned2M ;
   long int cds, utr, intronic, intergenic ;
   long int nComplexReads ;
   long int nPartialReads ;

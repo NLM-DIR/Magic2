@@ -201,7 +201,7 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
 
   aceOutDate (ao, "###", "This file is for debugging, see $run.runStats.tsf for more detailled results\n") ;
   aceOutf (ao, "%s\t%s\tPairs\t%ld\n", run, METHOD, s0->p.nPairs) ;
-  aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\tof_raw_pairs\n", run, METHOD, s0->nPairsAlignedM, (100.0 * s0->nPairsAlignedM)/(nRawReads/2 + .000001)) ;
+  aceOutf (ao, "%s\t%s\tAligned_pairs\t%ld\t%.2f%%\tof_raw_pairs\n", run, METHOD, s0->nPairsAligned, (100.0 * s0->nPairsAligned)/(nRawReads/2 + .000001)) ;
   
   aceOutf (ao, "%s\t%s\tnCompatible_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCompatiblePairs, (100.0 * s0->nCompatiblePairs)/(s0->nPairsAligned + .000001)) ;
   aceOutf (ao, "%s\t%s\tnCircle_pairs\t%ld\t%.2f%%\tof_aligned_pairs\n", run, METHOD, s0->nCirclePairs, (100.0 * s0->nCirclePairs)/(s0->nPairsAligned + .000001)) ;
@@ -222,8 +222,8 @@ void s2gSamStatsExports (const PP *pp, Array runStats)
   aceOutf (ao, "%s\t%s\tRawBases\t%ld\n", run, METHOD, nRawBases) ;
   aceOutf (ao, "%s\t%s\tnAlignedBases\t%ld\t%.2f%%\tof_raw_bases\n"
 	   , run, METHOD
-	   , s0->nBaseAligned1M + s0->nBaseAligned2M
-	   , 100.0 * (s0->nBaseAligned1M + s0->nBaseAligned2M) / (nRawBases + .000001)
+	   , s0->nBaseAligned1 + s0->nBaseAligned2
+	   , 100.0 * (s0->nBaseAligned1 + s0->nBaseAligned2) / (nRawBases + .000001)
 	   ) ;
   aceOutf (ao, "%s\t%s\tWiggleCumul\t%ld\n", run, METHOD, pp->wiggleCumul) ;
   aceOutf (ao, "%s\t%s\tnErrorEvents\t%ld\t", run, METHOD, s0->nErr) ;

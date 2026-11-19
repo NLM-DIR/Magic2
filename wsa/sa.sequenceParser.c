@@ -889,8 +889,6 @@ int sraSequenceParser (const PP *pp, RC *rc, TC *tc, BB *bb, int isGenome)
     fastq = FALSE ;
   split_pairs = FALSE ;
 
-  //  long int nReads = 0, nnReads = 0, nBloc = 0, nnBytes = 0 ;
-
   format = SRA ;
   while (Gb == 0 || bMax > 0)
     {
