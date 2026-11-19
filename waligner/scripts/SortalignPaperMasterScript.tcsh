@@ -212,11 +212,7 @@ setenv SV     v126.81.18M.wig.oct27     # idem, libwego modified
 setenv SVlast v126.81.18M.wig.oct27    # 
 setenv SV     v127.82.18M.wig.oct27     # unset errCost NO MASK (due to a switch 81 is mask, 82 is no mask)
 setenv SVlast v127.82.18M.wig.oct27    # 
-<<<<<<< HEAD
-setenv SV     v128.82.18M.wig.oct29     # fix the nemerator in ErrorRate
-=======
 setenv SV     v128.82.18M.wig.oct29     # fix the numerator in ErrorRate
->>>>>>> jean
 setenv SVlast v128.82.18M.wig.oct29    # 
 setenv SV     v129.82.18M.wig.nov13     # same but added the short runs that we will try to improve
 setenv SVlast v129.82.18M.wig.nov13
@@ -353,14 +349,8 @@ setenv monkeyRuns "Chimpanzee_0.92pc Macaque_2.69pc PTMacaque_2.71pc Baboon_2.92
 setenv baruzzoRuns "HG19t1_0.543pc HG19t2_1.186pc HG19t3_6.024pc"
 setenv PFAL_runs "PFALt1r1 PFALt2r1 PFALt3r1" 
 
-<<<<<<< HEAD
-setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $SHORT_runs "
-setenv runs     "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $SHORT_runs  "
-=======
 setenv allRuns "$ABRuns   $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $PFAL_runs $SHORT_runs "
 setenv runs    "$ABRuns  $iRefSeqRuns $dnaRuns $wormRuns $monkeyRuns  $baruzzoRuns $PFAL_runs $SHORT_runs  "
->>>>>>> jean
-
 
 # setenv runs "RNA_PolyA_AB_1_97G"
 # setenv runs "Roche"

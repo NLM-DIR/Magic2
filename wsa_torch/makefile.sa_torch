@@ -101,7 +101,7 @@ sortalign_torch: $(SA_OBJS) sa.torch.o libsraread.a
 	    $(LINK_ACS) \
 	    $(SRAINC) $(LIBS) \
 	    libsraread.a $(SRALIBS) \
-	    libfree.a libtsfree.a libchannels.a libwego.a \
+	    libfree.a libtsfree.a libwego.a \
 	    $(TORCH_LIB) \
 	    -lpthread -ldl -lz -lbz2 -llzma -lm -lgcc_s
 
