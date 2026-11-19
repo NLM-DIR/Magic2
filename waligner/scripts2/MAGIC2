@@ -2333,7 +2333,8 @@ if (! -d TARGET/IDX/IDX.$species) then
   mkdir TARGET/IDX
   if (-e TARGET/Targets/$species.genome.fasta.gz) echo "G\tTARGET/Targets/$species.genome.fasta.gz" > TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.mito.fasta.gz) echo "M\tTARGET/Targets/$species.mito.fasta.gz" >> TARGET/IDX/tConfig
-  if (-e TARGET/Targets/$species.chloro.fasta.gz) echo "C\tTARGET/Targets/$species.chloro.fasta.gz" >> TARGET/IDX/tConfig  
+  if (-e TARGET/Targets/$species.chloro.fasta.gz) echo "C\tTARGET/Targets/$species.chloro.fasta.gz" >> TARGET/IDX/tConfig
+  if (-e TARGET/Targets/$species.smallRNA.fasta.gz) echo "S\tTARGET/Targets/$species.smallRNA.fasta.gz" >> TARGET/IDX/tConfig  
   if (-e TARGET/Targets/$species.rrna.fasta.gz) echo "R\tTARGET/Targets/$species.rrna.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.transposons.fasta.gz) echo "T\tTARGET/Targets/$species.transposons.fasta.gz" >> TARGET/IDX/tConfig
   if (-e TARGET/Targets/$species.SpikeIn.fasta.gz) echo "E\tTARGET/Targets/$species.SpikeIn.fasta.gz" >> TARGET/IDX/tConfig

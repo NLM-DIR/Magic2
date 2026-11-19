@@ -476,7 +476,7 @@ long int saGffParser (PP *pp, TC *tc)
 	  ! dictFind (bbG->dict, hprintf (h, "M.%s", cp), &chrom) &&
 	  ! dictFind (bbG->dict, hprintf (h, "C.%s", cp), &chrom)
 	  )
-	messcrash ("\nUnknown chromosome name ###%s###, not matching the G targets, at line %d of file %s\n"
+	messcrash ("\nUnknown chromosome name ###%s###, not matching the G/M/C targets, at line %d of file %s\n"
 		   , cp
 		   , line
 		   , aceInFileName (ai)
