@@ -4227,7 +4227,7 @@ static void qcSLsDo (QC *qc, RC *rc, BOOL isSL)
   TT *ti, *tti ;
   TT ttA[] = {
     { "Spacer", "", 0, 0, 0} ,
-    { "pA", "polyA site", 1, 0, 0} ,
+    { "pA", "polyA sites", 1, 0, 0} ,
     { "pA", "polyA support", 2, 0, 0} ,
     { "pA", "polyA support per site", 3, 0, 0}  ,
     {  0, 0, 0, 0, 0}

@@ -79,7 +79,7 @@ Array saTargetParseConfig (PP *pp)
 	  if (!(cc >= 'A' && cc <= 'Z')) cc = 0 ;
 	  if (cp[1]) cc = 0 ;
 	  if (! cc)
-	    messcrash ("\n\nThe target class must be specified as a single character (A-Z), not %s,  at line %d of -T target config file %s\n Please try sortalign --help\n"
+	    messcrash ("\n\nThe target class must be specified as a single character (A-Z), not %s,  at line %d of-T target config file %s\n Please try sortalign --help\n"
 		       , cp
 		       , line
 		       , tConfigFileName
@@ -234,48 +234,53 @@ static void storeTargetIndex (PP *pp, int tStep)
   long int nn = 0 ;
   int NN = pp->nIndex ;
   BB *bbG = &(pp->bbG) ;
-  
+  const char *prefix = "" ;
+
+  if (pp->createSmallGenesIndex)
+    prefix = "smallGenes." ;
+  if (pp->createLongRnasIndex)
+    prefix = "longRnas." ;
   /* export the code words */
   for (int k = 0 ; k < NN ; k++)
     {
 #ifdef USE_TORCH
-      fNam = hprintf (h, "%s/cwsN.%d", pp->indexName, k) ;
+      fNam = hprintf (h, "%s/%scwsN.%d", pp->indexName, prefix, k) ;
 #else      
-      fNam = hprintf (h, "%s/cws.sortali.%d%s", pp->indexName, k, pp->noJump ? ".noJump" : "") ;
+      fNam = hprintf (h, "%s/%scws.sortali.%d%s", pp->indexName, prefix, k, pp->noJump ? ".noJump" : "") ;
 #endif      
       bigArrayMapWrite (bbG->cwsN[k], fNam) ;
       nn += bigArrayMax (bbG->cwsN[k]) ;
 
       if (bbG->cwsU && bbG->cwsU[k])
 	{
-	  fNam = hprintf (h, "%s/cwsU.%d", pp->indexName, k) ;
+	  fNam = hprintf (h, "%s/%scwsU.%d", pp->indexName, prefix, k) ;
 	  bigArrayMapWrite (bbG->cwsU[k], fNam) ;
 	}
       if (bbG->cwsP && bbG->cwsP[k])
 	{
-	  fNam = hprintf (h, "%s/cwsP.%d", pp->indexName, k) ;
+	  fNam = hprintf (h, "%s/%scwsP.%d", pp->indexName, prefix, k) ;
 	  bigArrayMapWrite (bbG->cwsP[k], fNam) ;
 	}
     }
   fprintf (stderr, "genomeCreateBinary exported %ld seed records\n", nn) ;
 
   /* export the global DNA */
-  fNam = hprintf (h, "%s/dna.sortali", pp->indexName) ;
+  fNam = hprintf (h, "%s/%sdna.sortali", pp->indexName, prefix) ;
   bigArrayMapWrite (bbG->globalDna, fNam) ;
   fprintf (stderr, "genomeCreateBinary exported %ld target bases\n", bigArrayMax (bbG->globalDna)) ;
 
   /* export the complement of the global DNA */
-  fNam = hprintf (h, "%s/dnaR.sortali", pp->indexName) ;
+  fNam = hprintf (h, "%s/%sdnaR.sortali", pp->indexName, prefix) ;
   bigArrayMapWrite (bbG->globalDnaR, fNam) ;
   fprintf (stderr, "genomeCreateBinary exported %ld complemented bases\n", bigArrayMax (bbG->globalDnaR)) ;
 
   /* memory map the coordinates */
-  fNam = hprintf (h, "%s/coords.sortali", pp->indexName) ;
+  fNam = hprintf (h, "%s/%scoords.sortali", pp->indexName, prefix) ;
   bigArrayMapWrite (bbG->dnaCoords, fNam) ;
   fprintf (stderr, "genomeCreateBinary exported %ld coordinates\n", bigArrayMax (bbG->dnaCoords)) ;
 
   /* memory map the sequence identifiers (chromosome names) */
-  fNam = hprintf (h, "%s/ids.sortali", pp->indexName) ;
+  fNam = hprintf (h, "%s/%sids.sortali", pp->indexName, prefix) ;
   saDictMapWrite (bbG->dict, fNam) ;
   fprintf (stderr, "genomeCreateBinary exported %d identifiers\n", dictMax (bbG->dict)) ;
 
@@ -627,7 +632,14 @@ static long int saTargetIndexCreateDo (PP *pp)
     }
 
   /* export the target lengths */
-  ACEOUT aoChromLengths = aceOutCreate (pp->indexName, "/targetSizes.txt", FALSE, pp->h) ;
+  ACEOUT aoChromLengths = 0 ;
+
+  if (pp->createSmallGenesIndex)
+    aoChromLengths = aceOutCreate (pp->indexName, "/smallGenesSizes.txt", FALSE, pp->h) ;
+  if (pp->createLongRnasIndex)
+    aoChromLengths = aceOutCreate (pp->indexName, "/longRnasSizes.txt", FALSE, pp->h) ;
+  else
+    aoChromLengths = aceOutCreate (pp->indexName, "/targetSizes.txt", FALSE, pp->h) ;
   for (int ii = 1 ; ii <= dictMax (bbG->dict) ; ii++)
     {
       const char *nam = dictName (bbG->dict, ii) ;
@@ -672,7 +684,7 @@ static long int saTargetIndexCreateDo (PP *pp)
 	    saGffParser (pp, tc) ;
 	}
     }
-
+  
   for (int nn = 0 ; nn < nMax ; nn++)
     {
       tc = arrayp (tArray, nn, TC) ;
@@ -805,30 +817,33 @@ void saTargetIndexCreate (PP *pp)
   pp->tMaxTargetRepeats = pp->maxTargetRepeats ;
   saTargetIndexCreateDo (pp) ;
 
-  pp->wiggle_step = 1 ;
-  if (pp->bbG.length >
-      10000000) pp->wiggle_step = 5 ;
-  if (pp->bbG.length > 100000000) pp->wiggle_step = 10 ;
-      
-  /* create short utility files in the IDX index directory */
-  ACEOUT ao = aceOutCreate (filName (pp->indexName, "/seedLength", "w") , 0, 0, h) ;
-  aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%ld\n# SeedLength\ttStep\tmaxTargetRepeats\twiggle_step\tGenome_length\n"
-	   , INDEXVERSION
-	   , pp->seedLength
-	   , pp->tStep
-	   , pp->maxTargetRepeats
-	   , pp->wiggle_step
-	   , pp->bbG.length
-	   ) ;
-
-  /* copy the actual config file used to create the index */
-  if (pp->tConfigFileName)
-    filFileCopy (pp->tConfigFileName, hprintf(h, "%s/tConfig", pp->indexName)) ;
-  else
+  if (! pp->createSmallGenesIndex && ! pp->createLongRnasIndex)
     {
-      ACEOUT ao = aceOutCreate (filName (pp->indexName, "/tConfig", "w") , 0, 0, h) ;
-      if (pp->tFileName)
-	aceOutf (ao, "G\t%s\n", pp->tFileName) ;
+      pp->wiggle_step = 1 ;
+      if (pp->bbG.length >
+	  10000000) pp->wiggle_step = 5 ;
+      if (pp->bbG.length > 100000000) pp->wiggle_step = 10 ;
+      
+      /* create short utility files in the IDX index directory */
+      ACEOUT ao = aceOutCreate (filName (pp->indexName, "/seedLength", "w") , 0, 0, h) ;
+      aceOutf (ao, "%s\t%d\t%d\t%d\t%d\t%ld\n# SeedLength\ttStep\tmaxTargetRepeats\twiggle_step\tGenome_length\n"
+	       , INDEXVERSION
+	       , pp->seedLength
+	       , pp->tStep
+	       , pp->maxTargetRepeats
+	       , pp->wiggle_step
+	       , pp->bbG.length
+	       ) ;
+      
+      /* copy the actual config file used to create the index */
+      if (pp->tConfigFileName)
+	filFileCopy (pp->tConfigFileName, hprintf(h, "%s/tConfig", pp->indexName)) ;
+      else
+	{
+	  ACEOUT ao = aceOutCreate (filName (pp->indexName, "/tConfig", "w") , 0, 0, h) ;
+	  if (pp->tFileName)
+	    aceOutf (ao, "G\t%s\n", pp->tFileName) ;
+	}
     }
   ac_free (h) ;
   return ;

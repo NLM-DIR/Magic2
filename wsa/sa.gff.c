@@ -84,6 +84,87 @@ static int exonA1Order (const void *va, const void *vb)
 
 /**************************************************************/
 /**************************************************************/
+
+static void exportSmallGenesFasta (PP *pp)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  DICT *dict = pp->smallGenesDict ;
+  int ii, iMax = dictMax (dict) ;
+  Array myDna = arrayCreate (1024, unsigned char) ;
+  ACEOUT ao = aceOutCreate (pp->indexName, "/smallGenes.fasta", TRUE, h) ;
+  
+  for (ii = 1 ; ii <= iMax ; ii++)
+    {
+      GBX *up = arrayp (pp->smallGenes, ii, GBX) ;
+      int nn = up->a2 - up->a1 + 1 ;
+      unsigned char *cp ;
+      Array dna = 0 ; 
+      array (myDna, nn, unsigned char) = 0 ; // make room
+      arr (myDna, nn, unsigned char) = 0 ;
+      arrayMax (myDna) = nn ;
+      dna = array (pp->bbG.dnas, up->chrom, Array) ;
+      if (dna)
+	{
+	  if (up->strand == 0x0)
+	    {
+	      cp = arrp (dna, up->a1 - 1, unsigned char) ;
+	      for (int j = 0 ; j < nn ; j++)
+		arr (myDna, j, unsigned char) = dnaDecodeChar[(int)cp[j]] ;
+	    }
+	  else
+	    {
+	      cp = arrp (dna, up->a2 - 1, unsigned char) ;
+	      for (int j = 0 ; j < nn ; j++)
+		arr (myDna, j, unsigned char) = dnaDecodeChar[(int)hardComplementBase[(int)cp[-j]]] ;
+	    }
+	  aceOutf (ao, ">%s\n%s\n", dictName (dict, ii), arrp (myDna, 0, unsigned char)) ;
+	}
+    }
+  ac_free (h) ;
+} /* exportSmallGenesFasta */
+
+/**************************************************************/
+
+static void exportLongRnasFasta (PP *pp)
+{
+  AC_HANDLE h = ac_new_handle () ;
+  DICT *dict = pp->longRnasDict ;
+  int ii, iMax = dictMax (dict) ;
+  Array myDna = arrayCreate (1024, unsigned char) ;
+  ACEOUT ao = aceOutCreate (pp->indexName, "/longRnas.fasta", TRUE, h) ;
+  
+  for (ii = 1 ; ii <= iMax ; ii++)
+    {
+      GBX *up = arrayp (pp->longRnas, ii, GBX) ;
+      int nn = up->a2 - up->a1 + 1 ;
+      unsigned char *cp ;
+      Array dna = 0 ; 
+      array (myDna, nn, unsigned char) = 0 ; // make room
+      arr (myDna, nn, unsigned char) = 0 ;
+      arrayMax (myDna) = nn ;
+      dna = array (pp->bbG.dnas, up->chrom, Array) ;
+      if (dna)
+	{
+	  if (up->strand == 0x0)
+	    {
+	      cp = arrp (dna, up->a1 - 1, unsigned char) ;
+	      for (int j = 0 ; j < nn ; j++)
+		arr (myDna, j, unsigned char) = dnaDecodeChar[(int)cp[j]] ;
+	    }
+	  else
+	    {
+	      cp = arrp (dna, up->a2 - 1, unsigned char) ;
+	      for (int j = 0 ; j < nn ; j++)
+		arr (myDna, j, unsigned char) = dnaDecodeChar[(int)hardComplementBase[(int)cp[-j]]] ;
+	    }
+	  aceOutf (ao, ">%s\n%s\n", dictName (dict, ii), arrp (myDna, 0, unsigned char)) ;
+	}
+    }
+  ac_free (h) ;
+} /* exportLongRnasFasta */
+
+/**************************************************************/
+/**************************************************************/
 /* memory map the annotated introns and gene boxes */
 void saGffBinaryParser (PP *pp)
 {
@@ -384,12 +465,15 @@ static int refineGeneBoxes (Array bb, Array aa, KEYSET borders)
 } /* refineGeneBoxes */
 
 /**************************************************************/
-
+/* Identify exons, mRNA genes, introns
+ * Identify small exons from snRNA snoRNA miRNA...
+ * Extract their dna and create an index with seedlength 9
+ */
 long int saGffParser (PP *pp, TC *tc)
 {
   AC_HANDLE h = ac_new_handle () ;
   ACEIN ai = aceInCreate (tc->fileName, 0, h) ;
-  long int nnE = 0, nnI = 0, nnGE = 0, nnME = 0, nnB = 0 ;
+  long int nnE = 0, nnI = 0, nnGE = 0, nnME = 0, nnB = 0, nnSE = 0, nnLR = 0 ;
   int chrom = 0, gene = 0, mrna = 0 ;
   int a1, a2 ;
   int line = 0 ;
@@ -401,6 +485,8 @@ long int saGffParser (PP *pp, TC *tc)
   DICT *chromDict = bbG->dict ;
   DICT *geneDict = pp->geneDict ;
   DICT *mrnaDict = pp->mrnaDict ;
+  Array smallGenes = 0 ;
+  Array longRnas = 0 ;
   Array geneExons = 0 ;
   Array geneBoxes = 0 ;
   Array geneBoxes2 = 0 ;
@@ -426,7 +512,11 @@ long int saGffParser (PP *pp, TC *tc)
   geneBoxes = arrayHandleCreate (100000, GBX, h) ;
   geneBoxes2 = arrayHandleCreate (100000, GBX, h) ;
   mrnaExons = arrayHandleCreate (100000, GBX, h) ;
-  
+
+  smallGenes = pp->smallGenes = arrayHandleCreate (100000, GBX, pp->h) ;
+  pp->smallGenesDict = dictHandleCreate (1 << 15, pp->h) ;
+  longRnas = pp->longRnas = arrayHandleCreate (100000, GBX, pp->h) ;
+  pp->longRnasDict = dictHandleCreate (1 << 15, pp->h) ;
   if (1)
     {
       const char *cp = tc->fileName ;
@@ -492,6 +582,15 @@ long int saGffParser (PP *pp, TC *tc)
       type = 0 ;
       if (! strcasecmp (cp, "exon")) type = 1 ;
       if (! strcasecmp (cp, "CDS")) type = 2 ;
+
+      if (! strcasecmp (cp, "miRNA")) type = 3 ;
+      if (! strcasecmp (cp, "scaRNA")) type = 3 ;
+      if (! strcasecmp (cp, "smallRNA")) type = 3 ;
+      if (! strcasecmp (cp, "vault_RNA")) type = 3 ;
+      if (! strcasecmp (cp, "snRNA")) type = 3 ;
+      if (! strcasecmp (cp, "snoRNA")) type = 3 ;
+      if (! strcasecmp (cp, "tRNA")) type = 3 ;
+      
       if (! type) continue ;
   
 
@@ -526,7 +625,7 @@ long int saGffParser (PP *pp, TC *tc)
       if (! cp)
 	continue ;
       mrna = 0 ;
-      if (type >= 1) /* identify the transcript */
+      if (type >= 1 && isGff) /* identify the transcript */
 	{ /* expect : transcript_id "NM_001364814.1"; */
 	  char *cq = strstr (cp, "transcript_id") ;
 	  if (cq)
@@ -540,8 +639,22 @@ long int saGffParser (PP *pp, TC *tc)
 	      ac_free (h1) ;
 	    }
 	}
+      if (type >= 1 && isGtf) /* identify the transcript */
+	{ 
+	  char *cq = strstr (cp, "ID=") ;
+	  if (cq)
+	    {
+	      AC_HANDLE h1 = ac_new_handle () ;
+	      ACEIN aj = aceInCreateFromText (cq + 3, 0, h1) ;
+	      aceInCard (aj) ;
+	      char *cr = aceInWordCut (aj, ";", 0) ;
+	      if (cr)
+		dictAdd (mrnaDict, cr, &mrna) ;
+	      ac_free (h1) ;
+	    }
+	}
       gene = 0 ;
-      if (type >= 1) /* identify the gene */
+      if (type >= 1 && isGff) /* identify the gene */
 	{ /* expect : transcript_id "NM_001364814.1"; */
 	  char *cq = strstr (cp, "gene_id") ;
 	  if (cq)
@@ -553,6 +666,38 @@ long int saGffParser (PP *pp, TC *tc)
 	      if (cr)
 		dictAdd (geneDict, cr, &gene) ;
 	      ac_free (h1) ;
+	    }
+	}
+      if (type >= 1 && isGtf) /* identify the gene */
+	{ /* expect "ID=rna-MIR6859-1;Parent=rna-NR_106918.1;Dbxref=GeneID:102466751,miRBase:MIMAT0027619,HGNC:HGNC:50039,miRBase:MI0022705;gbkey=ncRNA;gene=MIR6859-1;product=hsa-miR-6859-3p" */
+	  char *cq = strstr (cp, "gene=") ;
+	  if (cq)
+	    {
+	      AC_HANDLE h1 = ac_new_handle () ;
+	      ACEIN aj = aceInCreateFromText (cq + 5, 0, h1) ;
+	      aceInCard (aj) ;
+	      char *cr = aceInWordCut (aj, ";", 0) ;
+	      if (cr)
+		dictAdd (geneDict, cr, &gene) ;
+	      ac_free (h1) ;
+	    }
+	}
+
+      if (type == 3)
+	{ /* register the small exons */
+	  if (gene && mrna)
+	    {
+	      int small = 0 ;
+	      char *cp = hprintf (h, "%s|GENE|%s", dictName(mrnaDict, mrna), dictName(geneDict, gene)) ;
+	      dictAdd (pp->smallGenesDict, cp, &small) ;
+	      GBX *up = arrayp (smallGenes, nnSE++, GBX) ;
+	      up->gene = small ;
+	      up->strand = strand ;
+	      up->flag = 2 ;   /* exon : CDS | UTR, not yet determined */
+	      up->chrom = chrom ;
+	      up->a1 = a1 ;
+	      up->a2 = a2 ;
+	      continue ;
 	    }
 	}
       
@@ -721,6 +866,11 @@ long int saGffParser (PP *pp, TC *tc)
       saDictMapWrite (mrnaDict, fNam) ;
       fprintf (stderr, "saGffParser exported %d mrna identifiers\n", dictMax (mrnaDict)) ;
     }
+
+  if (nnSE > 64)
+    exportSmallGenesFasta (pp) ; // create pp->indexName/smallGenes.fasta.fz
+  if (nnLR > 8)
+    exportLongRnasFasta (pp) ; // create pp->indexName/smallGenes.fasta.fz
 
   fprintf (stderr, "+++++++ Found %ld boxes %ld introns in file %s\n", nnE, nnI, tc->fileName) ;
   ac_free (h) ;

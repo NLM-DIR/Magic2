@@ -278,10 +278,11 @@ setenv methods "02_ClipAlign"
 setenv methods "10_MagicBLAST"
 setenv methods "21_HISAT2"
 setenv methods "31_STARlong"
+setenv methods "40_TopHat2"
 setenv methods "50_Minimap2"
 
 
-setenv allMethods "011_SortAlignG6R3 012_SortAlignG3R3 013_SortAlignG3R1 014_SortAlignG3R3.g 015_SortAlignG3R1.g 11_MagicBLAST_2018 12_MagicBLAST_2022 13_MagicBLAST_2024 21_HISAT2_4threads 22_HISAT2_8threads 23_HISAT2_16threads 31_STARlong 50_Minimap2 51_Minimap2_4threads 52_Minimap2_8threads 53_Minimap2_16threads 54_Minimap2_32threads"
+setenv allMethods "011_SortAlignG6R3 012_SortAlignG3R3 013_SortAlignG3R1 014_SortAlignG3R3.g 015_SortAlignG3R1.g 11_MagicBLAST_2018 12_MagicBLAST_2022 13_MagicBLAST_2024 21_HISAT2_4threads 22_HISAT2_8threads 23_HISAT2_16threads 31_STARlong 40_TopHat2 50_Minimap2 51_Minimap2_4threads 52_Minimap2_8threads 53_Minimap2_16threads 54_Minimap2_32threads"
 
 setenv methods "$allMethods"
 # setenv methods "012_SortAlignG3R3"
@@ -317,25 +318,17 @@ setenv PFAL_runs "$PFAL_r1_runs $PFAL_r2_runs $PFAL_r3_runs"
 if (0) then
   pushd Fasta
   mkdir S_1 S_2 S_3 S_4
-  echo  SRR1535280 > S_1/SRR
-  echo  SRR1535283 > S_2/SRR
-  echo  SRR1535293 > S_3/SRR
-  echo  SRR1535276 > S_4/SRR
-  pushd S_1 ; ln -s ../../SRA/SRR1535280.fasta.gz S_1.fasta.gz ; popd
-  pushd S_2 ; ln -s ../../SRA/SRR1535283.fasta.gz S_2.fasta.gz ; popd
-  pushd S_3 ; ln -s ../../SRA/SRR1535293.fasta.gz S_3.fasta.gz ; popd
-  pushd S_4 ; ln -s ../../SRA/SRR1535276.fasta.gz S_4.fasta.gz ; popd
-  pushd S_1 ; ln -s ../../SRA/SRR1535280.fastq.gz S_1.fastq.gz ; popd
-  pushd S_2 ; ln -s ../../SRA/SRR1535283.fastq.gz S_2.fastq.gz ; popd
-  pushd S_3 ; ln -s ../../SRA/SRR1535293.fastq.gz S_3.fastq.gz ; popd
-  pushd S_4 ; ln -s ../../SRA/SRR1535276.fastq.gz S_4.fastq.gz ; popd
+  echo  SRR1535276 > S_1/SRR
+  echo  SRR1535278 > S_2/SRR
+  echo  SRR1535276 > S_1_clipped/SRR
+  echo  SRR1535278 > S_2_clipped/SRR
   echo GRCh38 > S_1/target
   echo GRCh38 > S_2/target
-  echo GRCh38 > S_3/target
-  echo GRCh38 > S_4/target
+  echo GRCh38 > S_1_clipped/target
+  echo GRCh38 > S_2_clipped/target
 endif
 
-setenv SHORT_runs "S_1 S_2 S_3 S_4"
+setenv SHORT_runs "S_1 S_2 S_1_clipped S_2_clipped"
 
 
 setenv bigIlluminaRuns "RNA_PolyA_A_1_50Gb RNA_PolyA_B_1_47Gb "

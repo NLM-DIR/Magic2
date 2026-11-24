@@ -2073,8 +2073,8 @@ int main (int argc, const char *argv[])
   p.seedLength = 0 ; /* default */
   if (getCmdLineInt (&argc, argv, "--seedLength", &(p.seedLength)))
     {
-      if (p.seedLength < 12)
-	messcrash ("\n parameter --seedlength %d must be at least 12, sorry\n", p.seedLength) ;
+      if (p.seedLength < 8)
+	messcrash ("\n parameter --seedlength %d must be at least 8, sorry\n", p.seedLength) ;
       else if (p.seedLength > 19)
 	messcrash ("\n parameter --seedlength %d cannot excered 19, sorry\n", p.seedLength) ;
     }
@@ -2083,6 +2083,12 @@ int main (int argc, const char *argv[])
   getCmdLineText (h, &argc, argv, "-t", &(p.tFileName)) ;
   getCmdLineText (h, &argc, argv, "-T", &(p.tConfigFileName)) ;
   p.createIndex = getCmdLineText (h, &argc, argv, "--createIndex", &(p.indexName)) ;
+  if (! p.createIndex)
+    {
+      p.createIndex |= p.createSmallGenesIndex = getCmdLineText (h, &argc, argv, "--createSmallGenesIndex", &(p.indexName)) ;
+      p.createIndex |= p.createLongRnasIndex = getCmdLineText (h, &argc, argv, "--createLongRnasIndex", &(p.indexName)) ;
+    }
+  
   p.noJump = getCmdLineBool (&argc, argv, "--noJump") ;
   
   getCmdLineInt (&argc, argv, "--gpu_device", &bestGpu) ;
@@ -2102,6 +2108,16 @@ int main (int argc, const char *argv[])
       if ( p.tFileName &&  p.tConfigFileName)
 	saUsage ("conflicting parameters -t and -T, both define the targets", argc, argv) ;
     }
+  if (p.createLongRnasIndex)
+    {
+      if (p.tConfigFileName)
+	saUsage ("--createLongRnasIndex does not handle -T", argc, argv) ;
+    }
+  if (p.createSmallGenesIndex)
+    {
+      if (p.tConfigFileName)
+	saUsage ("--createLongRnasIndex does not handle -T", argc, argv) ;
+    }
   
   if (! p.indexName)
     saUsage ("missing parameter -x <indexName> or --createIndex <indexName> or missing indexName", argc, argv) ;
@@ -2113,7 +2129,7 @@ int main (int argc, const char *argv[])
   getCmdLineText (h, &argc, argv, "-I", &(p.inConfigFileName)) ;
 
   /* check that input files were provided */
-  if (! p.createIndex &&
+  if (! p.createIndex && 
       ! p.inFileName && ! p.inConfigFileName)
     saUsage ("missing parameter -i or -I inputFileName(s)", argc, argv) ;
   if (p.inFileName && p.inConfigFileName)
@@ -2821,6 +2837,34 @@ int main (int argc, const char *argv[])
   wego_flush () ; /* flush the wego logs to stderr */
 
  done:
+  if (p.createIndex && p.smallGenes && arrayMax (p.smallGenes) > 64)
+    { /* iterate index creation by adding a small gene index automatically derived from the gff file */
+      vTXT txt = vtxtHandleCreate (h) ;
+      
+      vtxtPrintf (txt, "%s --createSmallGenesIndex %s -t %s/smallGenes.fasta.gz --seedLength 9"
+		  , argv[0]
+		  , p.indexName
+		  , p.indexName
+		  ) ;
+      // fprintf (stderr, 	"### %s\n", vtxtPtr (txt)) ;	  
+      system (vtxtPtr (txt)) ;
+    }
+
+  if (p.createIndex && p.longRnas && arrayMax (p.longRnas) > 8)
+    { /* iterate index creation by adding a longRNA index automatically derived from the gff file */
+      vTXT txt = vtxtHandleCreate (h) ;
+      
+      vtxtPrintf (txt, "%s --createLongRnaIndex %s -t %s/longRNAs.fasta.gz --seedLength %d"
+		  , argv[0]
+		  , p.indexName
+		  , p.indexName
+		  , p.seedLength
+		  ) ;
+
+      // fprintf (stderr, 	"### %s\n", vtxtPtr (txt)) ;	  
+      system (vtxtPtr (txt)) ;
+    }
+
   if (1)
     {
       int ns = 0 ;

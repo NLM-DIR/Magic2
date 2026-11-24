@@ -253,6 +253,8 @@ typedef struct pStruct {
   BOOL noJump ;
   BOOL full ;
   BOOL align ;
+  BOOL createSmallGenesIndex ;
+  BOOL createLongRnasIndex ;
   BOOL justStats ;
   BOOL wiggle ;
   BOOL wiggleEnds ;
@@ -336,6 +338,8 @@ typedef struct pStruct {
   Array confirmedSLs ;
   Array confirmedIntrons ;
   Array doubleIntrons ;
+  Array smallGenes ;
+  Array longRnas ;
   long int nrIntronSupports[4] ;
   BOOL fasta, fastq, fastc, raw, solid, sra, sraCaching, sraDownload, split_pairs, interleaved ;
   BOOL sam, bam, hitsFormat, tabular, blink ;
@@ -347,6 +351,8 @@ typedef struct pStruct {
   DICT *runDict ;
   DICT *targetClassDict ;
   DICT *geneDict ;
+  DICT *smallGenesDict ;
+  DICT *longRnasDict ;
   DICT *mrnaDict ;
   DICT *wiggleFileDict ;
   const char *method ;
